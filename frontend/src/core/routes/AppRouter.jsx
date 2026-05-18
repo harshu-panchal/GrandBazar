@@ -27,6 +27,8 @@ const CategoryProductsPage = lazy(() => import('../../modules/customer/pages/Cat
 const WishlistPage = lazy(() => import('../../modules/customer/pages/WishlistPage'));
 const OffersPage = lazy(() => import('../../modules/customer/pages/OffersPage'));
 const ShopByStorePage = lazy(() => import('../../modules/customer/pages/ShopByStorePage'));
+const StoresPage = lazy(() => import('../../modules/customer/pages/StoresPage'));
+const StoreDetailPage = lazy(() => import('../../modules/customer/pages/StoreDetailPage'));
 const ProfilePage = lazy(() => import('../../modules/customer/pages/ProfilePage'));
 const OrdersPage = lazy(() => import('../../modules/customer/pages/OrdersPage'));
 const OrderTransactionsPage = lazy(() => import('../../modules/customer/pages/OrderTransactionsPage'));
@@ -148,6 +150,8 @@ const AppRouter = () => {
                         { path: 'about', element: <AboutPage /> },
                         { path: 'offers', element: <OffersPage /> },
                         { path: 'shop-by-store', element: <ShopByStorePage /> },
+                        { path: 'stores', element: <StoresPage /> },
+                        { path: 'store/:sellerId', element: <StoreDetailPage /> },
                         { path: 'wishlist', element: <ProtectedRoute><WishlistPage /></ProtectedRoute> },
                         { path: 'orders', element: <ProtectedRoute><OrdersPage /></ProtectedRoute> },
                         { path: 'orders/:orderId', element: <ProtectedRoute><OrderDetailPage /></ProtectedRoute> },

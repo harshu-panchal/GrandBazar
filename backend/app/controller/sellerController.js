@@ -211,3 +211,34 @@ export const updateSellerProfile = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+
+/* ===============================
+   GET PUBLIC SELLER PROFILE
+================================ */
+export const getPublicSellerProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return handleResponse(res, 400, "Invalid seller ID format");
+    }
+
+    const seller = await Seller.findById(id)
+      .select("name shopName category description address locality pincode city state location serviceRadius isActive isVerified")
+      .lean();
+
+    if (!seller || !seller.isActive || !seller.isVerified) {
+      return handleResponse(res, 404, "Seller not found or is currently inactive");
+    }
+
+    return handleResponse(
+      res,
+      200,
+      "Seller profile fetched successfully",
+      seller,
+    );
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
