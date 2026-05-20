@@ -8,6 +8,7 @@
  */
 
 import mongoose from 'mongoose';
+import dns from 'dns';
 import { getProcessRole, isComponentEnabled, validateProcessRole } from './processRole.js';
 import { isRedisEnabled, getRedisClient, waitForRedis } from '../config/redis.js';
 import { createAllIndexes } from '../services/databaseIndexManager.js';
@@ -182,6 +183,13 @@ async function connectMongoDB(maxRetries = 5) {
   
   if (!mongoUri) {
     throw new Error('MONGO_URI environment variable is required (or set MONGODB_URI / DATABASE_URL)');
+  }
+  
+  // Set fallback public DNS servers to resolve potential Node.js SRV resolution bug on Windows/link-local IPv6 DNS
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (dnsErr) {
+    console.warn('[Startup] Failed to set public DNS servers, using system defaults:', dnsErr.message);
   }
   
   // If already connected, return

@@ -10,6 +10,7 @@ import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const STORE_THEMES = {
   grocery: {
@@ -34,11 +35,11 @@ const STORE_THEMES = {
     accentText: "text-rose-600"
   },
   default: {
-    accent: "text-slate-700 bg-slate-100",
-    badge: "bg-slate-800",
-    bannerBg: "bg-gradient-to-br from-slate-700 via-zinc-800 to-slate-900",
-    borderActive: "border-slate-800 text-slate-800 bg-slate-100",
-    accentText: "text-slate-800"
+    accent: "text-amber-700 bg-amber-50",
+    badge: "bg-amber-500",
+    bannerBg: "bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400",
+    borderActive: "border-amber-500 text-amber-600 bg-amber-50/50",
+    accentText: "text-amber-600"
   }
 };
 
@@ -160,7 +161,7 @@ const StoreDetailPage = () => {
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 pt-[130px] md:pt-[160px]">
+    <div className="min-h-screen bg-slate-50 pb-24 pt-[24px] md:pt-[40px]">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
         {/* Navigation Back Header */}
@@ -208,51 +209,89 @@ const StoreDetailPage = () => {
           <div className="flex flex-col gap-8">
             
             {/* Store Branding Banner */}
-            <div className={cn("relative overflow-hidden rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white", theme.bannerBg)}>
-              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
+            <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">
+              
+              {/* Ultra-Premium Floating Welcome Banner */}
+              <div className="mb-6 -mx-6 md:-mx-8 -mt-6 md:-mt-8 px-6 md:px-8 py-4 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border-b border-slate-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none relative overflow-hidden group hover:from-amber-500/15 hover:via-rose-500/15 hover:to-violet-500/15 transition-all duration-500">
+                {/* Glowing shimmer stroke line */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                
+                <div className="flex items-center gap-3.5 z-10">
+                  <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center text-white shadow-[0_4px_15px_rgba(244,63,94,0.25)] group-hover:scale-110 transition-transform duration-300">
+                    <Sparkles size={16} className="animate-pulse" />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-800 leading-none">
+                        Welcome to our store
+                      </span>
+                      <span className="inline-block animate-bounce text-xs leading-none select-none">👋</span>
+                      <span className="text-[9px] font-black uppercase tracking-widest bg-gradient-to-r from-amber-600 to-rose-600 bg-clip-text text-transparent px-2 py-0.5 rounded-md bg-amber-50/50 border border-amber-100/40 shadow-[0_2px_8px_rgba(245,158,11,0.05)]">
+                        {seller.shopName || seller.name}
+                      </span>
+                    </div>
+                    <span className="text-[9px] md:text-[10px] font-bold text-slate-500 mt-1 flex items-center gap-1">
+                      <span>✨</span>
+                      <span>Discover handpicked premium selections curated fresh for you daily.</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 z-10 sm:self-center bg-white/60 border border-white/80 px-3.5 py-1.5 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.01)] hover:scale-105 transition-transform duration-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
+                    Open & Ready to Serve
+                  </span>
+                </div>
+              </div>
+
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-200 via-rose-200 to-violet-200 blur-3xl pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 
                 {/* Logo & Info Group */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                   {/* Circular Avatar */}
-                  <div className="h-24 w-24 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0 shadow-inner">
-                    <span className="text-4xl font-black text-white leading-none">
+                  <div className={cn(
+                    "h-16 w-16 md:h-20 md:w-20 rounded-2xl flex items-center justify-center shrink-0 shadow-lg text-white font-black text-2xl md:text-3xl",
+                    theme.badge === "bg-amber-500" ? "bg-gradient-to-br from-amber-400 to-rose-400" : theme.badge
+                  )}>
+                    <span className="leading-none">
                       {initialLetter}
                     </span>
                   </div>
                   
                   {/* Shop Text */}
                   <div className="flex flex-col gap-1.5 leading-none">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-amber-300 w-fit">
-                      <Sparkles size={10} />
+                    <div className={cn("inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest w-fit border border-slate-100/50 shadow-sm", theme.accent)}>
+                      <Sparkles size={10} className="animate-pulse" />
                       <span>{seller.category || "Verified Shop"}</span>
                     </div>
-                    <h1 className="text-3xl md:text-5xl font-[1000] tracking-tight mt-1">
+                    <h1 className="text-2xl md:text-3xl font-[1000] tracking-tight text-slate-900 mt-1">
                       {seller.shopName || seller.name}
                     </h1>
-                    <p className="text-white/80 text-xs md:text-sm font-semibold max-w-xl leading-relaxed mt-1.5">
+                    <p className="text-slate-500 text-[11px] md:text-xs font-semibold max-w-xl leading-relaxed mt-1.5">
                       {seller.description || `Browse clean and premium inventory directly stocked and delivered from ${seller.shopName || seller.name}.`}
                     </p>
                   </div>
                 </div>
 
                 {/* Logistics Stats overlay */}
-                <div className="flex flex-wrap gap-4 shrink-0 bg-white/5 border border-white/10 p-5 rounded-[2rem] backdrop-blur-md">
+                <div className="flex flex-wrap gap-4 shrink-0 bg-slate-50/80 border border-slate-100/80 p-4 rounded-[1.5rem] shadow-sm backdrop-blur-sm">
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Delivery in</span>
-                    <span className="text-lg font-black text-amber-300">10-15 Mins</span>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Delivery in</span>
+                    <span className={cn("text-base font-black", theme.accentText)}>10-15 Mins</span>
                   </div>
-                  <div className="h-10 w-px bg-white/10" />
+                  <div className="h-8 w-px bg-slate-200" />
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Radius Limit</span>
-                    <span className="text-lg font-black text-emerald-300">{seller.serviceRadius || 5} km</span>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Radius Limit</span>
+                    <span className={cn("text-base font-black", theme.accentText)}>{seller.serviceRadius || 5} km</span>
                   </div>
                   {seller.locality && (
                     <>
-                      <div className="h-10 w-px bg-white/10" />
+                      <div className="h-8 w-px bg-slate-200" />
                       <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Locality</span>
-                        <span className="text-lg font-black text-slate-100 truncate max-w-[120px]">{seller.locality}</span>
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Locality</span>
+                        <span className="text-base font-black text-slate-700 truncate max-w-[120px]">{seller.locality}</span>
                       </div>
                     </>
                   )}
@@ -286,7 +325,7 @@ const StoreDetailPage = () => {
               </aside>
 
               {/* Mobile Horizontal Topbar swipe navigation */}
-              <div className="md:hidden w-full sticky top-[60px] z-20 bg-slate-50 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+              <div className="md:hidden w-full sticky top-0 z-[90] bg-slate-50 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-slate-100/50 shadow-sm">
                 {dynamicCategories.map(cat => (
                   <button
                     key={cat.id}
@@ -360,6 +399,9 @@ const StoreDetailPage = () => {
       {/* GrandBazar existing buy-loop overlay systems */}
       <MiniCart />
       <ProductDetailSheet />
+
+      {/* Welcome Splash overlay */}
+
 
       <style dangerouslySetInnerHTML={{
         __html: `
