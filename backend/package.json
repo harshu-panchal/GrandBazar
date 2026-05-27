@@ -51,7 +51,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "firebase-admin": "^13.7.0",
+    "firebase-admin": "^13.10.0",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
     "joi": "^18.0.2",
@@ -61,7 +61,7 @@
     "multer": "^2.0.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^8.0.5",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.5.4"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.29.0",
