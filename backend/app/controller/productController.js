@@ -330,7 +330,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -453,7 +453,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -643,6 +643,10 @@ export const createProduct = async (req, res) => {
       productData.tags = productData.tags.split(",").map((tag) => tag.trim());
     }
 
+    if (productData.isSignatureProduct !== undefined) {
+      productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
+    }
+
     // Handle variants if string (multipart/form-data sends as string)
     if (typeof productData.variants === "string") {
       try {
@@ -798,6 +802,10 @@ export const updateProduct = async (req, res) => {
 
     if (typeof productData.tags === "string") {
       productData.tags = productData.tags.split(",").map((tag) => tag.trim());
+    }
+
+    if (productData.isSignatureProduct !== undefined) {
+      productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
     }
 
     if (typeof productData.variants === "string") {

@@ -35,6 +35,8 @@ const SellerProfile = () => {
     lng: null,
     radius: 5,
     address: "",
+    bannerImage: "",
+    description: "",
   });
 
   useEffect(() => {
@@ -55,6 +57,8 @@ const SellerProfile = () => {
         lng: data.location?.coordinates[0] || null,
         radius: data.serviceRadius || 5,
         address: data.address || "",
+        bannerImage: data.bannerImage || "",
+        description: data.description || "",
       });
     } catch (error) {
       toast.error("Failed to fetch profile");
@@ -146,11 +150,44 @@ const SellerProfile = () => {
       {/* Header Section */}
       <div className="relative mb-24 px-4">
         {/* Banner Background */}
-        <div className="bg-linear-to-r from-slate-900 via-slate-950 to-black h-64 rounded-lg shadow-2xl relative overflow-hidden">
+        <div className="bg-linear-to-r from-slate-900 via-slate-950 to-black h-64 rounded-lg shadow-2xl relative overflow-hidden group">
+          {formData.bannerImage && (
+            <img 
+              src={formData.bannerImage} 
+              alt="Shop Banner" 
+              className="absolute inset-0 w-full h-full object-cover opacity-80"
+            />
+          )}
           <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-            <div className="absolute bottom-0 right-0 w-96 h-96 bg-slate-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+            <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-96 h-96 bg-slate-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none" />
           </div>
+          
+          {/* Banner Upload Button */}
+          {isEditing && (
+            <label className="absolute top-4 right-4 bg-black/50 backdrop-blur text-white px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase cursor-pointer hover:bg-black/70 transition-all shadow-xl z-20 flex items-center gap-2 border border-white/20">
+              <Edit2 size={14} /> Update Banner
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (file.size > 2 * 1024 * 1024) {
+                      toast.error("Image size must be less than 2MB");
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setFormData(prev => ({ ...prev, bannerImage: reader.result }));
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }} 
+              />
+            </label>
+          )}
         </div>
 
         {/* Profile Info Row */}
@@ -312,6 +349,20 @@ const SellerProfile = () => {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-600 ml-1">
+                  About My Shop
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  placeholder="Write a short description about your shop, what you sell, and your specialties..."
+                  className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-100 transition-all disabled:opacity-70 min-h-[120px] resize-y"
+                />
               </div>
             </form>
           </Card>

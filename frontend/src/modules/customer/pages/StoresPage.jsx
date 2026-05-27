@@ -2,16 +2,19 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Store, MapPin, Clock, ArrowRight, Search, 
-  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle
+  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter
 } from "lucide-react";
+import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import Lottie from "lottie-react";
+import storePin from "@/assets/store-pin.png";
+import customerPin from "@/assets/customer-pin.png";
 
 const STORE_THEMES = {
   grocery: {
     gradient: "from-emerald-50 to-teal-50/30",
-    border: "border-emerald-100/80 hover:border-emerald-300",
+    border: "border-emerald-100/80",
     accent: "text-emerald-700 bg-emerald-50",
     badge: "bg-emerald-600",
     bannerBg: "bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-800",
@@ -20,7 +23,7 @@ const STORE_THEMES = {
   },
   electronics: {
     gradient: "from-violet-50 to-indigo-50/30",
-    border: "border-violet-100/80 hover:border-violet-300",
+    border: "border-violet-100/80",
     accent: "text-violet-700 bg-violet-50",
     badge: "bg-violet-600",
     bannerBg: "bg-gradient-to-br from-violet-600 via-indigo-700 to-purple-800",
@@ -29,7 +32,7 @@ const STORE_THEMES = {
   },
   wedding: {
     gradient: "from-rose-50 to-pink-50/30",
-    border: "border-rose-100/80 hover:border-rose-300",
+    border: "border-rose-100/80",
     accent: "text-rose-700 bg-rose-50",
     badge: "bg-rose-600",
     bannerBg: "bg-gradient-to-br from-rose-600 via-pink-700 to-rose-800",
@@ -38,7 +41,7 @@ const STORE_THEMES = {
   },
   default: {
     gradient: "from-slate-50 to-zinc-50/30",
-    border: "border-slate-100/80 hover:border-slate-300",
+    border: "border-slate-100/80",
     accent: "text-slate-700 bg-slate-100",
     badge: "bg-slate-800",
     bannerBg: "bg-gradient-to-br from-slate-700 via-zinc-800 to-slate-900",
@@ -64,6 +67,32 @@ const StoresPage = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [expandedSellerId, setExpandedSellerId] = useState(null);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [isMapView, setIsMapView] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterDistance, setFilterDistance] = useState("all");
+
+  const { isLoaded } = useJsApiLoader({
+    id: "stores-map",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
+
+  const storeMarkerIcon = useMemo(() => {
+    if (!isLoaded || !window?.google?.maps) return undefined;
+    return {
+      url: storePin,
+      scaledSize: new window.google.maps.Size(40, 40),
+      anchor: new window.google.maps.Point(20, 40),
+    };
+  }, [isLoaded]);
+
+  const customerMarkerIcon = useMemo(() => {
+    if (!isLoaded || !window?.google?.maps) return undefined;
+    return {
+      url: customerPin,
+      scaledSize: new window.google.maps.Size(40, 40),
+      anchor: new window.google.maps.Point(20, 40),
+    };
+  }, [isLoaded]);
 
   // Dynamically load Lottie on mount
   useEffect(() => {
@@ -105,10 +134,17 @@ const StoresPage = () => {
 
   // Unique categories of nearby stores for dynamic filters
   const categoriesList = useMemo(() => {
-    const set = new Set();
+    const set = new Set(["Grocery", "Electronics", "Pharmacy", "Fashion", "General Store"]);
     sellers.forEach(s => {
       if (s.category && String(s.category).trim()) {
         set.add(String(s.category).trim());
+      }
+      if (Array.isArray(s.productCategories)) {
+        s.productCategories.forEach(cat => {
+          if (cat && String(cat).trim()) {
+            set.add(String(cat).trim());
+          }
+        });
       }
     });
     return ["all", ...Array.from(set)];
@@ -122,10 +158,25 @@ const StoresPage = () => {
         String(s.category || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(s.locality || "").toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesTab = activeTab === "all" || s.category === activeTab;
-      return matchesSearch && matchesTab;
+      const sCat = String(s.category || "General Store").toLowerCase();
+      const tabCat = activeTab.toLowerCase();
+      
+      let matchesTab = activeTab === "all" || sCat === tabCat;
+      
+      if (!matchesTab && Array.isArray(s.productCategories)) {
+        matchesTab = s.productCategories.some(cat => String(cat).toLowerCase() === tabCat);
+      }
+
+      const matchesDistance = filterDistance === "all" || (s.distance !== undefined && s.distance <= Number(filterDistance));
+      
+      return matchesSearch && matchesTab && matchesDistance;
+    }).sort((a, b) => {
+      if (a.distance !== undefined && b.distance !== undefined) {
+        return a.distance - b.distance;
+      }
+      return 0;
     });
-  }, [sellers, searchQuery, activeTab]);
+  }, [sellers, searchQuery, activeTab, filterDistance]);
 
   const toggleExpand = (e, sellerId) => {
     e.preventDefault();
@@ -134,21 +185,36 @@ const StoresPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 pt-[130px] md:pt-[160px]">
+    <div className="min-h-screen bg-slate-50/50 pb-24 pt-6 md:pt-12">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
+        {/* Page Heading & Map Toggle */}
+        <div className="flex items-center justify-between mb-6 md:mb-8">
+          <div className="flex items-center gap-3">
+            <Store size={28} className="text-brand-500" />
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Stores Near You</h1>
+          </div>
+          <button 
+            onClick={() => setIsMapView(true)}
+            className="flex items-center gap-2 bg-white border-2 border-slate-100 hover:border-slate-200 px-4 py-2 rounded-xl shadow-sm text-sm font-bold text-slate-700 transition-all active:scale-95"
+          >
+            <Map className="text-brand-500" size={18} />
+            <span className="hidden sm:inline">Map View</span>
+          </button>
+        </div>
+
         {/* Main Hero Header Section */}
-        <div className="relative mb-12 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-zinc-900 to-slate-950 p-8 md:p-12 shadow-2xl text-white">
+        <div className="relative mb-6 md:mb-10 overflow-hidden rounded-[2rem] md:rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-zinc-900 to-slate-950 p-6 md:p-12 shadow-2xl text-white">
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-400 via-rose-500 to-brand-500 blur-3xl pointer-events-none" />
           <div className="relative z-10 max-w-3xl flex flex-col items-start gap-4">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-xs font-bold tracking-wider uppercase text-amber-300">
               <Sparkles size={12} className="animate-pulse" />
               <span>Hyperlocal Shopping</span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-[1000] tracking-tighter leading-none">
+            <h1 className="text-3xl md:text-6xl font-[1000] tracking-tighter leading-tight md:leading-none">
               Discover Local <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-brand-200 to-pink-300">Artisans & Shops</span>
             </h1>
-            <p className="text-slate-300 text-sm md:text-lg font-medium leading-relaxed">
+            <p className="text-slate-300 text-xs md:text-lg font-medium leading-relaxed">
               Explore hand-picked, verified shops in your neighborhood. Directly browse their products, add to your cart, and support local business with super-fast doorstep deliveries.
             </p>
             <div className="flex flex-wrap gap-3 mt-2">
@@ -165,7 +231,7 @@ const StoresPage = () => {
         </div>
 
         {/* Filters and Search Strip */}
-        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Categories Pill Nav */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 md:mx-0 md:px-0">
             {categoriesList.map(cat => (
@@ -183,16 +249,96 @@ const StoresPage = () => {
             ))}
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full md:max-w-xs">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shop name, category..."
-              className="w-full bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
-            />
+          {/* Search Box & Filter Dropdown */}
+          <div className="flex items-center gap-2 w-full md:max-w-md">
+            <div className="relative w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search shop name, category..."
+                className="w-full bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
+              />
+            </div>
+
+            <div className="relative">
+              <button 
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`flex items-center justify-center border-2 p-3.5 rounded-2xl transition-all active:scale-95 shadow-sm ${
+                  isFilterOpen || filterDistance !== "all" 
+                    ? "bg-slate-900 border-slate-900 text-white" 
+                    : "bg-white border-slate-100 hover:border-slate-200 text-slate-700"
+                }`}
+              >
+                <Filter size={20} />
+              </button>
+              
+              {isFilterOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 p-5 z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-slate-800">Filter By</h3>
+                    {(filterDistance !== "all" || activeTab !== "all") && (
+                      <button 
+                        onClick={() => {
+                          setFilterDistance("all");
+                          setActiveTab("all");
+                        }}
+                        className="text-[10px] font-bold text-brand-500 uppercase hover:text-brand-600"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Distance Filter */}
+                  <div className="mb-5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 block">Maximum Distance</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: 'Any', value: 'all' },
+                        { label: '< 2 km', value: '2' },
+                        { label: '< 5 km', value: '5' },
+                        { label: '< 10 km', value: '10' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setFilterDistance(opt.value)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                            filterDistance === opt.value 
+                              ? 'bg-brand-50 border-brand-200 text-brand-700 border-2' 
+                              : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100 border-2'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Category Filter */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 block">Category</label>
+                    <div className="relative">
+                      <select 
+                        value={activeTab}
+                        onChange={(e) => setActiveTab(e.target.value)}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-brand-300 appearance-none pr-8"
+                      >
+                        {categoriesList.map(cat => (
+                          <option key={cat} value={cat}>
+                            {cat === 'all' ? 'All Categories' : cat}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -292,16 +438,7 @@ const StoresPage = () => {
                     </p>
 
                     {/* Quick Stats Grid */}
-                    <div className="mt-4 grid grid-cols-2 gap-3 pt-4 border-t border-slate-100/60">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-xl bg-slate-100/80 flex items-center justify-center text-slate-500">
-                          <Clock size={14} />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Time</span>
-                          <span className="text-xs font-black text-slate-700">{s.distance < 2 ? "10-15 mins" : "15-25 mins"}</span>
-                        </div>
-                      </div>
+                    <div className="mt-4 pt-4 border-t border-slate-100/60 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="h-8 w-8 rounded-xl bg-slate-100/80 flex items-center justify-center text-slate-500">
                           <Compass size={14} />
@@ -359,6 +496,61 @@ const StoresPage = () => {
         )}
 
       </div>
+      
+      {/* Full Screen Map Overlay */}
+      {isMapView && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+          {/* Map Header */}
+          <div className="flex items-center justify-between px-4 py-4 md:px-8 shadow-sm bg-white border-b border-slate-100 z-10">
+            <div className="flex items-center gap-3">
+              <Store size={24} className="text-brand-500" />
+              <h2 className="text-lg md:text-xl font-black text-slate-800 tracking-tight">Stores on Map</h2>
+            </div>
+            <button 
+              onClick={() => setIsMapView(false)}
+              className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full text-xs font-bold text-slate-700 transition-all active:scale-95 shadow-sm"
+            >
+              <List size={16} className="text-slate-500" />
+              Close Map
+            </button>
+          </div>
+
+          {/* Map Container */}
+          <div className="flex-1 relative bg-slate-50">
+            {isLoaded ? (
+              <GoogleMap
+                mapContainerStyle={{ width: "100%", height: "100%" }}
+                center={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+                zoom={14}
+                options={{ disableDefaultUI: true, zoomControl: true }}
+              >
+                {/* User Location */}
+                <Marker position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }} icon={customerMarkerIcon} />
+                
+                {/* Store Locations */}
+                {filteredSellers.map(s => {
+                  if (s.location?.coordinates && s.location.coordinates.length === 2) {
+                    return (
+                      <Marker 
+                        key={s._id} 
+                        position={{ lat: s.location.coordinates[1], lng: s.location.coordinates[0] }} 
+                        onClick={() => navigate(`/store/${s._id}`)}
+                        title={s.shopName || s.name}
+                        icon={storeMarkerIcon}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </GoogleMap>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="h-10 w-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

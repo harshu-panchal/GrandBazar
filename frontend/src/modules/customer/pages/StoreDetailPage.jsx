@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
@@ -10,6 +10,16 @@ import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+
+const getEmbedUrl = (url) => {
+  if (!url) return "";
+  const shortMatch = url.match(/shorts\/([^/?]+)/);
+  const watchMatch = url.match(/[?&]v=([^&]+)/);
+  const youtuMatch = url.match(/youtu\.be\/([^/?]+)/);
+  const videoId = shortMatch ? shortMatch[1] : watchMatch ? watchMatch[1] : youtuMatch ? youtuMatch[1] : null;
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+};
 
 const STORE_THEMES = {
   grocery: {
@@ -60,8 +70,17 @@ const StoreDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
+
+  useEffect(() => {
+    if (!seller?.banners || seller.banners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % seller.banners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [seller?.banners]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -160,7 +179,7 @@ const StoreDetailPage = () => {
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 pt-[130px] md:pt-[160px]">
+    <div className="min-h-screen bg-slate-50 pb-24 pt-6 md:pt-12">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
         {/* Navigation Back Header */}
@@ -208,21 +227,55 @@ const StoreDetailPage = () => {
           <div className="flex flex-col gap-8">
             
             {/* Store Branding Banner */}
-            <div className={cn("relative overflow-hidden rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white", theme.bannerBg)}>
-              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className={cn("relative overflow-hidden select-none outline-none border-none ring-0 focus:outline-none hover:outline-none rounded-[1.5rem] md:rounded-3xl p-6 md:p-10 shadow-2xl text-white", (!seller.banners || seller.banners.length === 0) && theme.bannerBg)}>
+              {seller.banners && seller.banners.length > 0 ? (
+                <>
+                  <AnimatePresence mode="popLayout">
+                    <motion.img 
+                      key={currentBannerIndex}
+                      src={seller.banners[currentBannerIndex]} 
+                      alt={`Store Banner ${currentBannerIndex + 1}`}
+                      initial={{ opacity: 0, scale: 1.05 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.8 }}
+                      className="absolute inset-0 w-full h-full object-cover" 
+                    />
+                  </AnimatePresence>
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
+                  
+                  {/* Carousel Indicators */}
+                  {seller.banners.length > 1 && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                      {seller.banners.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentBannerIndex(i)}
+                          className={cn(
+                            "w-2 h-2 rounded-full transition-all",
+                            i === currentBannerIndex ? "bg-white w-6" : "bg-white/40 hover:bg-white/60"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
+              )}
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 !outline-none !border-0 !ring-0 hover:!outline-none hover:!border-0 hover:!ring-0 focus:!outline-none">
                 
                 {/* Logo & Info Group */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-6 !outline-none !border-0 !ring-0 hover:!outline-none hover:!border-0 hover:!ring-0 focus:!outline-none">
                   {/* Circular Avatar */}
-                  <div className="h-24 w-24 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0 shadow-inner">
-                    <span className="text-4xl font-black text-white leading-none">
+                  <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl md:rounded-[1.5rem] bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                    <span className="text-3xl md:text-4xl font-black text-white leading-none">
                       {initialLetter}
                     </span>
                   </div>
                   
                   {/* Shop Text */}
-                  <div className="flex flex-col gap-1.5 leading-none">
+                  <div className="flex flex-col gap-1.5 leading-none !outline-none !border-0 !ring-0 hover:!outline-none hover:!border-0 hover:!ring-0 focus:!outline-none">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[9px] font-black uppercase tracking-widest text-amber-300 w-fit">
                       <Sparkles size={10} />
                       <span>{seller.category || "Verified Shop"}</span>
@@ -237,12 +290,7 @@ const StoreDetailPage = () => {
                 </div>
 
                 {/* Logistics Stats overlay */}
-                <div className="flex flex-wrap gap-4 shrink-0 bg-white/5 border border-white/10 p-5 rounded-[2rem] backdrop-blur-md">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Delivery in</span>
-                    <span className="text-lg font-black text-amber-300">10-15 Mins</span>
-                  </div>
-                  <div className="h-10 w-px bg-white/10" />
+                <div className="flex flex-wrap gap-4 shrink-0 bg-white/5 border border-white/10 p-4 md:p-5 rounded-2xl md:rounded-[1.25rem] backdrop-blur-md mt-4 md:mt-0">
                   <div className="flex flex-col">
                     <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Radius Limit</span>
                     <span className="text-lg font-black text-emerald-300">{seller.serviceRadius || 5} km</span>
@@ -260,6 +308,58 @@ const StoreDetailPage = () => {
 
               </div>
             </div>
+
+            {/* Store Video Section */}
+            {seller.storeVideo && (
+              <div className="w-full bg-slate-900 rounded-[1.5rem] md:rounded-3xl p-4 md:p-6 shadow-xl relative overflow-hidden mt-2">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-2 md:px-4 mt-1">
+                    <Sparkles size={18} className="text-brand-400 animate-pulse" />
+                    <h3 className="text-lg md:text-xl font-[900] text-white uppercase tracking-widest">Store Spotlight</h3>
+                  </div>
+                  <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl md:rounded-2xl overflow-hidden bg-black relative border-4 border-slate-800 shadow-2xl">
+                    {seller.storeVideo.includes("youtube.com") || seller.storeVideo.includes("youtu.be") ? (
+                      <iframe
+                        className="w-full h-full absolute inset-0"
+                        src={getEmbedUrl(seller.storeVideo)}
+                        title="Store Spotlight Video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    ) : (
+                      <video src={seller.storeVideo} controls className="w-full h-full object-contain absolute inset-0" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Signature Products Section */}
+            {seller.signatureProducts && Array.isArray(seller.signatureProducts) && seller.signatureProducts.length > 0 && (
+              <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-[1.5rem] md:rounded-3xl p-6 shadow-sm border border-amber-100/50 mt-2 mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Star size={18} className="text-amber-500 fill-amber-500" />
+                  <h3 className="text-lg md:text-xl font-[900] text-amber-900 uppercase tracking-widest">Signature Products</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {seller.signatureProducts.map(sigProd => (
+                    <ProductCard 
+                      key={sigProd._id}
+                      product={{
+                        ...sigProd,
+                        id: sigProd._id,
+                        image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+                        price: sigProd.salePrice || sigProd.price,
+                        originalPrice: sigProd.price,
+                        weight: sigProd.weight || "1 unit"
+                      }} 
+                      compact={false}
+                      isSignature={true}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Split layout: Sidebar for Category (Desktop) or Horizontal topbar (Mobile) + Main Product Grid */}
             <div className="flex flex-col md:flex-row items-start gap-8">
@@ -286,7 +386,7 @@ const StoreDetailPage = () => {
               </aside>
 
               {/* Mobile Horizontal Topbar swipe navigation */}
-              <div className="md:hidden w-full sticky top-[60px] z-20 bg-slate-50 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+              <div className="md:hidden w-full bg-slate-50 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
                 {dynamicCategories.map(cat => (
                   <button
                     key={cat.id}

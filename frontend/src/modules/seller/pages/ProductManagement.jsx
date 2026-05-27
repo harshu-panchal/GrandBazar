@@ -207,6 +207,7 @@ const ProductManagement = () => {
     variants: [
       { id: Date.now(), name: "", price: "", salePrice: "", stock: "", sku: "" },
     ],
+    isSignatureProduct: false,
   });
 
   const safeProducts = useMemo(
@@ -243,6 +244,7 @@ const ProductManagement = () => {
       if (filterStatus === "Low Stock")
         matchesStatus = p.stock > 0 && p.stock <= resolveLowStockThreshold(p);
       if (filterStatus === "Out of Stock") matchesStatus = p.stock === 0;
+      if (filterStatus === "Signature") matchesStatus = p.isSignatureProduct === true;
 
       let matchesPrice = true;
       const effectivePrice = Number(p.salePrice ?? p.price ?? 0);
@@ -292,6 +294,7 @@ const ProductManagement = () => {
       active:
         summaryStats?.active ??
         safeProducts.filter((p) => p.status === "active").length,
+      signature: safeProducts.filter((p) => p.isSignatureProduct === true).length,
     }),
     [safeProducts, summaryStats, total],
   );
@@ -329,6 +332,7 @@ const ProductManagement = () => {
       data.append("brand", formData.brand);
       data.append("weight", formData.weight);
       data.append("tags", formData.tags);
+      data.append("isSignatureProduct", formData.isSignatureProduct);
       data.append("variants", JSON.stringify(formData.variants));
 
       if (formData.mainImageFile) {
@@ -435,6 +439,7 @@ const ProductManagement = () => {
             sku: item.sku || "",
           },
         ],
+        isSignatureProduct: item.isSignatureProduct || false,
       });
       setEditingItem(item);
     } else {
@@ -465,6 +470,7 @@ const ProductManagement = () => {
             sku: "",
           },
         ],
+        isSignatureProduct: false,
       });
       setEditingItem(null);
     }
@@ -497,7 +503,7 @@ const ProductManagement = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           {
             label: "All Items",
@@ -530,6 +536,14 @@ const ProductManagement = () => {
             color: "text-rose-600",
             bg: "bg-rose-50",
             status: "Out of Stock",
+          },
+          {
+            label: "Signature",
+            val: stats.signature,
+            icon: HiOutlineTag,
+            color: "text-amber-600",
+            bg: "bg-amber-50",
+            status: "Signature",
           },
         ].map((stat, i) => (
           <Card
@@ -796,6 +810,7 @@ const ProductManagement = () => {
               <option value="Active">Active</option>
               <option value="Low Stock">Low Stock</option>
               <option value="Out of Stock">Out of Stock</option>
+              <option value="Signature">Signature Products</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -1074,6 +1089,21 @@ const ProductManagement = () => {
                             className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-mono font-bold outline-none ring-primary/5 focus:ring-2"
                             placeholder="AUTO-GENERATED"
                           />
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">
+                        <input
+                          type="checkbox"
+                          id="signatureProductEdit"
+                          checked={formData.isSignatureProduct}
+                          onChange={(e) => setFormData({ ...formData, isSignatureProduct: e.target.checked })}
+                          className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary/20 transition-all cursor-pointer"
+                        />
+                        <div className="flex flex-col">
+                          <label htmlFor="signatureProductEdit" className="text-sm font-bold text-slate-800 cursor-pointer">
+                            Mark as Signature Product
+                          </label>
+                          <span className="text-xs text-slate-500 font-medium">This product will be highlighted on your store and the main home page.</span>
                         </div>
                       </div>
                     </div>
