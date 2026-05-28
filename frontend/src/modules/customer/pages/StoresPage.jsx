@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Store, MapPin, Clock, ArrowRight, Search, 
-  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter
+  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter, ChevronDown
 } from "lucide-react";
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { customerApi } from "../services/customerApi";
@@ -93,6 +93,27 @@ const StoresPage = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [expandedSellerId, setExpandedSellerId] = useState(null);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [filterDistance, setFilterDistance] = useState("all");
+  const [isMapView, setIsMapView] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
+
+  const storeMarkerIcon = useMemo(() => {
+    return isLoaded && window.google ? {
+      url: storePin,
+      scaledSize: new window.google.maps.Size(40, 40),
+    } : null;
+  }, [isLoaded]);
+
+  const customerMarkerIcon = useMemo(() => {
+    return isLoaded && window.google ? {
+      url: customerPin,
+      scaledSize: new window.google.maps.Size(40, 40),
+    } : null;
+  }, [isLoaded]);
 
   // Dynamically load Lottie on mount
   useEffect(() => {
@@ -185,7 +206,7 @@ const StoresPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 pt-[130px] md:pt-[160px]">
+    <div className="min-h-screen bg-slate-50/50 pb-24 pt-6 md:pt-10">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
         {/* Page Heading & Map Toggle */}
@@ -252,16 +273,34 @@ const StoresPage = () => {
             ))}
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full md:max-w-xs">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shop name, category..."
-              className="w-full bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
-            />
+          {/* Search & Distance Filter */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-md">
+            <div className="relative w-full flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search shop name, category..."
+                className="w-full bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
+              />
+            </div>
+            
+            <div className="relative w-full sm:w-[160px] shrink-0">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-500 z-10" size={18} />
+              <select
+                value={filterDistance}
+                onChange={(e) => setFilterDistance(e.target.value)}
+                className="w-full appearance-none bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 px-4 py-3.5 pl-10 pr-10 rounded-2xl text-sm font-semibold text-slate-800 outline-none transition-all cursor-pointer shadow-sm relative z-0"
+              >
+                <option value="all">Any Distance</option>
+                <option value="2">Within 2 km</option>
+                <option value="5">Within 5 km</option>
+                <option value="10">Within 10 km</option>
+                <option value="20">Within 20 km</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" size={16} />
+            </div>
           </div>
         </div>
 
@@ -360,28 +399,6 @@ const StoresPage = () => {
                     <p className="text-slate-500 text-xs font-semibold line-clamp-2 leading-relaxed">
                       {s.description || `Fresh collections and quality products directly delivered from ${s.shopName || s.name}.`}
                     </p>
-
-                    {/* Quick Stats Grid */}
-                    <div className="mt-4 grid grid-cols-2 gap-3 pt-4 border-t border-slate-100/60">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-xl bg-slate-100/80 flex items-center justify-center text-slate-500">
-                          <Clock size={14} />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Time</span>
-                          <span className="text-xs font-black text-slate-700">{s.distance < 2 ? "10-15 mins" : "15-25 mins"}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-xl bg-slate-100/80 flex items-center justify-center text-slate-500">
-                          <Compass size={14} />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Service</span>
-                          <span className="text-xs font-black text-slate-700">Within {s.serviceRadius || 5} km</span>
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Expandable details panel toggler */}
                     <div className="mt-3 pt-2 border-t border-slate-100/60 flex flex-col">

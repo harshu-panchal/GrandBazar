@@ -129,7 +129,11 @@ const productSchema = new mongoose.Schema(
         isSignatureProduct: {
             type: Boolean,
             default: false,
-        }
+        },
+        addons: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Product",
+        }]
     },
     { timestamps: true }
 );

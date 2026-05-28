@@ -210,6 +210,7 @@ export const getProducts = async (req, res) => {
       sort,
       lat,
       lng,
+      productIds,
     } = req.query;
     const enforceRadius = isCustomerVisibilityRequest(req);
 
@@ -226,6 +227,13 @@ export const getProducts = async (req, res) => {
     if (finalHeaderId && finalHeaderId !== "all") query.headerId = finalHeaderId;
     if (finalCategoryId && finalCategoryId !== "all") query.categoryId = finalCategoryId;
     if (finalSubcategoryId && finalSubcategoryId !== "all") query.subcategoryId = finalSubcategoryId;
+
+    if (productIds) {
+      const ids = productIds.split(',').map(id => id.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        query._id = { $in: ids };
+      }
+    }
 
     const requestedSellerIds = parseSellerIdFilters({ sellerId, sellerIds });
     const coords = parseCustomerCoordinates({ lat, lng });
@@ -330,7 +338,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -453,7 +461,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -614,6 +622,14 @@ export const createProduct = async (req, res) => {
         // Not JSON, keep as is
       }
     }
+    
+    if (typeof productData.addons === "string") {
+      try {
+        productData.addons = JSON.parse(productData.addons);
+      } catch (e) {
+        productData.addons = [];
+      }
+    }
 
     if (!productData.name) {
       return handleResponse(res, 400, "Product name is required");
@@ -767,6 +783,14 @@ export const updateProduct = async (req, res) => {
         productData.tags = JSON.parse(productData.tags);
       } catch (e) {
         // Not JSON, keep as is
+      }
+    }
+
+    if (typeof productData.addons === "string") {
+      try {
+        productData.addons = JSON.parse(productData.addons);
+      } catch (e) {
+        productData.addons = [];
       }
     }
 

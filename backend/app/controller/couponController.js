@@ -25,7 +25,10 @@ export const listCoupons = async (req, res) => {
             ];
         }
 
-        const coupons = await Coupon.find(query).sort({ createdAt: -1 }).lean();
+        const coupons = await Coupon.find(query)
+            .populate('sellerId', 'shopName')
+            .sort({ createdAt: -1 })
+            .lean();
         return handleResponse(res, 200, "Coupons fetched successfully", coupons);
     } catch (error) {
         return handleResponse(res, 500, error.message);
@@ -173,6 +176,35 @@ export const validateCoupon = async (req, res) => {
             }
         }
 
+        // Determine eligible total for discount
+        let eligibleTotal = cartTotal;
+        if (coupon.sponsor === "seller" && coupon.sellerId) {
+            eligibleTotal = 0;
+            if (Array.isArray(items)) {
+                items.forEach((item) => {
+                    const itemSellerId = item.product?.branch || item.product?.sellerId || item.sellerId;
+                    if (String(itemSellerId) === String(coupon.sellerId)) {
+                        const price = item.product?.salePrice || item.product?.price || item.price || 0;
+                        eligibleTotal += price * (item.quantity || 1);
+                    }
+                });
+            }
+            if (eligibleTotal === 0) {
+                return handleResponse(
+                    res,
+                    400,
+                    "This coupon is only valid for products from a specific seller"
+                );
+            }
+            if (coupon.minOrderValue && eligibleTotal < coupon.minOrderValue) {
+                return handleResponse(
+                    res,
+                    400,
+                    `Minimum order value for this seller's products should be ₹${coupon.minOrderValue}`
+                );
+            }
+        }
+
         // Calculate discount
         let discountAmount = 0;
         let freeDelivery = false;
@@ -180,7 +212,7 @@ export const validateCoupon = async (req, res) => {
         if (coupon.discountType === "free_delivery") {
             freeDelivery = true;
         } else if (coupon.discountType === "percentage") {
-            discountAmount = Math.round((cartTotal * coupon.discountValue) / 100);
+            discountAmount = Math.round((eligibleTotal * coupon.discountValue) / 100);
         } else if (coupon.discountType === "fixed") {
             discountAmount = coupon.discountValue;
         }

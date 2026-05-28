@@ -8,6 +8,12 @@ import {
 import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
 import { getSellerWalletSummaryController } from "../controller/adminFinanceController.js";
+import { 
+    createSellerCoupon, 
+    getSellerCoupons, 
+    updateSellerCoupon, 
+    deleteSellerCoupon 
+} from "../controller/sellerCouponController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 import {
     authRouteRateLimiter,
@@ -67,5 +73,11 @@ router.get("/stats", verifyToken, allowRoles("seller"), getSellerStats);
 router.get("/earnings", verifyToken, allowRoles("seller"), getSellerEarnings);
 router.get("/wallet/summary", verifyToken, allowRoles("seller"), getSellerWalletSummaryController);
 router.post("/request-withdrawal", verifyToken, allowRoles("seller"), requestWithdrawal);
+
+// Coupons
+router.post("/coupons", verifyToken, allowRoles("seller"), createSellerCoupon);
+router.get("/coupons", verifyToken, allowRoles("seller"), getSellerCoupons);
+router.put("/coupons/:id", verifyToken, allowRoles("seller"), updateSellerCoupon);
+router.delete("/coupons/:id", verifyToken, allowRoles("seller"), deleteSellerCoupon);
 
 export default router;

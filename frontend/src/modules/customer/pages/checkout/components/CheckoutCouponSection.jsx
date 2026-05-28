@@ -61,18 +61,16 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
               return (
                 <div
                   key={coupon.code}
-                  className={`flex-shrink-0 w-[200px] snap-start rounded-2xl border-2 border-dashed p-3 flex flex-col gap-2 transition-all ${
-                    isApplied
+                  className={`flex-shrink-0 w-[200px] snap-start rounded-2xl border-2 border-dashed p-3 flex flex-col gap-2 transition-all ${isApplied
                       ? "border-green-400 bg-green-50"
                       : "border-orange-200 bg-gradient-to-br from-orange-50 to-yellow-50"
-                  }`}>
+                    }`}>
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-xs font-black px-2 py-0.5 rounded-lg tracking-widest uppercase ${
-                        isApplied
+                      className={`text-xs font-black px-2 py-0.5 rounded-lg tracking-widest uppercase ${isApplied
                           ? "bg-green-100 text-green-700"
                           : "bg-orange-100 text-orange-600"
-                      }`}>
+                        }`}>
                       {coupon.code}
                     </span>
                     {isApplied && (
@@ -127,11 +125,10 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
             {coupons.map((coupon) => (
               <div
                 key={coupon.code}
-                className={`p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${
-                  selectedCoupon?.code === coupon.code
+                className={`p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${selectedCoupon?.code === coupon.code
                     ? "border-primary bg-brand-50 shadow-sm"
                     : "border-slate-100 bg-white hover:border-slate-200"
-                }`}>
+                  }`}>
                 {selectedCoupon?.code === coupon.code && (
                   <div className="absolute top-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-bl-xl">
                     <Check size={12} strokeWidth={4} />
@@ -139,11 +136,10 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
                 )}
                 <div className="flex items-start gap-3">
                   <div
-                    className={`p-3 rounded-2xl ${
-                      selectedCoupon?.code === coupon.code
+                    className={`p-3 rounded-2xl ${selectedCoupon?.code === coupon.code
                         ? "bg-primary/10 text-primary"
                         : "bg-orange-50 text-orange-500"
-                    }`}>
+                      }`}>
                     <Tag size={20} />
                   </div>
                   <div className="flex-1">
@@ -156,11 +152,10 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
                     <button
                       onClick={() => onApplyCoupon(coupon)}
                       disabled={selectedCoupon?.code === coupon.code}
-                      className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
-                        selectedCoupon?.code === coupon.code
+                      className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${selectedCoupon?.code === coupon.code
                           ? "bg-white text-primary border-2 border-primary cursor-default"
                           : "bg-primary text-primary-foreground hover:bg-[#0b721b]"
-                      }`}>
+                        }`}>
                       {selectedCoupon?.code === coupon.code ? "Applied" : "Apply Now"}
                     </button>
                   </div>

@@ -5,9 +5,18 @@ const couponSchema = new mongoose.Schema(
         code: {
             type: String,
             required: true,
-            unique: true,
             trim: true,
             uppercase: true,
+        },
+        sellerId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Seller",
+            default: null, // null means it is an Admin/Global coupon
+        },
+        sponsor: {
+            type: String,
+            enum: ["admin", "seller"],
+            default: "admin",
         },
         title: {
             type: String,
@@ -92,6 +101,8 @@ const couponSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+// A code must be unique per seller (or globally for admin), so we use a compound index
+couponSchema.index({ code: 1, sellerId: 1 }, { unique: true });
 couponSchema.index({ isActive: 1, validFrom: 1, validTill: 1 });
 
 export default mongoose.model("Coupon", couponSchema);

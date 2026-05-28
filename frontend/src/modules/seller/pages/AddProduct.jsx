@@ -14,6 +14,8 @@ import {
   HiOutlineTrash,
   HiOutlinePlus,
   HiOutlineSquaresPlus,
+  HiOutlineXMark,
+  HiOutlineSparkles,
 } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -67,9 +69,11 @@ const AddProduct = () => {
       },
     ],
     isSignatureProduct: false,
+    addons: [],
   });
 
   const [dbCategories, setDbCategories] = useState([]);
+  const [sellerProducts, setSellerProducts] = useState([]);
   const [isLoadingCats, setIsLoadingCats] = useState(true);
 
   useEffect(() => {
@@ -99,19 +103,25 @@ const AddProduct = () => {
   }, [formData.name]);
 
   React.useEffect(() => {
-    const fetchCats = async () => {
+    const fetchCatsAndProducts = async () => {
       try {
-        const res = await sellerApi.getCategoryTree();
-        if (res.data.success) {
-          setDbCategories(res.data.results || res.data.result || []);
+        const [catsRes, prodsRes] = await Promise.all([
+          sellerApi.getCategoryTree(),
+          sellerApi.getProducts({ limit: 100 })
+        ]);
+        if (catsRes.data.success) {
+          setDbCategories(catsRes.data.results || catsRes.data.result || []);
+        }
+        if (prodsRes.data.success) {
+          setSellerProducts(prodsRes.data.result?.items || prodsRes.data.results?.items || []);
         }
       } catch (error) {
-        toast.error("Failed to load categories");
+        toast.error("Failed to load initial data");
       } finally {
         setIsLoadingCats(false);
       }
     };
-    fetchCats();
+    fetchCatsAndProducts();
   }, []);
 
   const categories = dbCategories;
@@ -160,6 +170,11 @@ const AddProduct = () => {
 
       // Tags
       data.append("tags", formData.tags);
+
+      // Addons
+      if (formData.addons && formData.addons.length > 0) {
+        data.append("addons", JSON.stringify(formData.addons));
+      }
 
       data.append("isSignatureProduct", formData.isSignatureProduct);
 
@@ -254,6 +269,8 @@ const AddProduct = () => {
             { id: "variants", label: "Item Variants", icon: HiOutlineSwatch },
             { id: "category", label: "Groups", icon: HiOutlineFolderOpen },
             { id: "media", label: "Photos", icon: HiOutlinePhoto },
+            // new Add-ons tab
+            { id: "addons", label: "Add-ons", icon: HiOutlineSparkles },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -538,70 +555,210 @@ const AddProduct = () => {
           )}
 
           {modalTab === "category" && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-1.5 flex flex-col">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                    Main Group <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.header}
-                    onChange={(e) =>
-                      setFormData({ ...formData, header: e.target.value, category: "", subcategory: "" })
-                    }
-                    className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/5 transition-all">
-                    <option value="">Select Main Group</option>
-                    {categories.map((h) => (
-                      <option key={h._id || h.id} value={h._id || h.id}>
-                        {h.name}
-                      </option>
-                    ))}
-                  </select>
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Category Selection (Drag & Drop)
+                  </h4>
+                  <p className="text-xs text-slate-600 font-medium mt-1">
+                    Drag a category from the pool below and drop it into the appropriate box.
+                  </p>
                 </div>
-                <div className="space-y-1.5 flex flex-col">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                    Specific Category <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value, subcategory: "" })
-                    }
-                    disabled={!formData.header}
-                    className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                    <option value="">Select Category</option>
-                    {categories
-                      .find((h) => (h._id || h.id) === formData.header)
-                      ?.children?.map((c) => (
-                        <option key={c._id || c.id} value={c._id || c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setFormData({ ...formData, header: "", category: "", subcategory: "" })
+                  }
+                  className="text-xs py-1.5 h-auto">
+                  <HiOutlineArrowPath className="mr-1.5 h-3.5 w-3.5" />
+                  Reset Selection
+                </Button>
               </div>
-              <div className="grid grid-cols-1 gap-6">
-                <div className="space-y-1.5 flex flex-col">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
-                    Sub-Category <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.subcategory}
-                    onChange={(e) =>
-                      setFormData({ ...formData, subcategory: e.target.value })
+
+              {/* Drop Zones */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  {
+                    id: "header",
+                    label: "Main Group",
+                    value: formData.header,
+                    options: categories,
+                    active: !formData.header,
+                    onDrop: (val) =>
+                      setFormData({ ...formData, header: val, category: "", subcategory: "" }),
+                    onClear: () =>
+                      setFormData({ ...formData, header: "", category: "", subcategory: "" }),
+                  },
+                  {
+                    id: "category",
+                    label: "Specific Category",
+                    value: formData.category,
+                    options:
+                      categories.find((h) => (h._id || h.id) === formData.header)?.children || [],
+                    active: !!formData.header && !formData.category,
+                    onDrop: (val) => setFormData({ ...formData, category: val, subcategory: "" }),
+                    onClear: () =>
+                      setFormData({ ...formData, category: "", subcategory: "" }),
+                  },
+                  {
+                    id: "subcategory",
+                    label: "Sub-Category",
+                    value: formData.subcategory,
+                    options:
+                      categories
+                        .find((h) => (h._id || h.id) === formData.header)
+                        ?.children?.find((c) => (c._id || c.id) === formData.category)
+                        ?.children || [],
+                    active: !!formData.category && !formData.subcategory,
+                    onDrop: (val) => setFormData({ ...formData, subcategory: val }),
+                    onClear: () => setFormData({ ...formData, subcategory: "" }),
+                  },
+                ].map((zone, index) => {
+                  const selectedItem = zone.options.find(
+                    (opt) => (opt._id || opt.id) === zone.value
+                  );
+
+                  return (
+                    <div
+                      key={zone.id}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add("bg-primary/5", "border-primary");
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("bg-primary/5", "border-primary");
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("bg-primary/5", "border-primary");
+                        const draggedId = e.dataTransfer.getData("categoryId");
+                        const draggedType = e.dataTransfer.getData("categoryType");
+
+                        // Allow dropping only if the dragged item type matches the zone type
+                        if (draggedType === zone.id) {
+                           zone.onDrop(draggedId);
+                        } else {
+                           toast.error(`Please drop a ${zone.label} here.`);
+                        }
+                      }}
+                      className={cn(
+                        "relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-all duration-200",
+                        zone.value
+                          ? "border-primary bg-primary/5"
+                          : zone.active
+                          ? "border-primary/40 bg-slate-50 ring-4 ring-primary/5"
+                          : "border-slate-200 bg-slate-50 opacity-60"
+                      )}>
+                      <div className="absolute -top-3 bg-white px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest rounded-full border border-slate-100 shadow-sm">
+                        Step {index + 1}: {zone.label}
+                      </div>
+
+                      {zone.value ? (
+                        <div className="flex flex-col items-center gap-2 relative group w-full">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              zone.onClear();
+                            }}
+                            className="absolute -top-4 -right-4 md:-right-2 bg-white rounded-full p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm border border-slate-200 transition-all opacity-0 group-hover:opacity-100 z-10"
+                            title={`Clear ${zone.label}`}
+                          >
+                            <HiOutlineXMark className="h-4 w-4" />
+                          </button>
+                          <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shadow-sm text-primary">
+                            <HiOutlineFolderOpen className="h-5 w-5" />
+                          </div>
+                          <span className="text-sm font-bold text-slate-800 text-center px-2">
+                            {selectedItem?.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                          <HiOutlineFolderOpen className="h-8 w-8 opacity-50" />
+                          <span className="text-xs font-medium text-center">
+                            {zone.active ? "Drop here" : "Waiting for previous step..."}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Draggable Pool */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <HiOutlineFolderOpen className="h-5 w-5 text-primary" />
+                  <h5 className="text-sm font-bold text-slate-800">Available Categories</h5>
+                </div>
+
+                <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 min-h-[200px]">
+                  {(() => {
+                    let currentOptions = [];
+                    let currentType = "";
+
+                    if (!formData.header) {
+                      currentOptions = categories;
+                      currentType = "header";
+                    } else if (!formData.category) {
+                      currentOptions =
+                        categories.find((h) => (h._id || h.id) === formData.header)?.children ||
+                        [];
+                      currentType = "category";
+                    } else if (!formData.subcategory) {
+                      currentOptions =
+                        categories
+                          .find((h) => (h._id || h.id) === formData.header)
+                          ?.children?.find((c) => (c._id || c.id) === formData.category)
+                          ?.children || [];
+                      currentType = "subcategory";
                     }
-                    disabled={!formData.category}
-                    className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                    <option value="">Select Sub-Category</option>
-                    {categories
-                      .find((h) => (h._id || h.id) === formData.header)
-                      ?.children?.find((c) => (c._id || c.id) === formData.category)
-                      ?.children?.map((sc) => (
-                        <option key={sc._id || sc.id} value={sc._id || sc.id}>
-                          {sc.name}
-                        </option>
-                      ))}
-                  </select>
+
+                    if (formData.header && formData.category && formData.subcategory) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 py-8">
+                          <div className="h-12 w-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                            <HiOutlineFolderOpen className="h-6 w-6" />
+                          </div>
+                          <span className="text-sm font-semibold">All categories selected!</span>
+                        </div>
+                      );
+                    }
+
+                    if (currentOptions.length === 0) {
+                       return (
+                         <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2 py-8">
+                            <span className="text-sm font-semibold">No options available for this level.</span>
+                         </div>
+                       )
+                    }
+
+                    return (
+                      <div className="flex flex-wrap gap-3">
+                        {currentOptions.map((opt) => (
+                          <div
+                            key={opt._id || opt.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("categoryId", opt._id || opt.id);
+                              e.dataTransfer.setData("categoryType", currentType);
+                              e.currentTarget.classList.add("opacity-50", "scale-95");
+                            }}
+                            onDragEnd={(e) => {
+                              e.currentTarget.classList.remove("opacity-50", "scale-95");
+                            }}
+                            className="group flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg shadow-sm cursor-grab active:cursor-grabbing hover:border-primary hover:shadow-md transition-all">
+                            <HiOutlineFolderOpen className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors" />
+                            <span className="text-sm font-bold text-slate-700 group-hover:text-primary transition-colors">
+                              {opt.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -687,6 +844,68 @@ const AddProduct = () => {
                 Quick Tip: Using WebP format at 800x800px makes your store load
                 3x faster.
               </p>
+            </div>
+          )}
+
+          {modalTab === "addons" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Product Add-ons
+                  </h4>
+                  <p className="text-xs text-slate-600 font-medium mt-1">
+                    Select items to recommend when customers buy this product (e.g. Sprite with Pizza).
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sellerProducts.length === 0 ? (
+                  <p className="text-sm text-slate-500 col-span-full">No other products available. Add more products first to use them as add-ons.</p>
+                ) : (
+                  sellerProducts.map(prod => {
+                    const isSelected = formData.addons.includes(prod._id);
+                    return (
+                      <div 
+                        key={prod._id}
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            addons: isSelected 
+                              ? prev.addons.filter(id => id !== prod._id) 
+                              : [...prev.addons, prod._id]
+                          }))
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/50" : "border-slate-200 hover:border-slate-300 bg-white"
+                        )}
+                      >
+                        <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                          {prod.mainImage ? (
+                            <img src={prod.mainImage} alt={prod.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <HiOutlinePhoto className="w-full h-full p-3 text-slate-300" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                          <p className="text-[10px] text-slate-500 font-medium">₹{prod.price}</p>
+                        </div>
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border flex items-center justify-center transition-all",
+                          isSelected ? "bg-primary border-primary text-white" : "border-slate-300 text-transparent"
+                        )}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           )}
 

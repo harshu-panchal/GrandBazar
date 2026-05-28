@@ -43,4 +43,10 @@ export const sellerApi = {
     approveReturn: (orderId, data) => axiosInstance.put(`/orders/returns/${orderId}/approve`, data),
     rejectReturn: (orderId, data) => axiosInstance.put(`/orders/returns/${orderId}/reject`, data),
     assignReturnDelivery: (orderId, data) => axiosInstance.put(`/orders/returns/${orderId}/assign-delivery`, data),
+
+    // Coupons
+    getCoupons: () => axiosInstance.get('/seller/coupons'),
+    createCoupon: (data) => axiosInstance.post('/seller/coupons', data),
+    updateCoupon: (id, data) => axiosInstance.put(`/seller/coupons/${id}`, data),
+    deleteCoupon: (id) => axiosInstance.delete(`/seller/coupons/${id}`),
 };

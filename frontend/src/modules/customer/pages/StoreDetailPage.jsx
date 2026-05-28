@@ -10,6 +10,7 @@ import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const STORE_THEMES = {
   grocery: {
@@ -48,6 +49,20 @@ const getStoreTheme = (category) => {
   if (cat.includes("electronic") || cat.includes("phone") || cat.includes("tech")) return STORE_THEMES.electronics;
   if (cat.includes("wed") || cat.includes("gift") || cat.includes("jewel") || cat.includes("rose") || cat.includes("bliss")) return STORE_THEMES.wedding;
   return STORE_THEMES.default;
+};
+
+const getEmbedUrl = (url) => {
+  if (!url) return "";
+  
+  // Handle YouTube Shorts
+  const shortsMatch = url.match(/\/shorts\/([^&?#]+)/);
+  if (shortsMatch && shortsMatch[1]) {
+    return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+  }
+
+  // Handle standard YouTube links
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
+  return match && match[1] ? `https://www.youtube.com/embed/${match[1]}` : url;
 };
 
 const StoreDetailPage = () => {
@@ -169,7 +184,7 @@ const StoreDetailPage = () => {
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 pt-[130px] md:pt-[160px]">
+    <div className="min-h-screen bg-slate-50 pb-24 pt-6 md:pt-10">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
         {/* Navigation Back Header */}
@@ -217,8 +232,42 @@ const StoreDetailPage = () => {
           <div className="flex flex-col gap-8">
             
             {/* Store Branding Banner */}
-            <div className={cn("relative overflow-hidden rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white", theme.bannerBg)}>
-              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
+            <div className={cn("relative overflow-hidden rounded-3xl p-8 md:p-12 shadow-2xl text-white", theme.bannerBg)}>
+              {seller.banners && seller.banners.length > 0 ? (
+                <>
+                  <AnimatePresence>
+                    <motion.img
+                      key={currentBannerIndex}
+                      src={seller.banners[currentBannerIndex]}
+                      alt="Store Banner"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.8 }}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  </AnimatePresence>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+                  
+                  {/* Indicators */}
+                  {seller.banners.length > 1 && (
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+                      {seller.banners.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentBannerIndex(i)}
+                          className={cn(
+                            "transition-all duration-300 rounded-full",
+                            i === currentBannerIndex ? "w-6 h-2 bg-white" : "w-2 h-2 bg-white/50 hover:bg-white/80"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
+              )}
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 
                 {/* Logo & Info Group */}
@@ -245,34 +294,12 @@ const StoreDetailPage = () => {
                   </div>
                 </div>
 
-                {/* Logistics Stats overlay */}
-                <div className="flex flex-wrap gap-4 shrink-0 bg-white/5 border border-white/10 p-5 rounded-[2rem] backdrop-blur-md">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-white/55 uppercase tracking-widest">Delivery in</span>
-                    <span className="text-lg font-black text-amber-300">10-15 Mins</span>
-                  </div>
-                  <div className="h-10 w-px bg-white/10" />
-                  <div className="flex flex-col">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Radius Limit</span>
-                    <span className={cn("text-base font-black", theme.accentText)}>{seller.serviceRadius || 5} km</span>
-                  </div>
-                  {seller.locality && (
-                    <>
-                      <div className="h-8 w-px bg-slate-200" />
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Locality</span>
-                        <span className="text-base font-black text-slate-700 truncate max-w-[120px]">{seller.locality}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
               </div>
             </div>
 
             {/* Store Video Section */}
             {seller.storeVideo && (
-              <div className="w-full bg-slate-900 rounded-[1.5rem] md:rounded-3xl p-4 md:p-6 shadow-xl relative overflow-hidden mt-2">
+              <div className="w-full bg-slate-900 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-xl relative overflow-hidden mt-2">
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2 px-2 md:px-4 mt-1">
                     <Sparkles size={18} className="text-brand-400 animate-pulse" />
@@ -347,7 +374,7 @@ const StoreDetailPage = () => {
               </aside>
 
               {/* Mobile Horizontal Topbar swipe navigation */}
-              <div className="md:hidden w-full sticky top-[60px] z-20 bg-slate-50 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+              <div className="md:hidden w-full mb-2 py-3 flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
                 {dynamicCategories.map(cat => (
                   <button
                     key={cat.id}

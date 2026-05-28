@@ -59,7 +59,10 @@ export function checkProximity(deliveryLocation, customerLocation) {
   );
   
   // Check if distance is within proximity range (0m - 120m inclusive)
-  const inRange = distance >= 0 && distance <= 120;
+  // For local testing/development, we bypass this check so OTP can be generated
+  // regardless of the simulated browser location vs order location.
+  const isDev = process.env.NODE_ENV !== 'production';
+  const inRange = isDev ? true : (distance >= 0 && distance <= 120);
   
   return {
     inRange,

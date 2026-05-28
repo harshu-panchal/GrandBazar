@@ -21,6 +21,7 @@ import {
   HiOutlineFolderOpen,
   HiOutlineSwatch,
   HiOutlineSquaresPlus,
+  HiOutlineSparkles,
 } from "react-icons/hi2";
 import Modal from "@shared/components/ui/Modal";
 import { cn } from "@/lib/utils";
@@ -159,11 +160,15 @@ const ProductManagement = () => {
   React.useEffect(() => {
     if (!isProductModalOpen) return;
 
-    const previousOverflow = document.body.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isProductModalOpen]);
 
@@ -208,6 +213,7 @@ const ProductManagement = () => {
       { id: Date.now(), name: "", price: "", salePrice: "", stock: "", sku: "" },
     ],
     isSignatureProduct: false,
+    addons: [],
   });
 
   const safeProducts = useMemo(
@@ -333,6 +339,11 @@ const ProductManagement = () => {
       data.append("weight", formData.weight);
       data.append("tags", formData.tags);
       data.append("isSignatureProduct", formData.isSignatureProduct);
+      
+      if (formData.addons && formData.addons.length > 0) {
+        data.append("addons", JSON.stringify(formData.addons));
+      }
+
       data.append("variants", JSON.stringify(formData.variants));
 
       if (formData.mainImageFile) {
@@ -440,6 +451,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: item.isSignatureProduct || false,
+        addons: item.addons || [],
       });
       setEditingItem(item);
     } else {
@@ -471,6 +483,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: false,
+        addons: [],
       });
       setEditingItem(null);
     }
@@ -885,7 +898,7 @@ const ProductManagement = () => {
       {/* Edit Modal (Copy from Admin) */}
       <AnimatePresence>
         {isProductModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-12 overflow-y-auto">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 lg:p-12 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -950,6 +963,7 @@ const ProductManagement = () => {
                       icon: HiOutlineFolderOpen,
                     },
                     { id: "media", label: "Photos", icon: HiOutlinePhoto },
+                    { id: "addons", label: "Add-ons", icon: HiOutlineSparkles },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -1326,6 +1340,69 @@ const ProductManagement = () => {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {modalTab === "addons" && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Product Add-ons
+                          </h4>
+                          <p className="text-xs text-slate-600 font-medium mt-1">
+                            Select items to recommend when customers buy this product (e.g. Sprite with Pizza).
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {safeProducts.length <= 1 ? (
+                          <p className="text-sm text-slate-500 col-span-full">No other products available. Add more products first to use them as add-ons.</p>
+                        ) : (
+                          safeProducts.filter(p => (p._id || p.id) !== (editingItem?._id || editingItem?.id)).map(prod => {
+                            const prodId = prod._id || prod.id;
+                            const isSelected = formData.addons.includes(prodId);
+                            return (
+                              <div 
+                                key={prodId}
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    addons: isSelected 
+                                      ? prev.addons.filter(id => id !== prodId) 
+                                      : [...prev.addons, prodId]
+                                  }))
+                                }}
+                                className={cn(
+                                  "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                                  isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/50" : "border-slate-200 hover:border-slate-300 bg-white"
+                                )}
+                              >
+                                <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                                  {prod.mainImage ? (
+                                    <img src={prod.mainImage} alt={prod.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <HiOutlinePhoto className="w-full h-full p-3 text-slate-300" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-medium">₹{prod.price}</p>
+                                </div>
+                                <div className={cn(
+                                  "w-5 h-5 rounded-full border flex items-center justify-center transition-all",
+                                  isSelected ? "bg-primary border-primary text-white" : "border-slate-300 text-transparent"
+                                )}>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
                       </div>
                     </div>
                   )}

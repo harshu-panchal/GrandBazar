@@ -300,7 +300,7 @@ const Home = () => {
         const mergedAllCategory = allHeaderFromAdmin ? { ...ALL_CATEGORY, headerColor: allHeaderFromAdmin.headerColor || ALL_CATEGORY.headerColor, headerFontColor: allHeaderFromAdmin.headerFontColor || ALL_CATEGORY.headerFontColor, headerIconColor: allHeaderFromAdmin.headerIconColor || ALL_CATEGORY.headerIconColor, icon: allHeaderFromAdmin.icon || ALL_CATEGORY.icon } : ALL_CATEGORY;
         nextHomeData.categories = [mergedAllCategory, ...formattedHeaders.filter((h) => !((h.slug?.toLowerCase() === "all") || (h.name?.toLowerCase() === "all")))];
         nextHomeData.activeCategory = mergedAllCategory;
-        nextHomeData.quickCategories = dbCats.filter((cat) => cat.type === "category").map((cat) => ({ id: cat._id, name: cat.name, image: cat.image || "https://cdn-icons-png.flaticon.com/128/2321/2321831.png" }));
+        nextHomeData.quickCategories = dbCats.filter((cat) => cat.type === "category").map((cat) => ({ id: cat._id, name: cat.name, image: cat.image || "https://cdn-icons-png.flaticon.com/128/2321/2321831.png", priorityStartTime: cat.priorityStartTime, priorityEndTime: cat.priorityEndTime }));
       }
       if (prodRes.data.success) {
         const rawResult = prodRes.data.result;
@@ -385,8 +385,52 @@ const Home = () => {
   const productsById = useMemo(() => { const map = {}; products.forEach((p) => { map[p._id || p.id] = p; }); return map; }, [products]);
   const effectiveQuickCategories = useMemo(() => {
     const ids = heroConfig.categoryIds || [];
-    if (ids.length > 0) { const resolved = ids.map((id) => categoryMap[id]).filter(Boolean).map((c) => ({ id: c._id, name: c.name, image: c.image || "https://cdn-icons-png.flaticon.com/128/2321/2321831.png" })); if (resolved.length > 0) return resolved; }
-    return quickCategories;
+    let baseCategories = [];
+    if (ids.length > 0) { 
+      const resolved = ids.map((id) => categoryMap[id]).filter(Boolean).map((c) => ({ id: c._id, name: c.name, image: c.image || "https://cdn-icons-png.flaticon.com/128/2321/2321831.png", priorityStartTime: c.priorityStartTime, priorityEndTime: c.priorityEndTime })); 
+      if (resolved.length > 0) baseCategories = resolved; 
+    }
+    if (baseCategories.length === 0) {
+      baseCategories = quickCategories;
+    }
+
+    // Dynamic Time-based sorting using admin configured times
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+    const parseTime = (timeStr) => {
+      if (!timeStr) return null;
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return null;
+      return hours * 60 + minutes;
+    };
+
+    const isCategoryPriorityNow = (cat) => {
+      const startTime = parseTime(cat.priorityStartTime);
+      const endTime = parseTime(cat.priorityEndTime);
+      
+      if (startTime !== null && endTime !== null) {
+        if (startTime <= endTime) {
+          // Standard range e.g. 05:00 to 11:00
+          return currentTimeInMinutes >= startTime && currentTimeInMinutes <= endTime;
+        } else {
+          // Overnight range e.g. 22:00 to 05:00
+          return currentTimeInMinutes >= startTime || currentTimeInMinutes <= endTime;
+        }
+      }
+      return false; // No priority times set
+    };
+
+    return [...baseCategories].sort((a, b) => {
+      const aPriority = isCategoryPriorityNow(a) ? 1 : 0;
+      const bPriority = isCategoryPriorityNow(b) ? 1 : 0;
+      if (aPriority !== bPriority) {
+        return bPriority - aPriority; // Priority categories come first
+      }
+      return 0; // Maintain original order for rest
+    });
   }, [heroConfig.categoryIds, categoryMap, quickCategories]);
 
   const sectionsForRenderer = headerSections.length ? headerSections : experienceSections;
