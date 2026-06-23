@@ -24,6 +24,7 @@ import ChevronDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
+import StoreIcon from "@mui/icons-material/Store";
 
 /** Full-width bottom stroke + tab curve; l/r are 0–100% of column where the inner bump sits. */
 function buildActiveTabPath(l, r) {
@@ -409,6 +410,17 @@ const MainLocationHeader = ({
 
             {/* Right Section: Action Icons */}
             <div className="flex items-center gap-5 lg:gap-8 shrink-0">
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => navigate("/stores")}
+                className="transition-all hover:text-slate-800 relative group flex items-center gap-1.5"
+                style={{ color: headerFontColor }}
+              >
+                <StoreIcon sx={{ fontSize: 24 }} />
+                <span className="hidden lg:inline text-xs font-black uppercase tracking-wider">Stores</span>
+              </motion.button>
+
               <motion.button
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 whileTap={{ scale: 0.9 }}

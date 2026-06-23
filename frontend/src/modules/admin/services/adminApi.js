@@ -137,5 +137,15 @@ export const adminApi = {
     getCoupons: (params) => axiosInstance.get('/admin/coupons', { params }),
     createCoupon: (data) => axiosInstance.post('/admin/coupons', data),
     updateCoupon: (id, data) => axiosInstance.put(`/admin/coupons/${id}`, data),
-    deleteCoupon: (id) => axiosInstance.delete(`/admin/coupons/${id}`),
+    deleteCoupon: (id) => axiosInstance.delete('/admin/coupons/${id}'),
+
+    // Staff/Sub-admin Management
+    getStaffList: () => axiosInstance.get('/admin/staff'),
+    createStaff: (data) => axiosInstance.post('/admin/staff', data),
+    updateStaff: (id, data) => axiosInstance.put(`/admin/staff/${id}`, data),
+    deleteStaff: (id) => axiosInstance.delete(`/admin/staff/${id}`),
+
+    // Active Sessions & Login Activity
+    getLoginActivities: (params) => axiosInstance.get('/admin/login-activities', { params }),
+    terminateSession: (id) => axiosInstance.delete(`/admin/login-activities/${id}`),
 };

@@ -364,6 +364,44 @@ const PendingSellers = () => {
                                         </button>
 
                                         <div className="ds-section-spacing">
+                                            {/* Quick Onboarding Fields */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-slate-100">
+                                                <div className="bg-slate-50 p-4 rounded-xl">
+                                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Identity Info</h5>
+                                                    <div className="space-y-1">
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>Aadhaar No:</span>
+                                                            <span className="font-mono text-slate-900">{viewingSeller.aadharNumber || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>PAN No:</span>
+                                                            <span className="font-mono text-slate-900 uppercase">{viewingSeller.panNumber || "N/A"}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-50 p-4 rounded-xl">
+                                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Bank Details</h5>
+                                                    <div className="space-y-1">
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>Bank:</span>
+                                                            <span className="text-slate-900">{viewingSeller.bankName || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>Holder:</span>
+                                                            <span className="text-slate-900">{viewingSeller.accountHolder || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>Account No:</span>
+                                                            <span className="font-mono text-slate-900">{viewingSeller.accountNumber || "N/A"}</span>
+                                                        </p>
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>IFSC:</span>
+                                                            <span className="font-mono text-slate-900 uppercase">{viewingSeller.ifsc || "N/A"}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <div>
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <HiOutlineDocumentText className="h-5 w-5 text-brand-500" />

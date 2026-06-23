@@ -25,6 +25,8 @@ function extractJwtFromHeaders(req) {
   return null;
 }
 
+import { updateLastActive } from "../services/loginActivityService.js";
+
 /* ===============================
    Verify Token
 ================================ */
@@ -39,6 +41,14 @@ export const verifyToken = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     req.user = decoded; // { id, role }
+
+    // Asynchronously update last active timestamp for current user session
+    if (decoded && decoded.id) {
+      updateLastActive(decoded.id).catch((err) =>
+        console.error("Failed to update last active timestamp:", err)
+      );
+    }
+
     next();
   } catch (error) {
     return handleResponse(res, 401, "Invalid or expired token");
@@ -74,11 +84,22 @@ export const optionalVerifyToken = (req, res, next) => {
 ================================ */
 export const allowRoles = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    let authorizedRoles = [...roles];
+    if (roles.includes("admin")) {
+      authorizedRoles = [...authorizedRoles, "superadmin", "accountant", "assistant"];
+    }
+    if (!authorizedRoles.includes(req.user.role)) {
       return handleResponse(res, 403, "Access denied");
     }
     next();
   };
+};
+
+export const allowSuperAdminOnly = (req, res, next) => {
+  if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+    return handleResponse(res, 403, "Access denied. Only super-administrators can perform this action.");
+  }
+  next();
 };
 
 /* ===============================
@@ -123,4 +144,18 @@ export const requireApprovedSeller = async (req, res, next) => {
   } catch (error) {
     return handleResponse(res, 500, "Unable to validate seller approval status");
   }
+};
+
+export const checkSubSellerPermission = (permission) => {
+  return (req, res, next) => {
+    // If it's the main seller, they have all permissions
+    if (!req.user || !req.user.subSellerId) {
+      return next();
+    }
+    // If it's a sub-seller, check their allowedPermissions
+    if (req.user.allowedPermissions && req.user.allowedPermissions.includes(permission)) {
+      return next();
+    }
+    return handleResponse(res, 403, "Access denied. You do not have permission for this section.");
+  };
 };

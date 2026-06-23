@@ -34,8 +34,14 @@ import {
     getSellers,
     getSellerLocations,
     getPlatformSettings,
-    updatePlatformSettings
-} from "../controller/adminController.js";
+    updatePlatformSettings,
+     getStaff,
+     createStaff,
+     updateStaff,
+     deleteStaff,
+     getLoginActivities,
+     terminateSession
+ } from "../controller/adminController.js";
 import {
     exportAdminFinanceStatementController,
     getAdminFinanceLedgerController,
@@ -46,7 +52,7 @@ import {
     updateDeliverySettingsController,
 } from "../controller/adminFinanceController.js";
 
-import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
+import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
 import {
     adminBootstrapRateLimiter,
     authRouteRateLimiter,
@@ -145,8 +151,16 @@ router.put(
     allowRoles("admin"),
     updatePlatformSettings
 );
+// Staff/Sub-admin Management Routes
+router.get("/staff", verifyToken, allowSuperAdminOnly, getStaff);
+router.post("/staff", verifyToken, allowSuperAdminOnly, createStaff);
+router.put("/staff/:id", verifyToken, allowSuperAdminOnly, updateStaff);
+router.delete("/staff/:id", verifyToken, allowSuperAdminOnly, deleteStaff);
+
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);
+router.get("/login-activities", verifyToken, allowRoles("admin"), getLoginActivities);
+router.delete("/login-activities/:id", verifyToken, allowRoles("admin"), terminateSession);
 router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);
 router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLocations);
 router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers);

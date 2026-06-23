@@ -1,7 +1,7 @@
 import Joi from "joi";
 
 const passwordSchema = Joi.string()
-  .min(10)
+  .min(6)
   .max(128)
   .pattern(/[a-z]/, "lowercase")
   .pattern(/[A-Z]/, "uppercase")
@@ -16,7 +16,7 @@ export const bootstrapAdminSchema = Joi.object({
 
 export const loginAdminSchema = Joi.object({
   email: Joi.string().trim().lowercase().email().required(),
-  password: Joi.string().min(8).max(128).required(),
+  password: Joi.string().min(6).max(128).required(),
 });
 
 export function validateSchema(schema, payload) {

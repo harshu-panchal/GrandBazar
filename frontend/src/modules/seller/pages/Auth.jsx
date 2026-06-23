@@ -24,6 +24,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  CreditCard,
+  Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import Lottie from "lottie-react";
@@ -42,9 +44,9 @@ const createInitialVerificationState = () => ({
 });
 
 const REQUIRED_DOCUMENT_CONFIG = [
-  { id: "tradeLicense", label: "Trade License" },
-  { id: "gstCertificate", label: "GST Certificate" },
-  { id: "idProof", label: "ID Proof" },
+  { id: "aadhar", label: "Aadhaar Card" },
+  { id: "pan", label: "PAN Card" },
+  { id: "bankProof", label: "Bank Proof (Passbook / Cancelled Cheque)" },
 ];
 
 const Auth = () => {
@@ -79,6 +81,12 @@ const Auth = () => {
     lng: null,
     radius: 5,
     address: "",
+    aadharNumber: "",
+    panNumber: "",
+    accountHolder: "",
+    accountNumber: "",
+    ifsc: "",
+    bankName: "",
   });
 
   const handleLocationSelect = (location) => {
@@ -96,9 +104,9 @@ const Auth = () => {
   };
 
   const [documents, setDocuments] = useState({
-    tradeLicense: null,
-    gstCertificate: null,
-    idProof: null,
+    aadhar: null,
+    pan: null,
+    bankProof: null,
   });
 
   const getMissingRequiredDocuments = () =>
@@ -298,6 +306,37 @@ const Auth = () => {
         return;
       }
 
+      if (!isLogin && signupStep === 2) {
+        if (!formData.lat || !formData.lng) {
+          toast.error("Please mark your shop location on the map.");
+          return;
+        }
+        if (!formData.aadharNumber || !/^\d{12}$/.test(formData.aadharNumber)) {
+          toast.error("Please enter a valid 12-digit Aadhaar Number.");
+          return;
+        }
+        if (!formData.panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(formData.panNumber)) {
+          toast.error("Please enter a valid 10-character PAN Number.");
+          return;
+        }
+        if (!formData.accountHolder) {
+          toast.error("Bank Account Holder Name is required.");
+          return;
+        }
+        if (!formData.accountNumber) {
+          toast.error("Bank Account Number is required.");
+          return;
+        }
+        if (!formData.ifsc || !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(formData.ifsc)) {
+          toast.error("Please enter a valid 11-character Bank IFSC Code.");
+          return;
+        }
+        if (!formData.bankName) {
+          toast.error("Bank Name is required.");
+          return;
+        }
+      }
+
       if (!isLogin && signupStep < 3) {
         setSignupStep((prev) => prev + 1);
         return;
@@ -485,7 +524,7 @@ const Auth = () => {
                 <img
                   src={logoUrl}
                   alt={`${appName} logo`}
-                  className="w-14 h-14 object-contain"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <Store size={30} className="text-slate-700" />
@@ -833,7 +872,6 @@ const Auth = () => {
                         />
                       </div>
                     </div>
-
                     <div className="relative group">
                       <div className="absolute left-5 top-5 text-slate-300 group-focus-within:text-violet-600 transition-colors">
                         <MapPin size={18} />
@@ -848,10 +886,121 @@ const Auth = () => {
                         onChange={handleChange}
                       />
                     </div>
+
+                    <div className="pt-4 border-t border-slate-100">
+                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
+                        Verification Numbers
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <span className="text-xs font-black">AADHAAR</span>
+                          </div>
+                          <input
+                            type="text"
+                            name="aadharNumber"
+                            required
+                            placeholder="12-digit Aadhaar Number"
+                            className="w-full pl-24 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                            value={formData.aadharNumber || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 12);
+                              setFormData({ ...formData, aadharNumber: val });
+                            }}
+                          />
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <span className="text-xs font-black">PAN</span>
+                          </div>
+                          <input
+                            type="text"
+                            name="panNumber"
+                            required
+                            placeholder="10-character PAN Number"
+                            className="w-full pl-16 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 uppercase"
+                            value={formData.panNumber || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+                              setFormData({ ...formData, panNumber: val });
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100">
+                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
+                        Bank Account Details
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <Landmark size={18} />
+                          </div>
+                          <input
+                            type="text"
+                            name="bankName"
+                            required
+                            placeholder="Bank Name"
+                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                            value={formData.bankName || ""}
+                            onChange={handleChange}
+                          />
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <User size={18} />
+                          </div>
+                          <input
+                            type="text"
+                            name="accountHolder"
+                            required
+                            placeholder="Account Holder Name"
+                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                            value={formData.accountHolder || ""}
+                            onChange={handleChange}
+                          />
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <CreditCard size={18} />
+                          </div>
+                          <input
+                            type="text"
+                            name="accountNumber"
+                            required
+                            placeholder="Account Number"
+                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                            value={formData.accountNumber || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setFormData({ ...formData, accountNumber: val });
+                            }}
+                          />
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                            <span className="text-xs font-black">IFSC</span>
+                          </div>
+                          <input
+                            type="text"
+                            name="ifsc"
+                            required
+                            placeholder="IFSC Code"
+                            className="w-full pl-16 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 uppercase"
+                            value={formData.ifsc || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
+                              setFormData({ ...formData, ifsc: val });
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* SIGNUP STEP 3 (Verification documents) */}
                 {!isLogin && signupStep === 3 && (
                   <div className="space-y-4">
                     <div className="pt-2">

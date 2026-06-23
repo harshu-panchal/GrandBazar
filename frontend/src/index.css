@@ -296,6 +296,18 @@ body {
     @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
   }
 
+  .custom-scrollbar-light::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .custom-scrollbar-light::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .custom-scrollbar-light::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+  }
+
   .classic-marquee-track {
     animation: hero-marquee 22s linear infinite;
     will-change: transform;

@@ -7,20 +7,31 @@ import {
     verifySellerVerificationToken,
 } from "../services/sellerVerificationService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
+import { recordLogin } from "../services/loginActivityService.js";
 
 /* ===============================
    Utils
 ================================ */
 
-const generateToken = (seller) =>
-    jwt.sign({ id: seller._id, role: "seller" }, process.env.JWT_SECRET, {
+const generateToken = (seller) => {
+    const payload = {
+        id: seller.parentId || seller._id,
+        role: "seller",
+    };
+    if (seller.parentId) {
+        payload.subSellerId = seller._id;
+        payload.subSellerRole = seller.role;
+        payload.allowedPermissions = seller.allowedPermissions || [];
+    }
+    return jwt.sign(payload, process.env.JWT_SECRET, {
         expiresIn: "7d",
     });
+};
 
 const SELLER_DOCUMENT_FIELDS = {
-    tradeLicense: "Trade License",
-    gstCertificate: "GST Certificate",
-    idProof: "ID Proof",
+    aadhar: "Aadhaar Card",
+    pan: "PAN Card",
+    bankProof: "Bank Proof",
 };
 
 const REQUIRED_SELLER_DOCUMENT_FIELDS = Object.keys(SELLER_DOCUMENT_FIELDS);
@@ -54,9 +65,9 @@ const resolveSellerDocuments = (body = {}, parsedDocuments = {}) => {
     const resolved = { ...(parsedDocuments || {}) };
 
     const directFields = {
-        tradeLicense: body.tradeLicenseUrl || body.tradeLicense,
-        gstCertificate: body.gstCertificateUrl || body.gstCertificate,
-        idProof: body.idProofUrl || body.idProof,
+        aadhar: body.aadharUrl || body.aadhar,
+        pan: body.panUrl || body.pan,
+        bankProof: body.bankProofUrl || body.bankProof,
     };
 
     for (const [field, candidate] of Object.entries(directFields)) {
@@ -97,7 +108,13 @@ export const signupSeller = async (req, res) => {
             documents,
             lat,
             lng,
-            radius
+            radius,
+            aadharNumber,
+            panNumber,
+            accountHolder,
+            accountNumber,
+            ifsc,
+            bankName
         } = req.body || {};
 
         // 1. Handle file uploads if they exist in req.files (multipart form)
@@ -130,8 +147,8 @@ export const signupSeller = async (req, res) => {
         const parsedLng = lng !== undefined ? Number(lng) : undefined;
         const parsedRadius = radius !== undefined ? Number(radius) : undefined;
 
-        if (!name || !email || !phone || !password || !shopName) {
-            return handleResponse(res, 400, "All fields are required");
+        if (!name || !email || !phone || !password || !shopName || !aadharNumber || !panNumber || !accountHolder || !accountNumber || !ifsc || !bankName) {
+            return handleResponse(res, 400, "All fields (including Aadhaar, PAN, and Bank details) are required");
         }
 
         verifySellerVerificationToken({
@@ -192,6 +209,12 @@ export const signupSeller = async (req, res) => {
             pincode,
             city,
             state,
+            aadharNumber,
+            panNumber,
+            accountHolder,
+            accountNumber,
+            ifsc,
+            bankName,
             documents: sellerDocuments,
             applicationStatus: "pending",
             isVerified: false,
@@ -292,29 +315,50 @@ export const loginSeller = async (req, res) => {
             return handleResponse(res, 401, "Invalid credentials");
         }
 
-        const applicationStatus =
-            seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
-        const isApproved =
-            seller.isVerified === true &&
-            seller.isActive === true &&
-            applicationStatus === "approved";
+        if (seller.parentId) {
+            // Sub-seller: Validate parent store's application status
+            const parent = await Seller.findById(seller.parentId);
+            if (!parent) {
+                return handleResponse(res, 404, "Parent store not found");
+            }
+            const parentStatus = parent.applicationStatus || (parent.isVerified ? "approved" : "pending");
+            const parentApproved = parent.isVerified === true && parent.isActive === true && parentStatus === "approved";
 
-        if (!isApproved) {
-            const approvalMessage =
-                applicationStatus === "rejected"
-                    ? "Your seller application was rejected. Please contact support."
-                    : "Your seller account is pending admin approval.";
+            if (!parentApproved) {
+                const approvalMessage = parentStatus === "rejected"
+                    ? "The store's application was rejected. Please contact support."
+                    : "The store account is pending admin approval.";
+                return handleResponse(res, 403, approvalMessage);
+            }
+        } else {
+            // Main seller: Validate own application status
+            const applicationStatus =
+                seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
+            const isApproved =
+                seller.isVerified === true &&
+                seller.isActive === true &&
+                applicationStatus === "approved";
 
-            return handleResponse(res, 403, approvalMessage, {
-                applicationStatus,
-                isVerified: seller.isVerified === true,
-                isActive: seller.isActive === true,
-                rejectionReason: seller.rejectionReason || "",
-            });
+            if (!isApproved) {
+                const approvalMessage =
+                    applicationStatus === "rejected"
+                        ? "Your seller application was rejected. Please contact support."
+                        : "Your seller account is pending admin approval.";
+
+                return handleResponse(res, 403, approvalMessage, {
+                    applicationStatus,
+                    isVerified: seller.isVerified === true,
+                    isActive: seller.isActive === true,
+                    rejectionReason: seller.rejectionReason || "",
+                });
+            }
         }
 
         seller.lastLogin = new Date();
         await seller.save();
+
+        // Record active login session
+        await recordLogin(seller, "Seller", req.ip, req.headers["user-agent"]);
 
         const token = generateToken(seller);
 

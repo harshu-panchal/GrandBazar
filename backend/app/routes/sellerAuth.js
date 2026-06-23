@@ -7,6 +7,12 @@ import {
 } from "../controller/sellerAuthController.js";
 import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
+import {
+    getSellerStaff,
+    createSellerStaff,
+    updateSellerStaff,
+    deleteSellerStaff
+} from "../controller/seller/staffController.js";
 import { getSellerWalletSummaryController } from "../controller/adminFinanceController.js";
 import { 
     createSellerCoupon, 
@@ -15,6 +21,15 @@ import {
     deleteSellerCoupon 
 } from "../controller/sellerCouponController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
+import handleResponse from "../utils/helper.js";
+
+const allowOwnerOnly = (req, res, next) => {
+  if (req.user && req.user.subSellerId) {
+    return handleResponse(res, 403, "Access denied. Only the store owner can perform this action.");
+  }
+  next();
+};
+
 import {
     authRouteRateLimiter,
     createContentLengthGuard,
@@ -79,5 +94,11 @@ router.post("/coupons", verifyToken, allowRoles("seller"), createSellerCoupon);
 router.get("/coupons", verifyToken, allowRoles("seller"), getSellerCoupons);
 router.put("/coupons/:id", verifyToken, allowRoles("seller"), updateSellerCoupon);
 router.delete("/coupons/:id", verifyToken, allowRoles("seller"), deleteSellerCoupon);
+
+// Sub-Seller/Staff Management Routes
+router.get("/staff", verifyToken, allowRoles("seller"), allowOwnerOnly, getSellerStaff);
+router.post("/staff", verifyToken, allowRoles("seller"), allowOwnerOnly, createSellerStaff);
+router.put("/staff/:id", verifyToken, allowRoles("seller"), allowOwnerOnly, updateSellerStaff);
+router.delete("/staff/:id", verifyToken, allowRoles("seller"), allowOwnerOnly, deleteSellerStaff);
 
 export default router;

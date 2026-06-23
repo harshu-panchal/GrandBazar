@@ -184,11 +184,25 @@ export const getSellerProfile = async (req, res) => {
     if (!seller) {
       return handleResponse(res, 404, "Seller not found");
     }
+    
+    const result = seller.toObject ? seller.toObject() : seller;
+    
+    if (req.user.subSellerId) {
+      const subSeller = await Seller.findById(req.user.subSellerId);
+      if (subSeller) {
+        result.subSeller = subSeller.toObject ? subSeller.toObject() : subSeller;
+        result.allowedPermissions = subSeller.allowedPermissions || [];
+        result.subRole = subSeller.role;
+        result.subName = subSeller.name;
+        result.subSellerId = subSeller._id;
+      }
+    }
+    
     return handleResponse(
       res,
       200,
       "Seller profile fetched successfully",
-      seller,
+      result,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);

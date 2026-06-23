@@ -12,6 +12,8 @@ const generateToken = (delivery) =>
         { expiresIn: "7d" }
     );
 
+import { recordLogin } from "../services/loginActivityService.js";
+
 /* ===============================
    SIGNUP – Send OTP
 ================================ */
@@ -173,6 +175,9 @@ export const verifyDeliveryOTP = async (req, res) => {
         delivery.lastLogin = new Date();
 
         await delivery.save();
+
+        // Record active login session
+        await recordLogin(delivery, "Delivery", req.ip, req.headers["user-agent"]);
 
         const token = generateToken(delivery);
 

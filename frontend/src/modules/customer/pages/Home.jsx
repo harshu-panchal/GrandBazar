@@ -475,7 +475,7 @@ const Home = () => {
                 <div className="w-full h-[190px] bg-[#ecfeff] p-6 relative overflow-hidden flex items-center border-y border-primary/10 shadow-sm">
                   <div className="relative z-10 w-3/5 flex flex-col items-start gap-2">
                     <h4 className="text-2xl font-black text-[#1A1A1A] tracking-tight">Get <span className="text-primary">Products</span></h4>
-                    <button className="bg-[#FF1E56] text-white px-6 py-2.5 rounded-2xl font-black text-xs tracking-wide">Order now</button>
+                    <button onClick={() => navigate('/stores')} className="bg-[#FF1E56] text-white px-6 py-2.5 rounded-2xl font-black text-xs tracking-wide active:scale-95 transition-transform">Order now</button>
                   </div>
                   <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -mt-12 -mr-12" />
                 </div>

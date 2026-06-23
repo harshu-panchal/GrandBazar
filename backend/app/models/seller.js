@@ -84,12 +84,48 @@ const sellerSchema = new mongoose.Schema(
       idProof: { type: String, trim: true },
       businessRegistration: { type: String, trim: true },
       fssaiLicense: { type: String, trim: true },
+      aadhar: { type: String, trim: true },
+      pan: { type: String, trim: true },
+      bankProof: { type: String, trim: true },
       other: { type: String, trim: true },
+    },
+
+    aadharNumber: {
+      type: String,
+      trim: true,
+    },
+    panNumber: {
+      type: String,
+      trim: true,
+    },
+    accountHolder: {
+      type: String,
+      trim: true,
+    },
+    accountNumber: {
+      type: String,
+      trim: true,
+    },
+    ifsc: {
+      type: String,
+      trim: true,
+    },
+    bankName: {
+      type: String,
+      trim: true,
     },
 
     role: {
       type: String,
       default: "seller",
+    },
+    parentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Seller",
+    },
+    allowedPermissions: {
+      type: [String],
+      default: [],
     },
 
     isVerified: {

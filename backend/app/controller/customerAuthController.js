@@ -60,8 +60,11 @@ export const loginCustomer = async (req, res) => {
     }
 };
 
+import { recordLogin } from "../services/loginActivityService.js";
+
 /* ===============================
    VERIFY OTP – Login / Signup
+Back to standard logic
 ================================ */
 export const verifyCustomerOTP = async (req, res) => {
     try {
@@ -72,6 +75,9 @@ export const verifyCustomerOTP = async (req, res) => {
             ipAddress: req.ip,
         });
         const token = generateToken(customer);
+
+        // Record active login session
+        await recordLogin(customer, "Customer", req.ip, req.headers["user-agent"]);
 
         return handleResponse(
             res,

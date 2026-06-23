@@ -4,6 +4,9 @@ const SELLER_DOC_LABELS = {
   idProof: "ID Proof",
   businessRegistration: "Business Registration",
   fssaiLicense: "FSSAI License",
+  aadhar: "Aadhaar Card",
+  pan: "PAN Card",
+  bankProof: "Bank Proof",
   other: "Other Document",
 };
 
@@ -88,6 +91,12 @@ export function formatSellerApplication(seller) {
       ? Math.min(100, 55 + docs.length * 12 + (seller.address ? 10 : 0))
       : 40,
     missingInfo,
+    aadharNumber: seller.aadharNumber || "",
+    panNumber: seller.panNumber || "",
+    accountHolder: seller.accountHolder || "",
+    accountNumber: seller.accountNumber || "",
+    ifsc: seller.ifsc || "",
+    bankName: seller.bankName || "",
   };
 }
 
