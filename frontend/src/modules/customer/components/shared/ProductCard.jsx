@@ -15,7 +15,7 @@ import { Clock } from "lucide-react";
 import { useProductDetail } from "../../context/ProductDetailContext";
 
 const ProductCard = React.memo(
-  ({ product, badge, className, compact = false, neutralBg = false, isSignature = false }) => {
+  ({ product, badge, className, compact = true, neutralBg = true, isSignature = false }) => {
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } =
       useWishlist();
     const { cart, addToCart, updateQuantity, removeFromCart } = useCart();
@@ -160,7 +160,7 @@ const ProductCard = React.memo(
         className={cn(
           "flex-shrink-0 w-full rounded-xl sm:rounded-2xl overflow-hidden flex flex-col h-full shadow-sm cursor-pointer transition-all duration-300 hover:scale-[1.02]",
           compact
-            ? "bg-white border-[1.5px] border-brand-50 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)]"
+            ? "bg-white border-[1.5px] border-brand-50 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)] max-w-[160px] sm:max-w-[190px] md:max-w-[210px] lg:max-w-[220px]"
             : neutralBg
               ? "bg-white border border-slate-100 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)]"
               : "bg-primary/10 border border-primary/20",
@@ -225,7 +225,8 @@ const ProductCard = React.memo(
 
           <div
             className={cn(
-              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square p-2 sm:p-4",
+              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105",
+              compact ? "aspect-[4/3] p-1.5 sm:p-2" : "aspect-square p-2 sm:p-4",
               compact || neutralBg ? "bg-white/70" : "bg-white/50"
             )}>
             <img
@@ -243,14 +244,14 @@ const ProductCard = React.memo(
           className={cn(
             "flex flex-col flex-1",
             compact
-              ? "p-2 pt-1 gap-0"
+              ? "p-2 pt-1 gap-0.5"
               : "bg-white/40 p-1.5 pt-2 sm:p-3 sm:pt-4 gap-0.5",
           )}>
-          <div className="flex items-center gap-1 mb-0.5 sm:gap-1.5 sm:mb-1">
+          <div className="flex items-center gap-1 mb-0.5 sm:gap-1.5">
             <div
               className={cn(
                 "border-2 border-primary rounded-full flex items-center justify-center",
-                compact ? "h-2.5 w-2.5" : "h-2.5 w-2.5 sm:h-3.5 sm:w-3.5",
+                compact ? "h-2 w-2" : "h-2.5 w-2.5 sm:h-3.5 sm:w-3.5",
               )}>
               <div
                 className={cn(
@@ -274,7 +275,7 @@ const ProductCard = React.memo(
             )}
           </div>
 
-          <div className={cn(compact ? "mb-1" : "mb-1 sm:mb-2")}>
+          <div className={cn(compact ? "mb-0.5" : "mb-1 sm:mb-2")}>
             <h4
               className={cn(
                 "font-[600] text-[#1A1A1A] leading-tight truncate",
@@ -285,8 +286,8 @@ const ProductCard = React.memo(
           </div>
 
           {/* Delivery Time & Unit info */}
-          <div className="flex items-center gap-1 text-gray-500 mt-0.5 mb-1 sm:gap-1.5 sm:mt-1 sm:mb-2">
-            <Clock size={compact ? 9 : 10} className="text-primary/80" />
+          <div className={cn("flex items-center gap-1 text-gray-500", compact ? "mt-0 mb-1" : "mt-0.5 mb-1 sm:gap-1.5 sm:mt-1 sm:mb-2")}>
+            <Clock size={compact ? 8 : 10} className="text-primary/80" />
             <span
               className={cn(
                 "font-semibold",

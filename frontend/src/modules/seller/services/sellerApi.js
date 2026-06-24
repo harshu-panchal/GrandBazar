@@ -12,6 +12,11 @@ export const sellerApi = {
     updateProduct: (id, data) => axiosInstance.put(`/products/${id}`, data),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
 
+    // Catalog
+    getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),
+    getCatalogProductById: (id) => axiosInstance.get(`/catalog/${id}`),
+    claimCatalogProduct: (data) => axiosInstance.post('/catalog/claim', data),
+
     // Categories (Public)
     getCategories: () => axiosInstance.get('/admin/categories'),
     getCategoryTree: () => axiosInstance.get('/admin/categories?tree=true'),

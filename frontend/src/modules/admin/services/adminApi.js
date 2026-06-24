@@ -49,6 +49,15 @@ export const adminApi = {
     createProduct: (formData) => axiosInstance.post('/products', formData),
     updateProduct: (id, formData) => axiosInstance.put(`/products/${id}`, formData),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
+
+    // Catalog Management
+    getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),
+    getCatalogProductById: (id) => axiosInstance.get(`/catalog/${id}`),
+    createCatalogProduct: (formData) => axiosInstance.post('/catalog', formData),
+    createCatalogProductsBulk: (data) => axiosInstance.post('/catalog/bulk', data),
+    updateCatalogProduct: (id, formData) => axiosInstance.put(`/catalog/${id}`, formData),
+    deleteCatalogProduct: (id) => axiosInstance.delete(`/catalog/${id}`),
+
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),

@@ -22,6 +22,7 @@ import {
   Sparkles,
   User,
   Activity,
+  Library,
 } from "lucide-react";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -43,6 +44,9 @@ const CategoryHierarchy = React.lazy(
 );
 const ProductManagement = React.lazy(
   () => import("../pages/ProductManagement"),
+);
+const CatalogManagement = React.lazy(
+  () => import("../pages/CatalogManagement"),
 );
 const ActiveSellers = React.lazy(() => import("../pages/ActiveSellers"));
 const PendingSellers = React.lazy(() => import("../pages/PendingSellers"));
@@ -121,6 +125,13 @@ const navItems = [
     path: "/admin/products", 
     icon: Box, 
     color: "amber",
+    permission: "products",
+  },
+  {
+    label: "Master Catalog", 
+    path: "/admin/catalog", 
+    icon: Library, 
+    color: "violet",
     permission: "products",
   },
   {
@@ -325,6 +336,7 @@ const AdminRoutes = () => {
         )}
         
         {hasPermission("products") && <Route path="/products" element={<ProductManagement />} />}
+        {hasPermission("products") && <Route path="/catalog" element={<CatalogManagement />} />}
         {hasPermission("sellers") && (
           <>
             <Route path="/sellers/active" element={<ActiveSellers />} />

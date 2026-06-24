@@ -80,6 +80,11 @@ const productSchema = new mongoose.Schema(
             ref: "Seller",
             required: true,
         },
+        catalogProductId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "CatalogProduct",
+            default: null,
+        },
         status: {
             type: String,
             enum: ["active", "inactive"],

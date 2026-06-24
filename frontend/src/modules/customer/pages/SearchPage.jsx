@@ -191,16 +191,6 @@ const SearchPage = () => {
         }
     };
 
-    // Real-time filtering logic
-    // Real-time filtering logic
-    const filteredResults = useMemo(() => {
-        if (!debouncedQuery.trim()) return [];
-        return allProducts.filter(p =>
-            p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-            p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase())
-        );
-    }, [debouncedQuery, allProducts]);
-
     const filteredSellerResults = useMemo(() => {
         if (!debouncedQuery.trim()) return [];
         return allSellers.filter(s =>
@@ -210,10 +200,86 @@ const SearchPage = () => {
         );
     }, [debouncedQuery, allSellers]);
 
+    // Real-time backend search fetch combined with local matches for instant response
     useEffect(() => {
-        setResults(filteredResults);
+        const fetchResults = async () => {
+            if (!debouncedQuery.trim()) {
+                setResults([]);
+                return;
+            }
+            
+            // First set results to local matches for instant feedback
+            const localMatches = allProducts.filter(p =>
+                p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+                p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase())
+            );
+            setResults(localMatches);
+            
+            const hasValidLocation =
+                Number.isFinite(currentLocation?.latitude) &&
+                Number.isFinite(currentLocation?.longitude);
+            if (!hasValidLocation) return;
+
+            setIsLoading(true);
+            try {
+                const prodRes = await customerApi.getProducts({
+                    search: debouncedQuery,
+                    limit: 100,
+                    lat: currentLocation.latitude,
+                    lng: currentLocation.longitude,
+                });
+                
+                if (prodRes.data.success) {
+                    const rawResult = prodRes.data.result;
+                    const dbProds = Array.isArray(prodRes.data.results)
+                        ? prodRes.data.results
+                        : Array.isArray(rawResult?.items)
+                        ? rawResult.items
+                        : Array.isArray(rawResult)
+                        ? rawResult
+                        : [];
+                    const formattedProds = dbProds.map(p => ({
+                        ...p,
+                        id: p._id,
+                        image:
+                          p.mainImage ||
+                          p.image ||
+                          "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+                        price: p.salePrice || p.price,
+                        originalPrice: p.price,
+                        weight: p.weight || '1 unit',
+                        deliveryTime: '8-15 mins'
+                    }));
+                    
+                    // Merge local and backend matches to avoid duplicates (by ID)
+                    setResults(prev => {
+                        const mergedMap = new Map();
+                        // Put local matches first
+                        localMatches.forEach(item => {
+                            const idKey = item.id || item._id;
+                            if (idKey) mergedMap.set(idKey, item);
+                        });
+                        // Overwrite/add backend matches
+                        formattedProds.forEach(item => {
+                            const idKey = item.id || item._id;
+                            if (idKey) mergedMap.set(idKey, item);
+                        });
+                        return Array.from(mergedMap.values());
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching search results:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchResults();
+    }, [debouncedQuery, allProducts, currentLocation?.latitude, currentLocation?.longitude]);
+
+    useEffect(() => {
         setSellerResults(filteredSellerResults);
-    }, [filteredResults, filteredSellerResults]);
+    }, [filteredSellerResults]);
 
     // Dynamically load no-service Lottie when results are empty
     useEffect(() => {
@@ -346,7 +412,7 @@ const SearchPage = () => {
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 md:gap-x-4 gap-y-6 md:gap-y-10">
                                         {results.map((product) => (
                                             <div key={product.id} onClick={() => saveSearch(query)} className="flex justify-center">
-                                                <ProductCard product={product} compact={isMobile} />
+                                                <ProductCard product={product} compact={true} neutralBg={true} />
                                             </div>
                                         ))}
                                     </div>
@@ -416,7 +482,7 @@ const SearchPage = () => {
                                     ))
                                 ) : lowestPriceProducts.map((product) => (
                                     <div key={product.id} className="min-w-[126px] sm:min-w-[136px] md:min-w-[148px] snap-start">
-                                        <ProductCard product={product} compact={isMobile} />
+                                        <ProductCard product={product} compact={true} neutralBg={true} />
                                     </div>
                                 ))}
                             </div>

@@ -1003,6 +1003,12 @@ const ProductManagement = () => {
                   onWheel={handleModalScrollWheel}>
                   {modalTab === "general" && (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                      {editingItem?.catalogProductId && (
+                        <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold p-4 rounded-xl flex items-center gap-2">
+                          <HiOutlineExclamationCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                          <span>This product is claimed from the Master Catalog. Canonical details (Title, Web Address, Description, Brand) are read-only to maintain consistency.</span>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-1.5 flex flex-col">
                           <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
@@ -1010,6 +1016,7 @@ const ProductManagement = () => {
                           </label>
                           <input
                             value={formData.name}
+                            disabled={!!editingItem?.catalogProductId}
                             onChange={(e) => {
                               const nextName = e.target.value;
                               setFormData((prev) => ({
@@ -1030,7 +1037,7 @@ const ProductManagement = () => {
                                 }),
                               }));
                             }}
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
+                            className="w-full px-4 py-2.5 bg-slate-100 disabled:opacity-75 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
                             placeholder="e.g. Premium Basmati Rice"
                           />
                         </div>
@@ -1038,12 +1045,13 @@ const ProductManagement = () => {
                           <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
                             Web Address
                           </label>
-                          <div className="flex items-center bg-slate-50 rounded-xl px-4 py-2.5">
+                          <div className={cn("flex items-center bg-slate-50 rounded-xl px-4 py-2.5", !!editingItem?.catalogProductId && "opacity-75")}>
                             <span className="text-[10px] text-slate-600 font-bold mr-1">
                               /product/
                             </span>
                             <input
                               value={formData.slug}
+                              disabled={!!editingItem?.catalogProductId}
                               onChange={(e) =>
                                 setFormData({
                                   ...formData,
@@ -1062,6 +1070,7 @@ const ProductManagement = () => {
                         </label>
                         <textarea
                           value={formData.description}
+                          disabled={!!editingItem?.catalogProductId}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
@@ -1070,7 +1079,7 @@ const ProductManagement = () => {
                           }
                           onWheel={(e) => e.stopPropagation()}
                           onTouchMove={(e) => e.stopPropagation()}
-                          className="w-full px-4 py-3 bg-slate-100 border-none rounded-2xl text-sm font-semibold min-h-[160px] max-h-[260px] outline-none resize-none overflow-y-auto custom-scrollbar"
+                          className="w-full px-4 py-3 bg-slate-100 disabled:opacity-75 border-none rounded-2xl text-sm font-semibold min-h-[160px] max-h-[260px] outline-none resize-none overflow-y-auto custom-scrollbar"
                           placeholder="Describe the item here..."
                         />
                       </div>
@@ -1081,13 +1090,14 @@ const ProductManagement = () => {
                           </label>
                           <input
                             value={formData.brand}
+                            disabled={!!editingItem?.catalogProductId}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
                                 brand: e.target.value,
-                              })
+                               })
                             }
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
+                            className="w-full px-4 py-2.5 bg-slate-100 disabled:opacity-75 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
                             placeholder="e.g. Amul"
                           />
                         </div>
@@ -1125,6 +1135,12 @@ const ProductManagement = () => {
                   {/* Additional tabs populated as needed */}
                   {modalTab === "category" && (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                      {editingItem?.catalogProductId && (
+                        <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold p-4 rounded-xl flex items-center gap-2">
+                          <HiOutlineExclamationCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                          <span>This product is claimed from the Master Catalog. Categories are read-only to maintain classification consistency.</span>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-1.5 flex flex-col">
                           <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
@@ -1132,10 +1148,11 @@ const ProductManagement = () => {
                           </label>
                           <select
                             value={formData.header}
+                            disabled={!!editingItem?.catalogProductId}
                             onChange={(e) =>
                               setFormData({ ...formData, header: e.target.value, category: "", subcategory: "" })
                             }
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer">
+                            className="w-full px-4 py-2.5 bg-slate-100 disabled:opacity-75 border-none rounded-xl text-sm font-bold outline-none cursor-pointer">
                             <option value="">Select Main Group</option>
                             {categories.map((h) => (
                               <option key={h._id || h.id} value={h._id || h.id}>
@@ -1153,8 +1170,8 @@ const ProductManagement = () => {
                             onChange={(e) =>
                               setFormData({ ...formData, category: e.target.value, subcategory: "" })
                             }
-                            disabled={!formData.header}
-                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
+                            disabled={!!editingItem?.catalogProductId || !formData.header}
+                            className="w-full px-4 py-2.5 bg-slate-100 disabled:opacity-75 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
                             <option value="">Select Category</option>
                             {categories
                               .find((h) => (h._id || h.id) === formData.header)
@@ -1175,8 +1192,8 @@ const ProductManagement = () => {
                           onChange={(e) =>
                             setFormData({ ...formData, subcategory: e.target.value })
                           }
-                          disabled={!formData.category}
-                          className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
+                          disabled={!!editingItem?.catalogProductId || !formData.category}
+                          className="w-full px-4 py-2.5 bg-slate-100 disabled:opacity-75 border-none rounded-xl text-sm font-bold outline-none cursor-pointer disabled:opacity-50">
                           <option value="">Select Sub-Category</option>
                           {categories
                             .find((h) => (h._id || h.id) === formData.header)
@@ -1193,17 +1210,25 @@ const ProductManagement = () => {
 
                   {modalTab === "media" && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
+                      {editingItem?.catalogProductId && (
+                        <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold p-4 rounded-xl flex items-center gap-2">
+                          <HiOutlineExclamationCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                          <span>This product is claimed from the Master Catalog. Images are read-only to maintain consistency.</span>
+                        </div>
+                      )}
                       <div className="space-y-3">
                         <label className="text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
                           Main Cover Photo
                         </label>
                         <div className="flex flex-col md:flex-row items-start gap-6">
-                          <div className="w-48 aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center group hover:border-primary hover:bg-primary/5 transition-all cursor-pointer overflow-hidden relative">
-                            <input
-                              type="file"
-                              className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                              onChange={(e) => handleImageUpload(e, "main")}
-                            />
+                          <div className={cn("w-48 aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center overflow-hidden relative", !editingItem?.catalogProductId && "group hover:border-primary hover:bg-primary/5 cursor-pointer")}>
+                            {!editingItem?.catalogProductId && (
+                              <input
+                                type="file"
+                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                onChange={(e) => handleImageUpload(e, "main")}
+                              />
+                            )}
                             {formData.mainImage ? (
                               <img src={formData.mainImage} alt="Main Preview" className="w-full h-full object-cover" />
                             ) : (
@@ -1224,11 +1249,11 @@ const ProductManagement = () => {
                           {(formData.galleryImages || []).slice(0, 4).map((img, idx) => (
                             <div
                               key={`${img}-${idx}`}
-                              className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 overflow-hidden relative">
+                              className="aspect-square rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden relative">
                               <img src={img} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
                             </div>
                           ))}
-                          {Array.from({ length: Math.max(0, 4 - (formData.galleryImages || []).length) }).map((_, idx) => (
+                          {!editingItem?.catalogProductId && Array.from({ length: Math.max(0, 4 - (formData.galleryImages || []).length) }).map((_, idx) => (
                             <div
                               key={`upload-${idx}`}
                               className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center group hover:border-primary hover:bg-primary/5 transition-all cursor-pointer overflow-hidden relative">
@@ -1244,9 +1269,11 @@ const ProductManagement = () => {
                             </div>
                           ))}
                         </div>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          Existing gallery images are shown here. Uploading new images will append them to the gallery.
-                        </p>
+                        {!editingItem?.catalogProductId && (
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            Existing gallery images are shown here. Uploading new images will append them to the gallery.
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}

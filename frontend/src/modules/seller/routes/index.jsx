@@ -16,12 +16,14 @@ import {
   HiOutlinePhoto,
   HiOutlineTag,
   HiOutlineUserGroup,
+  HiOutlineInboxStack,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
 const ProductManagement = React.lazy(
   () => import("../pages/ProductManagement"),
 );
+const BrowseCatalog = React.lazy(() => import("../pages/BrowseCatalog"));
 const StockManagement = React.lazy(() => import("../pages/StockManagement"));
 const AddProduct = React.lazy(() => import("../pages/AddProduct"));
 const Returns = React.lazy(() => import("../pages/Returns"));
@@ -39,6 +41,7 @@ const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
   { label: "Store Design", path: "/seller/storefront", icon: HiOutlinePhoto, permission: "storefront" },
   { label: "Products", path: "/seller/products", icon: HiOutlineCube, permission: "products" },
+  { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
   { label: "Stock", path: "/seller/inventory", icon: HiOutlineArchiveBox, permission: "inventory" },
   { label: "Orders", path: "/seller/orders", icon: HiOutlineTruck, permission: "orders" },
   { label: "Returns", path: "/seller/returns", icon: HiOutlineArchiveBox, permission: "returns" },
@@ -106,6 +109,7 @@ const SellerRoutes = () => {
         {hasPermission("products") && (
           <>
             <Route path="/products" element={<ProductManagement />} />
+            <Route path="/products/catalog" element={<BrowseCatalog />} />
             <Route path="/products/add" element={<AddProduct />} />
           </>
         )}
