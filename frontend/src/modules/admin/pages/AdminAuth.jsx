@@ -168,7 +168,7 @@ const AdminAuth = () => {
                                                 value={formData.name}
                                                 onChange={handleChange}
                                                 placeholder="Full Name"
-                                                className="w-full pl-14 pr-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-bold text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-8 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
+                                                className="w-full pl-14 pr-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-medium text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-4 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
                                             />
                                         </motion.div>
                                     )}
@@ -185,7 +185,7 @@ const AdminAuth = () => {
                                         value={formData.email}
                                         onChange={handleChange}
                                         placeholder="Username or email"
-                                        className="w-full pl-14 pr-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-bold text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-8 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
+                                        className="w-full pl-14 pr-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-medium text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-4 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
                                     />
                                 </div>
 
@@ -203,7 +203,7 @@ const AdminAuth = () => {
                                         value={formData.password}
                                         onChange={handleChange}
                                         placeholder="Password (min 10 chars)"
-                                        className="w-full pl-14 pr-14 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-bold text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-8 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
+                                        className="w-full pl-14 pr-14 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-medium text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-4 focus:ring-brand-50/50 transition-all placeholder:text-gray-300"
                                     />
                                     <button
                                         type="button"

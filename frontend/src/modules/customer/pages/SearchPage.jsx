@@ -24,6 +24,8 @@ const SearchPage = () => {
     const [query, setQuery] = useState(initialQuery);
     const [results, setResults] = useState([]);
     const [allProducts, setAllProducts] = useState([]);
+    const [allSellers, setAllSellers] = useState([]);
+    const [sellerResults, setSellerResults] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
@@ -105,27 +107,36 @@ const SearchPage = () => {
     };
 
     // Fetch products
+    // Fetch products and sellers
     useEffect(() => {
-        const fetchProducts = async () => {
+        const fetchData = async () => {
             const hasValidLocation =
                 Number.isFinite(currentLocation?.latitude) &&
                 Number.isFinite(currentLocation?.longitude);
             if (!hasValidLocation) {
                 setAllProducts([]);
+                setAllSellers([]);
                 setIsLoading(false);
                 return;
             }
             setIsLoading(true);
             try {
-                const response = await customerApi.getProducts({
-                    limit: 100,
-                    lat: currentLocation.latitude,
-                    lng: currentLocation.longitude,
-                });
-                if (response.data.success) {
-                    const rawResult = response.data.result;
-                    const dbProds = Array.isArray(response.data.results)
-                        ? response.data.results
+                const [prodRes, sellRes] = await Promise.all([
+                    customerApi.getProducts({
+                        limit: 100,
+                        lat: currentLocation.latitude,
+                        lng: currentLocation.longitude,
+                    }),
+                    customerApi.getNearbySellers({
+                        lat: currentLocation.latitude,
+                        lng: currentLocation.longitude,
+                    })
+                ]);
+                
+                if (prodRes.data.success) {
+                    const rawResult = prodRes.data.result;
+                    const dbProds = Array.isArray(prodRes.data.results)
+                        ? prodRes.data.results
                         : Array.isArray(rawResult?.items)
                         ? rawResult.items
                         : Array.isArray(rawResult)
@@ -145,13 +156,16 @@ const SearchPage = () => {
                     }));
                     setAllProducts(formattedProds);
                 }
+                
+                const dbSellers = sellRes.data?.results || sellRes.data?.result || sellRes.data || [];
+                setAllSellers(Array.isArray(dbSellers) ? dbSellers : []);
             } catch (error) {
-                console.error('Error fetching products:', error);
+                console.error('Error fetching data:', error);
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchProducts();
+        fetchData();
     }, [currentLocation?.latitude, currentLocation?.longitude]);
 
     // Save search term to history
@@ -178,6 +192,7 @@ const SearchPage = () => {
     };
 
     // Real-time filtering logic
+    // Real-time filtering logic
     const filteredResults = useMemo(() => {
         if (!debouncedQuery.trim()) return [];
         return allProducts.filter(p =>
@@ -186,9 +201,19 @@ const SearchPage = () => {
         );
     }, [debouncedQuery, allProducts]);
 
+    const filteredSellerResults = useMemo(() => {
+        if (!debouncedQuery.trim()) return [];
+        return allSellers.filter(s =>
+            String(s.shopName || s.name || "").toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+            String(s.category || "").toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+            String(s.locality || "").toLowerCase().includes(debouncedQuery.toLowerCase())
+        );
+    }, [debouncedQuery, allSellers]);
+
     useEffect(() => {
         setResults(filteredResults);
-    }, [filteredResults]);
+        setSellerResults(filteredSellerResults);
+    }, [filteredResults, filteredSellerResults]);
 
     // Dynamically load no-service Lottie when results are empty
     useEffect(() => {
@@ -275,36 +300,74 @@ const SearchPage = () => {
                 <div className="p-5 space-y-10 pb-24">
                 {/* Search Results List */}
                 {query ? (
-                    <section>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-slate-800 tracking-tight">
-                                Search Results
-                            </h2>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{results.length} found</span>
-                        </div>
-
-                        {results.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 md:gap-x-4 gap-y-6 md:gap-y-10">
-                                {results.map((product) => (
-                                    <div key={product.id} onClick={() => saveSearch(query)} className="flex justify-center">
-                                        <ProductCard product={product} compact={isMobile} />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="py-16 flex flex-col items-center text-center">
-                                <div className="w-48 h-48 md:w-64 md:h-64 mb-6">
-                                    {noServiceData ? (
-                                        <Lottie animationData={noServiceData} loop={true} />
-                                    ) : (
-                                        <div className="w-48 h-48 md:w-64 md:h-64" />
-                                    )}
+                    <div className="space-y-10">
+                        {/* Sellers Results */}
+                        {sellerResults.length > 0 && (
+                            <section>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                                        Shops & Stores
+                                    </h2>
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sellerResults.length} found</span>
                                 </div>
-                                <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">No items found</h3>
-                                <p className="text-slate-500 font-medium max-w-xs">We couldn't find anything for "{query}". Try different keywords!</p>
-                            </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {sellerResults.map(s => (
+                                        <div key={s._id} onClick={() => { saveSearch(query); navigate(`/store/${s._id}`); }} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md cursor-pointer transition-all">
+                                            <div className="h-14 w-14 rounded-xl bg-slate-100 flex items-center justify-center font-black text-xl text-slate-400">
+                                                {String(s.shopName || s.name || "S").charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-slate-800 line-clamp-1">{s.shopName || s.name}</h3>
+                                                <p className="text-xs text-slate-500 line-clamp-1">
+                                                    {s.category || "Store"} • {s.locality || s.address || "Nearby"}
+                                                    {s.distance !== undefined && (
+                                                        <span className="ml-1 font-bold text-brand-600"> • {s.distance < 0.1 ? "Very close" : `${s.distance.toFixed(1)} km away`}</span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <ChevronRight className="text-slate-300" size={20} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
                         )}
-                    </section>
+
+                        {/* Products Results */}
+                        {(results.length > 0 || sellerResults.length === 0) && (
+                            <section>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">
+                                        Products
+                                    </h2>
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{results.length} found</span>
+                                </div>
+
+                                {results.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 md:gap-x-4 gap-y-6 md:gap-y-10">
+                                        {results.map((product) => (
+                                            <div key={product.id} onClick={() => saveSearch(query)} className="flex justify-center">
+                                                <ProductCard product={product} compact={isMobile} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    sellerResults.length === 0 && (
+                                        <div className="py-16 flex flex-col items-center text-center">
+                                            <div className="w-48 h-48 md:w-64 md:h-64 mb-6">
+                                                {noServiceData ? (
+                                                    <Lottie animationData={noServiceData} loop={true} />
+                                                ) : (
+                                                    <div className="w-48 h-48 md:w-64 md:h-64" />
+                                                )}
+                                            </div>
+                                            <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">No items found</h3>
+                                            <p className="text-slate-500 font-medium max-w-xs">We couldn't find anything for "{query}". Try different keywords!</p>
+                                        </div>
+                                    )
+                                )}
+                            </section>
+                        )}
+                    </div>
                 ) : (
                     <>
                         {/* 1. Recently Searched Item Section */}

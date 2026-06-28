@@ -162,7 +162,6 @@ const DeliveryLayout = () => {
       pickup: p.pickup,
       drop: dropLabel,
       distance: "Nearby",
-      estTime: "10-15 min",
       value: total,
       earnings: earnings,
       expiresAt: payload.deliverySearchExpiresAt || null,
@@ -200,7 +199,6 @@ const DeliveryLayout = () => {
         ? newOrder.seller?.shopName || "Seller Store"
         : newOrder.address?.address || "Customer Address",
       distance: "Nearby",
-      estTime: "10-15 min",
       value: total,
       earnings: earnings,
       expiresAt: newOrder.deliverySearchExpiresAt || null,

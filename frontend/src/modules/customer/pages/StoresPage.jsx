@@ -2,11 +2,14 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Store, MapPin, Clock, ArrowRight, Search, 
-  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle
+  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter, ChevronDown
 } from "lucide-react";
+import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import Lottie from "lottie-react";
+import storePin from "@/assets/store-pin.png";
+import customerPin from "@/assets/customer-pin.png";
 
 const STORE_THEMES = {
   grocery: {
@@ -92,6 +95,27 @@ const StoresPage = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [expandedSellerId, setExpandedSellerId] = useState(null);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [filterDistance, setFilterDistance] = useState("all");
+  const [isMapView, setIsMapView] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
+
+  const storeMarkerIcon = useMemo(() => {
+    return isLoaded && window.google ? {
+      url: storePin,
+      scaledSize: new window.google.maps.Size(40, 40),
+    } : null;
+  }, [isLoaded]);
+
+  const customerMarkerIcon = useMemo(() => {
+    return isLoaded && window.google ? {
+      url: customerPin,
+      scaledSize: new window.google.maps.Size(40, 40),
+    } : null;
+  }, [isLoaded]);
 
   // Custom Welcome Splash State
   const [showWelcomeSplash, setShowWelcomeSplash] = useState(false);
@@ -153,10 +177,17 @@ const StoresPage = () => {
 
   // Unique categories of nearby stores for dynamic filters
   const categoriesList = useMemo(() => {
-    const set = new Set();
+    const set = new Set(["Grocery", "Electronics", "Pharmacy", "Fashion", "General Store"]);
     sellers.forEach(s => {
       if (s.category && String(s.category).trim()) {
         set.add(String(s.category).trim());
+      }
+      if (Array.isArray(s.productCategories)) {
+        s.productCategories.forEach(cat => {
+          if (cat && String(cat).trim()) {
+            set.add(String(cat).trim());
+          }
+        });
       }
     });
     return ["all", ...Array.from(set)];
@@ -170,10 +201,25 @@ const StoresPage = () => {
         String(s.category || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(s.locality || "").toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesTab = activeTab === "all" || s.category === activeTab;
-      return matchesSearch && matchesTab;
+      const sCat = String(s.category || "General Store").toLowerCase();
+      const tabCat = activeTab.toLowerCase();
+      
+      let matchesTab = activeTab === "all" || sCat === tabCat;
+      
+      if (!matchesTab && Array.isArray(s.productCategories)) {
+        matchesTab = s.productCategories.some(cat => String(cat).toLowerCase() === tabCat);
+      }
+
+      const matchesDistance = filterDistance === "all" || (s.distance !== undefined && s.distance <= Number(filterDistance));
+      
+      return matchesSearch && matchesTab && matchesDistance;
+    }).sort((a, b) => {
+      if (a.distance !== undefined && b.distance !== undefined) {
+        return a.distance - b.distance;
+      }
+      return 0;
     });
-  }, [sellers, searchQuery, activeTab]);
+  }, [sellers, searchQuery, activeTab, filterDistance]);
 
   const toggleExpand = (e, sellerId) => {
     e.preventDefault();
@@ -206,11 +252,23 @@ const StoresPage = () => {
           animation: waveShift 8s ease infinite;
         }
       `}</style>
-
-
-
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
+        {/* Page Heading & Map Toggle */}
+        <div className="flex items-center justify-between mb-6 md:mb-8">
+          <div className="flex items-center gap-3">
+            <Store size={28} className="text-brand-500" />
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Stores Near You</h1>
+          </div>
+          <button 
+            onClick={() => setIsMapView(true)}
+            className="flex items-center gap-2 bg-white border-2 border-slate-100 hover:border-slate-200 px-4 py-2 rounded-xl shadow-sm text-sm font-bold text-slate-700 transition-all active:scale-95"
+          >
+            <Map className="text-brand-500" size={18} />
+            <span className="hidden sm:inline">Map View</span>
+          </button>
+        </div>
+
         {/* Main Hero Header Section */}
         <div className="relative mb-8 overflow-hidden rounded-[2rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">
           <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-200 via-rose-200 to-violet-200 blur-3xl pointer-events-none" />
@@ -260,16 +318,34 @@ const StoresPage = () => {
             ))}
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full md:max-w-xs">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors" size={18} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shop name, category..."
-              className="w-full bg-white/90 backdrop-blur-md border-2 border-slate-100/80 hover:border-slate-200 focus:border-amber-400 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)] pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
-            />
+          {/* Search & Distance Filter */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-md">
+            <div className="relative w-full flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors" size={18} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search shop name, category..."
+                className="w-full bg-white/90 backdrop-blur-md border-2 border-slate-100/80 hover:border-slate-200 focus:border-amber-400 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)] pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
+              />
+            </div>
+            
+            <div className="relative w-full sm:w-[160px] shrink-0">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-500 z-10" size={18} />
+              <select
+                value={filterDistance}
+                onChange={(e) => setFilterDistance(e.target.value)}
+                className="w-full appearance-none bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 px-4 py-3.5 pl-10 pr-10 rounded-2xl text-sm font-semibold text-slate-800 outline-none transition-all cursor-pointer shadow-sm relative z-0"
+              >
+                <option value="all">Any Distance</option>
+                <option value="2">Within 2 km</option>
+                <option value="5">Within 5 km</option>
+                <option value="10">Within 10 km</option>
+                <option value="20">Within 20 km</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" size={16} />
+            </div>
           </div>
         </div>
 
@@ -390,7 +466,6 @@ const StoresPage = () => {
                         </div>
                       </div>
                     </div>
-
                     {/* Expandable details panel toggler */}
                     <div className="mt-3 pt-2 border-t border-slate-100/60 flex flex-col">
                       <button
@@ -438,6 +513,61 @@ const StoresPage = () => {
         )}
 
       </div>
+      
+      {/* Full Screen Map Overlay */}
+      {isMapView && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+          {/* Map Header */}
+          <div className="flex items-center justify-between px-4 py-4 md:px-8 shadow-sm bg-white border-b border-slate-100 z-10">
+            <div className="flex items-center gap-3">
+              <Store size={24} className="text-brand-500" />
+              <h2 className="text-lg md:text-xl font-black text-slate-800 tracking-tight">Stores on Map</h2>
+            </div>
+            <button 
+              onClick={() => setIsMapView(false)}
+              className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full text-xs font-bold text-slate-700 transition-all active:scale-95 shadow-sm"
+            >
+              <List size={16} className="text-slate-500" />
+              Close Map
+            </button>
+          </div>
+
+          {/* Map Container */}
+          <div className="flex-1 relative bg-slate-50">
+            {isLoaded ? (
+              <GoogleMap
+                mapContainerStyle={{ width: "100%", height: "100%" }}
+                center={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+                zoom={14}
+                options={{ disableDefaultUI: true, zoomControl: true }}
+              >
+                {/* User Location */}
+                <Marker position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }} icon={customerMarkerIcon} />
+                
+                {/* Store Locations */}
+                {filteredSellers.map(s => {
+                  if (s.location?.coordinates && s.location.coordinates.length === 2) {
+                    return (
+                      <Marker 
+                        key={s._id} 
+                        position={{ lat: s.location.coordinates[1], lng: s.location.coordinates[0] }} 
+                        onClick={() => navigate(`/store/${s._id}`)}
+                        title={s.shopName || s.name}
+                        icon={storeMarkerIcon}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </GoogleMap>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="h-10 w-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

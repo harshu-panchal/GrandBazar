@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
@@ -51,6 +51,20 @@ const getStoreTheme = (category) => {
   return STORE_THEMES.default;
 };
 
+const getEmbedUrl = (url) => {
+  if (!url) return "";
+  
+  // Handle YouTube Shorts
+  const shortsMatch = url.match(/\/shorts\/([^&?#]+)/);
+  if (shortsMatch && shortsMatch[1]) {
+    return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+  }
+
+  // Handle standard YouTube links
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
+  return match && match[1] ? `https://www.youtube.com/embed/${match[1]}` : url;
+};
+
 const StoreDetailPage = () => {
   const { sellerId } = useParams();
   const navigate = useNavigate();
@@ -61,8 +75,17 @@ const StoreDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
+
+  useEffect(() => {
+    if (!seller?.banners || seller.banners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % seller.banners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [seller?.banners]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -296,9 +319,60 @@ const StoreDetailPage = () => {
                     </>
                   )}
                 </div>
-
               </div>
             </div>
+
+            {/* Store Video Section */}
+            {seller.storeVideo && (
+              <div className="w-full bg-slate-900 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-xl relative overflow-hidden mt-2">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-2 md:px-4 mt-1">
+                    <Sparkles size={18} className="text-brand-400 animate-pulse" />
+                    <h3 className="text-lg md:text-xl font-[900] text-white uppercase tracking-widest">Store Spotlight</h3>
+                  </div>
+                  <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl md:rounded-2xl overflow-hidden bg-black relative border-4 border-slate-800 shadow-2xl">
+                    {seller.storeVideo.includes("youtube.com") || seller.storeVideo.includes("youtu.be") ? (
+                      <iframe
+                        className="w-full h-full absolute inset-0"
+                        src={getEmbedUrl(seller.storeVideo)}
+                        title="Store Spotlight Video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    ) : (
+                      <video src={seller.storeVideo} controls className="w-full h-full object-contain absolute inset-0" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Signature Products Section */}
+            {seller.signatureProducts && Array.isArray(seller.signatureProducts) && seller.signatureProducts.length > 0 && (
+              <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-[1.5rem] md:rounded-3xl p-6 shadow-sm border border-amber-100/50 mt-2 mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Star size={18} className="text-amber-500 fill-amber-500" />
+                  <h3 className="text-lg md:text-xl font-[900] text-amber-900 uppercase tracking-widest">Signature Products</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {seller.signatureProducts.map(sigProd => (
+                    <ProductCard 
+                      key={sigProd._id}
+                      product={{
+                        ...sigProd,
+                        id: sigProd._id,
+                        image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+                        price: sigProd.salePrice || sigProd.price,
+                        originalPrice: sigProd.price,
+                        weight: sigProd.weight || "1 unit"
+                      }} 
+                      compact={false}
+                      isSignature={true}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Split layout: Sidebar for Category (Desktop) or Horizontal topbar (Mobile) + Main Product Grid */}
             <div className="flex flex-col md:flex-row items-start gap-8">

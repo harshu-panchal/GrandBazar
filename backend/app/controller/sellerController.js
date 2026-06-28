@@ -1,5 +1,6 @@
 import Seller from "../models/seller.js";
 import Transaction from "../models/transaction.js";
+import Product from "../models/product.js";
 import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
@@ -51,6 +52,52 @@ export const getNearbySellers = async (req, res) => {
 
       return distance <= (seller.serviceRadius || 5);
     });
+
+    // Populate categories based on active products for each nearby seller
+    if (nearbySellers.length > 0) {
+      const sellerIds = nearbySellers.map(s => s._id);
+      
+      const activeProducts = await Product.find({
+        sellerId: { $in: sellerIds },
+        status: "active",
+      })
+      .select("sellerId headerId categoryId")
+      .populate("headerId", "name")
+      .populate("categoryId", "name")
+      .lean();
+
+      const sellerCategoryMap = {};
+      nearbySellers.forEach(s => {
+        sellerCategoryMap[s._id.toString()] = new Set();
+        // optionally keep their main category as well
+        if (s.category) {
+          sellerCategoryMap[s._id.toString()].add(s.category);
+        }
+      });
+
+      activeProducts.forEach(p => {
+        if (p.headerId && p.headerId.name) {
+          sellerCategoryMap[p.sellerId.toString()].add(p.headerId.name);
+        }
+        if (p.categoryId && p.categoryId.name) {
+          sellerCategoryMap[p.sellerId.toString()].add(p.categoryId.name);
+        }
+      });
+
+      nearbySellers.forEach(s => {
+        s.productCategories = Array.from(sellerCategoryMap[s._id.toString()]);
+      });
+
+      const signatureProducts = await Product.find({
+        sellerId: { $in: sellerIds },
+        isSignatureProduct: true,
+        status: "active",
+      }).lean();
+
+      nearbySellers.forEach(s => {
+        s.signatureProduct = signatureProducts.find(p => p.sellerId.toString() === s._id.toString()) || null;
+      });
+    }
 
     return handleResponse(
       res,
@@ -153,7 +200,7 @@ export const getSellerProfile = async (req, res) => {
 ================================ */
 export const updateSellerProfile = async (req, res) => {
   try {
-    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius } = req.body;
+    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius, banners, storeVideo, description } = req.body;
 
     // Find seller
     const seller = await Seller.findById(req.user.id);
@@ -165,6 +212,9 @@ export const updateSellerProfile = async (req, res) => {
     if (name) seller.name = name;
     if (shopName) seller.shopName = shopName;
     if (phone) seller.phone = phone;
+    if (banners !== undefined) seller.banners = banners;
+    if (storeVideo !== undefined) seller.storeVideo = storeVideo;
+    if (description !== undefined) seller.description = description;
     if (address !== undefined) seller.address = address;
     if (locality !== undefined) seller.locality = locality;
     if (pincode !== undefined) seller.pincode = pincode;
@@ -224,12 +274,15 @@ export const getPublicSellerProfile = async (req, res) => {
     }
 
     const seller = await Seller.findById(id)
-      .select("name shopName category description address locality pincode city state location serviceRadius isActive isVerified")
+      .select("name shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified")
       .lean();
 
     if (!seller || !seller.isActive || !seller.isVerified) {
       return handleResponse(res, 404, "Seller not found or is currently inactive");
     }
+
+    const signatureProducts = await Product.find({ sellerId: id, isSignatureProduct: true, status: "active" }).lean();
+    seller.signatureProducts = signatureProducts || [];
 
     return handleResponse(
       res,

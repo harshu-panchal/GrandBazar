@@ -138,6 +138,7 @@ const CheckoutPage = () => {
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [useWallet, setUseWallet] = useState(false);
   const [walletAmountToUse, setWalletAmountToUse] = useState(0);
+  const [isAddonRecommendation, setIsAddonRecommendation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [orderId, setOrderId] = useState(null);
   const [pricingPreview, setPricingPreview] = useState(null);
@@ -717,22 +718,60 @@ const CheckoutPage = () => {
       setRecommendedProducts([]);
       return;
     }
-    const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
-    if (!categoryId) return;
 
     const cartIds = new Set(cart.map((i) => i.id || i._id));
-    customerApi
-      .getProducts({ categoryId, limit: 10 })
-      .then((res) => {
-        if (res.data?.success) {
-          const items = (res.data.result?.items || [])
-            .map((p) => ({ ...p, id: p._id }))
-            .filter((p) => !cartIds.has(p.id));
-          setRecommendedProducts(items.slice(0, 8));
-        }
-      })
-      .catch(() => {});
-  }, [cartProductIdKey]);
+    const allAddons = new Set();
+    
+    cart.forEach(item => {
+      if (item.addons && Array.isArray(item.addons)) {
+        item.addons.forEach(addon => {
+          // If the addon isn't already in the cart, add it to our list
+          if (!cartIds.has(addon)) allAddons.add(addon);
+        });
+      }
+    });
+
+    const addonIdsStr = Array.from(allAddons).join(",");
+    
+    // Build common query parameters
+    const queryParams = { limit: 10 };
+    if (currentLocation?.latitude && currentLocation?.longitude) {
+      queryParams.lat = currentLocation.latitude;
+      queryParams.lng = currentLocation.longitude;
+    }
+
+    if (addonIdsStr) {
+      // Fetch specific add-ons
+      customerApi
+        .getProducts({ productIds: addonIdsStr, ...queryParams })
+        .then((res) => {
+          if (res.data?.success) {
+            const items = (res.data.result?.items || [])
+              .map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image }));
+            setRecommendedProducts(items.slice(0, 8));
+            setIsAddonRecommendation(true);
+          }
+        })
+        .catch(() => {});
+    } else {
+      // Fallback: fetch by category of the first item
+      const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
+      if (!categoryId) return;
+
+      customerApi
+        .getProducts({ categoryId, ...queryParams })
+        .then((res) => {
+          if (res.data?.success) {
+            const items = (res.data.result?.items || [])
+              .map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image }))
+              .filter((p) => !cartIds.has(p.id));
+            setRecommendedProducts(items.slice(0, 8));
+            setIsAddonRecommendation(false);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [cartProductIdKey, cart]);
 
   const handlePlaceOrder = async () => {
     setIsPlacingOrder(true);
@@ -963,23 +1002,11 @@ const CheckoutPage = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-12 md:-mt-16 lg:-mt-20 relative z-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-6 md:-mt-10 lg:-mt-12 relative z-20">
         <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-start">
 
           {/* Left Column */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6 pb-8">
-            {/* Delivery Time Banner */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mt-3">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
-                  <Clock size={24} className="text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-800 text-lg">Delivery in 12-15 mins</h3>
-                  <p className="text-sm text-slate-500">Shipment of {cartCount} items</p>
-                </div>
-              </div>
-            </div>
 
             {/* Address Section */}
             <CheckoutAddressSection
@@ -1023,6 +1050,7 @@ const CheckoutPage = () => {
               cart={cart}
               onAddToCart={handleAddToCart}
               onGetCartItem={getCartItem}
+              isAddon={isAddonRecommendation}
             />
           </div>
 

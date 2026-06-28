@@ -15,7 +15,7 @@ import { Clock } from "lucide-react";
 import { useProductDetail } from "../../context/ProductDetailContext";
 
 const ProductCard = React.memo(
-  ({ product, badge, className, compact = false, neutralBg = false }) => {
+  ({ product, badge, className, compact = false, neutralBg = false, isSignature = false }) => {
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } =
       useWishlist();
     const { cart, addToCart, updateQuantity, removeFromCart } = useCart();
@@ -185,6 +185,8 @@ const ProductCard = React.memo(
                   `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`}
               </div>
             )}
+            
+
 
           <button
             onClick={toggleWishlist}
@@ -223,7 +225,7 @@ const ProductCard = React.memo(
 
           <div
             className={cn(
-              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square",
+              "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105 aspect-square p-2 sm:p-4",
               compact || neutralBg ? "bg-white/70" : "bg-white/50"
             )}>
             <img
@@ -231,7 +233,7 @@ const ProductCard = React.memo(
               src={applyCloudinaryTransform(product.image)}
               alt={product.name}
               loading="lazy"
-              className="w-full h-full object-cover mix-blend-multiply"
+              className="w-full h-full object-contain mix-blend-multiply"
             />
           </div>
         </div>
@@ -264,12 +266,18 @@ const ProductCard = React.memo(
               )}>
               {product.weight || "1 unit"}
             </div>
+            {isSignature && (
+              <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white font-black rounded-sm flex items-center gap-0.5 px-1 py-[1px] sm:px-1.5 sm:py-[2px] ml-auto text-[7px] sm:text-[8px] uppercase tracking-wider shadow-sm">
+                <Star size={8} className="fill-white" />
+                SIGNATURE
+              </div>
+            )}
           </div>
 
-          <div className={cn(compact ? "h-8" : "h-8 sm:h-9")}>
+          <div className={cn(compact ? "mb-1" : "mb-1 sm:mb-2")}>
             <h4
               className={cn(
-                "font-[600] text-[#1A1A1A] leading-tight line-clamp-2",
+                "font-[600] text-[#1A1A1A] leading-tight truncate",
                 compact ? "text-[10.5px]" : "text-[12px] sm:text-[13px]",
               )}>
               {product.name}

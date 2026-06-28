@@ -1,12 +1,25 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence, useAnimation, useDragControls } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { X, ChevronDown, Share2, Heart, Search, Clock, Minus, Plus, ShoppingBag, Star, MessageSquare, ArrowLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronDown, Share2, Heart, Search, Clock, Minus, Plus, ShoppingBag, Star, MessageSquare, ArrowLeft, ChevronRight, Store } from 'lucide-react';
 import { useProductDetail } from '../../context/ProductDetailContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
+import { useLocation as useAppLocation } from '../../context/LocationContext';
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const p = 0.017453292519943295;    // Math.PI / 180
+    const c = Math.cos;
+    const a = 0.5 - c((lat2 - lat1) * p)/2 + 
+            c(lat1 * p) * c(lat2 * p) * 
+            (1 - c((lon2 - lon1) * p))/2;
+
+    return 12742 * Math.asin(Math.sqrt(a)); // 2 * R; R = 6371 km
+};
+
 import { cn } from '@/lib/utils';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { customerApi } from '../../services/customerApi';
@@ -20,6 +33,7 @@ const ProductDetailSheet = () => {
     const { showToast } = useToast();
     const { settings } = useSettings();
     const supportEmail = settings?.supportEmail || 'support@example.com';
+    const { currentLocation } = useAppLocation();
 
     // Controls for sheet animation
     const controls = useAnimation();
@@ -32,6 +46,8 @@ const ProductDetailSheet = () => {
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
     const [expandedSections, setExpandedSections] = useState(['description']); // Start with description open
+    const [sellerProfile, setSellerProfile] = useState(null);
+    const [sellerLoading, setSellerLoading] = useState(false);
 
     const toggleSection = (section) => {
         setExpandedSections(prev => 
@@ -71,7 +87,26 @@ const ProductDetailSheet = () => {
         if (selectedProduct?.id) {
             fetchReviews(selectedProduct.id);
         }
+        
+        if (selectedProduct?.sellerId?._id || selectedProduct?.sellerId) {
+            const id = typeof selectedProduct.sellerId === 'object' ? selectedProduct.sellerId._id : selectedProduct.sellerId;
+            fetchSellerProfile(id);
+        }
     }, [selectedProduct]);
+
+    const fetchSellerProfile = async (sellerId) => {
+        try {
+            setSellerLoading(true);
+            const res = await customerApi.getSellerPublicProfile(sellerId);
+            if (res.data.success) {
+                setSellerProfile(res.data.result || res.data.seller || res.data);
+            }
+        } catch (error) {
+            console.error("Fetch seller error:", error);
+        } finally {
+            setSellerLoading(false);
+        }
+    };
 
     const fetchReviews = async (productId) => {
         try {
@@ -629,6 +664,32 @@ const ProductDetailSheet = () => {
                                                     ))}
                                                 </div>
                                             </AccordionItem>
+                                            
+                                            {/* Seller Info */}
+                                            {sellerProfile && (
+                                                <AccordionItem 
+                                                    id="seller" 
+                                                    title="Seller Information" 
+                                                    icon={<Store size={16} />}
+                                                >
+                                                    <div className="text-[13px] text-slate-500 font-medium leading-relaxed bg-brand-50/50 p-4 rounded-xl border border-brand-100">
+                                                        <span className="font-bold text-slate-800 text-sm block mb-1">{sellerProfile.shopName || sellerProfile.name}</span>
+                                                        {sellerProfile.description && (
+                                                            <p className="mt-1">{sellerProfile.description}</p>
+                                                        )}
+                                                        {sellerProfile.locality && (
+                                                            <p className="mt-2 text-xs text-slate-400 flex items-center gap-1 flex-wrap">
+                                                                <span>📍 {sellerProfile.locality}{sellerProfile.city ? `, ${sellerProfile.city}` : ''}</span>
+                                                                {sellerProfile.location?.coordinates && currentLocation?.latitude && (
+                                                                    <span className="text-brand-600 bg-brand-100/80 px-2 py-0.5 rounded-md font-bold">
+                                                                        {calculateDistance(currentLocation.latitude, currentLocation.longitude, sellerProfile.location.coordinates[1], sellerProfile.location.coordinates[0]).toFixed(1)} km away
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </AccordionItem>
+                                            )}
 
                                             {/* Customer Reviews */}
                                             <AccordionItem 
@@ -901,6 +962,32 @@ const ProductDetailSheet = () => {
                                             ))}
                                         </div>
                                     </AccordionItem>
+                                    
+                                    {/* Seller Info */}
+                                    {sellerProfile && (
+                                        <AccordionItem 
+                                            id="seller" 
+                                            title="Seller Information" 
+                                            icon={<Store size={18} strokeWidth={2.5} />}
+                                        >
+                                            <div className="text-xs text-slate-500 font-medium leading-relaxed bg-brand-50/50 p-4 rounded-xl border border-brand-100">
+                                                <span className="font-bold text-slate-800 text-[13px] block mb-1">{sellerProfile.shopName || sellerProfile.name}</span>
+                                                {sellerProfile.description && (
+                                                    <p className="mt-1">{sellerProfile.description}</p>
+                                                )}
+                                                {sellerProfile.locality && (
+                                                    <p className="mt-2 text-[10px] text-slate-400 flex items-center gap-1 font-bold flex-wrap">
+                                                        <span>📍 {sellerProfile.locality}{sellerProfile.city ? `, ${sellerProfile.city}` : ''}</span>
+                                                        {sellerProfile.location?.coordinates && currentLocation?.latitude && (
+                                                            <span className="text-brand-600 bg-brand-100/80 px-2 py-0.5 rounded-md font-bold">
+                                                                {calculateDistance(currentLocation.latitude, currentLocation.longitude, sellerProfile.location.coordinates[1], sellerProfile.location.coordinates[0]).toFixed(1)} km away
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </AccordionItem>
+                                    )}
 
                                     {/* Customer Reviews */}
                                     <AccordionItem 

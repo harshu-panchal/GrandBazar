@@ -90,6 +90,16 @@ const categorySchema = new mongoose.Schema(
       type: String,
       trim: true, // Hex color for icons (e.g. #ffffff)
     },
+    priorityStartTime: {
+      type: String,
+      trim: true,
+      default: null, // format "HH:mm"
+    },
+    priorityEndTime: {
+      type: String,
+      trim: true,
+      default: null, // format "HH:mm"
+    },
   },
   {
     timestamps: true,

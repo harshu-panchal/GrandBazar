@@ -49,6 +49,8 @@ const Level2Categories = () => {
     status: "active",
     type: "category",
     parentId: "",
+    priorityStartTime: "",
+    priorityEndTime: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -207,6 +209,8 @@ const Level2Categories = () => {
       status: "active",
       type: "category",
       parentId: "",
+      priorityStartTime: "",
+      priorityEndTime: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -222,6 +226,8 @@ const Level2Categories = () => {
       status: item.status,
       type: "category",
       parentId: item.parentId?._id || item.parentId || "",
+      priorityStartTime: item.priorityStartTime || "",
+      priorityEndTime: item.priorityEndTime || "",
     });
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
@@ -587,6 +593,35 @@ const Level2Categories = () => {
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Priority Start Time
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.priorityStartTime}
+                      onChange={(e) =>
+                        setFormData({ ...formData, priorityStartTime: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Priority End Time
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.priorityEndTime}
+                      onChange={(e) =>
+                        setFormData({ ...formData, priorityEndTime: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -17,7 +17,6 @@ import {
 import LogoImage from "../../../../assets/Logo.png";
 
 // MUI Icons
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import SearchIcon from "@mui/icons-material/Search";
 import MicIcon from "@mui/icons-material/Mic";
@@ -363,15 +362,6 @@ const MainLocationHeader = ({
 
               {/* Location Block (Desktop inline row) */}
               <div className="flex flex-col border-l border-black/10 pl-4 lg:pl-8 h-10 justify-center">
-                <div className="flex items-center gap-1.5 opacity-70">
-                  <AccessTimeIcon sx={{ fontSize: 13, color: headerFontColor }} />
-                  <span 
-                    className="text-[11px] font-bold uppercase tracking-wider leading-none"
-                    style={{ color: headerFontColor }}
-                  >
-                    {currentLocation.time}
-                  </span>
-                </div>
                 <button
                   type="button"
                   data-lenis-prevent
@@ -475,15 +465,6 @@ const MainLocationHeader = ({
               </div>
               <div className="flex justify-between items-start">
                 <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <AccessTimeIcon sx={{ fontSize: 16, color: headerFontColor }} />
-                    <span 
-                      className="text-base font-bold tracking-tight leading-none"
-                      style={{ color: headerFontColor }}
-                    >
-                      {currentLocation.time}
-                    </span>
-                  </div>
                   <button
                     type="button"
                     data-lenis-prevent
