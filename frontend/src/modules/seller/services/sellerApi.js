@@ -16,6 +16,7 @@ export const sellerApi = {
     getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),
     getCatalogProductById: (id) => axiosInstance.get(`/catalog/${id}`),
     claimCatalogProduct: (data) => axiosInstance.post('/catalog/claim', data),
+    bulkClaimCatalogProducts: (data) => axiosInstance.post('/catalog/claim-bulk', data),
 
     // Categories (Public)
     getCategories: () => axiosInstance.get('/admin/categories'),

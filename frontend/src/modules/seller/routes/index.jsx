@@ -40,7 +40,7 @@ const StaffManagement = React.lazy(() => import("../pages/StaffManagement"));
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
   { label: "Store Design", path: "/seller/storefront", icon: HiOutlinePhoto, permission: "storefront" },
-  { label: "Products", path: "/seller/products", icon: HiOutlineCube, permission: "products" },
+  { label: "Products", path: "/seller/products", icon: HiOutlineCube, permission: "products", end: true },
   { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
   { label: "Stock", path: "/seller/inventory", icon: HiOutlineArchiveBox, permission: "inventory" },
   { label: "Orders", path: "/seller/orders", icon: HiOutlineTruck, permission: "orders" },

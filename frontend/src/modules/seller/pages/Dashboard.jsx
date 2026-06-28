@@ -134,13 +134,7 @@ const Dashboard = () => {
   ];
 
   const quickActions = [
-    {
-      title: "Add New Product",
-      description: "List a new item in your store",
-      icon: Plus,
-      path: "/seller/products/add",
-      variant: "primary", // dark bg, white text
-    },
+
     {
       title: "Process Orders",
       description: "View and manage pending orders",

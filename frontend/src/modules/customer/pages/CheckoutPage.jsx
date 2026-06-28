@@ -143,6 +143,7 @@ const CheckoutPage = () => {
   const [orderId, setOrderId] = useState(null);
   const [pricingPreview, setPricingPreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
   const [currentAddress, setCurrentAddress] = useState({
@@ -774,6 +775,10 @@ const CheckoutPage = () => {
   }, [cartProductIdKey, cart]);
 
   const handlePlaceOrder = async () => {
+    if (!policyAccepted) {
+      showToast("Please accept the Return and Exchange Policy to proceed.", "error");
+      return;
+    }
     setIsPlacingOrder(true);
     try {
       const taxAmount = pricingPreview?.taxTotal || 0;
@@ -1090,9 +1095,23 @@ const CheckoutPage = () => {
               onSelectPayment={setSelectedPayment}
               useWallet={useWallet}
               onToggleWallet={() => setUseWallet((v) => !v)}
-              walletBalance={user?.walletBalance || 0}
+              walletBalance={user?.walletBalance !== undefined ? user.walletBalance : 0}
               walletAmountToUse={walletAmountToUse}
             />
+
+            {/* Return Policy Checkbox */}
+            <div className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <input 
+                type="checkbox" 
+                id="policy-accept" 
+                checked={policyAccepted}
+                onChange={(e) => setPolicyAccepted(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <label htmlFor="policy-accept" className="text-xs text-slate-600 leading-snug cursor-pointer">
+                I agree to the <Link to="/terms" className="text-primary font-bold hover:underline">Return & Exchange Policy</Link> and understand that items can only be returned if they meet the criteria.
+              </label>
+            </div>
 
             {/* Desktop Slide to Pay */}
             <div className="hidden lg:block">

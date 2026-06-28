@@ -538,3 +538,100 @@ export const claimCatalogProduct = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+
+/* ===================================
+   SELLER: BULK CLAIM/PICK CATALOG PRODUCTS
+   =================================== */
+export const bulkClaimCatalogProducts = async (req, res) => {
+  try {
+    const { products } = req.body;
+    const sellerId = req.user.id;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return handleResponse(res, 400, "An array of products is required for bulk claim.");
+    }
+
+    const claimedCount = [];
+    const errors = [];
+
+    for (const p of products) {
+      const { catalogProductId, price = 0, salePrice = 0, stock = 0, name, mainImage } = p;
+      
+      if (!catalogProductId) {
+        errors.push({ name: name || "Unknown", error: "catalogProductId is required" });
+        continue;
+      }
+
+      // Check if already claimed
+      const alreadyClaimed = await Product.findOne({ catalogProductId, sellerId });
+      if (alreadyClaimed) {
+        continue; // silently skip if already claimed
+      }
+
+      const catalogProduct = await CatalogProduct.findById(catalogProductId);
+      if (!catalogProduct || catalogProduct.status !== "active") {
+        errors.push({ name: name || "Unknown", error: "Catalog product not found or inactive." });
+        continue;
+      }
+
+      const chosenName = name && String(name).trim() ? String(name).trim() : catalogProduct.name;
+      
+      let distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}`;
+      let slugExists = await Product.findOne({ slug: distinctSlug });
+      let slugCounter = 1;
+      while (slugExists) {
+        distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}-${slugCounter}`;
+        slugExists = await Product.findOne({ slug: distinctSlug });
+        slugCounter++;
+      }
+
+      const baseSku = makeProductSku(chosenName, 1);
+      let finalSku = baseSku;
+      let skuExists = await Product.findOne({ sku: finalSku });
+      let skuCounter = 1;
+      while (skuExists) {
+        finalSku = `${baseSku}-${skuCounter}`;
+        skuExists = await Product.findOne({ sku: finalSku });
+        skuCounter++;
+      }
+
+      const newProduct = await Product.create({
+        catalogProductId: catalogProduct._id,
+        sellerId,
+        name: chosenName,
+        slug: distinctSlug,
+        sku: finalSku,
+        description: catalogProduct.description,
+        price: Number(price),
+        salePrice: Number(salePrice) || 0,
+        stock: Number(stock),
+        brand: catalogProduct.brand || "",
+        weight: catalogProduct.weight || "",
+        tags: catalogProduct.tags || [],
+        mainImage: mainImage && String(mainImage).trim() ? String(mainImage).trim() : catalogProduct.mainImage,
+        galleryImages: catalogProduct.galleryImages || [],
+        headerId: catalogProduct.headerId,
+        categoryId: catalogProduct.categoryId,
+        subcategoryId: catalogProduct.subcategoryId,
+        status: "active",
+        approvalStatus: "approved",
+        variants: []
+      });
+
+      if (newProduct && newProduct._id) {
+        await enqueueProductIndex(newProduct._id.toString());
+        claimedCount.push(newProduct._id);
+      }
+    }
+
+    try {
+      await invalidate(buildKey("catalog", "productList", "*"));
+      await invalidate("cache:offersections:public:*");
+    } catch (e) {}
+
+    return handleResponse(res, 201, `${claimedCount.length} products added to your store.`, { claimed: claimedCount, errors });
+  } catch (error) {
+    console.error("Bulk Claim Product Error:", error);
+    return handleResponse(res, 500, error.message);
+  }
+};

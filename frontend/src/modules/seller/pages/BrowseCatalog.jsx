@@ -33,6 +33,8 @@ const BrowseCatalog = () => {
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
   // Claim Form Inputs
   const [claimData, setClaimData] = useState({
@@ -103,6 +105,35 @@ const BrowseCatalog = () => {
       document.body.style.overflow = "";
     };
   }, [isClaimModalOpen]);
+
+  const handleBulkClaim = async () => {
+    if (selectedItems.length === 0) return;
+    setIsBulkSubmitting(true);
+    try {
+      const payload = {
+        products: catalogItems
+          .filter(item => selectedItems.includes(item._id || item.id))
+          .map(item => ({
+            catalogProductId: item._id || item.id,
+            price: 100, // Default price
+            stock: 10,  // Default stock
+            name: item.name,
+            mainImage: item.mainImage
+          }))
+      };
+      
+      const res = await sellerApi.bulkClaimCatalogProducts(payload);
+      if (res.data.success) {
+        toast.success(res.data.message || "Bulk clone successful!");
+        setSelectedItems([]);
+        navigate("/seller/products");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to bulk clone products");
+    } finally {
+      setIsBulkSubmitting(false);
+    }
+  };
 
   const openClaimModal = (product) => {
     const initialImages = [];
@@ -341,6 +372,16 @@ const BrowseCatalog = () => {
             Pick pre-approved products from our centralized database and start selling instantly.
           </p>
         </div>
+        {selectedItems.length > 0 && (
+          <button
+            onClick={handleBulkClaim}
+            disabled={isBulkSubmitting}
+            className="px-5 py-2.5 bg-black text-white hover:bg-slate-800 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+          >
+            {isBulkSubmitting ? <HiOutlineArrowPath className="h-5 w-5 animate-spin" /> : <HiOutlineSquaresPlus className="h-5 w-5" />}
+            <span>Clone {selectedItems.length} Products</span>
+          </button>
+        )}
       </div>
 
       {/* Filters & Search */}
@@ -357,6 +398,20 @@ const BrowseCatalog = () => {
             />
           </div>
           <div className="flex gap-2 shrink-0 w-full lg:w-auto">
+            {catalogItems.length > 0 && (
+              <button
+                onClick={() => {
+                  if (selectedItems.length === catalogItems.length) {
+                    setSelectedItems([]);
+                  } else {
+                    setSelectedItems(catalogItems.map(item => item._id || item.id));
+                  }
+                }}
+                className="px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                {selectedItems.length === catalogItems.length ? "Deselect All" : "Select All"}
+              </button>
+            )}
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
@@ -408,6 +463,18 @@ const BrowseCatalog = () => {
               <div className="space-y-3">
                 {/* Image */}
                 <div className="h-40 rounded-lg overflow-hidden bg-slate-50 border border-slate-200 relative shrink-0">
+                  <input
+                    type="checkbox"
+                    className="absolute top-2 right-2 z-20 w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shadow-sm"
+                    checked={selectedItems.includes(item._id || item.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedItems(prev => [...prev, item._id || item.id]);
+                      } else {
+                        setSelectedItems(prev => prev.filter(id => id !== (item._id || item.id)));
+                      }
+                    }}
+                  />
                   <img
                     src={item.mainImage || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=200&h=200"}
                     alt={item.name}
@@ -441,7 +508,7 @@ const BrowseCatalog = () => {
                   className="w-full flex items-center justify-center gap-1 bg-black text-white hover:bg-slate-800 transition-colors py-2 rounded-lg text-xs font-semibold"
                 >
                   <HiOutlinePlus className="h-4 w-4" />
-                  <span>Sell This Product</span>
+                  <span>Add this product</span>
                 </button>
               </div>
             </Card>
@@ -713,6 +780,24 @@ const BrowseCatalog = () => {
 
                   {claimData.variants.length > 0 && (
                     <div className="space-y-3">
+                      <datalist id="variant-suggestions">
+                        <option value="100g" />
+                        <option value="250g" />
+                        <option value="500g" />
+                        <option value="1kg" />
+                        <option value="2kg" />
+                        <option value="5kg" />
+                        <option value="1 Pack" />
+                        <option value="2 Pack" />
+                        <option value="1 Piece" />
+                        <option value="1 Dozen" />
+                        <option value="250ml" />
+                        <option value="500ml" />
+                        <option value="1L" />
+                        <option value="Small" />
+                        <option value="Medium" />
+                        <option value="Large" />
+                      </datalist>
                       {claimData.variants.map((v) => (
                         <div key={v.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 border border-slate-100 p-3 rounded-lg bg-slate-50/50 items-end relative">
                           <button
@@ -727,9 +812,10 @@ const BrowseCatalog = () => {
                             <span className="text-[9px] font-bold text-slate-400 uppercase">Variant Name *</span>
                             <input
                               type="text"
+                              list="variant-suggestions"
                               value={v.name}
                               onChange={(e) => updateVariantField(v.id, "name", e.target.value)}
-                              placeholder="e.g. Red / XL"
+                              placeholder="e.g. 1kg, 1 Pack"
                               className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-semibold outline-none"
                             />
                           </div>

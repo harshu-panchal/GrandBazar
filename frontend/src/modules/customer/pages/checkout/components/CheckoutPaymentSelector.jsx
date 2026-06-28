@@ -26,7 +26,7 @@ const CheckoutPaymentSelector = React.memo(function CheckoutPaymentSelector({
   return (
     <>
       {/* Wallet Section */}
-      {walletBalance > 0 && (
+      {walletBalance !== undefined && (
         <motion.div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 overflow-hidden relative">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">

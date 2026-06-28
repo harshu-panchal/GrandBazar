@@ -40,6 +40,11 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
                 Variant: {item.variantName || item.variantSku}
               </p>
             )}
+            {item.weight && (
+              <p className="text-xs text-slate-500 mb-1">
+                Weight: {item.weight}
+              </p>
+            )}
             <button
               onClick={() => onMoveToWishlist(item)}
               className="text-xs text-slate-500 underline hover:text-primary transition-colors">
