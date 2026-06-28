@@ -77,8 +77,13 @@ const productSchema = new mongoose.Schema(
         },
         sellerId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Seller",
+            ref: "Store",
             required: true,
+        },
+        catalogProductId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "CatalogProduct",
+            default: null,
         },
         status: {
             type: String,

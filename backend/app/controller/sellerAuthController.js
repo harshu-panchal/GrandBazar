@@ -1,5 +1,5 @@
 import Seller from "../models/seller.js";
-import jwt from "jsonwebtoken";
+import Store from "../models/store.js";
 import handleResponse from "../utils/helper.js";
 import {
     issueSellerVerificationOtp,
@@ -7,75 +7,22 @@ import {
     verifySellerVerificationToken,
 } from "../services/sellerVerificationService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
+import { recordLogin } from "../services/loginActivityService.js";
+import {
+    buildStorePayloadFromBody,
+    generateSellerToken,
+    getMissingRequiredSellerDocuments,
+    isStoreApproved,
+    loadOwnerStores,
+    parseDocumentsPayload,
+    pickDefaultActiveStoreId,
+    REQUIRED_SELLER_DOCUMENT_FIELDS,
+    resolveSellerDocuments,
+    SELLER_DOCUMENT_FIELDS,
+} from "../services/storeService.js";
 
 /* ===============================
-   Utils
-================================ */
-
-const generateToken = (seller) =>
-    jwt.sign({ id: seller._id, role: "seller" }, process.env.JWT_SECRET, {
-        expiresIn: "7d",
-    });
-
-const SELLER_DOCUMENT_FIELDS = {
-    tradeLicense: "Trade License",
-    gstCertificate: "GST Certificate",
-    idProof: "ID Proof",
-};
-
-const REQUIRED_SELLER_DOCUMENT_FIELDS = Object.keys(SELLER_DOCUMENT_FIELDS);
-
-const parseDocumentsPayload = (documents) => {
-    if (!documents) {
-        return {};
-    }
-
-    if (typeof documents === "string") {
-        try {
-            return JSON.parse(documents);
-        } catch {
-            return {};
-        }
-    }
-
-    if (typeof documents === "object") {
-        return documents;
-    }
-
-    return {};
-};
-
-const isValidUploadedDocumentReference = (value) => {
-    const normalized = String(value || "").trim();
-    return /^https?:\/\//i.test(normalized);
-};
-
-const resolveSellerDocuments = (body = {}, parsedDocuments = {}) => {
-    const resolved = { ...(parsedDocuments || {}) };
-
-    const directFields = {
-        tradeLicense: body.tradeLicenseUrl || body.tradeLicense,
-        gstCertificate: body.gstCertificateUrl || body.gstCertificate,
-        idProof: body.idProofUrl || body.idProof,
-    };
-
-    for (const [field, candidate] of Object.entries(directFields)) {
-        const normalized = String(candidate || "").trim();
-        if (normalized && /^https?:\/\//i.test(normalized)) {
-            resolved[field] = normalized;
-        }
-    }
-
-    return resolved;
-};
-
-const getMissingRequiredSellerDocuments = (documents = {}) =>
-    REQUIRED_SELLER_DOCUMENT_FIELDS.filter(
-        (fieldName) => !isValidUploadedDocumentReference(documents[fieldName]),
-    );
-
-/* ===============================
-   SELLER SIGNUP
+   SELLER SIGNUP (account + first store)
 ================================ */
 export const signupSeller = async (req, res) => {
     try {
@@ -87,20 +34,17 @@ export const signupSeller = async (req, res) => {
             emailVerificationToken,
             phoneVerificationToken,
             shopName,
-            category,
-            description,
-            address,
-            locality,
-            pincode,
-            city,
-            state,
-            documents,
             lat,
             lng,
-            radius
+            radius,
+            aadharNumber,
+            panNumber,
+            accountHolder,
+            accountNumber,
+            ifsc,
+            bankName,
         } = req.body || {};
 
-        // 1. Handle file uploads if they exist in req.files (multipart form)
         const documentFiles = req.files || [];
         const uploadedDocs = {};
 
@@ -109,10 +53,9 @@ export const signupSeller = async (req, res) => {
                 try {
                     const fieldName = file.fieldname;
                     if (fieldName && REQUIRED_SELLER_DOCUMENT_FIELDS.includes(fieldName)) {
-                        const url = await uploadToCloudinary(file.buffer, "docs", {
+                        uploadedDocs[fieldName] = await uploadToCloudinary(file.buffer, "docs", {
                             mimeType: file.mimetype,
                         });
-                        uploadedDocs[fieldName] = url;
                     }
                 } catch (err) {
                     console.error("Failed to upload document to Cloudinary", err);
@@ -120,18 +63,13 @@ export const signupSeller = async (req, res) => {
             }
         }
 
-        // Merge uploaded document URLs into body for resolveSellerDocuments
-        const augmentedBody = {
-            ...req.body,
-            ...uploadedDocs
-        };
-
+        const augmentedBody = { ...req.body, ...uploadedDocs };
         const parsedLat = lat !== undefined ? Number(lat) : undefined;
         const parsedLng = lng !== undefined ? Number(lng) : undefined;
         const parsedRadius = radius !== undefined ? Number(radius) : undefined;
 
-        if (!name || !email || !phone || !password || !shopName) {
-            return handleResponse(res, 400, "All fields are required");
+        if (!name || !email || !phone || !password || !shopName || !aadharNumber || !panNumber || !accountHolder || !accountNumber || !ifsc || !bankName) {
+            return handleResponse(res, 400, "All fields (including Aadhaar, PAN, and Bank details) are required");
         }
 
         verifySellerVerificationToken({
@@ -145,7 +83,6 @@ export const signupSeller = async (req, res) => {
             token: phoneVerificationToken,
         });
 
-        // Validate coordinates and radius if provided
         if (lat !== undefined && (!Number.isFinite(parsedLat) || parsedLat < -90 || parsedLat > 90)) {
             return handleResponse(res, 400, "Invalid latitude");
         }
@@ -156,65 +93,43 @@ export const signupSeller = async (req, res) => {
             return handleResponse(res, 400, "Radius must be between 1 and 100 km");
         }
 
-        let seller = await Seller.findOne({ $or: [{ email }, { phone }] });
-
-        if (seller) {
+        const existingAccount = await Seller.findOne({ $or: [{ email }, { phone }] });
+        if (existingAccount) {
             return handleResponse(res, 400, "Seller with this email or phone already exists");
         }
 
-        const parsedDocuments = parseDocumentsPayload(documents);
-        const sellerDocuments = resolveSellerDocuments(augmentedBody, parsedDocuments);
-        const missingRequiredDocuments = getMissingRequiredSellerDocuments(
-            sellerDocuments || {}
-        );
+        const parsedDocuments = parseDocumentsPayload(req.body.documents);
+        const storeDocuments = resolveSellerDocuments(augmentedBody, parsedDocuments);
+        const missingRequiredDocuments = getMissingRequiredSellerDocuments(storeDocuments || {});
 
         if (missingRequiredDocuments.length > 0) {
             const readableMissing = missingRequiredDocuments
                 .map((field) => SELLER_DOCUMENT_FIELDS[field] || field)
                 .join(", ");
-            return handleResponse(
-                res,
-                400,
-                `All required documents must be uploaded: ${readableMissing}`
-            );
+            return handleResponse(res, 400, `All required documents must be uploaded: ${readableMissing}`);
         }
 
-        const sellerData = {
+        const account = await Seller.create({
             name,
             email,
             phone,
             password,
-            shopName,
-            category,
-            description,
-            address,
-            locality,
-            pincode,
-            city,
-            state,
-            documents: sellerDocuments,
-            applicationStatus: "pending",
-            isVerified: false,
+            accountType: "owner",
+            role: "seller",
             emailVerified: true,
             phoneVerified: true,
-            isActive: false,
-        };
+        });
 
-        if (parsedLat !== undefined && parsedLng !== undefined) {
-            sellerData.location = {
-                type: "Point",
-                coordinates: [parsedLng, parsedLat],
-            };
-        }
+        const storePayload = buildStorePayloadFromBody(augmentedBody, uploadedDocs);
+        storePayload.ownerId = account._id;
+        const store = await Store.create(storePayload);
 
-        if (parsedRadius !== undefined) {
-            sellerData.serviceRadius = parsedRadius;
-        }
+        account.lastActiveStoreId = store._id;
+        await account.save();
 
-        seller = await Seller.create(sellerData);
-
-        return handleResponse(res, 201, "Seller registered successfully", {
-            seller,
+        return handleResponse(res, 201, "Seller registered successfully. Store pending admin approval.", {
+            account,
+            store,
             applicationStatus: "pending",
             requiresApproval: true,
         });
@@ -279,7 +194,6 @@ export const loginSeller = async (req, res) => {
             return handleResponse(res, 400, "Email and password are required");
         }
 
-        // Include password for comparison
         const seller = await Seller.findOne({ email }).select("+password");
 
         if (!seller) {
@@ -287,40 +201,68 @@ export const loginSeller = async (req, res) => {
         }
 
         const isMatch = await seller.comparePassword(password);
-
         if (!isMatch) {
             return handleResponse(res, 401, "Invalid credentials");
         }
 
-        const applicationStatus =
-            seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
-        const isApproved =
-            seller.isVerified === true &&
-            seller.isActive === true &&
-            applicationStatus === "approved";
+        if (seller.accountType === "staff" || seller.parentId) {
+            const store = await Store.findById(seller.parentId);
+            if (!store) {
+                return handleResponse(res, 404, "Parent store not found");
+            }
 
-        if (!isApproved) {
-            const approvalMessage =
-                applicationStatus === "rejected"
-                    ? "Your seller application was rejected. Please contact support."
-                    : "Your seller account is pending admin approval.";
+            if (!isStoreApproved(store)) {
+                const storeStatus = store.applicationStatus || (store.isVerified ? "approved" : "pending");
+                const approvalMessage = storeStatus === "rejected"
+                    ? "The store's application was rejected. Please contact support."
+                    : "The store account is pending admin approval.";
+                return handleResponse(res, 403, approvalMessage);
+            }
 
-            return handleResponse(res, 403, approvalMessage, {
-                applicationStatus,
-                isVerified: seller.isVerified === true,
-                isActive: seller.isActive === true,
-                rejectionReason: seller.rejectionReason || "",
+            seller.lastLogin = new Date();
+            await seller.save();
+            await recordLogin(seller, "Seller", req.ip, req.headers["user-agent"]);
+
+            const token = generateSellerToken({
+                activeStoreId: store._id,
+                staffRecord: seller,
+            });
+
+            return handleResponse(res, 200, "Login successful", {
+                token,
+                seller,
+                account: null,
+                stores: [store],
+                activeStoreId: String(store._id),
+                activeStore: store,
             });
         }
 
-        seller.lastLogin = new Date();
-        await seller.save();
+        // Owner account login
+        const stores = await loadOwnerStores(seller._id);
+        const activeStoreId = await pickDefaultActiveStoreId(seller, stores);
+        const activeStore = stores.find((s) => String(s._id) === String(activeStoreId)) || null;
 
-        const token = generateToken(seller);
+        seller.lastLogin = new Date();
+        if (activeStoreId) {
+            seller.lastActiveStoreId = activeStoreId;
+        }
+        await seller.save();
+        await recordLogin(seller, "Seller", req.ip, req.headers["user-agent"]);
+
+        const token = generateSellerToken({
+            activeStoreId,
+            accountId: seller._id,
+        });
 
         return handleResponse(res, 200, "Login successful", {
             token,
             seller,
+            account: seller,
+            stores,
+            activeStoreId: activeStoreId ? String(activeStoreId) : null,
+            activeStore,
+            hasApprovedStore: stores.some((s) => isStoreApproved(s)),
         });
     } catch (error) {
         return handleResponse(res, 500, error.message);

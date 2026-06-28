@@ -330,7 +330,7 @@ const StoreDetailPage = () => {
                     <Sparkles size={18} className="text-brand-400 animate-pulse" />
                     <h3 className="text-lg md:text-xl font-[900] text-white uppercase tracking-widest">Store Spotlight</h3>
                   </div>
-                  <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl md:rounded-2xl overflow-hidden bg-black relative border-4 border-slate-800 shadow-2xl">
+                  <div className="w-full max-w-2xl mx-auto aspect-video rounded-xl md:rounded-2xl overflow-hidden bg-black relative border-4 border-slate-800 shadow-2xl">
                     {seller.storeVideo.includes("youtube.com") || seller.storeVideo.includes("youtu.be") ? (
                       <iframe
                         className="w-full h-full absolute inset-0"
@@ -349,26 +349,29 @@ const StoreDetailPage = () => {
 
             {/* Signature Products Section */}
             {seller.signatureProducts && Array.isArray(seller.signatureProducts) && seller.signatureProducts.length > 0 && (
-              <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-[1.5rem] md:rounded-3xl p-6 shadow-sm border border-amber-100/50 mt-2 mb-8">
+              <div className="w-full bg-gradient-to-br from-[#FAF6F0] via-[#F8F3E8] to-[#F3EBE0] rounded-[1.5rem] md:rounded-3xl p-6 shadow-sm border border-[#E8DEC9] mt-2 mb-8">
                 <div className="flex items-center gap-2 mb-4">
-                  <Star size={18} className="text-amber-500 fill-amber-500" />
-                  <h3 className="text-lg md:text-xl font-[900] text-amber-900 uppercase tracking-widest">Signature Products</h3>
+                  <Star size={18} className="text-amber-600 fill-amber-600" />
+                  <h3 className="text-lg md:text-xl font-[900] text-amber-955 uppercase tracking-widest">Signature Products</h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-5">
                   {seller.signatureProducts.map(sigProd => (
-                    <ProductCard 
-                      key={sigProd._id}
-                      product={{
-                        ...sigProd,
-                        id: sigProd._id,
-                        image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                        price: sigProd.salePrice || sigProd.price,
-                        originalPrice: sigProd.price,
-                        weight: sigProd.weight || "1 unit"
-                      }} 
-                      compact={false}
-                      isSignature={true}
-                    />
+                    <div key={sigProd._id} className="w-[calc(50%-6px)] sm:w-[190px] md:w-[210px] lg:w-[220px] shrink-0">
+                      <ProductCard 
+                        product={{
+                          ...sigProd,
+                          id: sigProd._id,
+                          image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+                          price: sigProd.salePrice || sigProd.price,
+                          originalPrice: sigProd.price,
+                          weight: sigProd.weight || "1 unit"
+                        }} 
+                        compact={true}
+                        neutralBg={true}
+                        isSignature={true}
+                        className="hover:scale-[1.03]"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

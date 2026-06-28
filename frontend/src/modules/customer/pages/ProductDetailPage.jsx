@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Heart, Plus, Minus, Star, ShieldCheck, Clock, ArrowLeft, MessageSquare } from 'lucide-react';
+import { Heart, Plus, Minus, Star, ShieldCheck, Clock, ArrowLeft, MessageSquare, Share2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '@shared/components/ui/Toast';
@@ -131,6 +131,44 @@ const ProductDetailPage = () => {
         );
     };
 
+    const handleShare = async (e) => {
+        if (e) e.stopPropagation();
+        if (!product) return;
+
+        const shareUrl = `${window.location.origin}/product/${product.id || product._id}`;
+        const shareTitle = product.name;
+        const shareText = `Check out ${product.name} on Grand Bazar!`;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: shareTitle,
+                    text: shareText,
+                    url: shareUrl,
+                });
+                showToast("Product shared successfully", "success");
+            } catch (error) {
+                if (error.name !== "AbortError") {
+                    console.error("Error sharing product:", error);
+                    fallbackShare(shareUrl);
+                }
+            }
+        } else {
+            fallbackShare(shareUrl);
+        }
+    };
+
+    const fallbackShare = (url) => {
+        navigator.clipboard.writeText(url)
+            .then(() => {
+                showToast("Product link copied to clipboard!", "success");
+            })
+            .catch((err) => {
+                console.error("Failed to copy link:", err);
+                showToast("Could not copy link. Please copy it manually.", "error");
+            });
+    };
+
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-white">
@@ -194,15 +232,23 @@ const ProductDetailPage = () => {
                             loading="lazy"
                             className="w-full h-full object-contain p-2 md:p-4 transition-transform duration-700 group-hover:scale-105"
                         />
-                        <button
-                            onClick={handleToggleWishlist}
-                            className={cn(
-                                "absolute top-5 right-5 p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110",
-                                isWishlisted ? "bg-red-50 text-red-500" : "bg-white text-slate-400"
-                            )}
-                        >
-                            <Heart size={20} className={cn(isWishlisted && "fill-current")} />
-                        </button>
+                        <div className="absolute top-5 right-5 flex flex-col gap-2.5">
+                            <button
+                                onClick={handleToggleWishlist}
+                                className={cn(
+                                    "p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110",
+                                    isWishlisted ? "bg-red-50 text-red-500" : "bg-white text-slate-400"
+                                )}
+                            >
+                                <Heart size={20} className={cn(isWishlisted && "fill-current")} />
+                            </button>
+                            <button
+                                onClick={handleShare}
+                                className="p-3.5 bg-white text-slate-500 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 hover:text-primary"
+                            >
+                                <Share2 size={20} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">

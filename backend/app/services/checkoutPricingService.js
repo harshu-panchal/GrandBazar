@@ -1,4 +1,4 @@
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import Category from "../models/category.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import { HANDLING_FEE_STRATEGY } from "../constants/finance.js";
@@ -38,7 +38,7 @@ async function computeDistanceKmForSeller({ sellerId, addressLocation, session =
   const normalizedLocation = normalizeLocation(addressLocation);
   if (!normalizedLocation) return 0;
 
-  const query = Seller.findById(sellerId).select("location serviceRadius shopName").lean();
+  const query = Store.findById(sellerId).select("location serviceRadius shopName").lean();
   if (session) query.session(session);
   const seller = await query;
   if (!seller) {

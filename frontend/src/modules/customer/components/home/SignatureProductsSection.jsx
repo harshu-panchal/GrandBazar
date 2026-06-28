@@ -62,7 +62,7 @@ const SignatureProductsSection = () => {
   if (isLoading || signatureProducts.length === 0) return null;
 
   return (
-    <div className="w-full bg-slate-50 border-t border-slate-100 py-10 mt-6">
+    <div className="w-full bg-gradient-to-br from-[#FAF6F0] via-[#F8F3E8] to-[#F3EBE0] border-t border-b border-[#E8DEC9] py-10 mt-6">
       <div className="container mx-auto px-4 md:px-8 lg:px-[50px]">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -70,10 +70,10 @@ const SignatureProductsSection = () => {
               <Star size={20} className="text-amber-500 fill-amber-500" />
             </div>
             <div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight leading-none">
+              <h2 className="text-xl md:text-2xl font-black text-amber-955 tracking-tight leading-none">
                 Signature Products
               </h2>
-              <p className="text-xs font-semibold text-slate-500 mt-1">
+              <p className="text-xs font-semibold text-amber-800 mt-1">
                 Top picks directly from local stores around you
               </p>
             </div>
@@ -82,11 +82,13 @@ const SignatureProductsSection = () => {
 
         <div className="flex overflow-x-auto gap-4 md:gap-6 pb-6 pt-2 -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar snap-x">
           {signatureProducts.map(product => (
-            <div key={product.id} className="min-w-[200px] md:min-w-[240px] max-w-[280px] shrink-0 snap-start">
+            <div key={product.id} className="min-w-[150px] sm:min-w-[180px] md:min-w-[220px] max-w-[240px] shrink-0 snap-start">
               <ProductCard 
                 product={product} 
-                compact={false} 
+                compact={true} 
+                neutralBg={true}
                 isSignature={true}
+                className="hover:scale-[1.03]"
               />
             </div>
           ))}

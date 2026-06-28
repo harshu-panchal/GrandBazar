@@ -458,10 +458,17 @@ const CustomerAuth = () => {
                                                     type="button"
                                                     disabled={timer > 0}
                                                     onClick={handleSendOtp}
-                                                    className={`text-[10px] font-black uppercase tracking-widest ${timer > 0 ? 'text-gray-300' : 'underline'}`}
+                                                    className={`text-[11px] font-black uppercase tracking-widest ${timer > 0 ? 'text-gray-500' : 'underline'}`}
                                                     style={{ color: timer > 0 ? undefined : activeCategory.theme }}
                                                 >
-                                                    {timer > 0 ? `Resend Code in ${timer}s` : 'Resend Now'}
+                                                    {timer > 0 ? (
+                                                        <>
+                                                            Resend Code in {timer}
+                                                            <span className="normal-case">s</span>
+                                                        </>
+                                                    ) : (
+                                                        'Resend Now'
+                                                    )}
                                                 </button>
                                             </div>
                                         </div>

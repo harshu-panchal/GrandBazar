@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import axiosInstance from '@core/api/axios';
 import { getWithDedupe } from '@core/api/dedupe';
 import { getStoredAuthToken } from '@core/utils/authStorage';
+import { setRoleToken, clearRoleToken, syncRoleTokensFromStorage, getRoleToken } from '@core/utils/authSession';
 
 const AuthContext = createContext(undefined);
 
@@ -24,23 +25,28 @@ export const AuthProvider = ({ children }) => {
         return 'customer';
     };
 
-    const getSafeToken = (key) => getStoredAuthToken(ROLE_STORAGE_KEYS[key]);
+    const getSafeToken = (key) => getRoleToken(key) || getStoredAuthToken(ROLE_STORAGE_KEYS[key]);
 
-    const [authData, setAuthData] = useState({
-        customer: getSafeToken('customer'),
-        seller: getSafeToken('seller'),
-        admin: getSafeToken('admin'),
-        delivery: getSafeToken('delivery'),
+    const [authData, setAuthData] = useState(() => {
+        syncRoleTokensFromStorage();
+        return {
+            customer: getRoleToken('customer') || getStoredAuthToken(ROLE_STORAGE_KEYS.customer),
+            seller: getRoleToken('seller') || getStoredAuthToken(ROLE_STORAGE_KEYS.seller),
+            admin: getRoleToken('admin') || getStoredAuthToken(ROLE_STORAGE_KEYS.admin),
+            delivery: getRoleToken('delivery') || getStoredAuthToken(ROLE_STORAGE_KEYS.delivery),
+        };
     });
 
     const currentRole = getCurrentRoleFromUrl();
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const hasLoadedProfileRef = useRef(false);
     const token = authData[currentRole];
     const isAuthenticated = !!token;
 
     useEffect(() => {
         const syncStoredTokens = () => {
+            syncRoleTokensFromStorage();
             setAuthData({
                 customer: getSafeToken('customer'),
                 seller: getSafeToken('seller'),
@@ -115,21 +121,23 @@ export const AuthProvider = ({ children }) => {
         const fetchProfile = async () => {
             if (token) {
                 try {
-                    setIsLoading(true);
-                    // Use deduplicated fetch to avoid multiple simultaneous profile calls
+                    if (!hasLoadedProfileRef.current) {
+                        setIsLoading(true);
+                    }
                     const endpoint = `/${currentRole}/profile`;
                     const response = await getWithDedupe(endpoint, {}, { ttl: 5000 });
                     setUser(response.data.result);
                 } catch (error) {
                     console.error('Failed to fetch profile:', error);
-                    // Preserve stored tokens on request failures; only manual logout clears auth storage.
                     setUser(null);
                 } finally {
                     setIsLoading(false);
+                    hasLoadedProfileRef.current = true;
                 }
             } else {
                 setUser(null);
                 setIsLoading(false);
+                hasLoadedProfileRef.current = false;
             }
         };
 
@@ -141,11 +149,9 @@ export const AuthProvider = ({ children }) => {
         const storageKey = ROLE_STORAGE_KEYS[role];
 
         if (storageKey && userData.token) {
-            // Save ONLY the token string as requested by the user
-            localStorage.setItem(storageKey, userData.token);
-
+            setRoleToken(role, userData.token);
             setAuthData(prev => ({ ...prev, [role]: userData.token }));
-            setUser(userData); // Set full data initially
+            setUser(userData);
         } else {
             console.error('Invalid role or missing token for login:', role);
         }
@@ -162,7 +168,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (storageKey) {
-            localStorage.removeItem(storageKey);
+            clearRoleToken(currentRole);
         }
 
         // Remove the legacy shared token only when it belongs to the current role session.
@@ -177,6 +183,8 @@ export const AuthProvider = ({ children }) => {
             ...prev,
             [currentRole]: null,
         }));
+
+        hasLoadedProfileRef.current = false;
 
         // Clear the current user profile from memory
         setUser(null);

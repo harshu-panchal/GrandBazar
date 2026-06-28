@@ -45,9 +45,16 @@ import {
   verifyToken,
   allowRoles,
   requireApprovedSeller,
+  resolveActiveStore,
+  checkSubSellerPermission,
 } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller];
+const sellerOrdersReadChain = [...sellerOrderChain, checkSubSellerPermission("orders", "read")];
+const sellerOrdersWriteChain = [...sellerOrderChain, checkSubSellerPermission("orders", "write")];
+const sellerReturnsReadChain = [...sellerOrderChain, checkSubSellerPermission("returns", "read")];
+const sellerReturnsWriteChain = [...sellerOrderChain, checkSubSellerPermission("returns", "write")];
 
 // Finance-aware checkout/order flow
 router.post(
@@ -104,37 +111,27 @@ router.get("/:orderId/returns", verifyToken, getReturnDetails);
 // Admin/Seller routes
 router.get(
   "/seller-orders",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerOrdersReadChain,
   getSellerOrders,
 );
 router.put(
   "/status/:orderId",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerOrdersWriteChain,
   updateOrderStatus,
 );
 router.get(
   "/seller-returns",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerReturnsReadChain,
   getSellerReturns,
 );
 router.put(
   "/returns/:orderId/approve",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerReturnsWriteChain,
   approveReturnRequest,
 );
 router.put(
   "/returns/:orderId/reject",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerReturnsWriteChain,
   rejectReturnRequest,
 );
 router.put(
@@ -145,9 +142,7 @@ router.put(
 );
 router.put(
   "/returns/:orderId/assign-delivery",
-  verifyToken,
-  allowRoles("admin", "seller"),
-  requireApprovedSeller,
+  ...sellerReturnsWriteChain,
   assignReturnDelivery,
 );
 

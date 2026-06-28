@@ -1,12 +1,14 @@
 import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import Transaction from "../models/transaction.js";
 import Product from "../models/product.js";
 import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
+import { loadOwnerStores, getStoreCategoryList } from "../services/storeService.js";
 
 /* ===============================
-   GET NEARBY SELLERS
+   GET NEARBY STORES (public)
 ================================ */
 export const getNearbySellers = async (req, res) => {
   try {
@@ -19,91 +21,85 @@ export const getNearbySellers = async (req, res) => {
     const customerLat = Number(lat);
     const customerLng = Number(lng);
 
-    // Fetch all active/verified sellers
-    // We could use $geoNear, but to strictly follow the requirement of individual radii,
-    // we'll fetch sellers within a reasonable max distance (e.g. 100km) and then filter.
-    const sellers = await Seller.find({
+    const stores = await Store.find({
       isActive: true,
       isVerified: true,
+      applicationStatus: "approved",
       location: {
         $near: {
           $geometry: {
             type: "Point",
             coordinates: [customerLng, customerLat],
           },
-          $maxDistance: 100000, // 100km max search area for performance
+          $maxDistance: 100000,
         },
       },
     }).lean();
 
-    // Filter based on individual service radius
-    const nearbySellers = sellers.filter((seller) => {
-      const sellerLng = seller.location.coordinates[0];
-      const sellerLat = seller.location.coordinates[1];
+    const nearbyStores = stores.filter((store) => {
+      const storeLng = store.location.coordinates[0];
+      const storeLat = store.location.coordinates[1];
       const distance = calculateDistance(
         customerLat,
         customerLng,
-        sellerLat,
-        sellerLng,
+        storeLat,
+        storeLng,
       );
-
-      // Add distance to seller object for frontend
-      seller.distance = distance;
-
-      return distance <= (seller.serviceRadius || 5);
+      store.distance = distance;
+      return distance <= (store.serviceRadius || 5);
     });
 
-    // Populate categories based on active products for each nearby seller
-    if (nearbySellers.length > 0) {
-      const sellerIds = nearbySellers.map(s => s._id);
-      
+    if (nearbyStores.length > 0) {
+      const storeIds = nearbyStores.map((s) => s._id);
+
       const activeProducts = await Product.find({
-        sellerId: { $in: sellerIds },
+        sellerId: { $in: storeIds },
         status: "active",
       })
-      .select("sellerId headerId categoryId")
-      .populate("headerId", "name")
-      .populate("categoryId", "name")
-      .lean();
+        .select("sellerId headerId categoryId")
+        .populate("headerId", "name")
+        .populate("categoryId", "name")
+        .lean();
 
-      const sellerCategoryMap = {};
-      nearbySellers.forEach(s => {
-        sellerCategoryMap[s._id.toString()] = new Set();
-        // optionally keep their main category as well
-        if (s.category) {
-          sellerCategoryMap[s._id.toString()].add(s.category);
-        }
+      const storeCategoryMap = {};
+      nearbyStores.forEach((s) => {
+        storeCategoryMap[s._id.toString()] = new Set();
+        getStoreCategoryList(s).forEach((name) => {
+          storeCategoryMap[s._id.toString()].add(name);
+        });
       });
 
-      activeProducts.forEach(p => {
+      activeProducts.forEach((p) => {
         if (p.headerId && p.headerId.name) {
-          sellerCategoryMap[p.sellerId.toString()].add(p.headerId.name);
+          storeCategoryMap[p.sellerId.toString()].add(p.headerId.name);
         }
         if (p.categoryId && p.categoryId.name) {
-          sellerCategoryMap[p.sellerId.toString()].add(p.categoryId.name);
+          storeCategoryMap[p.sellerId.toString()].add(p.categoryId.name);
         }
       });
 
-      nearbySellers.forEach(s => {
-        s.productCategories = Array.from(sellerCategoryMap[s._id.toString()]);
+      nearbyStores.forEach((s) => {
+        s.productCategories = Array.from(storeCategoryMap[s._id.toString()]);
       });
 
       const signatureProducts = await Product.find({
-        sellerId: { $in: sellerIds },
+        sellerId: { $in: storeIds },
         isSignatureProduct: true,
         status: "active",
       }).lean();
 
-      nearbySellers.forEach(s => {
-        s.signatureProduct = signatureProducts.find(p => p.sellerId.toString() === s._id.toString()) || null;
+      nearbyStores.forEach((s) => {
+        s.signatureProduct = signatureProducts.find(
+          (p) => p.sellerId.toString() === s._id.toString(),
+        ) || null;
       });
     }
 
     return handleResponse(
       res,
       200,
-      "Nearby sellers fetched successfully",
-      nearbySellers,
+      "Nearby stores fetched successfully",
+      nearbyStores,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -111,22 +107,20 @@ export const getNearbySellers = async (req, res) => {
 };
 
 /* ===============================
-   REQUEST WITHDRAWAL (Seller)
+   REQUEST WITHDRAWAL (per store)
 ================================ */
 export const requestWithdrawal = async (req, res) => {
   try {
-    const sellerId = req.user.id;
+    const storeId = req.user.id;
     const { amount } = req.body;
 
     if (!amount || amount <= 0) {
       return handleResponse(res, 400, "Please enter a valid amount");
     }
 
-    // 1. Calculate current available balance
-    // Consistent with getSellerEarnings logic in sellerStatsController.js
     const transactions = await Transaction.find({
-      user: sellerId,
-      userModel: "Seller",
+      user: storeId,
+      userModel: { $in: ["Seller", "Store"] },
     })
       .select("status amount type")
       .lean();
@@ -153,11 +147,9 @@ export const requestWithdrawal = async (req, res) => {
       );
     }
 
-    // 2. Create Withdrawal Transaction
-    // Withdrawals have negative amounts per the model comment
     const withdrawal = await Transaction.create({
-      user: sellerId,
-      userModel: "Seller",
+      user: storeId,
+      userModel: "Store",
       type: "Withdrawal",
       amount: -Math.abs(amount),
       status: "Pending",
@@ -176,19 +168,66 @@ export const requestWithdrawal = async (req, res) => {
 };
 
 /* ===============================
-   GET SELLER PROFILE
+   GET SELLER PROFILE (account + active store)
 ================================ */
 export const getSellerProfile = async (req, res) => {
   try {
-    const seller = await Seller.findById(req.user.id);
-    if (!seller) {
-      return handleResponse(res, 404, "Seller not found");
+    const storeId = req.user.id;
+    let store = await Store.findById(storeId).lean();
+
+    let account = null;
+    let stores = [];
+
+    if (req.user.accountId) {
+      account = await Seller.findById(req.user.accountId).lean();
+      stores = await loadOwnerStores(req.user.accountId);
+      if (!store && stores.length > 0) {
+        store = stores.find((s) => String(s._id) === String(req.user.activeStoreId))
+          || stores[0];
+      }
     }
+
+    if (!store && req.user.accountId && account) {
+      return handleResponse(res, 200, "Seller profile fetched successfully", {
+        account,
+        stores,
+        activeStoreId: req.user.activeStoreId || null,
+        name: account.name,
+        email: account.email,
+        phone: account.phone,
+      });
+    }
+
+    if (!store) {
+      return handleResponse(res, 404, "Store not found");
+    }
+
+    const result = {
+      ...store,
+      account,
+      stores,
+      activeStoreId: String(store._id),
+      shopName: store.shopName,
+      name: account?.name || store.shopName,
+    };
+
+    if (req.user.subSellerId) {
+      const subSeller = await Seller.findById(req.user.subSellerId);
+      if (subSeller) {
+        result.subSeller = subSeller.toObject ? subSeller.toObject() : subSeller;
+        result.allowedPermissions = subSeller.allowedPermissions || [];
+        result.subRole = subSeller.role;
+        result.subName = subSeller.name;
+        result.subSellerId = subSeller._id;
+        result.name = subSeller.name;
+      }
+    }
+
     return handleResponse(
       res,
       200,
       "Seller profile fetched successfully",
-      seller,
+      result,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -200,61 +239,77 @@ export const getSellerProfile = async (req, res) => {
 ================================ */
 export const updateSellerProfile = async (req, res) => {
   try {
-    const { name, shopName, phone, address, locality, pincode, city, state, lat, lng, radius, banners, storeVideo, description } = req.body;
-
-    // Find seller
-    const seller = await Seller.findById(req.user.id);
-    if (!seller) {
-      return handleResponse(res, 404, "Seller not found");
+    const storeId = req.user.id;
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return handleResponse(res, 404, "Store not found");
     }
 
-    // Update fields if provided
-    if (name) seller.name = name;
-    if (shopName) seller.shopName = shopName;
-    if (phone) seller.phone = phone;
-    if (banners !== undefined) seller.banners = banners;
-    if (storeVideo !== undefined) seller.storeVideo = storeVideo;
-    if (description !== undefined) seller.description = description;
-    if (address !== undefined) seller.address = address;
-    if (locality !== undefined) seller.locality = locality;
-    if (pincode !== undefined) seller.pincode = pincode;
-    if (city !== undefined) seller.city = city;
-    if (state !== undefined) seller.state = state;
+    const {
+      name,
+      shopName,
+      phone,
+      address,
+      locality,
+      pincode,
+      city,
+      state,
+      lat,
+      lng,
+      radius,
+      banners,
+      storeVideo,
+      description,
+      isActive,
+    } = req.body;
 
-    // Validate and update geo data
+    if (req.user.accountId && name) {
+      await Seller.findByIdAndUpdate(req.user.accountId, { name });
+    }
+
+    if (shopName) store.shopName = shopName;
+    if (banners !== undefined) store.banners = banners;
+    if (storeVideo !== undefined) store.storeVideo = storeVideo;
+    if (description !== undefined) store.description = description;
+    if (address !== undefined) store.address = address;
+    if (locality !== undefined) store.locality = locality;
+    if (pincode !== undefined) store.pincode = pincode;
+    if (city !== undefined) store.city = city;
+    if (state !== undefined) store.state = state;
+
+    if (isActive !== undefined && store.isVerified && store.applicationStatus === "approved") {
+      store.isActive = Boolean(isActive);
+    }
+
     if (lat !== undefined && lng !== undefined) {
-      if (lat < -90 || lat > 90)
-        return handleResponse(res, 400, "Invalid latitude");
-      if (lng < -180 || lng > 180)
-        return handleResponse(res, 400, "Invalid longitude");
-
-      seller.location = {
+      if (lat < -90 || lat > 90) return handleResponse(res, 400, "Invalid latitude");
+      if (lng < -180 || lng > 180) return handleResponse(res, 400, "Invalid longitude");
+      store.location = {
         type: "Point",
         coordinates: [Number(lng), Number(lat)],
       };
     }
 
     if (radius !== undefined) {
-      if (radius < 1 || radius > 100)
+      if (radius < 1 || radius > 100) {
         return handleResponse(res, 400, "Radius must be between 1 and 100 km");
-      seller.serviceRadius = Number(radius);
+      }
+      store.serviceRadius = Number(radius);
     }
 
-    const updatedSeller = await seller.save();
+    const updatedStore = await store.save();
 
-    // Invalidate cached seller name in case shopName changed
-    invalidateSellerName(req.user.id).catch((err) => {
-      console.warn("[Seller] Name cache invalidation failed:", err.message);
+    invalidateSellerName(storeId).catch((err) => {
+      console.warn("[Store] Name cache invalidation failed:", err.message);
     });
 
     return handleResponse(
       res,
       200,
       "Profile updated successfully",
-      updatedSeller,
+      updatedStore,
     );
   } catch (error) {
-    // Handle duplicate phone error
     if (error.code === 11000) {
       return handleResponse(res, 400, "Phone number already in use");
     }
@@ -263,35 +318,39 @@ export const updateSellerProfile = async (req, res) => {
 };
 
 /* ===============================
-   GET PUBLIC SELLER PROFILE
+   GET PUBLIC STORE PROFILE
 ================================ */
 export const getPublicSellerProfile = async (req, res) => {
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return handleResponse(res, 400, "Invalid seller ID format");
+      return handleResponse(res, 400, "Invalid store ID format");
     }
 
-    const seller = await Seller.findById(id)
-      .select("name shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified")
+    const store = await Store.findById(id)
+      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified applicationStatus")
       .lean();
 
-    if (!seller || !seller.isActive || !seller.isVerified) {
-      return handleResponse(res, 404, "Seller not found or is currently inactive");
+    if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {
+      return handleResponse(res, 404, "Store not found or is currently inactive");
     }
 
-    const signatureProducts = await Product.find({ sellerId: id, isSignatureProduct: true, status: "active" }).lean();
-    seller.signatureProducts = signatureProducts || [];
+    const signatureProducts = await Product.find({
+      sellerId: id,
+      isSignatureProduct: true,
+      status: "active",
+    }).lean();
+    store.signatureProducts = signatureProducts || [];
+    store.name = store.shopName;
 
     return handleResponse(
       res,
       200,
-      "Seller profile fetched successfully",
-      seller,
+      "Store profile fetched successfully",
+      store,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
 };
-

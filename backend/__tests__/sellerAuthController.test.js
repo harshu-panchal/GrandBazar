@@ -2,6 +2,8 @@ import { jest } from "@jest/globals";
 
 const mockSellerFindOne = jest.fn();
 const mockSellerCreate = jest.fn();
+const mockSellerFindByIdAndUpdate = jest.fn();
+const mockStoreCreate = jest.fn();
 const mockVerifySellerVerificationToken = jest.fn();
 const mockUploadToCloudinary = jest.fn();
 
@@ -9,6 +11,13 @@ jest.unstable_mockModule("../app/models/seller.js", () => ({
   default: {
     findOne: mockSellerFindOne,
     create: mockSellerCreate,
+    findByIdAndUpdate: mockSellerFindByIdAndUpdate,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/store.js", () => ({
+  default: {
+    create: mockStoreCreate,
   },
 }));
 
@@ -42,10 +51,16 @@ describe("sellerAuthController signupSeller", () => {
         shopName: "Noyo Mart",
         category: "Groceries",
         address: "MG Road",
+        aadharNumber: "123456789012",
+        panNumber: "ABCDE1234F",
+        accountHolder: "Seller Owner",
+        accountNumber: "1234567890",
+        ifsc: "HDFC0001234",
+        bankName: "HDFC Bank",
         documents: JSON.stringify({
-          tradeLicense: "https://example.com/trade-license.pdf",
-          gstCertificate: "https://example.com/gst.pdf",
-          idProof: "https://example.com/id-proof.pdf",
+          aadhar: "https://example.com/aadhar.pdf",
+          pan: "https://example.com/pan.pdf",
+          bankProof: "https://example.com/bankProof.pdf",
         }),
       },
       files: [],
@@ -59,32 +74,35 @@ describe("sellerAuthController signupSeller", () => {
 
     mockSellerFindOne.mockResolvedValue(null);
     mockSellerCreate.mockImplementation(async (payload) => ({
-      _id: "seller-1",
+      _id: "account-1",
+      ...payload,
+      save: jest.fn().mockResolvedValue(true),
+    }));
+    mockStoreCreate.mockImplementation(async (payload) => ({
+      _id: "store-1",
       ...payload,
     }));
+    mockSellerFindByIdAndUpdate.mockResolvedValue({});
   });
 
-  it("requires both verified email and phone tokens before creating the seller", async () => {
+  it("creates seller account and pending store on signup", async () => {
     await signupSeller(req, res);
 
     expect(mockVerifySellerVerificationToken).toHaveBeenCalledTimes(2);
-    expect(mockVerifySellerVerificationToken).toHaveBeenNthCalledWith(1, {
-      channel: "email",
-      rawValue: "seller@example.com",
-      token: "email-token",
-    });
-    expect(mockVerifySellerVerificationToken).toHaveBeenNthCalledWith(2, {
-      channel: "phone",
-      rawValue: "9876543210",
-      token: "phone-token",
-    });
     expect(mockSellerCreate).toHaveBeenCalledWith(
       expect.objectContaining({
+        accountType: "owner",
         emailVerified: true,
         phoneVerified: true,
+      }),
+    );
+    expect(mockStoreCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shopName: "Noyo Mart",
+        ownerId: "account-1",
+        applicationStatus: "pending",
         isVerified: false,
         isActive: false,
-        applicationStatus: "pending",
       }),
     );
     expect(res.status).toHaveBeenCalledWith(201);

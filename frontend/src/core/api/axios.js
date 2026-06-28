@@ -1,12 +1,54 @@
 import axios from 'axios';
 import { resolveApiBaseUrl } from './resolveApiBaseUrl';
 import { getStoredAuthToken } from '@core/utils/authStorage';
+import { getRoleToken } from '@core/utils/authSession';
 
 const ROLE_STORAGE_KEYS = ['auth_seller', 'auth_admin', 'auth_delivery', 'auth_customer'];
 
 const axiosInstance = axios.create({
     baseURL: resolveApiBaseUrl(),
 });
+
+function resolveTokenForRequest(pagePath, url) {
+    if (pagePath.startsWith('/seller')) {
+        return getRoleToken('seller');
+    }
+    if (pagePath.startsWith('/admin')) {
+        return getRoleToken('admin');
+    }
+    if (pagePath.startsWith('/delivery')) {
+        return getRoleToken('delivery');
+    }
+    if (pagePath.startsWith('/customer')) {
+        return getRoleToken('customer');
+    }
+
+    if (typeof url === 'string') {
+        if (url.startsWith('/seller')) return getRoleToken('seller');
+        if (url.startsWith('/admin')) return getRoleToken('admin');
+        if (url.startsWith('/delivery')) return getRoleToken('delivery');
+        if (
+            url.startsWith('/customer') ||
+            url.startsWith('/cart') ||
+            url.startsWith('/wishlist') ||
+            url.startsWith('/categories') ||
+            url.startsWith('/products') ||
+            url.startsWith('/payments')
+        ) {
+            return getRoleToken('customer');
+        }
+    }
+
+    if (
+        !pagePath.startsWith('/admin') &&
+        !pagePath.startsWith('/seller') &&
+        !pagePath.startsWith('/delivery')
+    ) {
+        return getRoleToken('customer');
+    }
+
+    return getStoredAuthToken('token');
+}
 
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
@@ -26,42 +68,29 @@ axiosInstance.interceptors.request.use(
             }
         }
 
-        // Determination strategy: 
-        // 1. If we are on a module-specific page (e.g. /seller/dashboard), prioritize that module's token
-        // This is crucial for shared APIs like /products or /admin/categories
-        if (pagePath.startsWith('/seller')) {
-            token = getStoredAuthToken('auth_seller');
-        } else if (pagePath.startsWith('/admin')) {
-            token = getStoredAuthToken('auth_admin');
-        } else if (pagePath.startsWith('/delivery')) {
-            token = getStoredAuthToken('auth_delivery');
-        } else if (pagePath.startsWith('/customer')) {
-            token = getStoredAuthToken('auth_customer');
-        }
-
-        // 2. Fallback to URL-based detection
-        if (!token) {
-            if (url.startsWith('/seller')) token = getStoredAuthToken('auth_seller');
-            else if (url.startsWith('/admin')) token = getStoredAuthToken('auth_admin');
-            else if (url.startsWith('/delivery')) token = getStoredAuthToken('auth_delivery');
-            else if (url.startsWith('/customer') || url.startsWith('/cart') || url.startsWith('/wishlist') || url.startsWith('/categories') || url.startsWith('/products') || url.startsWith('/payments')) {
-                token = getStoredAuthToken('auth_customer');
-            }
-        }
-
-        // 3. Final default: if we are on a general page and STILL no token, try customer token
-        if (!token && !pagePath.startsWith('/admin') && !pagePath.startsWith('/seller') && !pagePath.startsWith('/delivery')) {
-            token = getStoredAuthToken('auth_customer');
-        }
-
-        // 3. Last fallback: Check common 'token' key if implemented
-        if (!token) {
-            token = getStoredAuthToken('token');
-        }
+        token = resolveTokenForRequest(pagePath, url);
 
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+
+        const isSellerRequest =
+            pagePath.startsWith('/seller') ||
+            (typeof url === 'string' && (
+                url.startsWith('/seller') ||
+                url.startsWith('/orders') ||
+                url.startsWith('/notifications') ||
+                url.startsWith('/products') ||
+                url.startsWith('/catalog')
+            ));
+
+        if (isSellerRequest) {
+            const activeStoreId = localStorage.getItem('seller_active_store');
+            if (activeStoreId) {
+                config.headers['X-Active-Store-Id'] = activeStoreId;
+            }
+        }
+
         return config;
     },
     (error) => {

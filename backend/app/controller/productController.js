@@ -1,4 +1,5 @@
 import Product from "../models/product.js";
+import Category from "../models/category.js";
 import { handleResponse } from "../utils/helper.js";
 import { slugify } from "../utils/slugify.js";
 import getPagination from "../utils/pagination.js";
@@ -216,7 +217,25 @@ export const getProducts = async (req, res) => {
 
     const query = {};
     if (search) {
-      query.name = { $regex: search, $options: "i" };
+      const matchingCategories = await Category.find({
+        name: { $regex: search, $options: "i" }
+      }).select("_id");
+      const categoryIdsMatched = matchingCategories.map(c => c._id);
+
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { brand: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } }
+      ];
+
+      if (categoryIdsMatched.length > 0) {
+        query.$or.push(
+          { categoryId: { $in: categoryIdsMatched } },
+          { subcategoryId: { $in: categoryIdsMatched } },
+          { headerId: { $in: categoryIdsMatched } }
+        );
+      }
     }
 
     // Support both field names for flexibility (backward compatibility)

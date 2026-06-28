@@ -1,4 +1,4 @@
-import Seller from "../../models/seller.js";
+import Store from "../../models/store.js";
 import {
   escapeRegExp,
   formatSellerApplication,
@@ -37,25 +37,24 @@ export async function getPendingSellerApplications({
     const regex = new RegExp(escapeRegExp(search), "i");
     conditions.push({
       $or: [
-        { name: regex },
         { shopName: regex },
-        { email: regex },
-        { phone: regex },
         { address: regex },
+        { category: regex },
       ],
     });
   }
 
   const query = conditions.length > 1 ? { $and: conditions } : conditions[0];
 
-  const [sellers, total, allPendingForStats] = await Promise.all([
-    Seller.find(query)
+  const [stores, total, allPendingForStats] = await Promise.all([
+    Store.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
+      .populate("ownerId", "name email phone")
       .lean(),
-    Seller.countDocuments(query),
-    Seller.find({
+    Store.countDocuments(query),
+    Store.find({
       isVerified: { $ne: true },
       $or: [
         { applicationStatus: "pending" },
@@ -66,18 +65,28 @@ export async function getPendingSellerApplications({
       .lean(),
   ]);
 
-  const items = sellers.map(formatSellerApplication);
+  const items = stores.map((store) => {
+    const owner = store.ownerId || {};
+    return formatSellerApplication({
+      ...store,
+      name: owner.name || "Unnamed Owner",
+      email: owner.email || "",
+      phone: owner.phone || "",
+      ownerId: owner._id ? String(owner._id) : "",
+    });
+  });
+
   const totalApplications = allPendingForStats.length;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
   const receivedToday = allPendingForStats.filter(
-    (seller) => seller.createdAt && new Date(seller.createdAt) >= todayStart,
+    (store) => store.createdAt && new Date(store.createdAt) >= todayStart,
   ).length;
 
-  const missingInfo = allPendingForStats.filter((seller) => {
-    const docs = formatSellerDocuments(seller.documents);
-    return !seller.address || docs.length < 3;
+  const missingInfo = allPendingForStats.filter((store) => {
+    const docs = formatSellerDocuments(store.documents);
+    return !store.address || docs.length < 3;
   }).length;
 
   return {
@@ -96,7 +105,7 @@ export async function getPendingSellerApplications({
 }
 
 export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
-  const seller = await Seller.findByIdAndUpdate(
+  const store = await Store.findByIdAndUpdate(
     sellerId,
     {
       $set: {
@@ -109,13 +118,19 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
       },
     },
     { new: true },
-  );
+  ).populate("ownerId", "name email phone");
 
-  if (!seller) {
+  if (!store) {
     return null;
   }
 
-  return formatSellerApplication(seller);
+  const owner = store.ownerId || {};
+  return formatSellerApplication({
+    ...store.toObject(),
+    name: owner.name || "Unnamed Owner",
+    email: owner.email || "",
+    phone: owner.phone || "",
+  });
 }
 
 export async function rejectSellerApplicationById({
@@ -123,7 +138,7 @@ export async function rejectSellerApplicationById({
   reviewedBy,
   reason,
 }) {
-  const seller = await Seller.findByIdAndUpdate(
+  const store = await Store.findByIdAndUpdate(
     sellerId,
     {
       $set: {
@@ -136,11 +151,17 @@ export async function rejectSellerApplicationById({
       },
     },
     { new: true },
-  );
+  ).populate("ownerId", "name email phone");
 
-  if (!seller) {
+  if (!store) {
     return null;
   }
 
-  return formatSellerApplication(seller);
+  const owner = store.ownerId || {};
+  return formatSellerApplication({
+    ...store.toObject(),
+    name: owner.name || "Unnamed Owner",
+    email: owner.email || "",
+    phone: owner.phone || "",
+  });
 }

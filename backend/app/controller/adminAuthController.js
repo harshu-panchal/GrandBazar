@@ -6,6 +6,7 @@ import {
   loginAdminSchema,
   validateSchema,
 } from "../validation/adminAuthValidation.js";
+import { recordLogin } from "../services/loginActivityService.js";
 
 const PUBLIC_ADMIN_SIGNUP_ENABLED = () =>
   process.env.ENABLE_PUBLIC_ADMIN_SIGNUP === "true";
@@ -19,7 +20,7 @@ function sanitizeAdmin(adminDoc) {
 
 const generateToken = (admin) =>
   jwt.sign(
-    { id: admin._id, role: "admin" },
+    { id: admin._id, role: admin.role || "admin" },
     process.env.JWT_SECRET,
     { expiresIn: "7d" },
   );
@@ -64,6 +65,9 @@ export const bootstrapAdmin = async (req, res) => {
     });
 
     const token = generateToken(admin);
+    // Record active login session
+    await recordLogin(admin, "Admin", req.ip, req.headers["user-agent"]);
+
     return handleResponse(res, 201, "Admin bootstrapped successfully", {
       token,
       admin: sanitizeAdmin(admin),
@@ -98,6 +102,9 @@ export const signupAdmin = async (req, res) => {
     });
 
     const token = generateToken(admin);
+    // Record active login session
+    await recordLogin(admin, "Admin", req.ip, req.headers["user-agent"]);
+
     return handleResponse(res, 201, "Admin registered successfully", {
       token,
       admin: sanitizeAdmin(admin),
@@ -123,6 +130,9 @@ export const loginAdmin = async (req, res) => {
 
     admin.lastLogin = new Date();
     await admin.save();
+
+    // Record active login session
+    await recordLogin(admin, "Admin", req.ip, req.headers["user-agent"]);
 
     const token = generateToken(admin);
     return handleResponse(res, 200, "Login successful", {

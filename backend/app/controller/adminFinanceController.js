@@ -1,6 +1,6 @@
 import Payout from "../models/payout.js";
 import Wallet from "../models/wallet.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
@@ -101,8 +101,8 @@ export const getAdminFinancePayoutsController = async (req, res) => {
       .map((item) => item.beneficiaryId);
 
     const [sellers, riders] = await Promise.all([
-      Seller.find({ _id: { $in: sellerIds } })
-        .select("_id shopName name phone")
+      Store.find({ _id: { $in: sellerIds } })
+        .select("_id shopName")
         .lean(),
       Delivery.find({ _id: { $in: riderIds } })
         .select("_id name phone")

@@ -342,7 +342,7 @@ const DeliveryAuth = () => {
                   <img
                     src={logoUrl}
                     alt={`${appName} logo`}
-                    className="w-10 h-10 object-contain"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <ShieldCheck className="w-5 h-5 text-brand-600" />
@@ -998,8 +998,8 @@ const DeliveryAuth = () => {
                   {/* Timer / Resend */}
                   <div className="text-center">
                     {timer > 0 ? (
-                      <p className="text-gray-400 text-sm font-medium">
-                        Resend code in <span className="text-brand-600 font-bold">{timer}s</span>
+                      <p className="text-gray-500 text-sm font-black uppercase tracking-wide">
+                        Resend code in <span className="text-brand-600 font-black normal-case">{timer}s</span>
                       </p>
                     ) : (
                       <button

@@ -12,9 +12,14 @@ export const sellerApi = {
     updateProduct: (id, data) => axiosInstance.put(`/products/${id}`, data),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
 
+    // Catalog
+    getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),
+    getCatalogProductById: (id) => axiosInstance.get(`/catalog/${id}`),
+    claimCatalogProduct: (data) => axiosInstance.post('/catalog/claim', data),
+
     // Categories (Public)
-    getCategories: () => axiosInstance.get('/admin/categories'),
-    getCategoryTree: () => axiosInstance.get('/admin/categories?tree=true'),
+    getCategories: (params) => axiosInstance.get('/admin/categories', { params }),
+    getCategoryTree: () => axiosInstance.get('/admin/categories', { params: { tree: true } }),
 
     // Others
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
@@ -49,4 +54,19 @@ export const sellerApi = {
     createCoupon: (data) => axiosInstance.post('/seller/coupons', data),
     updateCoupon: (id, data) => axiosInstance.put(`/seller/coupons/${id}`, data),
     deleteCoupon: (id) => axiosInstance.delete(`/seller/coupons/${id}`),
+
+    // Sub-Seller/Staff Management
+    getStaffList: () => axiosInstance.get('/seller/staff'),
+    getStaffOverview: () => axiosInstance.get('/seller/staff/overview'),
+    createStaff: (data) => axiosInstance.post('/seller/staff', data),
+    updateStaff: (id, data) => axiosInstance.put(`/seller/staff/${id}`, data),
+    deleteStaff: (id) => axiosInstance.delete(`/seller/staff/${id}`),
+
+    // Multi-store management
+    getStores: () => axiosInstance.get('/seller/stores'),
+    createStore: (data) => axiosInstance.post('/seller/stores', data),
+    getStore: (storeId) => axiosInstance.get(`/seller/stores/${storeId}`),
+    updateStore: (storeId, data) => axiosInstance.put(`/seller/stores/${storeId}`, data),
+    switchStore: (storeId) => axiosInstance.post('/seller/stores/switch', { storeId }),
+    toggleStoreActive: (storeId) => axiosInstance.patch(`/seller/stores/${storeId}/toggle-active`),
 };

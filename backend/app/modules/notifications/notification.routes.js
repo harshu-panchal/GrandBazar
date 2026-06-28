@@ -1,5 +1,5 @@
 import express from "express";
-import { allowRoles, verifyToken } from "../../middleware/authMiddleware.js";
+import { allowRoles, verifyToken, resolveActiveStore } from "../../middleware/authMiddleware.js";
 import {
   registerPushToken,
   removePushToken,
@@ -14,7 +14,7 @@ import {
 } from "./notification.controller.js";
 
 const notificationRouter = express.Router();
-notificationRouter.use(verifyToken);
+notificationRouter.use(verifyToken, resolveActiveStore);
 
 // Required APIs
 notificationRouter.get("/", getNotifications);

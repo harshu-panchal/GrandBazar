@@ -3,7 +3,7 @@ import Cart from "../models/cart.js";
 import Product from "../models/product.js";
 import Transaction from "../models/transaction.js";
 import StockHistory from "../models/stockHistory.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import Setting from "../models/setting.js";
 import User from "../models/customer.js";
@@ -146,7 +146,7 @@ async function deriveDistanceKm({ sellerId, addressLocation }) {
     return 0;
   }
 
-  const seller = await Seller.findById(sellerId).select("location").lean();
+  const seller = await Store.findById(sellerId).select("location").lean();
   const coords = seller?.location?.coordinates;
   if (!Array.isArray(coords) || coords.length < 2) return 0;
   const [lng, lat] = coords;
@@ -1075,7 +1075,7 @@ export const approveReturnRequest = async (req, res) => {
     // Broadcast to nearby delivery partners for return pickup
     let sellerInfo = null;
     try {
-      sellerInfo = await Seller.findById(order.seller)
+      sellerInfo = await Store.findById(order.seller)
         .select("shopName address phone")
         .lean();
     } catch {

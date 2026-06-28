@@ -32,7 +32,12 @@ const adminSchema = new mongoose.Schema(
 
     role: {
       type: String,
+      enum: ["admin", "superadmin", "accountant", "assistant"],
       default: "admin",
+    },
+    allowedPermissions: {
+      type: [String],
+      default: [],
     },
     isVerified: {
       type: Boolean,

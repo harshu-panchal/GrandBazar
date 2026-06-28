@@ -2,6 +2,12 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
 
+const isStoreApproved = (store) => {
+  if (!store) return false;
+  const status = store.applicationStatus || (store.isVerified ? 'approved' : 'pending');
+  return store.isVerified === true && store.isActive === true && status === 'approved';
+};
+
 const ProtectedRoute = ({ children }) => {
     const { isAuthenticated, isLoading, user } = useAuth();
     const location = useLocation();
@@ -28,26 +34,62 @@ const ProtectedRoute = ({ children }) => {
     }
 
     if (location.pathname.startsWith('/seller')) {
-        const applicationStatus =
-            user?.applicationStatus || (user?.isVerified ? 'approved' : 'pending');
-        const isApprovedSeller =
-            Boolean(user) &&
-            user.isVerified === true &&
-            user.isActive === true &&
-            applicationStatus === 'approved';
+        const isStoresPage = location.pathname.startsWith('/seller/stores');
+        const isOwner = Boolean(user && !user?.subSellerId);
+        const stores = user?.stores || [];
 
-        if (!isApprovedSeller) {
-            return (
-                <Navigate
-                    to="/seller/pending-approval"
-                    state={{
-                        approvalRequired: true,
-                        applicationStatus,
-                        rejectionReason: user?.rejectionReason || '',
-                    }}
-                    replace
-                />
-            );
+        if (isOwner) {
+            const hasApprovedStore = stores.some(isStoreApproved);
+            if (!hasApprovedStore && !isStoresPage) {
+                return <Navigate to="/seller/stores" replace />;
+            }
+            if (isStoresPage) {
+                return <>{children}</>;
+            }
+        } else if (user?.subSellerId) {
+            const applicationStatus =
+                user?.applicationStatus || (user?.isVerified ? 'approved' : 'pending');
+            const isApprovedSeller =
+                Boolean(user) &&
+                user.isVerified === true &&
+                user.isActive === true &&
+                applicationStatus === 'approved';
+
+            if (!isApprovedSeller) {
+                return (
+                    <Navigate
+                        to="/seller/pending-approval"
+                        state={{
+                            approvalRequired: true,
+                            applicationStatus,
+                            rejectionReason: user?.rejectionReason || '',
+                        }}
+                        replace
+                    />
+                );
+            }
+        } else {
+            const applicationStatus =
+                user?.applicationStatus || (user?.isVerified ? 'approved' : 'pending');
+            const isApprovedSeller =
+                Boolean(user) &&
+                user.isVerified === true &&
+                user.isActive === true &&
+                applicationStatus === 'approved';
+
+            if (!isApprovedSeller && !isStoresPage) {
+                return (
+                    <Navigate
+                        to="/seller/stores"
+                        state={{
+                            approvalRequired: true,
+                            applicationStatus,
+                            rejectionReason: user?.rejectionReason || '',
+                        }}
+                        replace
+                    />
+                );
+            }
         }
     }
 
