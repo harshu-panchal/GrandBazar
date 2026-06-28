@@ -17,6 +17,12 @@ import orderAlertSound from '@/assets/sounds/order_alert.mp3';
 
 const POLL_INTERVAL_MS = 15000;
 
+const isApprovedStore = (store) => {
+    if (!store) return false;
+    const status = store.applicationStatus || (store.isVerified ? 'approved' : 'pending');
+    return store.isVerified === true && store.isActive === true && status === 'approved';
+};
+
 /** Match server `sellerPendingExpiresAt` — never reset to a full 60s when the modal opens late. */
 function secondsLeftUntilSellerExpiry(order) {
     if (!order) return 0;
@@ -55,6 +61,14 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const { user, logout, role } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
+
+    const canPollSellerOrders = React.useMemo(() => {
+        if (role !== 'seller' || !user) return false;
+        if (user.subSellerId) {
+            return isApprovedStore(user);
+        }
+        return (user.stores || []).some(isApprovedStore);
+    }, [role, user]);
 
     // Shared data for seller – single source, avoids duplicate API calls
     const [sellerOrders, setSellerOrders] = useState([]);
@@ -150,7 +164,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     }, [newReturnAlert]);
 
     useEffect(() => {
-        if (role !== 'seller') {
+        if (role !== 'seller' || !canPollSellerOrders) {
             setSellerOrders([]);
             setOrdersLoading(false);
             return;
@@ -198,11 +212,11 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
         fetchOrdersRef.current = fetchOrders;
         fetchOrders();
-    }, [role]);
+    }, [role, canPollSellerOrders]);
 
     // Resilient fallback when socket events are missed (tab backgrounded/suspended).
     useEffect(() => {
-        if (role !== 'seller') return undefined;
+        if (role !== 'seller' || !canPollSellerOrders) return undefined;
 
         const syncOrders = () => {
             if (fetchOrdersRef.current) fetchOrdersRef.current();
@@ -225,7 +239,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
             document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('online', onOnline);
         };
-    }, [role]);
+    }, [role, canPollSellerOrders]);
 
     useEffect(() => {
         if (newOrderAlert) {

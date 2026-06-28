@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import Order from "../models/order.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
 import OrderOtp from "../models/orderOtp.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import {
   WORKFLOW_STATUS,
   legacyStatusFromWorkflow,
@@ -692,7 +692,7 @@ export async function markArrivedAtStoreAtomic(deliveryId, orderId, lat, lng) {
     throw err;
   }
 
-  const seller = await Seller.findById(order.seller).select("location").lean();
+  const seller = await Store.findById(order.seller).select("location").lean();
   const coords = seller?.location?.coordinates;
   if (!Array.isArray(coords) || coords.length < 2) {
     const err = new Error("Seller location not configured");
@@ -782,7 +782,7 @@ export async function confirmPickupAtomic(deliveryId, orderId, lat, lng) {
     throw err;
   }
 
-  const seller = await Seller.findById(order.seller).select("location").lean();
+  const seller = await Store.findById(order.seller).select("location").lean();
   const coords = seller?.location?.coordinates;
   if (!Array.isArray(coords) || coords.length < 2) {
     const err = new Error("Seller location not configured");

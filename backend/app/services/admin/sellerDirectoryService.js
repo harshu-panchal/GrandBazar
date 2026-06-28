@@ -1,4 +1,4 @@
-import Seller from "../../models/seller.js";
+import Store from "../../models/store.js";
 import Order from "../../models/order.js";
 import Product from "../../models/product.js";
 import {
@@ -46,10 +46,7 @@ export async function getSellerLocationsData({
     const searchRegex = new RegExp(escapeRegExp(search), "i");
     filters.push({
       $or: [
-        { name: searchRegex },
         { shopName: searchRegex },
-        { email: searchRegex },
-        { phone: searchRegex },
         { address: searchRegex },
         { category: searchRegex },
       ],
@@ -57,36 +54,41 @@ export async function getSellerLocationsData({
   }
 
   const baseQuery = filters.length ? { $and: filters } : {};
-  const sellers = await Seller.find(baseQuery)
+  const stores = await Store.find(baseQuery)
     .select(
-      "_id name shopName email phone category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason",
+      "_id shopName category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason ownerId",
     )
+    .populate("ownerId", "name email phone")
     .lean();
 
-  const filteredByStatus = sellers.filter((seller) =>
-    matchSellerLifecycleFilter(seller, normalizedLifecycle),
+  const filteredByStatus = stores.filter((store) =>
+    matchSellerLifecycleFilter(store, normalizedLifecycle),
   );
 
-  const sellersWithDerivedFields = filteredByStatus.map((seller) => {
-    const coords = Array.isArray(seller.location?.coordinates)
-      ? seller.location.coordinates
+  const sellersWithDerivedFields = filteredByStatus.map((store) => {
+    const coords = Array.isArray(store.location?.coordinates)
+      ? store.location.coordinates
       : [];
     const lng = Number(coords[0]);
     const lat = Number(coords[1]);
-    const locationValid = hasValidSellerLocation(seller);
-    const radiusKm = normalizeRadiusKm(seller.serviceRadius, 5);
-    const cityLabel = extractSellerCity(seller);
+    const locationValid = hasValidSellerLocation(store);
+    const radiusKm = normalizeRadiusKm(store.serviceRadius, 5);
+    const cityLabel = extractSellerCity(store);
+    const owner = store.ownerId || {};
 
     return {
-      ...seller,
-      id: String(seller._id),
+      ...store,
+      id: String(store._id),
+      name: owner.name || "Unnamed Owner",
+      email: owner.email || "",
+      phone: owner.phone || "",
       city: cityLabel,
-      lifecycle: resolveSellerLifecycleStatus(seller),
+      lifecycle: resolveSellerLifecycleStatus(store),
       hasValidLocation: locationValid,
       lat: locationValid ? lat : null,
       lng: locationValid ? lng : null,
       serviceRadiusKm: radiusKm,
-      locationLabel: seller.address || "Location not set",
+      locationLabel: store.address || "Location not set",
     };
   });
 
@@ -272,7 +274,7 @@ export async function getActiveSellersData({
   limit,
   skip,
 }) {
-  const baseQuery = { isVerified: true, isActive: true };
+  const baseQuery = { isVerified: true, isActive: true, applicationStatus: "approved" };
   const filters = [baseQuery];
 
   if (category && category !== "all") {
@@ -286,10 +288,7 @@ export async function getActiveSellersData({
     const regex = new RegExp(escapeRegExp(search), "i");
     filters.push({
       $or: [
-        { name: regex },
         { shopName: regex },
-        { email: regex },
-        { phone: regex },
         { address: regex },
         { category: regex },
       ],
@@ -298,16 +297,16 @@ export async function getActiveSellersData({
 
   const query = filters.length > 1 ? { $and: filters } : baseQuery;
 
-  const [sellers, totalActiveCount, allActiveSellers] = await Promise.all([
-    Seller.find(query).lean(),
-    Seller.countDocuments(baseQuery),
-    Seller.find(baseQuery)
+  const [stores, totalActiveCount, allActiveStores] = await Promise.all([
+    Store.find(query).populate("ownerId", "name email phone").lean(),
+    Store.countDocuments(baseQuery),
+    Store.find(baseQuery)
       .select("_id createdAt category")
       .lean(),
   ]);
 
-  const sellerIds = sellers.map((seller) => seller._id);
-  const allActiveSellerIds = allActiveSellers.map((seller) => seller._id);
+  const sellerIds = stores.map((store) => store._id);
+  const allActiveSellerIds = allActiveStores.map((store) => store._id);
 
   const [ordersBySeller, productsBySeller, overallOrderStats] = await Promise.all([
     sellerIds.length
@@ -391,9 +390,10 @@ export async function getActiveSellersData({
   const orderMap = new Map(ordersBySeller.map((row) => [String(row._id), row]));
   const productMap = new Map(productsBySeller.map((row) => [String(row._id), row]));
 
-  const enrichedSellers = sellers.map((seller) => {
-    const orderStats = orderMap.get(String(seller._id)) || {};
-    const productStats = productMap.get(String(seller._id)) || {};
+  const enrichedSellers = stores.map((store) => {
+    const owner = store.ownerId || {};
+    const orderStats = orderMap.get(String(store._id)) || {};
+    const productStats = productMap.get(String(store._id)) || {};
     const totalOrders = Number(orderStats.totalOrders || 0);
     const deliveredOrders = Number(orderStats.deliveredOrders || 0);
     const pendingOrders = Number(orderStats.pendingOrders || 0);
@@ -403,18 +403,18 @@ export async function getActiveSellersData({
     const fulfillmentRate = totalOrders
       ? Math.round((deliveredOrders / totalOrders) * 100)
       : 0;
-    const joinedAt = seller.reviewedAt || seller.createdAt || new Date();
+    const joinedAt = store.reviewedAt || store.createdAt || new Date();
 
     return {
-      id: String(seller._id),
-      _id: seller._id,
-      shopName: seller.shopName || "Unnamed Store",
-      ownerName: seller.name || "Unnamed Owner",
-      email: seller.email || "",
-      phone: seller.phone || "",
-      category: seller.category || "General",
-      status: seller.isVerified && seller.isActive ? "active" : "inactive",
-      verificationStatus: seller.isVerified ? "verified" : "unverified",
+      id: String(store._id),
+      _id: store._id,
+      shopName: store.shopName || "Unnamed Store",
+      ownerName: owner.name || "Unnamed Owner",
+      email: owner.email || "",
+      phone: owner.phone || "",
+      category: store.category || "General",
+      status: store.isVerified && store.isActive ? "active" : "inactive",
+      verificationStatus: store.isVerified ? "verified" : "unverified",
       joinedAt,
       joinedDate: new Date(joinedAt).toLocaleDateString("en-GB", {
         day: "2-digit",
@@ -437,17 +437,17 @@ export async function getActiveSellersData({
       fulfillmentRate,
       productCount,
       activeProductCount,
-      serviceRadius: Number(seller.serviceRadius || 5),
-      location: getSellerDisplayLocation(seller),
-      city: seller.address || "Location not set",
-      latitude: Array.isArray(seller.location?.coordinates)
-        ? seller.location.coordinates[1] ?? null
+      serviceRadius: Number(store.serviceRadius || 5),
+      location: getSellerDisplayLocation(store),
+      city: store.address || "Location not set",
+      latitude: Array.isArray(store.location?.coordinates)
+        ? store.location.coordinates[1] ?? null
         : null,
-      longitude: Array.isArray(seller.location?.coordinates)
-        ? seller.location.coordinates[0] ?? null
+      longitude: Array.isArray(store.location?.coordinates)
+        ? store.location.coordinates[0] ?? null
         : null,
       avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-        seller.shopName || seller.name || seller.email || "seller",
+        store.shopName || owner.name || owner.email || "seller",
       )}`,
     };
   });
@@ -458,8 +458,8 @@ export async function getActiveSellersData({
 
   const totalRevenue = overallOrderStats[0]?.totalRevenue || 0;
   const totalOrders = overallOrderStats[0]?.totalOrders || 0;
-  const newThisMonth = allActiveSellers.filter((seller) => {
-    const createdAt = seller.createdAt ? new Date(seller.createdAt) : null;
+  const newThisMonth = allActiveStores.filter((store) => {
+    const createdAt = store.createdAt ? new Date(store.createdAt) : null;
     if (!createdAt) {
       return false;
     }
@@ -476,8 +476,8 @@ export async function getActiveSellersData({
 
   const uniqueCategories = [
     ...new Set(
-      allActiveSellers
-        .map((seller) => seller.category)
+      allActiveStores
+        .map((store) => store.category)
         .filter(Boolean)
         .map((value) => String(value).trim()),
     ),
@@ -505,8 +505,8 @@ export async function getActiveSellersData({
 }
 
 export async function getSellerOptions() {
-  return Seller.find({})
-    .select("_id shopName name email phone")
+  return Store.find({ isVerified: true, isActive: true, applicationStatus: "approved" })
+    .select("_id shopName category")
     .sort({ shopName: 1 })
     .lean();
 }

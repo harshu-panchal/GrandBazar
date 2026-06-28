@@ -13,46 +13,48 @@ import customerPin from "@/assets/customer-pin.png";
 
 const STORE_THEMES = {
   grocery: {
-    gradient: "from-emerald-50 to-teal-50/30",
+    gradient: "from-emerald-50/70 to-teal-50/20",
     border: "border-emerald-100/80 hover:border-emerald-300",
-    accent: "text-emerald-700 bg-emerald-50",
-    badge: "bg-emerald-600",
-    bannerBg: "bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-800",
+    accent: "text-emerald-700 bg-emerald-50/80 border border-emerald-100/30",
+    badge: "from-emerald-500 to-teal-600",
+    bannerBg: "bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700",
     dot: "bg-emerald-500",
     accentGlow: "shadow-emerald-100",
     titleHover: "group-hover:text-emerald-600",
     btnBg: "group-hover:bg-emerald-600 group-hover:text-white"
   },
   electronics: {
-    gradient: "from-violet-50 to-indigo-50/30",
+    gradient: "from-violet-50/70 to-indigo-50/20",
     border: "border-violet-100/80 hover:border-violet-300",
-    accent: "text-violet-700 bg-violet-50",
-    badge: "bg-violet-600",
-    bannerBg: "bg-gradient-to-br from-violet-600 via-indigo-700 to-purple-800",
+    accent: "text-violet-700 bg-violet-50/80 border border-violet-100/30",
+    badge: "from-violet-500 to-indigo-600",
+    bannerBg: "bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-700",
     dot: "bg-violet-500",
     accentGlow: "shadow-violet-100",
     titleHover: "group-hover:text-violet-600",
     btnBg: "group-hover:bg-violet-600 group-hover:text-white"
   },
   wedding: {
-    gradient: "from-rose-50 to-pink-50/30",
+    gradient: "from-rose-50/70 to-pink-50/20",
     border: "border-rose-100/80 hover:border-rose-300",
-    accent: "text-rose-700 bg-rose-50",
-    badge: "bg-rose-600",
-    bannerBg: "bg-gradient-to-br from-rose-600 via-pink-700 to-rose-800",
+    accent: "text-rose-700 bg-rose-50/80 border border-rose-100/30",
+    badge: "from-rose-500 to-pink-600",
+    bannerBg: "bg-gradient-to-br from-rose-500 via-pink-500 to-rose-700",
     dot: "bg-rose-500",
     accentGlow: "shadow-rose-100",
     titleHover: "group-hover:text-rose-600",
     btnBg: "group-hover:bg-rose-600 group-hover:text-white"
   },
   default: {
-    gradient: "from-slate-50 to-zinc-50/30",
-    border: "border-slate-100/80 hover:border-slate-300",
-    accent: "text-slate-700 bg-slate-100",
-    badge: "bg-slate-800",
-    bannerBg: "bg-gradient-to-br from-slate-700 via-zinc-800 to-slate-900",
-    dot: "bg-slate-500",
-    accentGlow: "shadow-slate-100"
+    gradient: "from-amber-50/70 to-pink-50/20",
+    border: "border-amber-100/80 hover:border-amber-300",
+    accent: "text-amber-700 bg-amber-50/80 border border-amber-100/30",
+    badge: "from-amber-400 to-rose-400",
+    bannerBg: "bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400",
+    dot: "bg-amber-400",
+    accentGlow: "shadow-amber-100",
+    titleHover: "group-hover:text-amber-600",
+    btnBg: "group-hover:bg-gradient-to-br group-hover:from-amber-400 group-hover:to-rose-400 group-hover:text-white"
   }
 };
 
@@ -114,6 +116,26 @@ const StoresPage = () => {
       scaledSize: new window.google.maps.Size(40, 40),
     } : null;
   }, [isLoaded]);
+
+  // Custom Welcome Splash State
+  const [showWelcomeSplash, setShowWelcomeSplash] = useState(false);
+  const [isExitingSplash, setIsExitingSplash] = useState(false);
+
+  const getGreetingText = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { text: "Good Morning", emoji: "🌅" };
+    if (hour < 17) return { text: "Good Afternoon", emoji: "☀️" };
+    return { text: "Good Evening", emoji: "🌆" };
+  };
+
+  const greeting = useMemo(() => getGreetingText(), []);
+
+  const handleDismissSplash = () => {
+    setIsExitingSplash(true);
+    setTimeout(() => {
+      setShowWelcomeSplash(false);
+    }, 600);
+  };
 
   // Dynamically load Lottie on mount
   useEffect(() => {
@@ -206,7 +228,30 @@ const StoresPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 pt-6 md:pt-10">
+    <div className="min-h-screen bg-slate-50/50 pb-24 pt-[70px] md:pt-[90px]">
+      <style>{`
+        @keyframes floatElement {
+          0% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-15px) rotate(5deg); }
+          100% { transform: translateY(0px) rotate(0deg); }
+        }
+        @keyframes splashExit {
+          0% { opacity: 1; transform: scale(1); filter: blur(0px); }
+          100% { opacity: 0; transform: scale(0.95); filter: blur(15px); }
+        }
+        .animate-splash-exit {
+          animation: splashExit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes waveShift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .animate-gradient-shift {
+          background-size: 200% 200%;
+          animation: waveShift 8s ease infinite;
+        }
+      `}</style>
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-[50px]">
         
         {/* Page Heading & Map Toggle */}
@@ -225,17 +270,17 @@ const StoresPage = () => {
         </div>
 
         {/* Main Hero Header Section */}
-        <div className="relative mb-12 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-zinc-900 to-slate-950 p-8 md:p-12 shadow-2xl text-white">
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-400 via-rose-500 to-brand-500 blur-3xl pointer-events-none" />
-          <div className="relative z-10 max-w-3xl flex flex-col items-start gap-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-xs font-bold tracking-wider uppercase text-amber-300">
+        <div className="relative mb-8 overflow-hidden rounded-[2rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">
+          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-200 via-rose-200 to-violet-200 blur-3xl pointer-events-none" />
+          <div className="relative z-10 max-w-3xl flex flex-col items-start gap-3.5">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-xs font-bold tracking-wider uppercase text-amber-800">
               <Sparkles size={12} className="animate-pulse" />
               <span>Hyperlocal Shopping</span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-[1000] tracking-tighter leading-none">
-              Discover Local <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-brand-200 to-pink-300">Artisans & Shops</span>
+            <h1 className="text-3xl md:text-5xl font-[1000] tracking-tighter leading-none text-slate-900">
+              Discover Local <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-rose-500 to-violet-600">Artisans & Shops</span>
             </h1>
-            <p className="text-slate-300 text-sm md:text-lg font-medium leading-relaxed">
+            <p className="text-slate-600 text-xs md:text-sm font-medium leading-relaxed max-w-2xl">
               Explore hand-picked, verified shops in your neighborhood. Directly browse their products, add to your cart, and support local business with super-fast doorstep deliveries.
             </p>
             <div className="flex flex-wrap gap-2.5 mt-1.5">
@@ -259,7 +304,7 @@ const StoresPage = () => {
         </div>
 
         {/* Filters and Search Strip */}
-        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/40 border border-white/60 p-4 md:p-6 rounded-[2.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.015)] backdrop-blur-xl">
           {/* Categories Pill Nav */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 md:mx-0 md:px-0">
             {categoriesList.map(cat => (
@@ -276,13 +321,13 @@ const StoresPage = () => {
           {/* Search & Distance Filter */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-md">
             <div className="relative w-full flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors" size={18} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search shop name, category..."
-                className="w-full bg-white border-2 border-slate-100 hover:border-slate-200 focus:border-slate-900 pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
+                className="w-full bg-white/90 backdrop-blur-md border-2 border-slate-100/80 hover:border-slate-200 focus:border-amber-400 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)] pl-11 pr-4 py-3.5 rounded-2xl text-sm font-semibold text-slate-800 transition-all outline-none"
               />
             </div>
             
@@ -400,6 +445,27 @@ const StoresPage = () => {
                       {s.description || `Fresh collections and quality products directly delivered from ${s.shopName || s.name}.`}
                     </p>
 
+                    {/* Quick Stats Grid */}
+                    <div className="mt-3 grid grid-cols-2 gap-2.5 pt-3 border-t border-slate-100/60">
+                      <div className="flex items-center gap-2 group-hover:translate-y-[-2px] transition-transform duration-300">
+                        <div className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center transition-all duration-300 ${theme.accent} group-hover:scale-110`}>
+                          <Clock size={13} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Time</span>
+                          <span className="text-xs font-black text-slate-700">{s.distance < 2 ? "10-15 mins" : "15-25 mins"}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 group-hover:translate-y-[-2px] transition-transform duration-300">
+                        <div className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center transition-all duration-300 ${theme.accent} group-hover:scale-110`}>
+                          <Compass size={13} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Service</span>
+                          <span className="text-xs font-black text-slate-700">Within {s.serviceRadius || 5} km</span>
+                        </div>
+                      </div>
+                    </div>
                     {/* Expandable details panel toggler */}
                     <div className="mt-3 pt-2 border-t border-slate-100/60 flex flex-col">
                       <button

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { HiChevronDown } from "react-icons/hi2";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import { StoreSwitcherSidebar } from "@/modules/seller/components/StoreSwitcher";
 
 const colorMap = {
   indigo:
@@ -300,6 +301,12 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
           <X className="h-5 w-5" />
         </button>
       </div>
+
+      {role === "seller" && title?.toLowerCase().includes("seller") && (
+        <div className="flex-shrink-0 pt-3">
+          <StoreSwitcherSidebar />
+        </div>
+      )}
 
       <nav
         data-lenis-prevent

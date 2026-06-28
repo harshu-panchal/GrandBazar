@@ -1,5 +1,5 @@
 import Category from "../models/category.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import { buildKey, getOrSet, getTTL, invalidate } from "./cacheService.js";
 
 /**
@@ -28,7 +28,7 @@ export async function resolveSellerName(id) {
   const key = buildKey("catalog", "sellerName", String(id));
   const seller = await getOrSet(
     key,
-    () => Seller.findById(id).select("shopName").lean(),
+    () => Store.findById(id).select("shopName").lean(),
     getTTL("categoryName"), // same 1-hour TTL
   );
   return seller?.shopName ?? null;

@@ -11,14 +11,21 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { adminApi } from '@/modules/admin/services/adminApi';
+import StoreSwitcher from '@/modules/seller/components/StoreSwitcher';
 import { AnimatePresence } from 'framer-motion';
 import NotificationPopup from './NotificationPopup';
 import { toast } from 'sonner';
 
 import { useSettings } from '@core/context/SettingsContext';
 
+const isApprovedStore = (store) => {
+    if (!store) return false;
+    const status = store.applicationStatus || (store.isVerified ? 'approved' : 'pending');
+    return store.isVerified === true && store.isActive === true && status === 'approved';
+};
+
 const Topbar = ({ onMenuClick }) => {
-    const { user, logout, role } = useAuth();
+    const { user, logout, role, isAuthenticated } = useAuth();
     const { settings } = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
@@ -31,9 +38,18 @@ const Topbar = ({ onMenuClick }) => {
     const [unreadCount, setUnreadCount] = React.useState(0);
     const [showNotifications, setShowNotifications] = React.useState(false);
     const notificationRef = React.useRef(null);
+    const isNotificationsFetchInFlightRef = React.useRef(false);
 
     const isSeller = location.pathname.startsWith('/seller');
     const isAdmin = location.pathname.startsWith('/admin');
+
+    const canPollSellerNotifications = React.useMemo(() => {
+        if (!isSeller || !isAuthenticated || !user) return false;
+        if (user.subSellerId) {
+            return isApprovedStore(user);
+        }
+        return (user.stores || []).some(isApprovedStore);
+    }, [isSeller, isAuthenticated, user]);
 
     const handleSearchSubmit = (e) => {
         e?.preventDefault();
@@ -44,9 +60,13 @@ const Topbar = ({ onMenuClick }) => {
         }
     };
 
-    const fetchNotifications = async () => {
+    const fetchNotifications = React.useCallback(async () => {
+        if (isNotificationsFetchInFlightRef.current) return;
+        if (isSeller && !canPollSellerNotifications) return;
+        if (!isSeller && !isAdmin) return;
+
+        isNotificationsFetchInFlightRef.current = true;
         try {
-            if (!isSeller && !isAdmin) return;
             const response = isSeller
                 ? await sellerApi.getNotifications()
                 : await adminApi.getNotifications();
@@ -55,16 +75,21 @@ const Topbar = ({ onMenuClick }) => {
                 setUnreadCount(response.data.result.unreadCount);
             }
         } catch (error) {
-            console.error("Notif Fetch Error:", error);
+            if (error.response?.status !== 401 && error.response?.status !== 403) {
+                console.error("Notif Fetch Error:", error);
+            }
+        } finally {
+            isNotificationsFetchInFlightRef.current = false;
         }
-    };
+    }, [isSeller, isAdmin, canPollSellerNotifications]);
 
     React.useEffect(() => {
         fetchNotifications();
-        if (!isSeller && !isAdmin) return undefined;
+        const shouldPoll = isAdmin || (isSeller && canPollSellerNotifications);
+        if (!shouldPoll) return undefined;
         const poll = setInterval(fetchNotifications, 20000);
         return () => clearInterval(poll);
-    }, [isSeller, isAdmin]);
+    }, [isSeller, isAdmin, canPollSellerNotifications, fetchNotifications]);
 
     // Handle Click Outside
     React.useEffect(() => {
@@ -118,16 +143,21 @@ const Topbar = ({ onMenuClick }) => {
                     <HiOutlineMenu className="h-5 w-5" />
                 </button>
 
-                {/* Mobile Logo */}
-                <div className="flex items-center space-x-2 mr-4 md:hidden">
-                    {logoUrl ? (
-                        <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100">
-                            <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
-                        </div>
-                    ) : (
-                        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-black text-sm shadow-md">
-                            {appName.charAt(0)}
-                        </div>
+                {/* Mobile Logo + store switcher */}
+                <div className="flex items-center gap-2 mr-2 md:mr-4 min-w-0 flex-1 md:flex-none md:min-w-0">
+                    <div className="flex items-center space-x-2 md:hidden shrink-0">
+                        {logoUrl ? (
+                            <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100">
+                                <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
+                            </div>
+                        ) : (
+                            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-black text-sm shadow-md">
+                                {appName.charAt(0)}
+                            </div>
+                        )}
+                    </div>
+                    {isSeller && (
+                        <StoreSwitcher className="md:hidden min-w-0 flex-1" compact />
                     )}
                 </div>
 
@@ -145,6 +175,7 @@ const Topbar = ({ onMenuClick }) => {
             </div>
 
             <div className="flex items-center space-x-4">
+                {isSeller && <StoreSwitcher className="hidden md:block" />}
                 <div className="relative" ref={notificationRef}>
                     <button
                         onClick={() => setShowNotifications(!showNotifications)}

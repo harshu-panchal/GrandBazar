@@ -19,8 +19,8 @@ export const sellerApi = {
     bulkClaimCatalogProducts: (data) => axiosInstance.post('/catalog/claim-bulk', data),
 
     // Categories (Public)
-    getCategories: () => axiosInstance.get('/admin/categories'),
-    getCategoryTree: () => axiosInstance.get('/admin/categories?tree=true'),
+    getCategories: (params) => axiosInstance.get('/admin/categories', { params }),
+    getCategoryTree: () => axiosInstance.get('/admin/categories', { params: { tree: true } }),
 
     // Others
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
@@ -58,12 +58,8 @@ export const sellerApi = {
 
     // Sub-Seller/Staff Management
     getStaffList: () => axiosInstance.get('/seller/staff'),
+    getStaffOverview: () => axiosInstance.get('/seller/staff/overview'),
     createStaff: (data) => axiosInstance.post('/seller/staff', data),
     updateStaff: (id, data) => axiosInstance.put(`/seller/staff/${id}`, data),
     deleteStaff: (id) => axiosInstance.delete(`/seller/staff/${id}`),
-
-    // Media
-    uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    })
 };

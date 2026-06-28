@@ -29,108 +29,30 @@ const sellerSchema = new mongoose.Schema(
       select: false,
     },
 
-    shopName: {
+    accountType: {
       type: String,
-      required: true,
-      trim: true,
-    },
-
-    category: {
-      type: String,
-      trim: true,
-    },
-
-    description: {
-      type: String,
-      trim: true,
-    },
-
-    banners: [{
-      type: String,
-      trim: true,
-    }],
-
-    storeVideo: {
-      type: String,
-      trim: true,
-    },
-
-
-
-    address: {
-      type: String,
-      trim: true,
-    },
-    locality: {
-      type: String,
-      trim: true,
-    },
-    pincode: {
-      type: String,
-      trim: true,
-    },
-    city: {
-      type: String,
-      trim: true,
-    },
-    state: {
-      type: String,
-      trim: true,
-    },
-
-    documents: {
-      tradeLicense: { type: String, trim: true },
-      gstCertificate: { type: String, trim: true },
-      idProof: { type: String, trim: true },
-      businessRegistration: { type: String, trim: true },
-      fssaiLicense: { type: String, trim: true },
-      aadhar: { type: String, trim: true },
-      pan: { type: String, trim: true },
-      bankProof: { type: String, trim: true },
-      other: { type: String, trim: true },
-    },
-
-    aadharNumber: {
-      type: String,
-      trim: true,
-    },
-    panNumber: {
-      type: String,
-      trim: true,
-    },
-    accountHolder: {
-      type: String,
-      trim: true,
-    },
-    accountNumber: {
-      type: String,
-      trim: true,
-    },
-    ifsc: {
-      type: String,
-      trim: true,
-    },
-    bankName: {
-      type: String,
-      trim: true,
+      enum: ["owner", "staff"],
+      default: "owner",
     },
 
     role: {
       type: String,
       default: "seller",
     },
+
     parentId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Seller",
+      ref: "Store",
     },
+
     allowedPermissions: {
       type: [String],
       default: [],
     },
 
-    isVerified: {
-      type: Boolean,
-      default: false,
+    lastActiveStoreId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
     },
 
     emailVerified: {
@@ -143,52 +65,10 @@ const sellerSchema = new mongoose.Schema(
       default: false,
     },
 
-    applicationStatus: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-
-    reviewedAt: {
-      type: Date,
-    },
-
-    reviewedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin",
-    },
-
-    rejectionReason: {
-      type: String,
-      trim: true,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: false,
-    },
-    location: {
-      type: {
-        type: String,
-        enum: ["Point"],
-        default: "Point",
-      },
-      coordinates: {
-        type: [Number],
-        default: [0, 0],
-      },
-    },
-    serviceRadius: {
-      type: Number,
-      default: 5, // Default 5km
-    },
     lastLogin: Date,
   },
   { timestamps: true },
 );
-
-sellerSchema.index({ location: "2dsphere" });
-sellerSchema.index({ isActive: 1, isVerified: 1 });
 
 // Hash password before saving
 sellerSchema.pre("save", async function (next) {

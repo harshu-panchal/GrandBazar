@@ -12,7 +12,9 @@ import {
 import {
   verifyToken,
   allowRoles,
-  requireApprovedSeller
+  requireApprovedSeller,
+  resolveActiveStore,
+  checkSubSellerPermission,
 } from "../middleware/authMiddleware.js";
 import multer from "multer";
 
@@ -26,6 +28,7 @@ router.get(
   "/",
   verifyToken,
   allowRoles("admin", "seller"),
+  checkSubSellerPermission("products", "read"),
   getCatalogProducts
 );
 
@@ -33,6 +36,7 @@ router.get(
   "/:id",
   verifyToken,
   allowRoles("admin", "seller"),
+  checkSubSellerPermission("products", "read"),
   getCatalogProductById
 );
 
@@ -72,7 +76,9 @@ router.post(
   "/claim",
   verifyToken,
   allowRoles("seller"),
+  resolveActiveStore,
   requireApprovedSeller,
+  checkSubSellerPermission("products", "write"),
   claimCatalogProduct
 );
 

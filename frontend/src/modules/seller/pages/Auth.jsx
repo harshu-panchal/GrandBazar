@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@core/context/AuthContext";
+import { setRoleToken } from "@core/utils/authSession";
 import { useSettings } from "@core/context/SettingsContext";
 import { UserRole } from "@core/constants/roles";
 import {
@@ -399,14 +400,23 @@ const Auth = () => {
         })();
 
       if (isLogin) {
-        const { token, seller } = response.data.result;
+        const { token, seller, stores, activeStoreId, hasApprovedStore } = response.data.result;
+        if (activeStoreId) {
+          localStorage.setItem('seller_active_store', String(activeStoreId));
+        }
+        setRoleToken('seller', token);
         login({
           ...seller,
+          stores: stores || [],
           token,
           role: "seller",
         });
         toast.success("Welcome back, Partner!");
-        navigate("/seller");
+        if (hasApprovedStore === false && !seller?.subSellerId) {
+          navigate("/seller/stores");
+        } else {
+          navigate("/seller");
+        }
       } else {
         setIsLogin(true);
         setSignupStep(1);
@@ -424,9 +434,9 @@ const Auth = () => {
           password: "",
         }));
         toast.success(
-          "Application submitted. Login is enabled only after admin approval.",
+          "Application submitted. You can log in and track store approval status.",
         );
-        navigate("/seller/pending-approval", {
+        navigate("/seller/stores", {
           replace: true,
           state: {
             approvalRequired: true,
@@ -440,7 +450,7 @@ const Auth = () => {
           error.response?.data?.result?.applicationStatus || "pending";
         const rejectionReason =
           error.response?.data?.result?.rejectionReason || "";
-        navigate("/seller/pending-approval", {
+        navigate("/seller/stores", {
           replace: true,
           state: {
             approvalRequired: true,

@@ -1,8 +1,10 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
+import { StoreProvider } from "../context/StoreContext";
 import Orders from "../pages/Orders";
 import { useAuth } from "@core/context/AuthContext";
+import { hasSellerModuleAccess } from "../constants/sellerPermissions";
 import {
   HiOutlineSquares2X2,
   HiOutlineCube,
@@ -36,6 +38,7 @@ const Withdrawals = React.lazy(() => import("../pages/Withdrawals"));
 const Storefront = React.lazy(() => import("../pages/Storefront"));
 const SellerCoupons = React.lazy(() => import("../pages/SellerCoupons"));
 const StaffManagement = React.lazy(() => import("../pages/StaffManagement"));
+const MyStores = React.lazy(() => import("../pages/MyStores"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
@@ -72,10 +75,16 @@ const navItems = [
     permission: "withdrawals",
   },
   {
-    label: "Staff Management",
+    label: "Team & Access",
     path: "/seller/staff",
     icon: HiOutlineUserGroup,
     permission: "staff",
+  },
+  {
+    label: "My Stores",
+    path: "/seller/stores",
+    icon: HiOutlineInboxStack,
+    ownerOnly: true,
   },
   { label: "Profile", path: "/seller/profile", icon: HiOutlineUser },
 ];
@@ -84,53 +93,65 @@ const SellerRoutes = () => {
   const { user } = useAuth();
 
   const isOwner = React.useMemo(() => {
-    return user?.role === 'seller' && !user?.subSellerId;
+    return Boolean(user && !user?.subSellerId);
   }, [user]);
 
-  const hasPermission = React.useCallback((permissionKey) => {
+  const hasPermission = React.useCallback((permissionKey, level = "read") => {
     if (isOwner) return true;
-    return user?.allowedPermissions?.includes(permissionKey);
+    return hasSellerModuleAccess(user?.allowedPermissions || [], permissionKey, level);
   }, [isOwner, user]);
 
   const filteredNavItems = React.useMemo(() => {
     return navItems.filter((item) => {
       if (item.path === "/seller" || item.path === "/seller/profile") return true;
+      if (item.ownerOnly) return isOwner;
       if (item.permission === "staff") return isOwner;
       if (isOwner) return true;
-      return user?.allowedPermissions?.includes(item.permission);
+      return hasSellerModuleAccess(user?.allowedPermissions || [], item.permission, "read");
     });
   }, [user, isOwner]);
 
   return (
+    <StoreProvider>
     <DashboardLayout navItems={filteredNavItems} title="Seller Panel">
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] items-center justify-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+          </div>
+        }
+      >
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        {hasPermission("storefront") && <Route path="/storefront" element={<Storefront />} />}
+        <Route index element={<Dashboard />} />
+        <Route path="stores" element={<MyStores />} />
+        {hasPermission("storefront") && <Route path="storefront" element={<Storefront />} />}
         {hasPermission("products") && (
           <>
-            <Route path="/products" element={<ProductManagement />} />
-            <Route path="/products/catalog" element={<BrowseCatalog />} />
-            <Route path="/products/add" element={<AddProduct />} />
+            <Route path="products" element={<ProductManagement />} />
+            <Route path="products/catalog" element={<BrowseCatalog />} />
+            <Route path="products/add" element={<AddProduct />} />
           </>
         )}
-        {hasPermission("inventory") && <Route path="/inventory" element={<StockManagement />} />}
-        {hasPermission("orders") && <Route path="/orders" element={<Orders />} />}
-        {hasPermission("returns") && <Route path="/returns" element={<Returns />} />}
-        {hasPermission("tracking") && <Route path="/tracking" element={<DeliveryTracking />} />}
-        {hasPermission("coupons") && <Route path="/coupons" element={<SellerCoupons />} />}
-        {hasPermission("analytics") && <Route path="/analytics" element={<Analytics />} />}
+        {hasPermission("inventory") && <Route path="inventory" element={<StockManagement />} />}
+        {hasPermission("orders") && <Route path="orders" element={<Orders />} />}
+        {hasPermission("returns") && <Route path="returns" element={<Returns />} />}
+        {hasPermission("tracking") && <Route path="tracking" element={<DeliveryTracking />} />}
+        {hasPermission("coupons") && <Route path="coupons" element={<SellerCoupons />} />}
+        {hasPermission("analytics") && <Route path="analytics" element={<Analytics />} />}
         {hasPermission("withdrawals") && (
           <>
-            <Route path="/withdrawals" element={<Withdrawals />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="/earnings" element={<Earnings />} />
+            <Route path="withdrawals" element={<Withdrawals />} />
+            <Route path="transactions" element={<Transactions />} />
+            <Route path="earnings" element={<Earnings />} />
           </>
         )}
-        <Route path="/profile" element={<Profile />} />
-        {isOwner && <Route path="/staff" element={<StaffManagement />} />}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="profile" element={<Profile />} />
+        {isOwner && <Route path="staff" element={<StaffManagement />} />}
+        <Route path="*" element={<Navigate to="/seller" replace />} />
       </Routes>
+      </Suspense>
     </DashboardLayout>
+    </StoreProvider>
   );
 };
 

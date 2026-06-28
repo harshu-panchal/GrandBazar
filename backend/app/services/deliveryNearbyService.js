@@ -1,5 +1,5 @@
 import Delivery from "../models/delivery.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 
 /** When true, only verified riders receive broadcasts (stricter). Default: do not require. */
@@ -39,7 +39,7 @@ function filterByHaversine(candidates, lat, lng, maxDistanceM) {
 export async function getDeliveryPartnerIdsWithinSellerRadius(sellerId) {
   if (!sellerId) return [];
 
-  const seller = await Seller.findById(sellerId)
+  const seller = await Store.findById(sellerId)
     .select("location serviceRadius")
     .lean();
 

@@ -10,7 +10,7 @@ const couponSchema = new mongoose.Schema(
         },
         sellerId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Seller",
+            ref: "Store",
             default: null, // null means it is an Admin/Global coupon
         },
         sponsor: {

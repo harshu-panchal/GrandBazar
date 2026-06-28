@@ -1,6 +1,6 @@
 import Order from "../models/order.js";
 import Delivery from "../models/delivery.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 
@@ -176,7 +176,10 @@ function parseAvailableOrdersLimit(requestedLimit) {
 }
 
 async function resolveNearbySellerIds(deliveryPartner, userId) {
-  const nearbySellers = await Seller.find({
+  const nearbySellers = await Store.find({
+    isActive: true,
+    isVerified: true,
+    applicationStatus: "approved",
     location: {
       $near: {
         $geometry: deliveryPartner.location,
@@ -189,7 +192,7 @@ async function resolveNearbySellerIds(deliveryPartner, userId) {
   let usedFallback = false;
 
   if (sellerIds.length === 0 && process.env.NODE_ENV !== "production") {
-    const allSellers = await Seller.find({}).select("_id");
+    const allSellers = await Store.find({ isActive: true, isVerified: true }).select("_id");
     sellerIds = allSellers.map((seller) => seller._id);
     usedFallback = true;
     console.log(

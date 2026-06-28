@@ -1,6 +1,58 @@
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
 import Seller from "../models/seller.js";
+import Store from "../models/store.js";
+import { isStoreApproved, loadOwnerStores, pickDefaultActiveStoreId } from "../services/storeService.js";
+import { hasSellerModuleAccess } from "../services/sellerPermissionService.js";
+
+async function resolveSellerStoreRecord(req) {
+  if (req.user?.role !== "seller") {
+    return null;
+  }
+
+  const candidateIds = [
+    req.user.activeStoreId,
+    req.user.id,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const storeId of candidateIds) {
+    const store = await Store.findById(storeId)
+      .select("isVerified isActive applicationStatus rejectionReason shopName ownerId")
+      .lean();
+    if (store) {
+      return { store, storeId: String(store._id) };
+    }
+  }
+
+  const ownerId = req.user.accountId || (req.user.subSellerId ? null : req.user.id);
+  if (!ownerId) {
+    return null;
+  }
+
+  const stores = await loadOwnerStores(ownerId);
+  if (!stores.length) {
+    return null;
+  }
+
+  const fallbackStoreId = await pickDefaultActiveStoreId(
+    { lastActiveStoreId: req.user.activeStoreId },
+    stores,
+  );
+  const fallbackStore =
+    stores.find((entry) => String(entry._id) === String(fallbackStoreId)) || stores[0];
+
+  return fallbackStore
+    ? { store: fallbackStore, storeId: String(fallbackStore._id) }
+    : null;
+}
+
+function applyResolvedStoreContext(req, storeId) {
+  if (!storeId) return;
+  req.user.id = String(storeId);
+  req.user.activeStoreId = String(storeId);
+}
 
 function extractJwtFromHeaders(req) {
   const authHeader = String(req.headers.authorization || "").trim();
@@ -10,8 +62,6 @@ function extractJwtFromHeaders(req) {
       return parts[1];
     }
 
-    // Allow raw JWT in Authorization header for non-standard clients.
-    // Still requires signature verification so it doesn't weaken auth.
     if (authHeader.split(".").length === 3) {
       return authHeader;
     }
@@ -40,12 +90,12 @@ export const verifyToken = (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.user = decoded; // { id, role }
+    req.user = decoded;
 
-    // Asynchronously update last active timestamp for current user session
-    if (decoded && decoded.id) {
-      updateLastActive(decoded.id).catch((err) =>
-        console.error("Failed to update last active timestamp:", err)
+    const activityId = decoded.accountId || decoded.subSellerId || decoded.id;
+    if (activityId) {
+      updateLastActive(activityId).catch((err) =>
+        console.error("Failed to update last active timestamp:", err),
       );
     }
 
@@ -56,7 +106,7 @@ export const verifyToken = (req, res, next) => {
 };
 
 /* ===============================
-   Optional Verify Token (for public routes that need user context)
+   Optional Verify Token
 ================================ */
 export const optionalVerifyToken = (req, res, next) => {
   try {
@@ -65,16 +115,14 @@ export const optionalVerifyToken = (req, res, next) => {
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // { id, role }
-      } catch (error) {
-        // Token is invalid, but we don't block the request
+        req.user = decoded;
+      } catch {
         req.user = null;
       }
     }
 
     next();
-  } catch (error) {
-    // Don't block the request, just continue without user
+  } catch {
     next();
   }
 };
@@ -103,6 +151,44 @@ export const allowSuperAdminOnly = (req, res, next) => {
 };
 
 /* ===============================
+   Resolve active store from header (owner multi-store)
+================================ */
+export const resolveActiveStore = async (req, res, next) => {
+  try {
+    if (req.user?.role !== "seller") {
+      return next();
+    }
+
+    const headerStoreId = String(req.headers["x-active-store-id"] || "").trim();
+    if (!headerStoreId || !req.user.accountId) {
+      return next();
+    }
+
+    if (headerStoreId === String(req.user.accountId)) {
+      return next();
+    }
+
+    if (String(req.user.activeStoreId) === headerStoreId && String(req.user.id) === headerStoreId) {
+      return next();
+    }
+
+    const store = await Store.findOne({
+      _id: headerStoreId,
+      ownerId: req.user.accountId,
+    }).lean();
+
+    if (!store) {
+      return next();
+    }
+
+    applyResolvedStoreContext(req, store._id);
+    next();
+  } catch (error) {
+    return handleResponse(res, 500, "Unable to resolve active store");
+  }
+};
+
+/* ===============================
    Ensure seller can access seller-only operational routes
 ================================ */
 export const requireApprovedSeller = async (req, res, next) => {
@@ -111,51 +197,63 @@ export const requireApprovedSeller = async (req, res, next) => {
       return next();
     }
 
-    const seller = await Seller.findById(req.user.id)
-      .select("isVerified isActive applicationStatus rejectionReason")
-      .lean();
-
-    if (!seller) {
-      return handleResponse(res, 401, "Seller account not found");
+    const resolved = await resolveSellerStoreRecord(req);
+    if (!resolved?.store) {
+      return handleResponse(res, 403, "No store found for this seller account.", {
+        applicationStatus: "pending",
+      });
     }
 
-    const applicationStatus =
-      seller.applicationStatus || (seller.isVerified ? "approved" : "pending");
-    const isApproved =
-      seller.isVerified === true &&
-      seller.isActive === true &&
-      applicationStatus === "approved";
+    applyResolvedStoreContext(req, resolved.storeId);
+    const store = resolved.store;
 
-    if (!isApproved) {
+    if (!isStoreApproved(store)) {
+      const applicationStatus =
+        store.applicationStatus || (store.isVerified ? "approved" : "pending");
       const message =
         applicationStatus === "rejected"
-          ? "Seller application rejected. Please contact admin support."
-          : "Seller account is pending admin approval.";
+          ? "Store application rejected. Please contact admin support."
+          : "Store is pending admin approval.";
 
       return handleResponse(res, 403, message, {
         applicationStatus,
-        isVerified: seller.isVerified === true,
-        isActive: seller.isActive === true,
-        rejectionReason: seller.rejectionReason || "",
+        isVerified: store.isVerified === true,
+        isActive: store.isActive === true,
+        rejectionReason: store.rejectionReason || "",
+        shopName: store.shopName || "",
       });
     }
 
     next();
   } catch (error) {
-    return handleResponse(res, 500, "Unable to validate seller approval status");
+    return handleResponse(res, 500, "Unable to validate store approval status");
   }
 };
 
-export const checkSubSellerPermission = (permission) => {
+export const requireStoreOwner = (req, res, next) => {
+  if (req.user?.subSellerId) {
+    return handleResponse(res, 403, "Access denied. Only the store owner can perform this action.");
+  }
+  if (!req.user?.accountId) {
+    return handleResponse(res, 403, "Access denied. Only the store owner can perform this action.");
+  }
+  next();
+};
+
+export const checkSubSellerPermission = (module, level = "read") => {
   return (req, res, next) => {
-    // If it's the main seller, they have all permissions
-    if (!req.user || !req.user.subSellerId) {
+    if (!req.user?.subSellerId) {
       return next();
     }
-    // If it's a sub-seller, check their allowedPermissions
-    if (req.user.allowedPermissions && req.user.allowedPermissions.includes(permission)) {
+
+    if (hasSellerModuleAccess(req.user.allowedPermissions || [], module, level)) {
       return next();
     }
-    return handleResponse(res, 403, "Access denied. You do not have permission for this section.");
+
+    return handleResponse(
+      res,
+      403,
+      `Access denied. You do not have ${level} permission for ${module}.`,
+    );
   };
 };

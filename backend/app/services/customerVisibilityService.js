@@ -1,4 +1,4 @@
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import { calculateDistance } from "../utils/helper.js";
 import { buildKey, getOrSet, getTTL } from "./cacheService.js";
 
@@ -19,20 +19,18 @@ export function parseCustomerCoordinates(query = {}) {
   return { valid: true, lat, lng };
 }
 
-/**
- * Round lat/lng to 4 decimal places (~11m precision) for cache key.
- * This groups nearby requests into the same cache bucket.
- */
 function buildNearbySellersKey(lat, lng) {
   const rLat = Number(lat).toFixed(4);
   const rLng = Number(lng).toFixed(4);
-  return buildKey("sellers", "nearby", `${rLat}:${rLng}`);
+  return buildKey("stores", "nearby", `${rLat}:${rLng}`);
 }
 
 export async function getNearbySellerIdsForCustomer(lat, lng) {
   const fetchFn = async () => {
-    const sellers = await Seller.find({
+    const stores = await Store.find({
       isActive: true,
+      isVerified: true,
+      applicationStatus: "approved",
       location: {
         $near: {
           $geometry: {
@@ -46,18 +44,18 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
       .select("_id location serviceRadius")
       .lean();
 
-    return sellers
-      .filter((seller) => {
-        const coords = seller?.location?.coordinates;
+    return stores
+      .filter((store) => {
+        const coords = store?.location?.coordinates;
         if (!Array.isArray(coords) || coords.length < 2) return false;
-        const [sellerLng, sellerLat] = coords;
-        if (!Number.isFinite(sellerLat) || !Number.isFinite(sellerLng)) {
+        const [storeLng, storeLat] = coords;
+        if (!Number.isFinite(storeLat) || !Number.isFinite(storeLng)) {
           return false;
         }
-        const distanceKm = calculateDistance(lat, lng, sellerLat, sellerLng);
-        return distanceKm <= (seller.serviceRadius || 5);
+        const distanceKm = calculateDistance(lat, lng, storeLat, storeLng);
+        return distanceKm <= (store.serviceRadius || 5);
       })
-      .map((seller) => String(seller._id));
+      .map((store) => String(store._id));
   };
 
   return getOrSet(buildNearbySellersKey(lat, lng), fetchFn, getTTL("nearbySellers"));
