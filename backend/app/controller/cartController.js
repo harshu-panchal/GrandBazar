@@ -4,7 +4,7 @@ import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
 const CART_POPULATE_FIELDS =
-  "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons";
+  "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",

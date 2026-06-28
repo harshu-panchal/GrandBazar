@@ -6,7 +6,8 @@ import {
   getCatalogProductById,
   updateCatalogProduct,
   deleteCatalogProduct,
-  claimCatalogProduct
+  claimCatalogProduct,
+  bulkClaimCatalogProducts
 } from "../controller/catalogController.js";
 import {
   verifyToken,
@@ -79,6 +80,14 @@ router.post(
   requireApprovedSeller,
   checkSubSellerPermission("products", "write"),
   claimCatalogProduct
+);
+
+router.post(
+  "/claim-bulk",
+  verifyToken,
+  allowRoles("seller"),
+  requireApprovedSeller,
+  bulkClaimCatalogProducts
 );
 
 export default router;

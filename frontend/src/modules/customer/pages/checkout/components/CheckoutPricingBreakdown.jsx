@@ -36,28 +36,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
 
   return (
     <>
-      {/* Tip for Partner */}
-      <motion.div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl p-4 border border-pink-100">
-        <div className="flex items-center gap-2 mb-3">
-          <Heart size={18} className="text-pink-500 fill-pink-500" />
-          <h3 className="font-black text-slate-800">Tip your delivery partner</h3>
-        </div>
-        <p className="text-xs text-slate-600 mb-3">100% of the tip goes to them</p>
-        <div className="grid grid-cols-4 gap-2">
-          {tipAmounts.map((tip) => (
-            <button
-              key={tip.value}
-              onClick={() => onSelectTip(tip.value)}
-              className={`py-2 rounded-xl border-2 transition-all font-bold text-sm ${
-                selectedTip === tip.value
-                  ? "border-pink-500 bg-pink-100 text-pink-700"
-                  : "border-pink-200 bg-white text-slate-700 hover:border-pink-300"
-              }`}>
-              {tip.label}
-            </button>
-          ))}
-        </div>
-      </motion.div>
+
 
       {/* Bill Details */}
       <motion.div className="bg-white rounded-[2rem] p-6 shadow-xl shadow-gray-200/50 border border-slate-100">
