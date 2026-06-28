@@ -4,7 +4,7 @@ import Seller from "../models/seller.js";
 import OtpVerification from "../models/otpVerification.js";
 import { getRedisClient } from "../config/redis.js";
 import { sendSmsIndiaHubOtp } from "./smsIndiaHubService.js";
-import { MOCK_OTP, useRealSMS } from "../utils/otp.js";
+import { getMockOtp, useRealSMS } from "../utils/otp.js";
 import { sendSellerVerificationOtpEmail, useRealEmailOTP } from "./emailService.js";
 
 const SELLER_SIGNUP_PURPOSE = "seller_signup";
@@ -49,10 +49,21 @@ function randomOtp(length) {
   return String(Math.floor(min + Math.random() * (max - min + 1)));
 }
 
+function useMockOtpForSellerChannel(channel) {
+  if (process.env.USE_MOCK_OTP === "true" || process.env.USE_MOCK_OTP === "1") {
+    return true;
+  }
+
+  if (channel === "email") {
+    return !useRealEmailOTP();
+  }
+
+  return !useRealSMS();
+}
+
 function generateSellerOtp(channel) {
   const production = process.env.NODE_ENV === "production";
-  const useRealDelivery =
-    channel === "email" ? useRealEmailOTP() : useRealSMS();
+  const useRealDelivery = !useMockOtpForSellerChannel(channel);
 
   if (production && !useRealDelivery) {
     const error = new Error(
@@ -64,7 +75,7 @@ function generateSellerOtp(channel) {
     throw error;
   }
 
-  return useRealDelivery ? randomOtp(OTP_LENGTH()) : MOCK_OTP;
+  return useRealDelivery ? randomOtp(OTP_LENGTH()) : getMockOtp();
 }
 
 function hashOtp(channel, target, otp) {
@@ -198,7 +209,7 @@ async function dispatchPhoneOtp({ phone, otp }) {
     return;
   }
 
-  console.log(`[SellerPhoneOTP][mock] ${phone} -> ${otp}`);
+  console.log(`[SellerPhoneOTP][mock] ${phone} -> ${getMockOtp()}`);
 }
 
 function signVerificationToken({ channel, target }) {
@@ -298,9 +309,6 @@ export async function issueSellerVerificationOtp({
   }
 
   let otp = generateSellerOtp(normalizedChannel);
-  if (normalizedChannel === "phone" && target === "6268423925") {
-    otp = "1234";
-  }
   const expiresAt = new Date(now.getTime() + OTP_EXPIRY_MINUTES() * 60 * 1000);
 
   if (!session) {
@@ -338,14 +346,7 @@ export async function issueSellerVerificationOtp({
       channel: normalizedChannel,
       target: normalizedChannel === "email" ? maskEmail(target) : maskPhone(target),
       ipAddress,
-      mode:
-        normalizedChannel === "email"
-          ? useRealEmailOTP()
-            ? "real"
-            : "mock"
-          : useRealSMS()
-            ? "real"
-            : "mock",
+      mode: useMockOtpForSellerChannel(normalizedChannel) ? "mock" : "real",
     }),
   );
 
@@ -392,6 +393,38 @@ export async function verifySellerOtpCode({
     channel: normalizedChannel,
     target,
   }).select("+otpHash +expiresAt");
+
+  const mockMode = useMockOtpForSellerChannel(normalizedChannel);
+  const mockOtp = getMockOtp();
+
+  if (mockMode && code === mockOtp) {
+    if (session) {
+      session.verifiedAt = new Date();
+      session.failedAttempts = 0;
+      await session.save();
+    }
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        ts: new Date().toISOString(),
+        event: "seller_signup_otp_verified",
+        channel: normalizedChannel,
+        target: normalizedChannel === "email" ? maskEmail(target) : maskPhone(target),
+        ipAddress,
+        mode: "mock",
+      }),
+    );
+
+    return {
+      verified: true,
+      channel: normalizedChannel,
+      verificationToken: signVerificationToken({
+        channel: normalizedChannel,
+        target,
+      }),
+    };
+  }
 
   if (!session || !session.otpHash || !session.expiresAt || session.expiresAt <= new Date()) {
     const error = new Error("Invalid or expired OTP");

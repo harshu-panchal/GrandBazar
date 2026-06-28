@@ -8,6 +8,19 @@ const isStoreApproved = (store) => {
   return store.isVerified === true && store.isActive === true && status === 'approved';
 };
 
+const isOwnerAccountApproved = (user) => {
+  if (!user || user.subSellerId) return true;
+  if (user.isAccountApproved === true) return true;
+  if (user.isAccountApproved === false) return false;
+
+  const accountStatus =
+    user.accountApplicationStatus ||
+    user.applicationStatus ||
+    (user.isVerified ? 'approved' : 'pending');
+
+  return user.isVerified === true && accountStatus === 'approved';
+};
+
 const ProtectedRoute = ({ children }) => {
     const { isAuthenticated, isLoading, user } = useAuth();
     const location = useLocation();
@@ -39,12 +52,28 @@ const ProtectedRoute = ({ children }) => {
         const stores = user?.stores || [];
 
         if (isOwner) {
+            const accountStatus =
+                user?.accountApplicationStatus ||
+                user?.applicationStatus ||
+                (user?.isVerified ? 'approved' : 'pending');
+
+            if (!isOwnerAccountApproved(user)) {
+                return (
+                    <Navigate
+                        to="/seller/pending-approval"
+                        state={{
+                            approvalRequired: true,
+                            applicationStatus: accountStatus,
+                            rejectionReason: user?.rejectionReason || '',
+                        }}
+                        replace
+                    />
+                );
+            }
+
             const hasApprovedStore = stores.some(isStoreApproved);
             if (!hasApprovedStore && !isStoresPage) {
                 return <Navigate to="/seller/stores" replace />;
-            }
-            if (isStoresPage) {
-                return <>{children}</>;
             }
         } else if (user?.subSellerId) {
             const applicationStatus =
@@ -59,28 +88,6 @@ const ProtectedRoute = ({ children }) => {
                 return (
                     <Navigate
                         to="/seller/pending-approval"
-                        state={{
-                            approvalRequired: true,
-                            applicationStatus,
-                            rejectionReason: user?.rejectionReason || '',
-                        }}
-                        replace
-                    />
-                );
-            }
-        } else {
-            const applicationStatus =
-                user?.applicationStatus || (user?.isVerified ? 'approved' : 'pending');
-            const isApprovedSeller =
-                Boolean(user) &&
-                user.isVerified === true &&
-                user.isActive === true &&
-                applicationStatus === 'approved';
-
-            if (!isApprovedSeller && !isStoresPage) {
-                return (
-                    <Navigate
-                        to="/seller/stores"
                         state={{
                             approvalRequired: true,
                             applicationStatus,

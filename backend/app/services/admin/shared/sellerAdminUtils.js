@@ -63,14 +63,16 @@ export function formatSellerApplication(seller) {
   const documentFiles = formatSellerDocumentFiles(seller.documents);
   const createdAt = seller.createdAt ? new Date(seller.createdAt) : new Date();
   const missingInfo = !seller.address || docs.length < 3;
+  const applicationType = seller.applicationType || "store";
 
   return {
     id: String(seller._id),
-    shopName: seller.shopName || "Unnamed Store",
+    applicationType,
+    shopName: seller.shopName || (applicationType === "seller_admin" ? "Seller Admin Account" : "Unnamed Store"),
     ownerName: seller.name || "Unnamed Owner",
     email: seller.email || "",
     phone: seller.phone || "",
-    category: seller.category || "General",
+    category: seller.category || (applicationType === "seller_admin" ? "Admin Registration" : "General"),
     applicationDate: createdAt.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short",
@@ -85,12 +87,18 @@ export function formatSellerApplication(seller) {
       (seller.isVerified ? "approved" : "pending"),
     documents: docs,
     documentFiles,
-    location: seller.address || "Not provided",
-    description: seller.description || "No application note provided.",
-    verificationScore: docs.length
-      ? Math.min(100, 55 + docs.length * 12 + (seller.address ? 10 : 0))
-      : 40,
-    missingInfo,
+    location: seller.address || (applicationType === "seller_admin" ? "Account registration" : "Not provided"),
+    description:
+      seller.description ||
+      (applicationType === "seller_admin"
+        ? "New seller admin account awaiting approval."
+        : "No application note provided."),
+    verificationScore: applicationType === "seller_admin"
+      ? 70
+      : docs.length
+        ? Math.min(100, 55 + docs.length * 12 + (seller.address ? 10 : 0))
+        : 40,
+    missingInfo: applicationType === "seller_admin" ? false : missingInfo,
     aadharNumber: seller.aadharNumber || "",
     panNumber: seller.panNumber || "",
     accountHolder: seller.accountHolder || "",

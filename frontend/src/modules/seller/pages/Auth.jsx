@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@core/context/AuthContext";
 import { setRoleToken } from "@core/utils/authSession";
 import { useSettings } from "@core/context/SettingsContext";
-import { UserRole } from "@core/constants/roles";
 import {
   Mail,
   Lock,
@@ -12,27 +11,20 @@ import {
   Phone,
   ArrowRight,
   Store,
-  ShoppingBag,
-  TrendingUp,
   Rocket,
   Globe,
-  MapPin,
-  LayoutList,
-  FileText,
-  Upload,
   CheckCircle,
-  Navigation,
   Loader2,
   Eye,
   EyeOff,
-  CreditCard,
-  Landmark,
+  Building2,
+  Layers,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import Lottie from "lottie-react";
 import sellerAnimation from "../../../assets/INSTANT_6.json";
 import { sellerApi } from "../services/sellerApi";
-import MapPicker from "../../../shared/components/MapPicker";
 
 const createInitialVerificationState = () => ({
   status: "idle",
@@ -44,18 +36,29 @@ const createInitialVerificationState = () => ({
   verifiedValue: "",
 });
 
-const REQUIRED_DOCUMENT_CONFIG = [
-  { id: "aadhar", label: "Aadhaar Card" },
-  { id: "pan", label: "PAN Card" },
-  { id: "bankProof", label: "Bank Proof (Passbook / Cancelled Cheque)" },
+const ONBOARDING_STEPS = [
+  {
+    title: "Create admin account",
+    description: "Verify your email and phone, then set a secure password.",
+  },
+  {
+    title: "Add shop locations",
+    description: "Register each shop with its own address, category, and KYC.",
+  },
+  {
+    title: "Admin approval per shop",
+    description: "Every shop is reviewed independently before going live.",
+  },
+  {
+    title: "Run all shops from one panel",
+    description: "Switch between stores, staff, products, and orders anytime.",
+  },
 ];
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [signupStep, setSignupStep] = useState(1);
-  const [isMapOpen, setIsMapOpen] = useState(false);
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -70,48 +73,8 @@ const Auth = () => {
     email: "",
     password: "",
     name: "",
-    shopName: "",
     phone: "",
-    locality: "",
-    pincode: "",
-    city: "",
-    state: "",
-    category: "",
-    description: "",
-    lat: null,
-    lng: null,
-    radius: 5,
-    address: "",
-    aadharNumber: "",
-    panNumber: "",
-    accountHolder: "",
-    accountNumber: "",
-    ifsc: "",
-    bankName: "",
   });
-
-  const handleLocationSelect = (location) => {
-    setFormData((prev) => ({
-      ...prev,
-      lat: location.lat,
-      lng: location.lng,
-      radius: location.radius,
-      address: location.address,
-      locality: location.locality || prev.locality,
-      pincode: location.pincode || prev.pincode,
-      city: location.city || prev.city,
-      state: location.state || prev.state,
-    }));
-  };
-
-  const [documents, setDocuments] = useState({
-    aadhar: null,
-    pan: null,
-    bankProof: null,
-  });
-
-  const getMissingRequiredDocuments = () =>
-    REQUIRED_DOCUMENT_CONFIG.filter((doc) => !documents[doc.id]);
 
   const updateVerificationState = (field, updates) => {
     setVerifications((prev) => ({
@@ -157,23 +120,11 @@ const Auth = () => {
         resetVerificationState("phone");
       }
       setFormData({ ...formData, [name]: digitsOnly });
-    } else if (name === "city" || name === "state") {
-      // City & State: only alphabets and spaces
-      const cleaned = value.replace(/[^a-zA-Z\s]/g, "");
-      setFormData({ ...formData, [name]: cleaned });
-    } else if (name === "pincode") {
-      const digitsOnly = value.replace(/[^0-9]/g, "").slice(0, 6);
-      setFormData({ ...formData, [name]: digitsOnly });
     } else if (name === "password") {
-      // Password: allow any characters, min length 6
       setFormData({ ...formData, [name]: value });
     } else {
       setFormData({ ...formData, [name]: value });
     }
-  };
-
-  const handleDocumentChange = (e, docName) => {
-    setDocuments({ ...documents, [docName]: e.target.files[0] });
   };
 
   const handleSendVerificationOtp = async (field) => {
@@ -276,13 +227,15 @@ const Auth = () => {
     e.preventDefault();
 
     try {
-      // Basic client-side validation for signup
       if (!isLogin) {
         const email = formData.email || "";
         const phone = formData.phone || "";
+        if (!formData.name?.trim()) {
+          toast.error("Please enter your full name.");
+          return;
+        }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           toast.error("Please enter a valid business email address.");
-          setIsLoading(false);
           return;
         }
         if (!/^[0-9]{10}$/.test(phone)) {
@@ -298,109 +251,40 @@ const Auth = () => {
           return;
         }
       }
-      // Password: min 6 characters
+
       const pwd = (formData.password || "").trim();
       if (pwd.length < 6) {
-        toast.error(
-          "Password must be at least 6 characters.",
-        );
+        toast.error("Password must be at least 6 characters.");
         return;
-      }
-
-      if (!isLogin && signupStep === 2) {
-        if (!formData.lat || !formData.lng) {
-          toast.error("Please mark your shop location on the map.");
-          return;
-        }
-        if (!formData.aadharNumber || !/^\d{12}$/.test(formData.aadharNumber)) {
-          toast.error("Please enter a valid 12-digit Aadhaar Number.");
-          return;
-        }
-        if (!formData.panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(formData.panNumber)) {
-          toast.error("Please enter a valid 10-character PAN Number.");
-          return;
-        }
-        if (!formData.accountHolder) {
-          toast.error("Bank Account Holder Name is required.");
-          return;
-        }
-        if (!formData.accountNumber) {
-          toast.error("Bank Account Number is required.");
-          return;
-        }
-        if (!formData.ifsc || !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(formData.ifsc)) {
-          toast.error("Please enter a valid 11-character Bank IFSC Code.");
-          return;
-        }
-        if (!formData.bankName) {
-          toast.error("Bank Name is required.");
-          return;
-        }
-      }
-
-      if (!isLogin && signupStep < 3) {
-        setSignupStep((prev) => prev + 1);
-        return;
-      }
-
-      if (!isLogin) {
-        const missingRequiredDocuments = getMissingRequiredDocuments();
-        if (missingRequiredDocuments.length > 0) {
-          toast.error(
-            `Please upload all required documents: ${missingRequiredDocuments
-              .map((doc) => doc.label)
-              .join(", ")}`,
-          );
-          return;
-        }
       }
 
       setIsLoading(true);
-      // Note: backend expects a single address string, derive from city + state
-      const address =
-        formData.address ||
-        [
-          formData.locality,
-          formData.city,
-          formData.state,
-          formData.pincode,
-        ]
-          .filter(Boolean)
-          .join(", ");
 
       const response = isLogin
         ? await sellerApi.login({
           email: formData.email,
           password: formData.password,
         })
-        : await (() => {
-          const signupPayload = new FormData();
-
-          Object.entries({
-            ...formData,
-            address,
-            lat: formData.lat,
-            lng: formData.lng,
-            radius: formData.radius,
-            emailVerificationToken: verifications.email.token,
-            phoneVerificationToken: verifications.phone.token,
-          }).forEach(([key, value]) => {
-            if (value !== null && value !== undefined && value !== "") {
-              signupPayload.append(key, value);
-            }
-          });
-
-          Object.entries(documents).forEach(([key, file]) => {
-            if (file) {
-              signupPayload.append(key, file);
-            }
-          });
-
-          return sellerApi.signup(signupPayload);
-        })();
+        : await sellerApi.signup({
+          name: formData.name.trim(),
+          email: formData.email,
+          phone: formData.phone,
+          password: formData.password,
+          emailVerificationToken: verifications.email.token,
+          phoneVerificationToken: verifications.phone.token,
+        });
 
       if (isLogin) {
-        const { token, seller, stores, activeStoreId, hasApprovedStore } = response.data.result;
+        const {
+          token,
+          seller,
+          stores,
+          activeStoreId,
+          hasApprovedStore,
+          isAccountApproved,
+          accountApplicationStatus,
+          rejectionReason,
+        } = response.data.result;
         if (activeStoreId) {
           localStorage.setItem('seller_active_store', String(activeStoreId));
         }
@@ -410,37 +294,69 @@ const Auth = () => {
           stores: stores || [],
           token,
           role: "seller",
+          isAccountApproved,
+          accountApplicationStatus,
+          rejectionReason: rejectionReason || seller?.rejectionReason || "",
         });
         toast.success("Welcome back, Partner!");
-        if (hasApprovedStore === false && !seller?.subSellerId) {
+
+        const isOwner = !seller?.subSellerId && !seller?.parentId;
+        const accountApproved =
+          isAccountApproved ??
+          (seller?.isVerified === true && (accountApplicationStatus || "pending") === "approved");
+
+        if (isOwner && !accountApproved) {
+          navigate("/seller/pending-approval", {
+            replace: true,
+            state: {
+              applicationStatus: accountApplicationStatus || "pending",
+              rejectionReason: rejectionReason || "",
+            },
+          });
+        } else if (hasApprovedStore === false && isOwner) {
           navigate("/seller/stores");
         } else {
           navigate("/seller");
         }
       } else {
-        setIsLogin(true);
-        setSignupStep(1);
-        setDocuments({
-          tradeLicense: null,
-          gstCertificate: null,
-          idProof: null,
-        });
+        const {
+          token,
+          seller,
+          account,
+          stores,
+          activeStoreId,
+          isAccountApproved,
+          accountApplicationStatus,
+        } = response.data.result;
+        if (token) {
+          if (activeStoreId) {
+            localStorage.setItem('seller_active_store', String(activeStoreId));
+          }
+          setRoleToken('seller', token);
+          login({
+            ...(seller || account),
+            stores: stores || [],
+            token,
+            role: "seller",
+            isAccountApproved,
+            accountApplicationStatus,
+          });
+        }
         setVerifications({
           email: createInitialVerificationState(),
           phone: createInitialVerificationState(),
         });
-        setFormData((prev) => ({
-          ...prev,
+        setFormData({
+          email: formData.email,
           password: "",
-        }));
-        toast.success(
-          "Application submitted. You can log in and track store approval status.",
-        );
-        navigate("/seller/stores", {
+          name: formData.name,
+          phone: formData.phone,
+        });
+        toast.success("Registration submitted. Admin will review your seller admin account.");
+        navigate("/seller/pending-approval", {
           replace: true,
           state: {
-            approvalRequired: true,
-            applicationStatus: "pending",
+            applicationStatus: accountApplicationStatus || "pending",
           },
         });
       }
@@ -450,7 +366,7 @@ const Auth = () => {
           error.response?.data?.result?.applicationStatus || "pending";
         const rejectionReason =
           error.response?.data?.result?.rejectionReason || "";
-        navigate("/seller/stores", {
+        navigate("/seller/pending-approval", {
           replace: true,
           state: {
             approvalRequired: true,
@@ -501,9 +417,39 @@ const Auth = () => {
 
             <div className="mt-8 text-center space-y-4">
               <h2 className="text-2xl font-black text-white tracking-tight leading-tight uppercase underline decoration-white/20 underline-offset-8">
-                Seller <span className="text-slate-600">Expansion.</span>
+                Multi-Shop <span className="text-slate-600">Admin.</span>
               </h2>
+              {!isLogin && (
+                <p className="text-xs text-slate-400 font-medium max-w-[260px] mx-auto leading-relaxed">
+                  One admin account. Unlimited shops. Each location gets its own approval and operations.
+                </p>
+              )}
             </div>
+
+            {!isLogin && (
+              <div className="mt-10 w-full max-w-xs space-y-3">
+                {ONBOARDING_STEPS.map((item, index) => (
+                  <div
+                    key={item.title}
+                    className={`flex gap-3 rounded-xl border px-3 py-3 transition-all ${
+                      index === 0
+                        ? "border-white/20 bg-white/10"
+                        : "border-white/5 bg-white/[0.03]"
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${
+                      index === 0 ? "bg-white text-slate-900" : "bg-white/10 text-white/70"
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-wide text-white">{item.title}</p>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
 
           {/* Partner Badges */}
@@ -543,7 +489,7 @@ const Auth = () => {
           </div>
           <AnimatePresence mode="wait">
             <motion.div
-              key={isLogin ? "login" : `signup-step-${signupStep}`}
+              key={isLogin ? "login" : "signup"}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -551,61 +497,53 @@ const Auth = () => {
               className="space-y-8 py-4 md:py-6">
               <div className="space-y-4">
                 <span className="inline-block px-4 py-1 bg-slate-100 text-slate-800 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200">
-                  {isLogin
-                    ? "Welcome Back"
-                    : `New Partnership - Step ${signupStep} of 3`}
+                  {isLogin ? "Welcome Back" : "Seller Admin Registration"}
                 </span>
                 <h1 className="text-3xl font-black text-slate-900 tracking-tighter">
-                  Seller{" "}
-                  <span className="text-slate-900">
-                    {isLogin ? "Login" : "Signup"}
-                  </span>
+                  {isLogin ? (
+                    <>Seller <span className="text-slate-900">Login</span></>
+                  ) : (
+                    <>Create <span className="text-slate-900">Admin Account</span></>
+                  )}
                 </h1>
                 <p className="text-slate-600 font-medium text-base leading-relaxed">
                   {isLogin
-                    ? "Access your unified seller dashboard and manage orders."
-                    : signupStep === 1
-                      ? "Register your store and start selling instantly."
-                      : signupStep === 2
-                        ? "Set your shop address and service area precisely."
-                        : "Upload verification documents to complete your application."}
+                    ? "Access your multi-shop dashboard, switch stores, and manage operations."
+                    : "Set up your seller admin profile. You will add individual shops with location and KYC from My Stores after signup."}
                 </p>
               </div>
 
+              {!isLogin && (
+                <div className="grid grid-cols-2 gap-3 md:hidden">
+                  {[
+                    { icon: Building2, label: "Admin account" },
+                    { icon: Layers, label: "Multiple shops" },
+                    { icon: ShieldCheck, label: "Per-shop approval" },
+                    { icon: Store, label: "One dashboard" },
+                  ].map(({ icon: Icon, label }) => (
+                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-slate-500" />
+                      <span className="text-[10px] font-bold text-slate-600">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* LOGIN OR SIGNUP STEP 1 */}
-                {(isLogin || signupStep === 1) && (
-                  <>
                     {!isLogin && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <User size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            name="name"
-                            required
-                            placeholder="Owner Name"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.name}
-                            onChange={handleChange}
-                          />
+                      <div className="relative group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                          <User size={18} />
                         </div>
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <Store size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            name="shopName"
-                            required
-                            placeholder="Shop / Business Name"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.shopName}
-                            onChange={handleChange}
-                          />
-                        </div>
+                        <input
+                          type="text"
+                          name="name"
+                          required
+                          placeholder="Admin / Owner full name"
+                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                          value={formData.name}
+                          onChange={handleChange}
+                        />
                       </div>
                     )}
 
@@ -776,312 +714,23 @@ const Auth = () => {
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
-                  </>
-                )}
 
-                {/* SIGNUP STEP 2 (Shop address and service area) */}
-                {!isLogin && signupStep === 2 && (
-                  <div className="space-y-4">
-                    <div className="pt-2">
-                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
-                        Shop Location & Service Area
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setIsMapOpen(true)}
-                        className={`w-full flex items-center justify-between p-4 rounded-lg border-2 border-dashed transition-all cursor-pointer ${formData.lat
-                          ? "border-brand-200 bg-brand-50/50"
-                          : "border-slate-200 bg-slate-50 hover:border-slate-300"
-                          }`}>
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`p-2 rounded-md ${formData.lat ? "bg-brand-100 text-brand-600" : "bg-white text-slate-600 shadow-sm"}`}>
-                            {formData.lat ? (
-                              <CheckCircle className="w-4 h-4" />
-                            ) : (
-                              <MapPin className="w-4 h-4" />
-                            )}
-                          </div>
-                          <div className="text-left">
-                            <p
-                              className={`text-xs font-bold ${formData.lat ? "text-brand-700" : "text-slate-600"}`}>
-                              {formData.lat
-                                ? "Location Selected"
-                                : "Pin Shop on Map"}
-                            </p>
-                            <p className="text-xs text-slate-600 font-medium truncate max-w-[250px]">
-                              {formData.lat
-                                ? `${formData.address} (${formData.radius}km)`
-                                : "Precisely mark your shop location"}
-                            </p>
-                          </div>
-                        </div>
-                        {formData.lat && (
-                          <span className="text-[10px] font-black text-brand-600 bg-brand-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                            Verified
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="relative group">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                          <MapPin size={18} />
-                        </div>
-                        <input
-                          type="text"
-                          name="locality"
-                          required
-                          placeholder="Locality / Area"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                          value={formData.locality}
-                          onChange={handleChange}
-                        />
+                    {!isLogin && (
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 leading-relaxed">
+                        Shop location, categories, KYC documents, and bank details are collected when you add each shop from <span className="font-bold text-slate-800">My Stores</span> after creating your admin account.
                       </div>
-                      <div className="relative group">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                          <MapPin size={18} />
-                        </div>
-                        <input
-                          type="text"
-                          name="pincode"
-                          required
-                          placeholder="Pincode"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                          value={formData.pincode}
-                          onChange={handleChange}
-                        />
-                      </div>
-                      <div className="relative group">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                          <MapPin size={18} />
-                        </div>
-                        <input
-                          type="text"
-                          name="city"
-                          required
-                          placeholder="City"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                          value={formData.city}
-                          onChange={handleChange}
-                        />
-                      </div>
-                      <div className="relative group">
-                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                          <MapPin size={18} />
-                        </div>
-                        <input
-                          type="text"
-                          name="state"
-                          required
-                          placeholder="State"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                          value={formData.state}
-                          onChange={handleChange}
-                        />
-                      </div>
-                    </div>
-                    <div className="relative group">
-                      <div className="absolute left-5 top-5 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                        <MapPin size={18} />
-                      </div>
-                      <textarea
-                        name="address"
-                        rows={3}
-                        required
-                        placeholder="Full address"
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 resize-none"
-                        value={formData.address}
-                        onChange={handleChange}
-                      />
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100">
-                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
-                        Verification Numbers
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <span className="text-xs font-black">AADHAAR</span>
-                          </div>
-                          <input
-                            type="text"
-                            name="aadharNumber"
-                            required
-                            placeholder="12-digit Aadhaar Number"
-                            className="w-full pl-24 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.aadharNumber || ""}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 12);
-                              setFormData({ ...formData, aadharNumber: val });
-                            }}
-                          />
-                        </div>
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <span className="text-xs font-black">PAN</span>
-                          </div>
-                          <input
-                            type="text"
-                            name="panNumber"
-                            required
-                            placeholder="10-character PAN Number"
-                            className="w-full pl-16 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 uppercase"
-                            value={formData.panNumber || ""}
-                            onChange={(e) => {
-                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
-                              setFormData({ ...formData, panNumber: val });
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100">
-                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
-                        Bank Account Details
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <Landmark size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            name="bankName"
-                            required
-                            placeholder="Bank Name"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.bankName || ""}
-                            onChange={handleChange}
-                          />
-                        </div>
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <User size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            name="accountHolder"
-                            required
-                            placeholder="Account Holder Name"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.accountHolder || ""}
-                            onChange={handleChange}
-                          />
-                        </div>
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <CreditCard size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            name="accountNumber"
-                            required
-                            placeholder="Account Number"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
-                            value={formData.accountNumber || ""}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9]/g, "");
-                              setFormData({ ...formData, accountNumber: val });
-                            }}
-                          />
-                        </div>
-                        <div className="relative group">
-                          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
-                            <span className="text-xs font-black">IFSC</span>
-                          </div>
-                          <input
-                            type="text"
-                            name="ifsc"
-                            required
-                            placeholder="IFSC Code"
-                            className="w-full pl-16 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 uppercase"
-                            value={formData.ifsc || ""}
-                            onChange={(e) => {
-                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
-                              setFormData({ ...formData, ifsc: val });
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!isLogin && signupStep === 3 && (
-                  <div className="space-y-4">
-                    <div className="pt-2">
-                      <p className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">
-                        Verification Documents
-                      </p>
-                      <div className="space-y-3">
-                        {REQUIRED_DOCUMENT_CONFIG.map((doc) => (
-                          <div key={doc.id} className="relative">
-                            <input
-                              type="file"
-                              id={doc.id}
-                              className="hidden"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleDocumentChange(e, doc.id)}
-                            />
-                            <label
-                              htmlFor={doc.id}
-                              className={`flex items-center justify-between p-3.5 rounded-lg border-2 border-dashed transition-all cursor-pointer ${documents[doc.id]
-                                ? "border-brand-200 bg-brand-50/50"
-                                : "border-slate-200 bg-slate-50 hover:border-slate-300"
-                                }`}>
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`p-2 rounded-md ${documents[doc.id] ? "bg-brand-100 text-brand-600" : "bg-white text-slate-600 shadow-sm"}`}>
-                                  {documents[doc.id] ? (
-                                    <CheckCircle className="w-4 h-4" />
-                                  ) : (
-                                    <Upload className="w-4 h-4" />
-                                  )}
-                                </div>
-                                <div className="text-left">
-                                  <p
-                                    className={`text-xs font-bold ${documents[doc.id] ? "text-brand-700" : "text-slate-600"}`}>
-                                    {doc.label}
-                                  </p>
-                                  <p className="text-xs text-slate-600 font-medium truncate max-w-[150px]">
-                                    {documents[doc.id]
-                                      ? documents[doc.id].name
-                                      : "Upload secure PDF or image"}
-                                  </p>
-                                </div>
-                              </div>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    )}
 
                 <div className="flex gap-3 pt-2">
-                  {!isLogin && signupStep > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setSignupStep((prev) => Math.max(1, prev - 1))}
-                      className="w-1/3 bg-slate-100 text-slate-600 rounded-lg py-4 text-sm font-black tracking-[2px] transition-all hover:bg-slate-200">
-                      BACK
-                    </button>
-                  )}
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`${!isLogin && signupStep > 1 ? "w-2/3" : "w-full"} bg-slate-900 text-white rounded-lg py-4 text-sm font-black tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group`}>
+                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-sm font-black tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
                     {isLoading
                       ? "WORKING..."
                       : isLogin
                         ? "ENTER DASHBOARD"
-                        : signupStep < 3
-                          ? "NEXT STEP"
-                          : "SUBMIT APPLICATION"}
+                        : "CREATE ADMIN ACCOUNT"}
                     <ArrowRight
                       className="group-hover:translate-x-2 transition-transform"
                       size={20}
@@ -1096,14 +745,13 @@ const Auth = () => {
                   <button
                     onClick={() => {
                       setIsLogin(!isLogin);
-                      setSignupStep(1);
                       setVerifications({
                         email: createInitialVerificationState(),
                         phone: createInitialVerificationState(),
                       });
                     }}
                     className="text-slate-900 hover:text-black transition-colors px-2">
-                    {isLogin ? "Register Store" : "Sign In"}
+                    {isLogin ? "Register Seller Admin" : "Sign In"}
                   </button>
                 </p>
               </div>
@@ -1116,19 +764,6 @@ const Auth = () => {
       <div className="absolute bottom-6 flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-[6px]">
         Empowering Business Digitalization
       </div>
-
-      {isMapOpen && (
-        <MapPicker
-          isOpen={isMapOpen}
-          onClose={() => setIsMapOpen(false)}
-          onConfirm={handleLocationSelect}
-          preferCurrentLocationOnOpen={true}
-          initialLocation={
-            formData.lat ? { lat: formData.lat, lng: formData.lng } : null
-          }
-          initialRadius={formData.radius}
-        />
-      )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store,
@@ -51,6 +52,7 @@ const INITIAL_FORM_DATA = {
 };
 
 const MyStores = () => {
+  const location = useLocation();
   const { stores, activeStoreId, switchStore, refreshStores, isSwitching } = useStoreContext();
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -60,6 +62,14 @@ const MyStores = () => {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [documents, setDocuments] = useState({ aadhar: null, pan: null, bankProof: null });
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+
+  useEffect(() => {
+    if (location.state?.welcomeNewAdmin) {
+      setShowCreate(true);
+      toast.success('Welcome! Add your first shop to begin the approval process.');
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state?.welcomeNewAdmin]);
 
   useEffect(() => {
     const load = async () => {
@@ -200,7 +210,7 @@ const MyStores = () => {
         <div>
           <h1 className="text-2xl font-black text-slate-900">My Stores</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage all your store locations. Each store requires separate admin approval.
+            Add and manage shop locations under your admin account. Each shop is reviewed and approved separately.
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)} className="flex items-center gap-2">
@@ -212,7 +222,14 @@ const MyStores = () => {
       {stores.length === 0 ? (
         <Card className="p-8 text-center">
           <Store className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-600 font-medium">No stores yet. Create your first store to get started.</p>
+          <p className="text-slate-800 font-bold text-lg">No shops yet</p>
+          <p className="text-slate-500 text-sm mt-2 max-w-md mx-auto">
+            Your seller admin account is ready. Add your first shop with location, category, KYC, and bank details. You can add more shops anytime from this page.
+          </p>
+          <Button onClick={() => setShowCreate(true)} className="mt-6 inline-flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add your first shop
+          </Button>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -316,7 +333,8 @@ const MyStores = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6 pb-4 border-b border-slate-100 shrink-0">
-                <h2 className="text-xl font-black text-slate-900">Add New Store</h2>
+                <h2 className="text-xl font-black text-slate-900">Add New Shop</h2>
+                <p className="text-sm text-slate-500 mt-1">Each shop needs its own location, category, KYC, and bank details for admin approval.</p>
               </div>
               <form
                 onSubmit={handleCreateStore}

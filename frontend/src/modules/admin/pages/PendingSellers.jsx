@@ -74,9 +74,20 @@ const PendingSellers = () => {
     const filteredSellers = useMemo(() => {
         return pendingSellers.filter(s =>
             String(s.shopName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            String(s.ownerName || '').toLowerCase().includes(searchTerm.toLowerCase())
+            String(s.ownerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            String(s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [pendingSellers, searchTerm]);
+
+    const canQuickApprove = (seller) =>
+        seller.applicationType === 'seller_admin' ||
+        (seller.documents && seller.documents.length > 0);
+
+    const handleRowClick = (seller) => {
+        if (seller.applicationType === 'store') {
+            navigate(`/admin/sellers/active/${seller.id}`);
+        }
+    };
 
     const reviewDocuments = useMemo(() => {
         if (!viewingSeller) {
@@ -193,7 +204,7 @@ const PendingSellers = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
-                                <th className="ds-table-header-cell px-6">Applicant Store</th>
+                                <th className="ds-table-header-cell px-6">Applicant</th>
                                 <th className="ds-table-header-cell px-6">Documentation</th>
                                 <th className="ds-table-header-cell px-6">Applied On</th>
                                 <th className="ds-table-header-cell px-6 !text-right">Actions</th>
@@ -214,7 +225,7 @@ const PendingSellers = () => {
                                     <td className="px-6 py-5 align-middle">
                                         <div
                                             className="flex items-center gap-4 cursor-pointer group/name"
-                                            onClick={() => navigate(`/admin/sellers/active/${s.id}`)}
+                                            onClick={() => handleRowClick(s)}
                                         >
                                             <div className="h-10 w-10 rounded-xl overflow-hidden bg-slate-100 ring-2 ring-slate-100 group-hover:ring-primary/20 transition-all">
                                                 <div className="h-full w-full flex items-center justify-center bg-slate-100 text-slate-400">
@@ -222,14 +233,21 @@ const PendingSellers = () => {
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold text-slate-900 group-hover/name:text-primary transition-colors">{s.shopName}</p>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className="text-sm font-bold text-slate-900 group-hover/name:text-primary transition-colors">{s.shopName}</p>
+                                                    <Badge variant={s.applicationType === 'seller_admin' ? 'info' : 'gray'} className="text-[8px] px-1.5 py-0 uppercase">
+                                                        {s.applicationType === 'seller_admin' ? 'Admin Account' : 'New Shop'}
+                                                    </Badge>
+                                                </div>
                                                 <p className="text-[10px] font-bold text-slate-400">{s.ownerName}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-5 align-middle">
                                         <div className="flex flex-wrap gap-1.5 items-center">
-                                            {(s.documents || []).map((doc, idx) => (
+                                            {s.applicationType === 'seller_admin' ? (
+                                                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-[8px] font-bold rounded-full ring-1 ring-sky-100 uppercase">Account Only</span>
+                                            ) : (s.documents || []).map((doc, idx) => (
                                                 <span key={idx} className="px-2 py-0.5 bg-brand-50 text-brand-600 text-[8px] font-bold rounded-full ring-1 ring-brand-100 uppercase">{doc}</span>
                                             ))}
                                         </div>
@@ -242,7 +260,7 @@ const PendingSellers = () => {
                                     </td>
                                     <td className="px-6 py-5 text-right align-middle">
                                         <div className="flex items-center justify-end gap-3 h-full">
-                                            {s.documents && s.documents.length > 0 && (
+                                            {canQuickApprove(s) && (
                                                 <button
                                                     onClick={() => handleApprove(s.id)}
                                                     className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all ring-1 ring-emerald-100"
@@ -322,7 +340,12 @@ const PendingSellers = () => {
 
                                         <div className="space-y-6">
                                             <div>
-                                                <h3 className="ds-h2 leading-tight">{viewingSeller.shopName}</h3>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <h3 className="ds-h2 leading-tight">{viewingSeller.shopName}</h3>
+                                                    {viewingSeller.applicationType === 'seller_admin' && (
+                                                        <Badge variant="info" className="text-[8px] uppercase">Admin Account</Badge>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs font-bold text-primary mt-1 uppercase tracking-widest">{viewingSeller.category || 'General'} PARTNER</p>
                                             </div>
 
@@ -405,9 +428,17 @@ const PendingSellers = () => {
                                             <div>
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <HiOutlineDocumentText className="h-5 w-5 text-brand-500" />
-                                                    <h4 className="text-sm font-bold text-slate-900">Submitted Verification Documents</h4>
+                                                    <h4 className="text-sm font-bold text-slate-900">
+                                                        {viewingSeller.applicationType === 'seller_admin'
+                                                            ? 'Account Registration'
+                                                            : 'Submitted Verification Documents'}
+                                                    </h4>
                                                 </div>
-                                                <p className="text-xs text-slate-400 font-medium">Check each document before final approval.</p>
+                                                <p className="text-xs text-slate-400 font-medium">
+                                                    {viewingSeller.applicationType === 'seller_admin'
+                                                        ? 'Review contact details before approving this seller admin account.'
+                                                        : 'Check each document before final approval.'}
+                                                </p>
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -468,7 +499,9 @@ const PendingSellers = () => {
                                                     <div>
                                                         <h5 className="text-xs font-bold text-amber-900">Initial Review Passed</h5>
                                                         <p className="text-[10px] text-amber-700/80 font-medium mt-1 leading-relaxed">
-                                                            Our system automatically checked all basic identity and shop locations. You need to check documents manually now.
+                                                            {viewingSeller.applicationType === 'seller_admin'
+                                                                ? 'Email and phone were verified during registration. Approve to let this seller admin add shops.'
+                                                                : 'Our system automatically checked all basic identity and shop locations. You need to check documents manually now.'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -483,7 +516,7 @@ const PendingSellers = () => {
                                                 >
                                                     REJECT APPLICATION
                                                 </button>
-                                                {reviewDocuments.length > 0 && (
+                                                {canQuickApprove(viewingSeller) && (
                                                     <button
                                                         disabled={isProcessing}
                                                         onClick={() => handleApprove(viewingSeller.id)}

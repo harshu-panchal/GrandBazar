@@ -14,6 +14,7 @@ import {
   SELLER_DOCUMENT_FIELDS,
 } from "../../services/storeService.js";
 import { invalidateSellerName } from "../../services/entityNameCache.js";
+import { isOwnerAccountApproved } from "../../services/sellerAccountService.js";
 
 async function resolveUploadedDocs(req) {
   const documentFiles = req.files || [];
@@ -54,6 +55,16 @@ export const createStore = async (req, res) => {
     const accountId = req.user.accountId;
     if (!accountId) {
       return handleResponse(res, 403, "Only store owners can create stores");
+    }
+
+    const ownerAccount = await Seller.findById(accountId).lean();
+    if (!isOwnerAccountApproved(ownerAccount)) {
+      return handleResponse(
+        res,
+        403,
+        "Your seller admin account must be approved before adding shops",
+        { accountApplicationStatus: ownerAccount?.applicationStatus || "pending" },
+      );
     }
 
     const uploadedDocs = await resolveUploadedDocs(req);

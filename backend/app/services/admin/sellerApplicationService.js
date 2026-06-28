@@ -1,9 +1,86 @@
 import Store from "../../models/store.js";
+import Seller from "../../models/seller.js";
 import {
   escapeRegExp,
   formatSellerApplication,
   formatSellerDocuments,
 } from "./shared/sellerAdminUtils.js";
+
+function buildPendingStoreQuery(normalizedStatus) {
+  if (normalizedStatus === "pending") {
+    return {
+      isVerified: { $ne: true },
+      $or: [
+        { applicationStatus: "pending" },
+        { applicationStatus: { $exists: false } },
+        { applicationStatus: null },
+      ],
+    };
+  }
+
+  if (normalizedStatus !== "all") {
+    return {
+      isVerified: { $ne: true },
+      applicationStatus: normalizedStatus,
+    };
+  }
+
+  return { isVerified: { $ne: true } };
+}
+
+function buildPendingOwnerQuery(normalizedStatus) {
+  const base = {
+    accountType: "owner",
+    $or: [{ parentId: { $exists: false } }, { parentId: null }],
+  };
+
+  const hasExplicitApprovalState = {
+    $or: [
+      { applicationStatus: { $exists: true, $nin: [null, ""] } },
+      { isVerified: { $exists: true } },
+    ],
+  };
+
+  if (normalizedStatus === "pending") {
+    return {
+      ...base,
+      $and: [
+        hasExplicitApprovalState,
+        { isVerified: { $ne: true } },
+        {
+          $or: [
+            { applicationStatus: "pending" },
+            { applicationStatus: { $exists: false } },
+            { applicationStatus: null },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (normalizedStatus !== "all") {
+    return {
+      ...base,
+      isVerified: { $ne: true },
+      applicationStatus: normalizedStatus,
+    };
+  }
+
+  return {
+    ...base,
+    isVerified: { $ne: true },
+  };
+}
+
+function applySearchFilter(conditions, search, fields) {
+  const normalizedSearch = String(search || "").trim();
+  if (!normalizedSearch) return;
+
+  const regex = new RegExp(escapeRegExp(normalizedSearch), "i");
+  conditions.push({
+    $or: fields.map((field) => ({ [field]: regex })),
+  });
+}
 
 export async function getPendingSellerApplications({
   q = "",
@@ -13,62 +90,48 @@ export async function getPendingSellerApplications({
   skip,
 }) {
   const normalizedStatus = String(status || "pending").trim().toLowerCase();
-  let baseStatusQuery = { isVerified: { $ne: true } };
 
-  if (normalizedStatus === "pending") {
-    baseStatusQuery = {
-      isVerified: { $ne: true },
-      $or: [
-        { applicationStatus: "pending" },
-        { applicationStatus: { $exists: false } },
-        { applicationStatus: null },
-      ],
-    };
-  } else if (normalizedStatus !== "all") {
-    baseStatusQuery = {
-      isVerified: { $ne: true },
-      applicationStatus: normalizedStatus,
-    };
-  }
+  const storeConditions = [buildPendingStoreQuery(normalizedStatus)];
+  applySearchFilter(storeConditions, q, ["shopName", "address", "category"]);
 
-  const conditions = [baseStatusQuery];
-  const search = String(q || "").trim();
-  if (search) {
-    const regex = new RegExp(escapeRegExp(search), "i");
-    conditions.push({
-      $or: [
-        { shopName: regex },
-        { address: regex },
-        { category: regex },
-      ],
-    });
-  }
+  const ownerConditions = [buildPendingOwnerQuery(normalizedStatus)];
+  applySearchFilter(ownerConditions, q, ["name", "email", "phone"]);
 
-  const query = conditions.length > 1 ? { $and: conditions } : conditions[0];
+  const storeQuery = storeConditions.length > 1 ? { $and: storeConditions } : storeConditions[0];
+  const ownerQuery = ownerConditions.length > 1 ? { $and: ownerConditions } : ownerConditions[0];
 
-  const [stores, total, allPendingForStats] = await Promise.all([
-    Store.find(query)
+  const [stores, owners, allPendingStores, allPendingOwners] = await Promise.all([
+    Store.find(storeQuery)
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
       .populate("ownerId", "name email phone")
       .lean(),
-    Store.countDocuments(query),
-    Store.find({
-      isVerified: { $ne: true },
-      $or: [
-        { applicationStatus: "pending" },
-        { applicationStatus: { $exists: false } },
-      ],
-    })
+    Seller.find(ownerQuery)
+      .sort({ createdAt: -1 })
+      .lean(),
+    Store.find(buildPendingStoreQuery("pending"))
       .select("address documents createdAt")
+      .lean(),
+    Seller.find(buildPendingOwnerQuery("pending"))
+      .select("createdAt")
       .lean(),
   ]);
 
-  const items = stores.map((store) => {
-    const owner = store.ownerId || {};
+  const mergedRaw = [
+    ...owners.map((account) => ({ ...account, applicationType: "seller_admin" })),
+    ...stores.map((store) => ({ ...store, applicationType: "store" })),
+  ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  const total = mergedRaw.length;
+  const paginated = mergedRaw.slice(skip, skip + limit);
+
+  const items = paginated.map((entry) => {
+    if (entry.applicationType === "seller_admin") {
+      return formatSellerApplication(entry);
+    }
+
+    const owner = entry.ownerId || {};
     return formatSellerApplication({
-      ...store,
+      ...entry,
       name: owner.name || "Unnamed Owner",
       email: owner.email || "",
       phone: owner.phone || "",
@@ -76,15 +139,15 @@ export async function getPendingSellerApplications({
     });
   });
 
-  const totalApplications = allPendingForStats.length;
+  const totalApplications = allPendingStores.length + allPendingOwners.length;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const receivedToday = allPendingForStats.filter(
-    (store) => store.createdAt && new Date(store.createdAt) >= todayStart,
+  const receivedToday = [...allPendingStores, ...allPendingOwners].filter(
+    (entry) => entry.createdAt && new Date(entry.createdAt) >= todayStart,
   ).length;
 
-  const missingInfo = allPendingForStats.filter((store) => {
+  const missingInfo = allPendingStores.filter((store) => {
     const docs = formatSellerDocuments(store.documents);
     return !store.address || docs.length < 3;
   }).length;
@@ -120,16 +183,43 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
     { new: true },
   ).populate("ownerId", "name email phone");
 
-  if (!store) {
+  if (store) {
+    const owner = store.ownerId || {};
+    return formatSellerApplication({
+      ...store.toObject(),
+      applicationType: "store",
+      name: owner.name || "Unnamed Owner",
+      email: owner.email || "",
+      phone: owner.phone || "",
+    });
+  }
+
+  const account = await Seller.findOneAndUpdate(
+    {
+      _id: sellerId,
+      accountType: "owner",
+      $or: [{ parentId: { $exists: false } }, { parentId: null }],
+    },
+    {
+      $set: {
+        isVerified: true,
+        isActive: true,
+        applicationStatus: "approved",
+        reviewedAt: new Date(),
+        reviewedBy,
+        rejectionReason: null,
+      },
+    },
+    { new: true },
+  );
+
+  if (!account) {
     return null;
   }
 
-  const owner = store.ownerId || {};
   return formatSellerApplication({
-    ...store.toObject(),
-    name: owner.name || "Unnamed Owner",
-    email: owner.email || "",
-    phone: owner.phone || "",
+    ...account.toObject(),
+    applicationType: "seller_admin",
   });
 }
 
@@ -153,15 +243,42 @@ export async function rejectSellerApplicationById({
     { new: true },
   ).populate("ownerId", "name email phone");
 
-  if (!store) {
+  if (store) {
+    const owner = store.ownerId || {};
+    return formatSellerApplication({
+      ...store.toObject(),
+      applicationType: "store",
+      name: owner.name || "Unnamed Owner",
+      email: owner.email || "",
+      phone: owner.phone || "",
+    });
+  }
+
+  const account = await Seller.findOneAndUpdate(
+    {
+      _id: sellerId,
+      accountType: "owner",
+      $or: [{ parentId: { $exists: false } }, { parentId: null }],
+    },
+    {
+      $set: {
+        isVerified: false,
+        isActive: false,
+        applicationStatus: "rejected",
+        reviewedAt: new Date(),
+        reviewedBy,
+        rejectionReason: reason || "",
+      },
+    },
+    { new: true },
+  );
+
+  if (!account) {
     return null;
   }
 
-  const owner = store.ownerId || {};
   return formatSellerApplication({
-    ...store.toObject(),
-    name: owner.name || "Unnamed Owner",
-    email: owner.email || "",
-    phone: owner.phone || "",
+    ...account.toObject(),
+    applicationType: "seller_admin",
   });
 }

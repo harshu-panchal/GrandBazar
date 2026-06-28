@@ -174,6 +174,34 @@ describe("sellerVerificationService", () => {
     ).not.toThrow();
   });
 
+  it("verifies phone OTP using MOCK_OTP from env when mock mode is enabled", async () => {
+    process.env.USE_MOCK_OTP = "true";
+    process.env.MOCK_OTP = "1234";
+    process.env.USE_REAL_SMS = "true";
+
+    await issueSellerVerificationOtp({
+      channel: "phone",
+      rawValue: "6666666666",
+      ipAddress: "127.0.0.1",
+    });
+
+    const verification = await verifySellerOtpCode({
+      channel: "phone",
+      rawValue: "6666666666",
+      otp: "1234",
+      ipAddress: "127.0.0.1",
+    });
+
+    expect(verification).toEqual(
+      expect.objectContaining({
+        verified: true,
+        channel: "phone",
+        verificationToken: expect.any(String),
+      }),
+    );
+    expect(mockSendSmsIndiaHubOtp).not.toHaveBeenCalled();
+  });
+
   it("rejects signup token validation when email details do not match the verified OTP", async () => {
     await issueSellerVerificationOtp({
       channel: "email",

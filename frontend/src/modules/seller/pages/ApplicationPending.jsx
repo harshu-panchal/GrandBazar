@@ -12,21 +12,33 @@ const ApplicationPending = () => {
 
   const appName = settings?.appName || "App";
   const logoUrl = settings?.logoUrl || "";
+  const isOwner = Boolean(user && !user?.subSellerId);
 
   const applicationStatus =
     location.state?.applicationStatus ||
+    user?.accountApplicationStatus ||
     user?.applicationStatus ||
     (user?.isVerified ? "approved" : "pending");
   const rejectionReason = location.state?.rejectionReason || user?.rejectionReason || "";
 
   if (!isLoading && isAuthenticated && role === "seller") {
-    const isApproved =
-      user?.isVerified === true &&
-      user?.isActive === true &&
-      applicationStatus === "approved";
+    if (isOwner) {
+      const isAccountApproved =
+        user?.isAccountApproved ??
+        (user?.isVerified === true && applicationStatus === "approved");
 
-    if (isApproved) {
-      return <Navigate to="/seller" replace />;
+      if (isAccountApproved) {
+        return <Navigate to="/seller/stores" replace />;
+      }
+    } else {
+      const isApproved =
+        user?.isVerified === true &&
+        user?.isActive === true &&
+        applicationStatus === "approved";
+
+      if (isApproved) {
+        return <Navigate to="/seller" replace />;
+      }
     }
   }
 
@@ -69,13 +81,19 @@ const ApplicationPending = () => {
 
           <h1 className="text-3xl md:text-4xl font-black text-white leading-tight">
             {isRejected
-              ? "Your seller application needs action."
-              : "Your seller application is under review."}
+              ? isOwner
+                ? "Your seller admin account needs action."
+                : "Your seller application needs action."
+              : isOwner
+                ? "Your seller admin account is under review."
+                : "Your seller application is under review."}
           </h1>
           <p className="mt-4 text-base md:text-lg text-slate-200/90 font-medium max-w-2xl">
             {isRejected
               ? "You cannot access the seller dashboard yet. Please contact admin support and re-submit with the required details."
-              : "Dashboard access unlocks automatically once admin approves your account."}
+              : isOwner
+                ? "Once admin approves your seller admin account, you can sign in and add your shops from My Stores."
+                : "Dashboard access unlocks automatically once admin approves your account."}
           </p>
 
           {rejectionReason ? (
@@ -89,7 +107,7 @@ const ApplicationPending = () => {
             <div className="mt-6 rounded-2xl border border-brand-400/30 bg-brand-500/10 px-4 py-3 text-sm text-brand-200 flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-brand-400" />
               <p className="font-semibold">
-                Approval usually takes less than 24 hours. You can return to login and try again later.
+                Approval usually takes less than 24 hours. You can return to login and check back later.
               </p>
             </div>
           ) : null}

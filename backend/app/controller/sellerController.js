@@ -6,6 +6,10 @@ import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
 import { loadOwnerStores, getStoreCategoryList } from "../services/storeService.js";
+import {
+  getOwnerAccountApplicationStatus,
+  isOwnerAccountApproved,
+} from "../services/sellerAccountService.js";
 
 /* ===============================
    GET NEARBY STORES (public)
@@ -189,12 +193,16 @@ export const getSellerProfile = async (req, res) => {
 
     if (!store && req.user.accountId && account) {
       return handleResponse(res, 200, "Seller profile fetched successfully", {
+        ...account,
         account,
         stores,
         activeStoreId: req.user.activeStoreId || null,
         name: account.name,
         email: account.email,
         phone: account.phone,
+        isAccountApproved: isOwnerAccountApproved(account),
+        accountApplicationStatus: getOwnerAccountApplicationStatus(account),
+        applicationStatus: getOwnerAccountApplicationStatus(account),
       });
     }
 
@@ -209,6 +217,8 @@ export const getSellerProfile = async (req, res) => {
       activeStoreId: String(store._id),
       shopName: store.shopName,
       name: account?.name || store.shopName,
+      isAccountApproved: isOwnerAccountApproved(account),
+      accountApplicationStatus: getOwnerAccountApplicationStatus(account),
     };
 
     if (req.user.subSellerId) {

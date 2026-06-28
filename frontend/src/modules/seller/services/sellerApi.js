@@ -2,7 +2,12 @@ import axiosInstance from '@core/api/axios';
 
 export const sellerApi = {
     login: (data) => axiosInstance.post('/seller/login', data),
-    signup: (data) => axiosInstance.post('/seller/signup', data),
+    signup: (data) => {
+        if (data instanceof FormData) {
+            return axiosInstance.post('/seller/signup', data);
+        }
+        return axiosInstance.post('/seller/signup', data);
+    },
     sendVerificationOtp: (data) => axiosInstance.post('/seller/verification/send-otp', data),
     verifyVerificationOtp: (data) => axiosInstance.post('/seller/verification/verify-otp', data),
     // Products

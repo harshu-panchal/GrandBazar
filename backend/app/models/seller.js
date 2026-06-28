@@ -65,6 +65,36 @@ const sellerSchema = new mongoose.Schema(
       default: false,
     },
 
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    applicationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+
+    reviewedAt: {
+      type: Date,
+    },
+
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+
+    rejectionReason: {
+      type: String,
+      trim: true,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
     lastLogin: Date,
   },
   { timestamps: true },
