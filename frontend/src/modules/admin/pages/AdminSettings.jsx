@@ -19,7 +19,8 @@ import {
     Linkedin,
     Youtube,
     Loader2,
-    X
+    X,
+    Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -76,6 +77,7 @@ const AdminSettings = () => {
             sellerCreateRequiresApproval: false,
             sellerEditRequiresApproval: false,
         },
+        defaultDeliveryProvider: 'zinto',
     });
 
     useEffect(() => {
@@ -201,6 +203,7 @@ const AdminSettings = () => {
         { id: 'legal', label: 'Legal & Contact', icon: Building2 },
         { id: 'social', label: 'Social & Apps', icon: Share2 },
         { id: 'seo', label: 'SEO & Meta', icon: Search },
+        { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
     ];
 
     return (
@@ -690,6 +693,75 @@ const AdminSettings = () => {
                                         placeholder="keyword1, keyword2, keyword3"
                                     />
                                     <p className="text-[10px] font-bold text-slate-400 italic text-right">Separate keywords with commas</p>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Delivery & Logistics Settings */}
+                    {activeTab === 'delivery' && (
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    Delivery & Logistics System
+                                </h3>
+                            </div>
+                            <div className="p-8 space-y-6">
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Delivery Mode</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div 
+                                            role="button"
+                                            onClick={() => handleInputChange('defaultDeliveryProvider', 'zinto')}
+                                            className={cn(
+                                                "p-5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-4",
+                                                settings.defaultDeliveryProvider === 'zinto' 
+                                                    ? "border-brand-600 bg-brand-50/30" 
+                                                    : "border-slate-100 bg-white hover:border-slate-300"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                                                settings.defaultDeliveryProvider === 'zinto' ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-400"
+                                            )}>
+                                                <Truck className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className={cn("text-sm font-bold", settings.defaultDeliveryProvider === 'zinto' ? "text-brand-900" : "text-slate-700")}>
+                                                    Internal Fleet (Zinto Delivery)
+                                                </h4>
+                                                <p className="text-xs font-medium text-slate-500 mt-1 leading-relaxed">
+                                                    Orders will be automatically broadcasted to and managed by Zinto's internal delivery boy network.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div 
+                                            role="button"
+                                            onClick={() => handleInputChange('defaultDeliveryProvider', 'external')}
+                                            className={cn(
+                                                "p-5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-4",
+                                                settings.defaultDeliveryProvider === 'external' 
+                                                    ? "border-brand-600 bg-brand-50/30" 
+                                                    : "border-slate-100 bg-white hover:border-slate-300"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                                                settings.defaultDeliveryProvider === 'external' ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-400"
+                                            )}>
+                                                <Globe className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className={cn("text-sm font-bold", settings.defaultDeliveryProvider === 'external' ? "text-brand-900" : "text-slate-700")}>
+                                                    Third-Party Logistics (External)
+                                                </h4>
+                                                <p className="text-xs font-medium text-slate-500 mt-1 leading-relaxed">
+                                                    Orders will not be broadcasted. Admin must manually assign orders to external logistics partners (e.g. Porter, Dunzo).
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </Card>

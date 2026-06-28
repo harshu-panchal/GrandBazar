@@ -196,7 +196,7 @@ export const getCatalogProducts = async (req, res) => {
     ]);
 
     // Enrich items category names
-    const enrichedItems = await Promise.all(
+    let enrichedItems = await Promise.all(
       items.map(async (item) => {
         const [headerName, categoryName, subcategoryName] = await Promise.all([
           item.headerId ? resolveCategoryName(item.headerId.toString()) : null,
@@ -211,6 +211,26 @@ export const getCatalogProducts = async (req, res) => {
         };
       })
     );
+
+    // If user is seller, mark which ones are already claimed
+    if (req.user && req.user.role === "seller" && enrichedItems.length > 0) {
+      const catalogIds = enrichedItems.map((item) => item._id);
+      const claimedProducts = await Product.find({
+        sellerId: req.user.id,
+        catalogProductId: { $in: catalogIds },
+      })
+        .select("catalogProductId")
+        .lean();
+      
+      const claimedSet = new Set(
+        claimedProducts.map((p) => p.catalogProductId.toString())
+      );
+
+      enrichedItems = enrichedItems.map((item) => ({
+        ...item,
+        isClaimed: claimedSet.has(item._id.toString()),
+      }));
+    }
 
     return handleResponse(res, 200, "Catalog products fetched successfully", {
       items: enrichedItems,

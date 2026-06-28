@@ -957,7 +957,8 @@ export const validateDeliveryOtp = async (req, res) => {
                     status: "delivered",
                     deliveredAt: now,
                     otpValidatedAt: now,
-                    otpValidationLocation: validationLocation
+                    otpValidationLocation: validationLocation,
+                    deliveryProofImages: req.body.deliveryProofImages
                 }
             },
             { new: true }

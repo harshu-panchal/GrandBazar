@@ -71,7 +71,14 @@ const BrowseCatalog = () => {
     try {
       const params = { page: 1, limit: 40, status: "active" };
       if (searchTerm) params.search = searchTerm;
-      if (filterCategory !== "all") params.categoryId = filterCategory;
+      if (filterCategory !== "all") {
+        const isHeader = categories.some(h => (h._id || h.id) === filterCategory);
+        if (isHeader) {
+          params.headerId = filterCategory;
+        } else {
+          params.categoryId = filterCategory;
+        }
+      }
 
       const response = await sellerApi.getCatalogProducts(params);
       if (response.data.success) {
@@ -398,18 +405,19 @@ const BrowseCatalog = () => {
             />
           </div>
           <div className="flex gap-2 shrink-0 w-full lg:w-auto">
-            {catalogItems.length > 0 && (
+            {catalogItems.length > 0 && catalogItems.some(i => !i.isClaimed) && (
               <button
                 onClick={() => {
-                  if (selectedItems.length === catalogItems.length) {
+                  const claimableItems = catalogItems.filter(i => !i.isClaimed);
+                  if (selectedItems.length === claimableItems.length && claimableItems.length > 0) {
                     setSelectedItems([]);
                   } else {
-                    setSelectedItems(catalogItems.map(item => item._id || item.id));
+                    setSelectedItems(claimableItems.map(item => item._id || item.id));
                   }
                 }}
                 className="px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
               >
-                {selectedItems.length === catalogItems.length ? "Deselect All" : "Select All"}
+                {selectedItems.length === catalogItems.filter(i => !i.isClaimed).length && catalogItems.filter(i => !i.isClaimed).length > 0 ? "Deselect All" : "Select All"}
               </button>
             )}
             <select
@@ -463,18 +471,20 @@ const BrowseCatalog = () => {
               <div className="space-y-3">
                 {/* Image */}
                 <div className="h-40 rounded-lg overflow-hidden bg-slate-50 border border-slate-200 relative shrink-0">
-                  <input
-                    type="checkbox"
-                    className="absolute top-2 right-2 z-20 w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shadow-sm"
-                    checked={selectedItems.includes(item._id || item.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedItems(prev => [...prev, item._id || item.id]);
-                      } else {
-                        setSelectedItems(prev => prev.filter(id => id !== (item._id || item.id)));
-                      }
-                    }}
-                  />
+                  {!item.isClaimed && (
+                    <input
+                      type="checkbox"
+                      className="absolute top-2 right-2 z-20 w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shadow-sm"
+                      checked={selectedItems.includes(item._id || item.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedItems(prev => [...prev, item._id || item.id]);
+                        } else {
+                          setSelectedItems(prev => prev.filter(id => id !== (item._id || item.id)));
+                        }
+                      }}
+                    />
+                  )}
                   <img
                     src={item.mainImage || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=200&h=200"}
                     alt={item.name}
@@ -504,11 +514,16 @@ const BrowseCatalog = () => {
               {/* Action */}
               <div className="pt-4 mt-auto">
                 <button
-                  onClick={() => openClaimModal(item)}
-                  className="w-full flex items-center justify-center gap-1 bg-black text-white hover:bg-slate-800 transition-colors py-2 rounded-lg text-xs font-semibold"
+                  onClick={() => !item.isClaimed && openClaimModal(item)}
+                  disabled={item.isClaimed}
+                  className={`w-full flex items-center justify-center gap-1 transition-colors py-2 rounded-lg text-xs font-semibold ${
+                    item.isClaimed 
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                      : "bg-black text-white hover:bg-slate-800"
+                  }`}
                 >
-                  <HiOutlinePlus className="h-4 w-4" />
-                  <span>Add this product</span>
+                  {item.isClaimed ? <HiOutlineSparkles className="h-4 w-4" /> : <HiOutlinePlus className="h-4 w-4" />}
+                  <span>{item.isClaimed ? "Already Added" : "Add this product"}</span>
                 </button>
               </div>
             </Card>

@@ -301,6 +301,8 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Delivery",
     },
+    externalLogisticsProvider: String,
+    externalTrackingLink: String,
     cancelledBy: {
       type: String,
       enum: ["customer", "seller", "admin", "system"],
@@ -447,6 +449,7 @@ const orderSchema = new mongoose.Schema(
     },
     refundIssuedAt: { type: Date },
     sellerPayoutReleasedAt: { type: Date },
+    pickupProofImages: [{ type: String }],
     deliveryProofImages: [{ type: String }],
     otpValidatedAt: {
       type: Date,

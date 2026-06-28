@@ -61,4 +61,9 @@ export const sellerApi = {
     createStaff: (data) => axiosInstance.post('/seller/staff', data),
     updateStaff: (id, data) => axiosInstance.put(`/seller/staff/${id}`, data),
     deleteStaff: (id) => axiosInstance.delete(`/seller/staff/${id}`),
+
+    // Media
+    uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    })
 };

@@ -27,7 +27,9 @@ import {
     Navigation,
     Store,
     Info,
-    MapPin
+    MapPin,
+    Globe,
+    Camera
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -39,6 +41,9 @@ const OrderDetail = () => {
     const { settings } = useSettings();
     const [order, setOrder] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [externalProvider, setExternalProvider] = useState("");
+    const [externalTracking, setExternalTracking] = useState("");
+    const [isAssigningExternal, setIsAssigningExternal] = useState(false);
     const invoiceRef = useRef(null);
 
     const fetchDetail = async () => {
@@ -63,6 +68,27 @@ const OrderDetail = () => {
         } catch (error) {
             console.error("Failed to update status:", error);
             showToast("Failed to update status", "error");
+        }
+    };
+
+    const handleAssignExternalLogistics = async () => {
+        if (!externalProvider) {
+            showToast("Provider name is required", "error");
+            return;
+        }
+        setIsAssigningExternal(true);
+        try {
+            await adminApi.updateOrderStatus(orderId, { 
+                externalLogisticsProvider: externalProvider,
+                externalTrackingLink: externalTracking 
+            });
+            showToast(`External logistics assigned successfully`, "success");
+            fetchDetail();
+        } catch (error) {
+            console.error("Failed to assign external logistics:", error);
+            showToast("Failed to assign external logistics", "error");
+        } finally {
+            setIsAssigningExternal(false);
         }
     };
 
@@ -408,32 +434,93 @@ const OrderDetail = () => {
                         </div>
                     </Card>
 
-                    {/* Rider Section */}
-                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6 text-left">
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Truck className="h-3.5 w-3.5" /> Logistical Agent
-                                </h4>
-                                <Badge variant={order.deliveryBoy ? "success" : "secondary"} className="text-[8px] font-black uppercase tracking-widest">
-                                    {order.deliveryBoy ? "ASSIGNED" : "UNASSIGNED"}
-                                </Badge>
-                            </div>
-                            <div className="flex items-center gap-3 mt-2">
-                                <div className="h-10 w-10 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-slate-300 overflow-hidden">
-                                    {order.deliveryBoy ? (
-                                        <div className="h-full w-full flex items-center justify-center font-black text-slate-400 bg-brand-50 ds-h3">{order.deliveryBoy.name.charAt(0)}</div>
-                                    ) : (
-                                        <User className="h-5 w-5" />
-                                    )}
+                    {/* Logistics Section */}
+                    {settings?.defaultDeliveryProvider === 'external' ? (
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6 text-left">
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Globe className="h-3.5 w-3.5" /> External Logistics
+                                    </h4>
+                                    <Badge variant={order.externalLogisticsProvider ? "success" : "secondary"} className="text-[8px] font-black uppercase tracking-widest">
+                                        {order.externalLogisticsProvider ? "ASSIGNED" : "UNASSIGNED"}
+                                    </Badge>
                                 </div>
-                                <div>
-                                    <h5 className="text-sm font-black text-slate-900">{order.deliveryBoy?.name || "Pending Rider Assignment"}</h5>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">CONTACT: {order.deliveryBoy?.phone || "N/A"}</p>
+                                {order.externalLogisticsProvider ? (
+                                    <div className="space-y-3">
+                                        <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl">
+                                            <p className="text-[10px] font-black text-brand-700 uppercase tracking-widest mb-1">Provider</p>
+                                            <p className="text-sm font-bold text-slate-900">{order.externalLogisticsProvider}</p>
+                                            {order.externalTrackingLink && (
+                                                <div className="mt-3">
+                                                    <p className="text-[10px] font-black text-brand-700 uppercase tracking-widest mb-1">Tracking Link</p>
+                                                    <a href={order.externalTrackingLink} target="_blank" rel="noreferrer" className="text-xs font-bold text-brand-600 hover:underline break-all">
+                                                        {order.externalTrackingLink}
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Provider Name (e.g., Porter, Dunzo)</label>
+                                            <input 
+                                                type="text" 
+                                                value={externalProvider} 
+                                                onChange={(e) => setExternalProvider(e.target.value)} 
+                                                placeholder="Enter provider name"
+                                                className="w-full mt-1 px-4 py-3 bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tracking Link (Optional)</label>
+                                            <input 
+                                                type="url" 
+                                                value={externalTracking} 
+                                                onChange={(e) => setExternalTracking(e.target.value)} 
+                                                placeholder="https://..."
+                                                className="w-full mt-1 px-4 py-3 bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                        <button 
+                                            onClick={handleAssignExternalLogistics}
+                                            disabled={isAssigningExternal || !externalProvider}
+                                            className="w-full mt-2 py-3 bg-brand-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isAssigningExternal ? "Assigning..." : "Assign External Partner"}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    ) : (
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6 text-left">
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Truck className="h-3.5 w-3.5" /> Logistical Agent
+                                    </h4>
+                                    <Badge variant={order.deliveryBoy ? "success" : "secondary"} className="text-[8px] font-black uppercase tracking-widest">
+                                        {order.deliveryBoy ? "ASSIGNED" : "UNASSIGNED"}
+                                    </Badge>
+                                </div>
+                                <div className="flex items-center gap-3 mt-2">
+                                    <div className="h-10 w-10 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-slate-300 overflow-hidden">
+                                        {order.deliveryBoy ? (
+                                            <div className="h-full w-full flex items-center justify-center font-black text-slate-400 bg-brand-50 ds-h3">{order.deliveryBoy.name.charAt(0)}</div>
+                                        ) : (
+                                            <User className="h-5 w-5" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h5 className="text-sm font-black text-slate-900">{order.deliveryBoy?.name || "Pending Rider Assignment"}</h5>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">CONTACT: {order.deliveryBoy?.phone || "N/A"}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </Card>
+                        </Card>
+                    )}
 
                     {/* Payment Vector */}
                     <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-2xl overflow-hidden text-left">
@@ -474,6 +561,42 @@ const OrderDetail = () => {
                             "{order.cancelReason ? `Cancellation Payload: ${order.cancelReason}` : `Delivery window scheduled for ${order.timeSlot}. Instructions: Follow local logistical protocols.`}"
                         </p>
                     </Card>
+
+                    {/* Proof Images Section */}
+                    {(order.pickupProofImages?.length > 0 || order.deliveryProofImages?.length > 0) && (
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6 text-left">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Camera className="h-4 w-4" />
+                                Operational Proofs
+                            </h4>
+                            <div className="space-y-4">
+                                {order.pickupProofImages?.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-2">Pickup Proof (Seller to Rider)</p>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                            {order.pickupProofImages.map((img, idx) => (
+                                                <a key={idx} href={img} target="_blank" rel="noreferrer" className="block shrink-0">
+                                                    <img src={img} alt={`Pickup Proof ${idx + 1}`} className="h-24 w-24 object-cover rounded-xl border border-slate-200" />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {order.deliveryProofImages?.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-2">Delivery Proof (Rider to Customer)</p>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                            {order.deliveryProofImages.map((img, idx) => (
+                                                <a key={idx} href={img} target="_blank" rel="noreferrer" className="block shrink-0">
+                                                    <img src={img} alt={`Delivery Proof ${idx + 1}`} className="h-24 w-24 object-cover rounded-xl border border-slate-200" />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    )}
                 </div>
             </div>
 

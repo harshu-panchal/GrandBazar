@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { deliveryApi } from "../services/deliveryApi";
 
@@ -25,6 +25,8 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
   const [error, setError] = useState(null);
   const [lastErrorCode, setLastErrorCode] = useState(null);
   const [attemptsRemaining, setAttemptsRemaining] = useState(3);
+  const [deliveryProofImage, setDeliveryProofImage] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const inputRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
 
   // Auto-focus first input on mount
@@ -103,7 +105,35 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
   const clearInputs = () => {
     setOtp(["", "", "", ""]);
     setError(null);
+    setDeliveryProofImage(null);
     inputRefs[0].current?.focus();
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+    }
+    
+    setIsUploading(true);
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', 'orders/delivery');
+        const res = await deliveryApi.uploadMedia(formData);
+        const url = res.data?.result?.url || res.data?.url;
+        if (url) {
+            setDeliveryProofImage(url);
+            toast.success('Delivery proof uploaded');
+        }
+    } catch (err) {
+        console.error(err);
+        toast.error('Failed to upload proof');
+    } finally {
+        setIsUploading(false);
+    }
   };
 
   const handleGenerateOtp = async () => {
@@ -144,6 +174,11 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
       return;
     }
 
+    if (!isReturn && !isReturnDrop && !deliveryProofImage) {
+      setError("Please upload a delivery proof image");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setLastErrorCode(null);
@@ -154,7 +189,10 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
         ? await deliveryApi.verifyReturnDropOtp(orderId, { code: otpString })
         : isReturn
           ? await deliveryApi.verifyReturnOtp(orderId, { otp: otpString })
-          : await deliveryApi.validateDeliveryOtp(orderId, { otp: otpString });
+          : await deliveryApi.validateDeliveryOtp(orderId, { 
+              otp: otpString,
+              deliveryProofImages: deliveryProofImage ? [deliveryProofImage] : undefined 
+            });
 
       // Success
       toast.success(
@@ -297,12 +335,40 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
         </button>
       )}
 
+      {/* Delivery Proof Upload */}
+      {!isReturn && !isReturnDrop && (
+        <div className="relative h-32 w-full bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors cursor-pointer">
+          {deliveryProofImage ? (
+            <img src={deliveryProofImage} alt="Delivery Proof" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex flex-col items-center pointer-events-none">
+              {isUploading ? (
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              ) : (
+                <>
+                  <Camera className="w-8 h-8 text-gray-400 group-hover:text-primary transition-colors" />
+                  <span className="text-xs font-bold text-gray-500 mt-2">Upload Delivery Proof</span>
+                </>
+              )}
+            </div>
+          )}
+          <input 
+            type="file" 
+            accept="image/*" 
+            capture="environment"
+            onChange={handleImageUpload}
+            disabled={isUploading || isLoading}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+        </div>
+      )}
+
       {/* Submit Button */}
-      {/* Enable submit button only when 4 digits entered */}
+      {/* Enable submit button only when 4 digits entered and image uploaded */}
       <button
         onClick={handleSubmit}
-        disabled={!isComplete || isLoading || isGenerating}
-        className={`w-full h-12 rounded-xl font-bold transition-all duration-200 flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-0 ${!isComplete || isLoading || isGenerating
+        disabled={!isComplete || isLoading || isGenerating || isUploading || (!isReturn && !isReturnDrop && !deliveryProofImage)}
+        className={`w-full h-12 rounded-xl font-bold transition-all duration-200 flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-0 ${(!isComplete || isLoading || isGenerating || isUploading || (!isReturn && !isReturnDrop && !deliveryProofImage))
             ? "bg-gray-200 text-gray-600 cursor-not-allowed"
             : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 shadow-md hover:shadow-lg"
           }`}

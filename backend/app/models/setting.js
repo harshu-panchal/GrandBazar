@@ -161,6 +161,11 @@ const settingSchema = new mongoose.Schema(
                 default: false,
             },
         },
+        defaultDeliveryProvider: {
+            type: String,
+            enum: ['zinto', 'external'],
+            default: 'zinto',
+        }
     },
     {
         timestamps: true,
