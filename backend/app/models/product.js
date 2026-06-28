@@ -138,7 +138,16 @@ const productSchema = new mongoose.Schema(
         addons: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "Product",
-        }]
+        }],
+        importSource: {
+            type: String,
+            enum: ["manual", "catalog_claim", "bundle_import"],
+            default: "manual",
+        },
+        isPublished: {
+            type: Boolean,
+            default: true,
+        },
     },
     { timestamps: true }
 );
@@ -153,6 +162,7 @@ productSchema.index({ subcategoryId: 1, status: 1 });
 productSchema.index({ sellerId: 1, status: 1 });
 productSchema.index({ sellerId: 1, approvalStatus: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, createdAt: -1, _id: -1 });
+productSchema.index({ sellerId: 1, isPublished: 1, status: 1 });
 productSchema.index({ name: "text", tags: "text" }); // For better search if regex is too slow
 
 export default mongoose.model("Product", productSchema);

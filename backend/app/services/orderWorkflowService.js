@@ -29,6 +29,7 @@ import { applyDeliveredSettlement } from "./orderSettlement.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
@@ -224,6 +225,31 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
   const sellerMs = DEFAULT_SELLER_TIMEOUT_MS();
   const deliveryMs = DEFAULT_DELIVERY_TIMEOUT_MS();
 
+  const existingOrder = await Order.findOne({ orderId, seller: sellerId })
+    .select("logisticsMode workflowStatus")
+    .lean();
+  const logisticsMode = existingOrder?.logisticsMode || await getPlatformDeliveryProvider();
+  const useExternalLogistics = logisticsMode === "external";
+
+  const nextWorkflowStatus = useExternalLogistics
+    ? WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING
+    : WORKFLOW_STATUS.DELIVERY_SEARCH;
+
+  const updateSet = {
+    workflowStatus: nextWorkflowStatus,
+    status: legacyStatusFromWorkflow(nextWorkflowStatus),
+    sellerAcceptedAt: now,
+  };
+
+  if (!useExternalLogistics) {
+    updateSet.deliverySearchExpiresAt = new Date(now.getTime() + deliveryMs);
+    updateSet.deliverySearchMeta = {
+      radiusMeters: INITIAL_DELIVERY_RADIUS_M(),
+      attempt: 1,
+      lastBroadcastAt: now,
+    };
+  }
+
   const updated = await Order.findOneAndUpdate(
     {
       orderId,
@@ -237,18 +263,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
       ],
     },
     {
-      $set: {
-        workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
-        status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_SEARCH),
-        sellerAcceptedAt: now,
-        deliverySearchExpiresAt: new Date(now.getTime() + deliveryMs),
-        deliverySearchMeta: {
-          radiusMeters: INITIAL_DELIVERY_RADIUS_M(),
-          attempt: 1,
-          lastBroadcastAt: now,
-        },
-      },
-      // CRITICAL FIX: Remove expiresAt to prevent TTL index from auto-deleting the order
+      $set: updateSet,
       $unset: { expiresAt: 1 },
     },
     { new: true },
@@ -263,6 +278,22 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
   }
 
   await removeSellerTimeoutJob(orderId);
+
+  if (useExternalLogistics) {
+    emitOrderStatusUpdate(
+      updated.orderId,
+      { workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING },
+      updated.customer?._id || updated.customer,
+    );
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CONFIRMED, {
+      orderId: updated.orderId,
+      customerId: updated.customer?._id || updated.customer,
+      userId: updated.customer?._id || updated.customer,
+      sellerId: updated.seller?._id || updated.seller,
+    }).catch(() => {});
+    return updated;
+  }
+
   await scheduleDeliveryTimeoutJob(orderId, 1);
 
   await DeliveryAssignment.create({

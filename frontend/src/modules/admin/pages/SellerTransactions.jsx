@@ -84,8 +84,15 @@ const SellerTransactions = () => {
                         (t.type === 'Withdrawal' || t.type === 'Payout') ? 'payout' :
                             t.type.toLowerCase(),
                     amount: t.amount,
-                    commissionRate: t.order?.pricing?.platformFeeRate || 0,
-                    commissionAmount: t.order?.pricing?.platformFee || 0,
+                    commissionRate: t.order?.paymentBreakdown?.lineItems?.[0]?.appliedCommissionValue
+                        || t.order?.pricingSnapshot?.categoryCommissionSettings?.[0]?.adminCommissionValue
+                        || 0,
+                    commissionAmount: t.order?.paymentBreakdown?.adminProductCommissionTotal
+                        || t.order?.paymentBreakdown?.lineItems?.reduce?.(
+                          (sum, line) => sum + Number(line?.adminProductCommission || 0),
+                          0,
+                        )
+                        || 0,
                     taxAmount: t.order?.pricing?.tax || 0,
                     netPayable: t.amount,
                     status: t.status.toLowerCase(),

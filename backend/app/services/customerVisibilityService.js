@@ -1,6 +1,7 @@
 import Store from "../models/store.js";
 import { calculateDistance } from "../utils/helper.js";
 import { buildKey, getOrSet, getTTL } from "./cacheService.js";
+import { filterStoreIdsByOwnerBusinessModel } from "./sellerBusinessModelService.js";
 
 const MAX_SELLER_SEARCH_DISTANCE_M = 100000;
 
@@ -58,5 +59,6 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
       .map((store) => String(store._id));
   };
 
-  return getOrSet(buildNearbySellersKey(lat, lng), fetchFn, getTTL("nearbySellers"));
+  const storeIds = await getOrSet(buildNearbySellersKey(lat, lng), fetchFn, getTTL("nearbySellers"));
+  return filterStoreIdsByOwnerBusinessModel(storeIds);
 }

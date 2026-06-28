@@ -10,6 +10,9 @@ import {
   getOwnerAccountApplicationStatus,
   isOwnerAccountApproved,
 } from "../services/sellerAccountService.js";
+import { formatBusinessModelPayload, filterStoreIdsByOwnerBusinessModel } from "../services/sellerBusinessModelService.js";
+import { getSellerSubscriptionSummary } from "../services/subscriptionService.js";
+import { getPlatformDeliveryProvider } from "../services/finance/financeSettingsService.js";
 
 /* ===============================
    GET NEARBY STORES (public)
@@ -53,8 +56,16 @@ export const getNearbySellers = async (req, res) => {
       return distance <= (store.serviceRadius || 5);
     });
 
-    if (nearbyStores.length > 0) {
-      const storeIds = nearbyStores.map((s) => s._id);
+    const operationalStoreIds = await filterStoreIdsByOwnerBusinessModel(
+      nearbyStores.map((store) => String(store._id)),
+    );
+    const operationalSet = new Set(operationalStoreIds);
+    const visibleStores = nearbyStores.filter((store) =>
+      operationalSet.has(String(store._id)),
+    );
+
+    if (visibleStores.length > 0) {
+      const storeIds = visibleStores.map((s) => s._id);
 
       const activeProducts = await Product.find({
         sellerId: { $in: storeIds },
@@ -66,7 +77,7 @@ export const getNearbySellers = async (req, res) => {
         .lean();
 
       const storeCategoryMap = {};
-      nearbyStores.forEach((s) => {
+      visibleStores.forEach((s) => {
         storeCategoryMap[s._id.toString()] = new Set();
         getStoreCategoryList(s).forEach((name) => {
           storeCategoryMap[s._id.toString()].add(name);
@@ -82,7 +93,7 @@ export const getNearbySellers = async (req, res) => {
         }
       });
 
-      nearbyStores.forEach((s) => {
+      visibleStores.forEach((s) => {
         s.productCategories = Array.from(storeCategoryMap[s._id.toString()]);
       });
 
@@ -92,7 +103,7 @@ export const getNearbySellers = async (req, res) => {
         status: "active",
       }).lean();
 
-      nearbyStores.forEach((s) => {
+      visibleStores.forEach((s) => {
         s.signatureProduct = signatureProducts.find(
           (p) => p.sellerId.toString() === s._id.toString(),
         ) || null;
@@ -103,7 +114,7 @@ export const getNearbySellers = async (req, res) => {
       res,
       200,
       "Nearby stores fetched successfully",
-      nearbyStores,
+      visibleStores,
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -192,6 +203,7 @@ export const getSellerProfile = async (req, res) => {
     }
 
     if (!store && req.user.accountId && account) {
+      const subscriptionSummary = await getSellerSubscriptionSummary(req.user.accountId);
       return handleResponse(res, 200, "Seller profile fetched successfully", {
         ...account,
         account,
@@ -203,12 +215,19 @@ export const getSellerProfile = async (req, res) => {
         isAccountApproved: isOwnerAccountApproved(account),
         accountApplicationStatus: getOwnerAccountApplicationStatus(account),
         applicationStatus: getOwnerAccountApplicationStatus(account),
+        ...formatBusinessModelPayload(account),
+        hasActiveSubscription: Boolean(subscriptionSummary.activeSubscription),
+        subscription: subscriptionSummary,
       });
     }
 
     if (!store) {
       return handleResponse(res, 404, "Store not found");
     }
+
+    const subscriptionSummary = account
+      ? await getSellerSubscriptionSummary(account._id)
+      : null;
 
     const result = {
       ...store,
@@ -219,6 +238,9 @@ export const getSellerProfile = async (req, res) => {
       name: account?.name || store.shopName,
       isAccountApproved: isOwnerAccountApproved(account),
       accountApplicationStatus: getOwnerAccountApplicationStatus(account),
+      ...(account ? formatBusinessModelPayload(account) : {}),
+      hasActiveSubscription: Boolean(subscriptionSummary?.activeSubscription),
+      subscription: subscriptionSummary,
     };
 
     if (req.user.subSellerId) {
@@ -339,11 +361,31 @@ export const getPublicSellerProfile = async (req, res) => {
     }
 
     const store = await Store.findById(id)
-      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified applicationStatus")
+      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified applicationStatus ownerId")
       .lean();
 
     if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {
       return handleResponse(res, 404, "Store not found or is currently inactive");
+    }
+
+    if (store.ownerId) {
+      const owner = await Seller.findById(store.ownerId)
+        .select("businessModel")
+        .lean();
+      if (!owner) {
+        return handleResponse(res, 404, "Store not found or is currently inactive");
+      }
+      if (owner.businessModel === "commission") {
+        // visible
+      } else if (owner.businessModel === "subscription") {
+        const { isSellerSubscriptionOperational } = await import("../services/subscriptionService.js");
+        const operational = await isSellerSubscriptionOperational(store.ownerId);
+        if (!operational) {
+          return handleResponse(res, 404, "Store not found or is currently inactive");
+        }
+      } else {
+        return handleResponse(res, 404, "Store not found or is currently inactive");
+      }
     }
 
     const signatureProducts = await Product.find({
@@ -360,6 +402,20 @@ export const getPublicSellerProfile = async (req, res) => {
       "Store profile fetched successfully",
       store,
     );
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const getSellerDeliverySettings = async (req, res) => {
+  try {
+    const provider = await getPlatformDeliveryProvider();
+    return handleResponse(res, 200, "Delivery settings fetched", {
+      logisticsMode: provider,
+      description: provider === "external"
+        ? "Orders are fulfilled via external courier partners assigned by admin."
+        : "Orders are fulfilled via the platform delivery fleet.",
+    });
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

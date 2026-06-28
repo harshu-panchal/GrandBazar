@@ -19,7 +19,8 @@ import {
     HiOutlineInboxStack,
     HiOutlineMapPin,
     HiOutlinePhone,
-    HiOutlineCalendarDays
+    HiOutlineCalendarDays,
+    HiOutlineCamera
 } from 'react-icons/hi2';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,10 @@ const Orders = () => {
     const [endDate, setEndDate] = useState('');
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
+    const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
+    const [pickupImage, setPickupImage] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const { showToast } = useToast();
     const [page, setPage] = useState(1);
@@ -225,17 +230,71 @@ const Orders = () => {
         setIsDetailsModalOpen(true);
     };
 
-    const handleStatusUpdate = async (orderId, newStatus) => {
+    const handleStatusUpdate = async (orderId, newStatus, additionalData = {}) => {
+        if (newStatus === 'out_for_delivery' && !additionalData.pickupProofImages) {
+            setPendingStatusUpdate({ orderId, status: newStatus });
+            setPickupImage(null);
+            setIsPickupModalOpen(true);
+            return;
+        }
+
         try {
-            await sellerApi.updateOrderStatus(orderId, { status: newStatus.toLowerCase() });
+            await sellerApi.updateOrderStatus(orderId, { 
+                status: newStatus.toLowerCase(),
+                ...additionalData
+            });
             showToast(`Order status updated to ${newStatus}`, "success");
             fetchOrders(); // Refresh orders
             if (selectedOrder && selectedOrder.id === orderId) {
                 setSelectedOrder({ ...selectedOrder, status: newStatus });
             }
+            if (isPickupModalOpen) {
+                setIsPickupModalOpen(false);
+                setPendingStatusUpdate(null);
+                setPickupImage(null);
+            }
         } catch (error) {
             console.error("Failed to update status:", error);
             showToast("Failed to update status", "error");
+        }
+    };
+
+    const handlePickupImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('Please select an image file', 'error');
+            return;
+        }
+        
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('folder', 'orders/pickup');
+            const res = await sellerApi.uploadMedia(formData);
+            const url = res.data?.result?.url || res.data?.url;
+            if (url) {
+                setPickupImage(url);
+                showToast('Pickup proof uploaded', 'success');
+            }
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to upload pickup proof', 'error');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const confirmPickup = () => {
+        if (!pickupImage) {
+            showToast('Please upload a pickup proof image first', 'error');
+            return;
+        }
+        if (pendingStatusUpdate) {
+            handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
+                pickupProofImages: [pickupImage]
+            });
         }
     };
 
@@ -742,6 +801,88 @@ const Orders = () => {
                             </div>
                         )}
                     </AnimatePresence>
+
+                    {/* Pickup Proof Modal */}
+                    <AnimatePresence>
+                        {isPickupModalOpen && (
+                            <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={() => !isUploading && setIsPickupModalOpen(false)}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineCamera className="h-5 w-5 text-primary" />
+                                            Capture Pickup Proof
+                                        </h3>
+                                        <button 
+                                            onClick={() => setIsPickupModalOpen(false)} 
+                                            disabled={isUploading}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-6 space-y-4 text-center">
+                                        <p className="text-xs font-bold text-slate-600">
+                                            Please upload a photo of the order being handed over to the delivery partner.
+                                        </p>
+                                        <div className="relative h-48 w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors">
+                                            {pickupImage ? (
+                                                <img src={pickupImage} alt="Pickup Proof" className="h-full w-full object-cover" />
+                                            ) : (
+                                                <div className="flex flex-col items-center">
+                                                    {isUploading ? (
+                                                        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <HiOutlineCamera className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors" />
+                                                            <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest group-hover:text-primary">Tap to Upload</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                capture="environment"
+                                                onChange={handlePickupImageUpload}
+                                                disabled={isUploading}
+                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                                        <Button 
+                                            variant="outline" 
+                                            onClick={() => setIsPickupModalOpen(false)}
+                                            className="flex-1 text-xs"
+                                            disabled={isUploading}
+                                        >
+                                            CANCEL
+                                        </Button>
+                                        <Button 
+                                            onClick={confirmPickup}
+                                            disabled={!pickupImage || isUploading}
+                                            className="flex-1 text-xs"
+                                        >
+                                            CONFIRM HANDOVER
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
                     <AnimatePresence>
                         {isDetailsModalOpen && selectedOrder && (
                             <div className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center p-3 sm:p-6 lg:p-12">

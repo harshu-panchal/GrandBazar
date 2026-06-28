@@ -2,6 +2,8 @@ import { jest } from "@jest/globals";
 
 const mockProductFind = jest.fn();
 const mockCategoryFind = jest.fn();
+const mockStoreFindById = jest.fn();
+const mockSellerFindById = jest.fn();
 const mockGetOrCreateFinanceSettings = jest.fn();
 
 function createQueryChain(result) {
@@ -23,8 +25,25 @@ jest.unstable_mockModule("../app/models/category.js", () => ({
   },
 }));
 
+jest.unstable_mockModule("../app/models/store.js", () => ({
+  default: {
+    findById: mockStoreFindById,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/seller.js", () => ({
+  default: {
+    findById: mockSellerFindById,
+  },
+}));
+
 jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", () => ({
   getOrCreateFinanceSettings: mockGetOrCreateFinanceSettings,
+}));
+
+const mockGetActiveSubscriptionForSeller = jest.fn();
+jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
+  getActiveSubscriptionForSeller: mockGetActiveSubscriptionForSeller,
 }));
 
 const {
@@ -40,6 +59,19 @@ const {
 describe("finance pricing flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockStoreFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1" }),
+    });
+    mockSellerFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({
+        _id: "owner-1",
+        businessModel: "commission",
+        commissionConfig: { scope: "category" },
+      }),
+    });
+    mockGetActiveSubscriptionForSeller.mockResolvedValue({ _id: "sub1" });
   });
 
   it("calculates product subtotal accurately", () => {
@@ -295,5 +327,38 @@ describe("finance pricing flow", () => {
       "distance_based",
     );
     expect(breakdown.snapshots.handlingFeeStrategy).toBe("highest_category_fee");
+  });
+
+  it("blocks checkout when subscription seller has no active subscription", async () => {
+    const storeId = "507f1f77bcf86cd799439011";
+    mockStoreFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: storeId, ownerId: "507f1f77bcf86cd799439012" }),
+    });
+    mockSellerFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({
+        _id: "507f1f77bcf86cd799439012",
+        businessModel: "subscription",
+        commissionConfig: { scope: "category" },
+      }),
+    });
+    mockGetActiveSubscriptionForSeller.mockResolvedValue(null);
+
+    await expect(
+      generateOrderPaymentBreakdown({
+        preHydratedItems: [
+          {
+            productId: "prod-1",
+            productName: "Apple",
+            quantity: 1,
+            price: 100,
+            headerCategoryId: "cat-1",
+            sellerId: storeId,
+          },
+        ],
+        distanceKm: 1,
+      }),
+    ).rejects.toThrow("Active subscription required for checkout");
   });
 });

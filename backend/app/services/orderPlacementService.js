@@ -28,6 +28,7 @@ import {
   validateIdempotencyKey,
 } from "./idempotencyService.js";
 import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
+import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import * as logger from "./logger.js";
@@ -348,6 +349,7 @@ export async function placeOrderAtomic({
     const pendingLowStockAlerts = [];
     const sellerTimeoutMs = DEFAULT_SELLER_TIMEOUT_MS();
     const shouldStartSellerWorkflow = paymentMode === "COD";
+    const logisticsMode = await getPlatformDeliveryProvider();
 
     for (let index = 0; index < pricingSnapshot.sellerBreakdownEntries.length; index += 1) {
       const entry = pricingSnapshot.sellerBreakdownEntries[index];
@@ -407,6 +409,7 @@ export async function placeOrderAtomic({
         checkoutGroupId,
         checkoutGroupSize: pricingSnapshot.sellerCount,
         checkoutGroupIndex: index,
+        logisticsMode,
         placement: {
           idempotencyKey: idempotencyKey || undefined,
           idempotencyKeyExpiry,

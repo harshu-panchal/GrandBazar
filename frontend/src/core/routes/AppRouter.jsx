@@ -16,6 +16,7 @@ import ScrollToTop from '../../modules/customer/components/shared/ScrollToTop';
 // Public Pages
 import Auth from '../../modules/seller/pages/Auth';
 import ApplicationPending from '../../modules/seller/pages/ApplicationPending';
+import ChooseBusinessModel from '../../modules/seller/pages/ChooseBusinessModel';
 import AdminAuth from '../../modules/admin/pages/AdminAuth';
 import DeliveryAuth from '../../modules/delivery/pages/DeliveryAuth';
 import CustomerAuth from '../../modules/customer/pages/CustomerAuth';
@@ -95,6 +96,16 @@ const AppRouter = () => {
                 {
                     path: 'seller/pending-approval',
                     element: <ApplicationPending />,
+                },
+                {
+                    path: 'seller/choose-model',
+                    element: (
+                        <ProtectedRoute>
+                            <RoleGuard allowedRoles={[UserRole.SELLER]}>
+                                <ChooseBusinessModel />
+                            </RoleGuard>
+                        </ProtectedRoute>
+                    ),
                 },
                 {
                     path: 'admin/auth',

@@ -13,6 +13,7 @@ import {
     ensureFcmTokenRegistered,
     startForegroundPushListener
 } from '@core/firebase/pushClient';
+import BecomeSellerButton from '../components/shared/BecomeSellerButton';
 
 const TEST_PUSH_STATUS_POLL_INTERVAL_MS = 1500;
 const TEST_PUSH_STATUS_MAX_ATTEMPTS = 20;
@@ -141,6 +142,8 @@ const ProfilePage = () => {
                         <Edit2 size={16} />
                     </Link>
                 </div>
+
+                <BecomeSellerButton fullWidth />
 
                 {/* Menu Sections */}
                 <div className="space-y-4">

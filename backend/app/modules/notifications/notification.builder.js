@@ -358,6 +358,34 @@ function eventDefinition(eventType) {
           return `Only ${currentStock} left for ${itemLabel}. Restock soon.`;
         },
       };
+    case NOTIFICATION_EVENTS.SELLER_ACCOUNT_APPROVED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Seller account approved",
+        body: () => "Your seller admin account has been approved. You can now continue onboarding.",
+      };
+    case NOTIFICATION_EVENTS.SELLER_ACCOUNT_REJECTED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Seller account rejected",
+        body: (payload) => payload.reason || "Your seller admin account application was rejected.",
+      };
+    case NOTIFICATION_EVENTS.STORE_APPLICATION_APPROVED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: (payload) => `${payload.shopName || "Your shop"} approved`,
+        body: () => "Your shop application has been approved. You can now open your store.",
+      };
+    case NOTIFICATION_EVENTS.STORE_APPLICATION_REJECTED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: (payload) => `${payload.shopName || "Shop"} application rejected`,
+        body: (payload) => payload.reason || "Your shop application was rejected. You can resubmit from My Stores.",
+      };
     default:
       return null;
   }

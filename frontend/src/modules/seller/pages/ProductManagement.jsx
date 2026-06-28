@@ -30,6 +30,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
 import Pagination from "@shared/components/ui/Pagination";
+import StoreCatalogImportPanel from "../components/StoreCatalogImportPanel";
 
 const ProductManagement = () => {
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ const ProductManagement = () => {
         limit: pageSize,
         sort: sortBy,
         approvalStatus: filterApproval,
+        pricingStatus: filterStatus === "Needs Pricing" ? "needs_pricing" : undefined,
       });
       if (res.data.success) {
         // Backend returns handleResponse(..., { items, page, limit, total, totalPages })
@@ -251,6 +253,7 @@ const ProductManagement = () => {
         matchesStatus = p.stock > 0 && p.stock <= resolveLowStockThreshold(p);
       if (filterStatus === "Out of Stock") matchesStatus = p.stock === 0;
       if (filterStatus === "Signature") matchesStatus = p.isSignatureProduct === true;
+      if (filterStatus === "Needs Pricing") matchesStatus = p.isPublished === false;
 
       let matchesPrice = true;
       const effectivePrice = Number(p.salePrice ?? p.price ?? 0);
@@ -301,6 +304,7 @@ const ProductManagement = () => {
         summaryStats?.active ??
         safeProducts.filter((p) => p.status === "active").length,
       signature: safeProducts.filter((p) => p.isSignatureProduct === true).length,
+      needsPricing: safeProducts.filter((p) => p.isPublished === false).length,
     }),
     [safeProducts, summaryStats, total],
   );
@@ -493,6 +497,7 @@ const ProductManagement = () => {
 
   return (
     <div className="space-y-6 pb-16">
+      <StoreCatalogImportPanel />
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
@@ -544,6 +549,14 @@ const ProductManagement = () => {
             color: "text-rose-600",
             bg: "bg-rose-50",
             status: "Out of Stock",
+          },
+          {
+            label: "Needs Pricing",
+            val: stats.needsPricing,
+            icon: HiOutlineTag,
+            color: "text-violet-600",
+            bg: "bg-violet-50",
+            status: "Needs Pricing",
           },
           {
             label: "Signature",
@@ -767,6 +780,11 @@ const ProductManagement = () => {
                   <td className="px-6 py-4 text-center">
                     <div className="flex flex-col items-center gap-1">
                       <ApprovalBadge approvalStatus={p.approvalStatus} />
+                      {p.isPublished === false && (
+                        <Badge variant="warning" className="text-[10px] px-2 py-0.5">
+                          Needs pricing
+                        </Badge>
+                      )}
                       {p.approvalReviewedAt ? (
                         <span className="text-[10px] text-slate-400">
                           Reviewed

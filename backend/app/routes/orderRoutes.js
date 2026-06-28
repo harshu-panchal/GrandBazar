@@ -45,12 +45,14 @@ import {
   verifyToken,
   allowRoles,
   requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
   resolveActiveStore,
   checkSubSellerPermission,
 } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller];
+const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
 const sellerOrdersReadChain = [...sellerOrderChain, checkSubSellerPermission("orders", "read")];
 const sellerOrdersWriteChain = [...sellerOrderChain, checkSubSellerPermission("orders", "write")];
 const sellerReturnsReadChain = [...sellerOrderChain, checkSubSellerPermission("returns", "read")];

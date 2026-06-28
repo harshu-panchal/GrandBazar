@@ -812,8 +812,29 @@ const OrderDetailPage = () => {
           </motion.div>
         )}
 
+        {/* External courier tracking */}
+        {!isAwaitingOnlinePayment && order.externalTrackingLink && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Shipment tracking</p>
+              <p className="text-xs text-slate-500">
+                {order.externalLogisticsProvider || "Courier partner"}
+              </p>
+            </div>
+            <a
+              href={order.externalTrackingLink}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-bold text-primary-600 hover:underline"
+            >
+              Track shipment
+            </a>
+          </div>
+        )}
+
         {/* Enhanced Map with Cleaner Design - Hide when delivered or cancelled */}
-        {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled" && (
+        {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled"
+          && order.logisticsMode !== "external" && !order.externalTrackingLink && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

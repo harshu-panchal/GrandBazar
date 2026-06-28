@@ -297,6 +297,7 @@ const Auth = () => {
           isAccountApproved,
           accountApplicationStatus,
           rejectionReason: rejectionReason || seller?.rejectionReason || "",
+          businessModel: response.data.result?.businessModel ?? seller?.businessModel ?? null,
         });
         toast.success("Welcome back, Partner!");
 
@@ -304,6 +305,7 @@ const Auth = () => {
         const accountApproved =
           isAccountApproved ??
           (seller?.isVerified === true && (accountApplicationStatus || "pending") === "approved");
+        const businessModel = response.data.result?.businessModel ?? seller?.businessModel ?? null;
 
         if (isOwner && !accountApproved) {
           navigate("/seller/pending-approval", {
@@ -313,6 +315,8 @@ const Auth = () => {
               rejectionReason: rejectionReason || "",
             },
           });
+        } else if (isOwner && !businessModel) {
+          navigate("/seller/choose-model", { replace: true });
         } else if (hasApprovedStore === false && isOwner) {
           navigate("/seller/stores");
         } else {

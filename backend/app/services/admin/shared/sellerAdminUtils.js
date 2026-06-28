@@ -101,6 +101,7 @@ export function formatSellerApplication(seller) {
     missingInfo: applicationType === "seller_admin" ? false : missingInfo,
     aadharNumber: seller.aadharNumber || "",
     panNumber: seller.panNumber || "",
+    gstNumber: seller.gstNumber || "",
     accountHolder: seller.accountHolder || "",
     accountNumber: seller.accountNumber || "",
     ifsc: seller.ifsc || "",

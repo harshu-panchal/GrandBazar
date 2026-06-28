@@ -26,6 +26,7 @@ const ProductManagement = React.lazy(
   () => import("../pages/ProductManagement"),
 );
 const BrowseCatalog = React.lazy(() => import("../pages/BrowseCatalog"));
+const CatalogPricingWizard = React.lazy(() => import("../pages/CatalogPricingWizard"));
 const StockManagement = React.lazy(() => import("../pages/StockManagement"));
 const AddProduct = React.lazy(() => import("../pages/AddProduct"));
 const Returns = React.lazy(() => import("../pages/Returns"));
@@ -39,6 +40,8 @@ const Storefront = React.lazy(() => import("../pages/Storefront"));
 const SellerCoupons = React.lazy(() => import("../pages/SellerCoupons"));
 const StaffManagement = React.lazy(() => import("../pages/StaffManagement"));
 const MyStores = React.lazy(() => import("../pages/MyStores"));
+const SellerSubscription = React.lazy(() => import("../pages/SellerSubscription"));
+const SellerSubscriptionPaymentStatus = React.lazy(() => import("../pages/SellerSubscriptionPaymentStatus"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
@@ -86,6 +89,12 @@ const navItems = [
     icon: HiOutlineInboxStack,
     ownerOnly: true,
   },
+  {
+    label: "Subscription",
+    path: "/seller/subscription",
+    icon: HiOutlineCreditCard,
+    ownerOnly: true,
+  },
   { label: "Profile", path: "/seller/profile", icon: HiOutlineUser },
 ];
 
@@ -124,11 +133,14 @@ const SellerRoutes = () => {
       <Routes>
         <Route index element={<Dashboard />} />
         <Route path="stores" element={<MyStores />} />
+        {isOwner && <Route path="subscription" element={<SellerSubscription />} />}
+        {isOwner && <Route path="subscription/payment-status" element={<SellerSubscriptionPaymentStatus />} />}
         {hasPermission("storefront") && <Route path="storefront" element={<Storefront />} />}
         {hasPermission("products") && (
           <>
             <Route path="products" element={<ProductManagement />} />
             <Route path="products/catalog" element={<BrowseCatalog />} />
+            <Route path="products/pricing" element={<CatalogPricingWizard />} />
             <Route path="products/add" element={<AddProduct />} />
           </>
         )}

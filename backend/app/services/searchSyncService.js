@@ -128,6 +128,12 @@ async function processSearchIndexJob(job) {
         logger.warn(`[SearchSync] Product ${productId} not found, skipping index`);
         return;
       }
+
+      if (product.status !== "active" || product.isPublished === false) {
+        await removeProduct(productId);
+        logger.debug(`[SearchSync] Skipped indexing unpublished/inactive product ${productId}`);
+        return;
+      }
       
       await indexProduct(product);
       logger.debug(`[SearchSync] Successfully indexed product ${productId}`);

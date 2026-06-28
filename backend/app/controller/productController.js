@@ -323,6 +323,7 @@ export const getProducts = async (req, res) => {
     let finalQuery = { ...query };
     if (enforceRadius) {
       finalQuery.status = "active";
+      finalQuery.isPublished = { $ne: false };
       finalQuery = { $and: [finalQuery, getApprovedOrLegacyFilter()] };
     } else {
       if (status && status !== "all") {
@@ -434,7 +435,7 @@ export const getProducts = async (req, res) => {
 export const getSellerProducts = async (req, res) => {
   try {
     const sellerId = req.user.id;
-    const { stockStatus, sort, approvalStatus } = req.query;
+    const { stockStatus, sort, approvalStatus, pricingStatus } = req.query;
     const { page, limit, skip } = getPagination(req, {
       defaultLimit: 20,
       maxLimit: 100,
@@ -453,6 +454,12 @@ export const getSellerProducts = async (req, res) => {
       if (Object.keys(approvalFilter).length > 0) {
         Object.assign(query, approvalFilter);
       }
+    }
+
+    if (pricingStatus === "needs_pricing") {
+      query.isPublished = false;
+    } else if (pricingStatus === "published") {
+      query.isPublished = { $ne: false };
     }
 
     const sortMap = {
@@ -480,7 +487,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -1009,7 +1016,7 @@ export const getProductById = async (req, res) => {
 
     if (enforceRadius) {
       const approvalState = resolveProductApprovalStatus(product);
-      if (product.status !== "active" || approvalState !== PRODUCT_APPROVAL_STATUS.APPROVED) {
+      if (product.status !== "active" || product.isPublished === false || approvalState !== PRODUCT_APPROVAL_STATUS.APPROVED) {
         return handleResponse(res, 404, "Product not found");
       }
     }
@@ -1230,6 +1237,53 @@ export const rejectProduct = async (req, res) => {
       "Product rejected successfully",
       normalizeProductDocumentModeration(updated?.toObject?.() || updated),
     );
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const publishSellerProduct = async (req, res) => {
+  try {
+    const { price, salePrice, stock } = req.body;
+    const { publishProductPricing } = await import("../services/productPublishService.js");
+    const product = await publishProductPricing({
+      productId: req.params.id,
+      storeId: req.user.id,
+      price,
+      salePrice,
+      stock,
+    });
+    return handleResponse(res, 200, "Product published successfully", product);
+  } catch (error) {
+    const status = error.message === "Product not found" ? 404 : 400;
+    return handleResponse(res, status, error.message);
+  }
+};
+
+export const bulkPublishSellerProducts = async (req, res) => {
+  try {
+    const { items } = req.body;
+    const { bulkPublishProductPricing } = await import("../services/productPublishService.js");
+    const result = await bulkPublishProductPricing({
+      storeId: req.user.id,
+      items,
+    });
+    return handleResponse(
+      res,
+      200,
+      `${result.publishedCount} product(s) published successfully`,
+      result,
+    );
+  } catch (error) {
+    return handleResponse(res, 400, error.message);
+  }
+};
+
+export const getUnpublishedSellerProducts = async (req, res) => {
+  try {
+    const { getUnpublishedProductsForStore } = await import("../services/productPublishService.js");
+    const products = await getUnpublishedProductsForStore(req.user.id);
+    return handleResponse(res, 200, "Unpublished products fetched successfully", products);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

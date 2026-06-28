@@ -18,6 +18,7 @@ import { useStoreContext } from '../context/StoreContext';
 import MapPicker from '../../../shared/components/MapPicker';
 import Button from '@shared/components/ui/Button';
 import Card from '@shared/components/ui/Card';
+import StoreCatalogImportPanel from '../components/StoreCatalogImportPanel';
 
 const STATUS_BADGE = {
   approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
@@ -29,6 +30,7 @@ const REQUIRED_DOCS = [
   { id: 'aadhar', label: 'Aadhaar Card' },
   { id: 'pan', label: 'PAN Card' },
   { id: 'bankProof', label: 'Bank Proof' },
+  { id: 'gstCertificate', label: 'GST Certificate' },
 ];
 
 const INITIAL_FORM_DATA = {
@@ -45,11 +47,63 @@ const INITIAL_FORM_DATA = {
   radius: 5,
   aadharNumber: '',
   panNumber: '',
+  gstNumber: '',
   accountHolder: '',
   accountNumber: '',
   ifsc: '',
   bankName: '',
 };
+
+const EMPTY_DOCUMENTS = { aadhar: null, pan: null, bankProof: null, gstCertificate: null };
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+const KYC_TEXT_FIELDS = [
+  { id: 'aadharNumber', label: 'Aadhaar Number', placeholder: '12-digit Aadhaar number' },
+  { id: 'panNumber', label: 'PAN Number', placeholder: 'e.g. ABCDE1234F', maxLength: 10, uppercase: true },
+  {
+    id: 'gstNumber',
+    label: 'GSTIN',
+    placeholder: '22AAAAA0000A1Z5',
+    maxLength: 15,
+    uppercase: true,
+    hint: 'Exactly 15 characters: 2-digit state + PAN + entity + Z + checksum digit.',
+  },
+  { id: 'accountHolder', label: 'Account Holder Name', placeholder: 'Name as per bank' },
+  { id: 'accountNumber', label: 'Account Number', placeholder: 'Bank account number' },
+  { id: 'ifsc', label: 'IFSC Code', placeholder: 'e.g. SBIN0001234', maxLength: 11, uppercase: true },
+  { id: 'bankName', label: 'Bank Name', placeholder: 'e.g. State Bank of India' },
+];
+
+function normalizeGstInput(value) {
+  return String(value || '').toUpperCase().replace(/\s/g, '').slice(0, 15);
+}
+
+function validateGstNumber(value) {
+  const normalized = normalizeGstInput(value);
+  if (!normalized) return 'GSTIN is required.';
+  if (normalized.length !== 15) {
+    return `GSTIN must be 15 characters (you entered ${normalized.length}). Example: 22AAAAA0000A1Z5`;
+  }
+  if (!GSTIN_REGEX.test(normalized)) {
+    return 'Invalid GSTIN format. Use: 2-digit state + 10-char PAN + entity + Z + checksum (15 total).';
+  }
+  return null;
+}
+
+function handleKycFieldChange(field, rawValue, setFormData) {
+  let value = rawValue;
+  if (field.uppercase) {
+    value = value.toUpperCase();
+  }
+  if (field.id === 'gstNumber') {
+    value = normalizeGstInput(value);
+  }
+  if (field.maxLength) {
+    value = value.slice(0, field.maxLength);
+  }
+  setFormData((prev) => ({ ...prev, [field.id]: value }));
+}
 
 const MyStores = () => {
   const location = useLocation();
@@ -60,8 +114,9 @@ const MyStores = () => {
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
-  const [documents, setDocuments] = useState({ aadhar: null, pan: null, bankProof: null });
+  const [documents, setDocuments] = useState(EMPTY_DOCUMENTS);
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+  const [resubmitStoreId, setResubmitStoreId] = useState(null);
 
   useEffect(() => {
     if (location.state?.welcomeNewAdmin) {
@@ -138,6 +193,23 @@ const MyStores = () => {
     });
   };
 
+  const buildStoreFormPayload = () => {
+    const payload = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      if (key === 'categories') return;
+      if (value !== null && value !== undefined && value !== '') {
+        payload.append(key, value);
+      }
+    });
+    formData.categories.forEach((categoryName) => {
+      payload.append('categories', categoryName);
+    });
+    Object.entries(documents).forEach(([key, file]) => {
+      if (file) payload.append(key, file);
+    });
+    return payload;
+  };
+
   const handleCreateStore = async (e) => {
     e.preventDefault();
     if (!formData.categories.length) {
@@ -150,30 +222,90 @@ const MyStores = () => {
       return;
     }
 
+    const gstError = validateGstNumber(formData.gstNumber);
+    if (gstError) {
+      toast.error(gstError);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const payload = new FormData();
-      Object.entries(formData).forEach(([key, value]) => {
-        if (key === 'categories') return;
-        if (value !== null && value !== undefined && value !== '') {
-          payload.append(key, value);
-        }
-      });
-      formData.categories.forEach((categoryName) => {
-        payload.append('categories', categoryName);
-      });
-      Object.entries(documents).forEach(([key, file]) => {
-        if (file) payload.append(key, file);
-      });
-
-      await sellerApi.createStore(payload);
+      await sellerApi.createStore(buildStoreFormPayload());
       toast.success('Store submitted for admin approval');
       setShowCreate(false);
       setFormData(INITIAL_FORM_DATA);
-      setDocuments({ aadhar: null, pan: null, bankProof: null });
+      setDocuments(EMPTY_DOCUMENTS);
       await refreshStores();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create store');
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to create store';
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openResubmit = (store) => {
+    setResubmitStoreId(store._id);
+    setFormData({
+      ...INITIAL_FORM_DATA,
+      shopName: store.shopName || '',
+      categories: Array.isArray(store.categories) && store.categories.length
+        ? store.categories
+        : store.category ? [store.category] : [],
+      description: store.description || '',
+      address: store.address || '',
+      locality: store.locality || '',
+      city: store.city || '',
+      state: store.state || '',
+      pincode: store.pincode || '',
+      lat: store.location?.coordinates?.[1] ?? null,
+      lng: store.location?.coordinates?.[0] ?? null,
+      radius: store.serviceRadius || 5,
+      aadharNumber: store.aadharNumber || '',
+      panNumber: store.panNumber || '',
+      gstNumber: store.gstNumber || '',
+      accountHolder: store.accountHolder || '',
+      accountNumber: store.accountNumber || '',
+      ifsc: store.ifsc || '',
+      bankName: store.bankName || '',
+    });
+    setDocuments(EMPTY_DOCUMENTS);
+    setShowCreate(true);
+  };
+
+  const handleResubmitStore = async (e) => {
+    e.preventDefault();
+    if (!resubmitStoreId) return;
+    if (!formData.categories.length) {
+      toast.error('Please select at least one store category');
+      return;
+    }
+    const missingDocs = REQUIRED_DOCS.filter((d) => !documents[d.id]);
+    if (missingDocs.length) {
+      toast.error(`Upload required documents: ${missingDocs.map((d) => d.label).join(', ')}`);
+      return;
+    }
+
+    const gstError = validateGstNumber(formData.gstNumber);
+    if (gstError) {
+      toast.error(gstError);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await sellerApi.resubmitStoreKyc(resubmitStoreId, buildStoreFormPayload());
+      toast.success('Application resubmitted for admin approval');
+      setShowCreate(false);
+      setResubmitStoreId(null);
+      setFormData(INITIAL_FORM_DATA);
+      setDocuments(EMPTY_DOCUMENTS);
+      await refreshStores();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to resubmit application');
     } finally {
       setIsSubmitting(false);
     }
@@ -232,6 +364,10 @@ const MyStores = () => {
           </Button>
         </Card>
       ) : (
+        <div className="space-y-4">
+          {stores.some((store) => isApplicationApproved(store) && String(store._id) === String(activeStoreId)) && (
+            <StoreCatalogImportPanel />
+          )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {stores.map((store) => {
             const status = getStatus(store);
@@ -296,14 +432,20 @@ const MyStores = () => {
                     </span>
                   )}
                   {!isApplicationApproved(store) && status === 'rejected' && (
-                    <span className="text-xs text-rose-600 flex items-center gap-1">
-                      <XCircle className="h-3.5 w-3.5" /> {store.rejectionReason || 'Rejected'}
-                    </span>
+                    <div className="flex flex-col gap-2 w-full">
+                      <span className="text-xs text-rose-600 flex items-center gap-1">
+                        <XCircle className="h-3.5 w-3.5" /> {store.rejectionReason || 'Rejected'}
+                      </span>
+                      <Button size="sm" variant="outline" onClick={() => openResubmit(store)}>
+                        Resubmit application
+                      </Button>
+                    </div>
                   )}
                 </div>
               </motion.div>
             );
           })}
+        </div>
         </div>
       )}
 
@@ -319,6 +461,8 @@ const MyStores = () => {
             data-lenis-prevent-wheel
             onClick={() => {
               setFormData(INITIAL_FORM_DATA);
+              setDocuments(EMPTY_DOCUMENTS);
+              setResubmitStoreId(null);
               setShowCreate(false);
             }}
           >
@@ -333,11 +477,17 @@ const MyStores = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6 pb-4 border-b border-slate-100 shrink-0">
-                <h2 className="text-xl font-black text-slate-900">Add New Shop</h2>
-                <p className="text-sm text-slate-500 mt-1">Each shop needs its own location, category, KYC, and bank details for admin approval.</p>
+                <h2 className="text-xl font-black text-slate-900">
+                  {resubmitStoreId ? 'Resubmit Shop Application' : 'Add New Shop'}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {resubmitStoreId
+                    ? 'Update KYC, GST, and documents, then resubmit for admin review.'
+                    : 'Each shop needs its own location, category, KYC, GST, and bank details for admin approval.'}
+                </p>
               </div>
               <form
-                onSubmit={handleCreateStore}
+                onSubmit={resubmitStoreId ? handleResubmitStore : handleCreateStore}
                 className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-4 min-h-0 custom-scrollbar-light"
                 data-lenis-prevent
                 data-lenis-prevent-touch
@@ -406,16 +556,37 @@ const MyStores = () => {
                   {formData.lat ? formData.address || 'Location selected' : 'Pick store location *'}
                 </button>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {['aadharNumber', 'panNumber', 'accountHolder', 'accountNumber', 'ifsc', 'bankName'].map((field) => (
-                    <input
-                      key={field}
-                      required
-                      placeholder={field.replace(/([A-Z])/g, ' $1').trim() + ' *'}
-                      className="px-4 py-3 rounded-xl border border-slate-200 capitalize"
-                      value={formData[field]}
-                      onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {KYC_TEXT_FIELDS.map((field) => (
+                    <div key={field.id} className={field.id === 'gstNumber' ? 'sm:col-span-2' : ''}>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                        {field.label}
+                        <span className="text-rose-500"> *</span>
+                      </label>
+                      <input
+                        required
+                        placeholder={field.placeholder}
+                        maxLength={field.maxLength}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono text-sm uppercase"
+                        value={formData[field.id]}
+                        onChange={(e) => handleKycFieldChange(field, e.target.value, setFormData)}
+                      />
+                      {field.id === 'gstNumber' && (
+                        <p className={`mt-1.5 text-[11px] font-medium ${
+                          formData.gstNumber.length === 15 && GSTIN_REGEX.test(normalizeGstInput(formData.gstNumber))
+                            ? 'text-emerald-600'
+                            : 'text-slate-500'
+                        }`}>
+                          {formData.gstNumber.length}/15 characters
+                          {formData.gstNumber.length > 0 && formData.gstNumber.length < 15
+                            ? ' — add the final checksum digit'
+                            : ''}
+                        </p>
+                      )}
+                      {field.hint && field.id !== 'gstNumber' && (
+                        <p className="mt-1 text-[11px] text-slate-500">{field.hint}</p>
+                      )}
+                    </div>
                   ))}
                 </div>
 
@@ -442,13 +613,15 @@ const MyStores = () => {
                     className="flex-1"
                     onClick={() => {
                       setFormData(INITIAL_FORM_DATA);
+                      setDocuments(EMPTY_DOCUMENTS);
+                      setResubmitStoreId(null);
                       setShowCreate(false);
                     }}
                   >
                     Cancel
                   </Button>
                   <Button type="submit" className="flex-1" disabled={isSubmitting || !formData.lat}>
-                    {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
+                    {isSubmitting ? 'Submitting...' : resubmitStoreId ? 'Resubmit for Approval' : 'Submit for Approval'}
                   </Button>
                 </div>
               </form>

@@ -95,6 +95,75 @@ const sellerSchema = new mongoose.Schema(
       default: true,
     },
 
+    businessModel: {
+      type: String,
+      enum: ["commission", "subscription", null],
+      default: null,
+    },
+
+    businessModelChosenAt: {
+      type: Date,
+    },
+
+    businessModelSwitch: {
+      requestedModel: {
+        type: String,
+        enum: ["commission", "subscription", null],
+        default: null,
+      },
+      requestedAt: Date,
+      effectiveAt: Date,
+      status: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+      },
+      rejectionReason: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+    },
+
+    commissionConfig: {
+      scope: {
+        type: String,
+        enum: ["category", "seller"],
+        default: "category",
+      },
+      type: {
+        type: String,
+        enum: ["percentage", "fixed"],
+        default: "percentage",
+      },
+      value: {
+        type: Number,
+        default: 0,
+      },
+      fixedRule: {
+        type: String,
+        enum: ["per_qty", "per_item"],
+        default: "per_qty",
+      },
+      categoryOverrides: [
+        {
+          categoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Category",
+          },
+          type: {
+            type: String,
+            enum: ["percentage", "fixed"],
+          },
+          value: Number,
+          fixedRule: {
+            type: String,
+            enum: ["per_qty", "per_item"],
+          },
+        },
+      ],
+    },
+
     lastLogin: Date,
   },
   { timestamps: true },

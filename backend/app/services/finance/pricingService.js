@@ -5,6 +5,10 @@ import {
   resolveProductApprovalStatus,
 } from "../productModerationService.js";
 import {
+  loadStoreOwnerBusinessModel,
+  resolveSellerCommissionConfig,
+} from "../sellerBusinessModelService.js";
+import {
   COMMISSION_FIXED_RULE,
   COMMISSION_TYPE,
   DELIVERY_PRICING_MODE,
@@ -402,6 +406,27 @@ export async function generateOrderPaymentBreakdown({
     throw new Error("Multi-seller checkout is not supported in current flow");
   }
 
+  const storeId = sellerIds[0];
+  const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
+  if (owner && !owner.businessModel) {
+    const err = new Error("Seller has not activated a business model yet");
+    err.statusCode = 403;
+    throw err;
+  }
+  if (owner?.businessModel === "subscription") {
+    const { getActiveSubscriptionForSeller } = await import("../subscriptionService.js");
+    const active = await getActiveSubscriptionForSeller(owner._id);
+    if (!active) {
+      const err = new Error("Active subscription required for checkout");
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+  const effectiveOwner = owner || {
+    businessModel: "commission",
+    commissionConfig: { scope: "category" },
+  };
+
   const headerIds = Array.from(
     new Set(normalizedItems.map((item) => item.headerCategoryId).filter(Boolean)),
   );
@@ -426,7 +451,17 @@ export async function generateOrderPaymentBreakdown({
 
   const lineItems = normalizedItems.map((item) => {
     const category = categoryById.get(String(item.headerCategoryId));
-    const commission = calculateCategoryCommission(item, category);
+    const { config, source } = resolveSellerCommissionConfig(
+      effectiveOwner,
+      item.headerCategoryId,
+      category,
+    );
+    if (!config) {
+      const err = new Error("Seller business model is not configured for checkout");
+      err.statusCode = 403;
+      throw err;
+    }
+    const commission = calculateCategoryCommission(item, config);
     productSubtotal = addMoney(productSubtotal, commission.itemSubtotal);
     sellerPayoutTotal = addMoney(sellerPayoutTotal, commission.sellerPayout);
     adminProductCommissionTotal = addMoney(
@@ -447,6 +482,7 @@ export async function generateOrderPaymentBreakdown({
       appliedCommissionType: commission.appliedCommissionType,
       appliedCommissionValue: commission.appliedCommissionValue,
       appliedCommissionFixedRule: commission.appliedFixedRule,
+      appliedCommissionSource: source,
     };
   });
 
@@ -505,10 +541,12 @@ export async function generateOrderPaymentBreakdown({
     })),
     handlingFeeStrategy: effectiveHandlingStrategy,
     handlingCategoryUsed: handling.handlingCategoryUsed,
+    sellerBusinessModel: effectiveOwner.businessModel,
+    sellerOwnerId: owner?._id ? String(owner._id) : null,
   };
 
   return {
-    sellerId: sellerIds[0],
+    sellerId: storeId,
     lineItems,
     currency: "INR",
     productSubtotal,

@@ -13,6 +13,11 @@ import {
   Globe,
   MapPin,
   CheckCircle,
+  Truck,
+  Percent,
+  ArrowRightLeft,
+  Loader2,
+  CreditCard,
 } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
@@ -26,6 +31,9 @@ const SellerProfile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const [deliverySettings, setDeliverySettings] = useState(null);
+  const [businessModelData, setBusinessModelData] = useState(null);
+  const [switchLoading, setSwitchLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     shopName: "",
@@ -41,7 +49,36 @@ const SellerProfile = () => {
 
   useEffect(() => {
     fetchProfile();
+    sellerApi.getDeliverySettings()
+      .then((response) => setDeliverySettings(response.data.result))
+      .catch(() => setDeliverySettings(null));
   }, []);
+
+  const isOwnerAccount = Boolean(profile) && !profile?.subSellerId;
+
+  useEffect(() => {
+    if (!isOwnerAccount) return;
+    sellerApi.getBusinessModel()
+      .then((response) => setBusinessModelData(response.data.result))
+      .catch(() => setBusinessModelData(null));
+  }, [isOwnerAccount, profile?.businessModel]);
+
+  const handleRequestModelSwitch = async (requestedModel) => {
+    setSwitchLoading(true);
+    try {
+      const response = await sellerApi.requestBusinessModelSwitch({ requestedModel });
+      setBusinessModelData(response.data.result);
+      toast.success(response.data.message || "Switch request submitted");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to submit switch request");
+    } finally {
+      setSwitchLoading(false);
+    }
+  };
+
+  const modelSwitch = businessModelData?.businessModelSwitch;
+  const commissionSummary = businessModelData?.commissionSummary;
+  const currentModel = businessModelData?.businessModel || profile?.businessModel;
 
   const fetchProfile = async () => {
     try {
@@ -466,6 +503,175 @@ const SellerProfile = () => {
 
         {/* Sidebar Card */}
         <div className="space-y-8">
+          {isOwnerAccount && currentModel && (
+            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+              <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
+                Business Model
+              </h4>
+              <div className="flex items-start gap-4 mb-5">
+                <div className="h-10 w-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+                  {currentModel === "subscription" ? (
+                    <CreditCard size={20} className="text-violet-700" />
+                  ) : (
+                    <Percent size={20} className="text-violet-700" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900 capitalize">
+                    {currentModel} model
+                  </p>
+                  <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
+                    {currentModel === "subscription"
+                      ? "You pay a subscription fee and keep 100% of product sales."
+                      : "You set customer prices; platform commission is deducted per order."}
+                  </p>
+                </div>
+              </div>
+
+              {modelSwitch?.status === "pending" && (
+                <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-xs font-bold text-amber-800">
+                    Switch to {modelSwitch.requestedModel} pending admin review
+                  </p>
+                  {modelSwitch.requestedAt && (
+                    <p className="text-[10px] text-amber-600 mt-1">
+                      Requested {new Date(modelSwitch.requestedAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {modelSwitch?.status === "rejected" && (
+                <div className="mb-4 p-4 rounded-xl bg-rose-50 border border-rose-100">
+                  <p className="text-xs font-bold text-rose-800">Last switch request was rejected</p>
+                  {modelSwitch.rejectionReason && (
+                    <p className="text-[10px] text-rose-600 mt-1">{modelSwitch.rejectionReason}</p>
+                  )}
+                </div>
+              )}
+
+              {modelSwitch?.status === "approved" && modelSwitch.requestedModel === "subscription" && !profile?.hasActiveSubscription && (
+                <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                  <p className="text-xs font-bold text-emerald-800">
+                    Switch approved — complete PhonePe payment on the Subscription page to activate.
+                  </p>
+                </div>
+              )}
+
+              {modelSwitch?.status !== "pending" && currentModel === "commission" && (
+                <Button
+                  variant="outline"
+                  className="w-full text-xs font-bold"
+                  disabled={switchLoading}
+                  onClick={() => handleRequestModelSwitch("subscription")}
+                >
+                  {switchLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <ArrowRightLeft className="h-4 w-4 mr-2" />
+                      Request switch to subscription
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {modelSwitch?.status !== "pending"
+                && currentModel === "subscription"
+                && !profile?.hasActiveSubscription && (
+                <Button
+                  variant="outline"
+                  className="w-full text-xs font-bold"
+                  disabled={switchLoading}
+                  onClick={() => handleRequestModelSwitch("commission")}
+                >
+                  {switchLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <ArrowRightLeft className="h-4 w-4 mr-2" />
+                      Request switch to commission
+                    </>
+                  )}
+                </Button>
+              )}
+            </Card>
+          )}
+
+          {isOwnerAccount && currentModel === "commission" && commissionSummary && (
+            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+              <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
+                Your Commission Rates
+              </h4>
+              <p className="text-xs text-slate-500 font-medium mb-4 leading-relaxed">
+                {commissionSummary.description}
+              </p>
+
+              {commissionSummary.scope === "seller" && (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 mb-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                    Seller-wise rate
+                  </p>
+                  <p className="text-lg font-black text-slate-900">{commissionSummary.label}</p>
+                </div>
+              )}
+
+              {(commissionSummary.scope === "seller"
+                ? commissionSummary.categoryOverrides
+                : commissionSummary.categoryRates
+              )?.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {(commissionSummary.scope === "seller"
+                    ? commissionSummary.categoryOverrides
+                    : commissionSummary.categoryRates
+                  ).map((rate) => (
+                    <div
+                      key={rate.categoryId}
+                      className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100"
+                    >
+                      <span className="text-xs font-bold text-slate-700">{rate.categoryName}</span>
+                      <span className="text-xs font-black text-slate-900">{rate.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {isOwnerAccount && currentModel === "subscription" && (
+            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+              <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
+                Commission
+              </h4>
+              <p className="text-sm font-black text-emerald-700">No product commission</p>
+              <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                On the subscription model you keep the full product sale amount. Your subscription fee covers platform access.
+              </p>
+            </Card>
+          )}
+
+          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
+              Delivery Settings
+            </h4>
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                <Truck size={20} className="text-slate-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">
+                  {deliverySettings?.logisticsMode === "external"
+                    ? "External courier partners"
+                    : "Platform delivery fleet"}
+                </p>
+                <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                  {deliverySettings?.description
+                    || "Your orders are fulfilled via the platform logistics network."}
+                </p>
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px] bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-800 text-white">
             <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white/40 mb-6">
               Security & Trust

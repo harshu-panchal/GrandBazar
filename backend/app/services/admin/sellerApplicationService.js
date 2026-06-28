@@ -5,6 +5,8 @@ import {
   formatSellerApplication,
   formatSellerDocuments,
 } from "./shared/sellerAdminUtils.js";
+import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
 
 function buildPendingStoreQuery(normalizedStatus) {
   if (normalizedStatus === "pending") {
@@ -185,6 +187,10 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
 
   if (store) {
     const owner = store.ownerId || {};
+    emitNotificationEvent(NOTIFICATION_EVENTS.STORE_APPLICATION_APPROVED, {
+      sellerId: owner._id || store.ownerId,
+      shopName: store.shopName,
+    }).catch(() => {});
     return formatSellerApplication({
       ...store.toObject(),
       applicationType: "store",
@@ -217,6 +223,10 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
     return null;
   }
 
+  emitNotificationEvent(NOTIFICATION_EVENTS.SELLER_ACCOUNT_APPROVED, {
+    sellerId: account._id,
+  }).catch(() => {});
+
   return formatSellerApplication({
     ...account.toObject(),
     applicationType: "seller_admin",
@@ -245,6 +255,11 @@ export async function rejectSellerApplicationById({
 
   if (store) {
     const owner = store.ownerId || {};
+    emitNotificationEvent(NOTIFICATION_EVENTS.STORE_APPLICATION_REJECTED, {
+      sellerId: owner._id || store.ownerId,
+      shopName: store.shopName,
+      reason: reason || "",
+    }).catch(() => {});
     return formatSellerApplication({
       ...store.toObject(),
       applicationType: "store",
@@ -276,6 +291,11 @@ export async function rejectSellerApplicationById({
   if (!account) {
     return null;
   }
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.SELLER_ACCOUNT_REJECTED, {
+    sellerId: account._id,
+    reason: reason || "",
+  }).catch(() => {});
 
   return formatSellerApplication({
     ...account.toObject(),

@@ -1,4 +1,7 @@
 import axiosInstance from '@core/api/axios';
+import { unwrapList } from '@shared/utils/apiResponse';
+
+export { unwrapList };
 
 export const adminApi = {
     login: (data) => axiosInstance.post('/admin/login', data),
@@ -7,10 +10,29 @@ export const adminApi = {
     getUsers: (params) => axiosInstance.get('/admin/users', { params }),
     getUserById: (id) => axiosInstance.get(`/admin/users/${id}`),
     getActiveSellers: (params) => axiosInstance.get('/admin/sellers/active', { params }),
+    getActiveSellerById: (id) => axiosInstance.get(`/admin/sellers/active/${id}`),
     getSellerLocations: (params) => axiosInstance.get('/admin/sellers/locations', { params }),
     getPendingSellers: (params) => axiosInstance.get('/admin/sellers/pending', { params }),
     approveSeller: (id) => axiosInstance.patch(`/admin/sellers/approve/${id}`),
     rejectSeller: (id, data) => axiosInstance.delete(`/admin/sellers/reject/${id}`, { data }),
+    getSellerBusinessModel: (id) => axiosInstance.get(`/admin/sellers/${id}/business-model`),
+    updateSellerBusinessModel: (id, data) => axiosInstance.put(`/admin/sellers/${id}/business-model`, data),
+    updateSellerCommission: (id, data) => axiosInstance.put(`/admin/sellers/${id}/commission`, data),
+    getModelSwitchRequests: (params) => axiosInstance.get('/admin/sellers/model-switch-requests', { params }),
+    approveModelSwitch: (id) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/approve`),
+    rejectModelSwitch: (id, data) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/reject`, data),
+
+    getSubscriptionPlans: () => axiosInstance.get('/admin/subscription/plans'),
+    createSubscriptionPlan: (data) => axiosInstance.post('/admin/subscription/plans', data),
+    updateSubscriptionPlan: (id, data) => axiosInstance.put(`/admin/subscription/plans/${id}`, data),
+    deleteSubscriptionPlan: (id) => axiosInstance.delete(`/admin/subscription/plans/${id}`),
+    getSubscriptionPaymentRequests: (params) => axiosInstance.get('/admin/subscription/payment-requests', { params }),
+    approveSubscriptionPayment: (id) => axiosInstance.patch(`/admin/subscription/payment-requests/${id}/approve`),
+    rejectSubscriptionPayment: (id, data) => axiosInstance.patch(`/admin/subscription/payment-requests/${id}/reject`, data),
+    getSubscriptionPaymentSettings: () => axiosInstance.get('/admin/subscription/payment-settings'),
+    updateSubscriptionPaymentSettings: (data) => axiosInstance.put('/admin/subscription/payment-settings', data),
+    getSubscriptionOverview: () => axiosInstance.get('/admin/subscription/overview'),
+    getSubscriptionPayments: (params) => axiosInstance.get('/admin/subscription/payments', { params }),
     getAdminWalletData: (params) => axiosInstance.get('/admin/wallet-data', { params }),
     getReports: () => axiosInstance.get('/admin/reports'),
     getProfile: () => axiosInstance.get('/admin/profile'),
@@ -57,6 +79,12 @@ export const adminApi = {
     createCatalogProductsBulk: (data) => axiosInstance.post('/catalog/bulk', data),
     updateCatalogProduct: (id, formData) => axiosInstance.put(`/catalog/${id}`, formData),
     deleteCatalogProduct: (id) => axiosInstance.delete(`/catalog/${id}`),
+
+    getCatalogBundles: (params) => axiosInstance.get('/catalog/bundles', { params }),
+    getCatalogBundleById: (id) => axiosInstance.get(`/catalog/bundles/${id}`),
+    createCatalogBundle: (data) => axiosInstance.post('/catalog/bundles', data),
+    updateCatalogBundle: (id, data) => axiosInstance.put(`/catalog/bundles/${id}`, data),
+    deleteCatalogBundle: (id) => axiosInstance.delete(`/catalog/bundles/${id}`),
 
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),

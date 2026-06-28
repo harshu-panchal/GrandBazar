@@ -10,6 +10,7 @@ import { useLocation as useAppLocation } from "../context/LocationContext";
 import Lottie from "lottie-react";
 import storePin from "@/assets/store-pin.png";
 import customerPin from "@/assets/customer-pin.png";
+import BecomeSellerButton from "../components/shared/BecomeSellerButton";
 
 const STORE_THEMES = {
   grocery: {
@@ -260,13 +261,20 @@ const StoresPage = () => {
             <Store size={28} className="text-brand-500" />
             <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Stores Near You</h1>
           </div>
-          <button 
-            onClick={() => setIsMapView(true)}
-            className="flex items-center gap-2 bg-white border-2 border-slate-100 hover:border-slate-200 px-4 py-2 rounded-xl shadow-sm text-sm font-bold text-slate-700 transition-all active:scale-95"
-          >
-            <Map className="text-brand-500" size={18} />
-            <span className="hidden sm:inline">Map View</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <BecomeSellerButton className="hidden sm:inline-flex" />
+            <button
+              onClick={() => setIsMapView(true)}
+              className="flex items-center gap-2 bg-white border-2 border-slate-100 hover:border-slate-200 px-4 py-2 rounded-xl shadow-sm text-sm font-bold text-slate-700 transition-all active:scale-95"
+            >
+              <Map className="text-brand-500" size={18} />
+              <span className="hidden sm:inline">Map View</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="sm:hidden mb-6 flex justify-center">
+          <BecomeSellerButton fullWidth />
         </div>
 
         {/* Main Hero Header Section */}

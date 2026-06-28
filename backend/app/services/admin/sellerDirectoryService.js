@@ -504,6 +504,127 @@ export async function getActiveSellersData({
   };
 }
 
+export async function getActiveSellerByIdData(id) {
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) return null;
+
+  let store = await Store.findOne({
+    _id: normalizedId,
+    isVerified: true,
+    applicationStatus: "approved",
+  })
+    .populate("ownerId", "name email phone")
+    .lean();
+
+  if (!store) {
+    store = await Store.findOne({
+      ownerId: normalizedId,
+      isVerified: true,
+      applicationStatus: "approved",
+    })
+      .populate("ownerId", "name email phone")
+      .lean();
+  }
+
+  if (!store) return null;
+
+  const storeId = store._id;
+  const [orderRows, productRows] = await Promise.all([
+    Order.aggregate([
+      { $match: { seller: storeId } },
+      {
+        $group: {
+          _id: "$seller",
+          totalOrders: { $sum: 1 },
+          deliveredOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] },
+          },
+          pendingOrders: {
+            $sum: {
+              $cond: [
+                {
+                  $in: [
+                    "$status",
+                    ["pending", "confirmed", "packed", "out_for_delivery"],
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          totalRevenue: {
+            $sum: {
+              $cond: [
+                { $eq: ["$status", "delivered"] },
+                { $ifNull: ["$pricing.total", 0] },
+                0,
+              ],
+            },
+          },
+          lastOrderAt: { $max: "$createdAt" },
+        },
+      },
+    ]),
+    Product.aggregate([
+      { $match: { sellerId: storeId } },
+      {
+        $group: {
+          _id: "$sellerId",
+          productCount: { $sum: 1 },
+          activeProductCount: {
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const owner = store.ownerId || {};
+  const orderStats = orderRows[0] || {};
+  const productStats = productRows[0] || {};
+  const totalOrders = Number(orderStats.totalOrders || 0);
+  const deliveredOrders = Number(orderStats.deliveredOrders || 0);
+  const totalRevenue = Number(orderStats.totalRevenue || 0);
+  const joinedAt = store.reviewedAt || store.createdAt || new Date();
+
+  return {
+    id: String(store._id),
+    ownerId: owner._id ? String(owner._id) : "",
+    shopName: store.shopName || "Unnamed Store",
+    ownerName: owner.name || "Unnamed Owner",
+    email: owner.email || "",
+    phone: owner.phone || "",
+    category: store.category || "General",
+    status: store.isVerified && store.isActive ? "active" : "inactive",
+    joinedDate: new Date(joinedAt).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }),
+    location: getSellerDisplayLocation(store),
+    totalOrders,
+    deliveredOrders,
+    totalRevenue,
+    fulfillmentRate: totalOrders
+      ? Math.round((deliveredOrders / totalOrders) * 100)
+      : 0,
+    productCount: Number(productStats.productCount || 0),
+    activeProductCount: Number(productStats.activeProductCount || 0),
+    serviceRadius: Number(store.serviceRadius || 5),
+    gstNumber: store.gstNumber || "",
+    bankInfo: {
+      bankName: store.bankName || "",
+      accountNo: store.accountNumber || "",
+      ifsc: store.ifsc || "",
+      accountHolder: store.accountHolder || "",
+    },
+    image: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+      store.shopName || owner.name || "seller",
+    )}`,
+  };
+}
+
 export async function getSellerOptions() {
   return Store.find({ isVerified: true, isActive: true, applicationStatus: "approved" })
     .select("_id shopName category")

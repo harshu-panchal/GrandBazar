@@ -103,3 +103,13 @@ export async function updateDeliveryFinanceSettings(payload, { session } = {}) {
 }
 
 export { DEFAULT_FINANCE_SETTINGS };
+
+export async function getPlatformDeliveryProvider() {
+  const settings = await Setting.findOne({
+    $or: [{ tenantId: null }, { tenantId: { $exists: false } }],
+  })
+    .select("defaultDeliveryProvider")
+    .lean();
+  const provider = String(settings?.defaultDeliveryProvider || "zinto").toLowerCase();
+  return provider === "external" ? "external" : "zinto";
+}

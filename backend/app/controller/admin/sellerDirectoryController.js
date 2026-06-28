@@ -2,6 +2,7 @@ import handleResponse from "../../utils/helper.js";
 import getPagination from "../../utils/pagination.js";
 import {
   getActiveSellersData,
+  getActiveSellerByIdData,
   getSellerLocationsData,
   getSellerOptions,
 } from "../../services/admin/sellerDirectoryService.js";
@@ -58,6 +59,18 @@ export const getActiveSellers = async (req, res) => {
     });
 
     return handleResponse(res, 200, "Active sellers fetched successfully", data);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const getActiveSellerById = async (req, res) => {
+  try {
+    const data = await getActiveSellerByIdData(req.params.id);
+    if (!data) {
+      return handleResponse(res, 404, "Active seller not found");
+    }
+    return handleResponse(res, 200, "Active seller fetched successfully", data);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

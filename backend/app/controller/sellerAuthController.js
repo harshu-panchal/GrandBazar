@@ -17,6 +17,7 @@ import {
     getOwnerAccountApplicationStatus,
     isOwnerAccountApproved,
 } from "../services/sellerAccountService.js";
+import { formatBusinessModelPayload } from "../services/sellerBusinessModelService.js";
 
 /* ===============================
    SELLER ADMIN SIGNUP (account only — shops added later)
@@ -216,6 +217,7 @@ export const loginSeller = async (req, res) => {
             isAccountApproved,
             accountApplicationStatus,
             rejectionReason: seller.rejectionReason || "",
+            ...formatBusinessModelPayload(seller),
         });
     } catch (error) {
         return handleResponse(res, 500, error.message);

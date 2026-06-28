@@ -1,5 +1,26 @@
 import express from "express";
 import {
+    getAdminSellerBusinessModel,
+    updateAdminSellerBusinessModel,
+    updateAdminSellerCommission,
+    listModelSwitchRequests,
+    approveModelSwitchRequest,
+    rejectModelSwitchRequest,
+} from "../controller/admin/sellerBusinessModelController.js";
+import {
+    listSubscriptionPlans,
+    createSubscriptionPlan,
+    updateSubscriptionPlan,
+    deleteSubscriptionPlan,
+    listPaymentRequests,
+    approveSubscriptionPaymentRequest,
+    rejectSubscriptionPaymentRequest,
+    getSubscriptionPaymentSettingsAdmin,
+    updateSubscriptionPaymentSettings,
+    getSubscriptionOverview,
+    listSubscriptionPayments,
+} from "../controller/admin/subscriptionController.js";
+import {
     bootstrapAdmin,
     signupAdmin,
     loginAdmin,
@@ -18,6 +39,7 @@ import {
     settleTransaction,
     bulkSettleDelivery,
     getActiveSellers,
+    getActiveSellerById,
     getPendingSellers,
     approveSellerApplication,
     rejectSellerApplication,
@@ -164,9 +186,28 @@ router.delete("/login-activities/:id", verifyToken, allowRoles("admin"), termina
 router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);
 router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLocations);
 router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers);
+router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), getActiveSellerById);
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
 router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
+router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);
+router.put("/sellers/:id/business-model", verifyToken, allowRoles("admin"), updateAdminSellerBusinessModel);
+router.put("/sellers/:id/commission", verifyToken, allowRoles("admin"), updateAdminSellerCommission);
+router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), listModelSwitchRequests);
+router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), approveModelSwitchRequest);
+router.patch("/sellers/:id/model-switch/reject", verifyToken, allowRoles("admin"), rejectModelSwitchRequest);
+
+router.get("/subscription/plans", verifyToken, allowRoles("admin"), listSubscriptionPlans);
+router.post("/subscription/plans", verifyToken, allowRoles("admin"), createSubscriptionPlan);
+router.put("/subscription/plans/:id", verifyToken, allowRoles("admin"), updateSubscriptionPlan);
+router.delete("/subscription/plans/:id", verifyToken, allowRoles("admin"), deleteSubscriptionPlan);
+router.get("/subscription/payment-requests", verifyToken, allowRoles("admin"), listPaymentRequests);
+router.patch("/subscription/payment-requests/:id/approve", verifyToken, allowRoles("admin"), approveSubscriptionPaymentRequest);
+router.patch("/subscription/payment-requests/:id/reject", verifyToken, allowRoles("admin"), rejectSubscriptionPaymentRequest);
+router.get("/subscription/payment-settings", verifyToken, allowRoles("admin"), getSubscriptionPaymentSettingsAdmin);
+router.put("/subscription/payment-settings", verifyToken, allowRoles("admin"), updateSubscriptionPaymentSettings);
+router.get("/subscription/overview", verifyToken, allowRoles("admin"), getSubscriptionOverview);
+router.get("/subscription/payments", verifyToken, allowRoles("admin"), listSubscriptionPayments);
 
 router.get(
     "/delivery-partners",

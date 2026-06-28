@@ -10,9 +10,21 @@ import {
   bulkClaimCatalogProducts
 } from "../controller/catalogController.js";
 import {
+  getCatalogBundles,
+  getCatalogBundle,
+  createCatalogBundleHandler,
+  updateCatalogBundleHandler,
+  deleteCatalogBundleHandler,
+  getAvailableCatalogBundles,
+  getCatalogBundleImportStatus,
+  importCatalogBundles,
+} from "../controller/catalogBundleController.js";
+import {
   verifyToken,
   allowRoles,
   requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
   resolveActiveStore,
   checkSubSellerPermission,
 } from "../middleware/authMiddleware.js";
@@ -22,6 +34,82 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 const router = express.Router();
+
+const sellerBundleChain = [
+  verifyToken,
+  allowRoles("seller"),
+  resolveActiveStore,
+  requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
+  checkSubSellerPermission("products", "write"),
+];
+
+// Catalog bundle routes (must be before /:id)
+router.get(
+  "/bundles",
+  verifyToken,
+  allowRoles("admin"),
+  getCatalogBundles,
+);
+
+router.post(
+  "/bundles",
+  verifyToken,
+  allowRoles("admin"),
+  createCatalogBundleHandler,
+);
+
+router.get(
+  "/bundles/available",
+  verifyToken,
+  allowRoles("seller"),
+  resolveActiveStore,
+  requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
+  checkSubSellerPermission("products", "read"),
+  getAvailableCatalogBundles,
+);
+
+router.get(
+  "/bundles/import-status",
+  verifyToken,
+  allowRoles("seller"),
+  resolveActiveStore,
+  requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
+  checkSubSellerPermission("products", "read"),
+  getCatalogBundleImportStatus,
+);
+
+router.post(
+  "/bundles/import",
+  ...sellerBundleChain,
+  importCatalogBundles,
+);
+
+router.get(
+  "/bundles/:id",
+  verifyToken,
+  allowRoles("admin"),
+  getCatalogBundle,
+);
+
+router.put(
+  "/bundles/:id",
+  verifyToken,
+  allowRoles("admin"),
+  updateCatalogBundleHandler,
+);
+
+router.delete(
+  "/bundles/:id",
+  verifyToken,
+  allowRoles("admin"),
+  deleteCatalogBundleHandler,
+);
 
 // General Catalog Browsing (shared by Admin and Sellers)
 router.get(
@@ -78,6 +166,8 @@ router.post(
   allowRoles("seller"),
   resolveActiveStore,
   requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
   checkSubSellerPermission("products", "write"),
   claimCatalogProduct
 );
@@ -86,7 +176,11 @@ router.post(
   "/claim-bulk",
   verifyToken,
   allowRoles("seller"),
+  resolveActiveStore,
   requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
+  checkSubSellerPermission("products", "write"),
   bulkClaimCatalogProducts
 );
 

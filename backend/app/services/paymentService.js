@@ -17,6 +17,7 @@ import { handleOnlineOrderFinance } from "./finance/orderFinanceService.js";
 import { DEFAULT_SELLER_TIMEOUT_MS, WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
+import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
@@ -717,6 +718,11 @@ export async function processPhonePeWebhook({
   }
 
   const merchantOrderId = payload.merchantOrderId;
+
+  if (isSubscriptionMerchantOrderId(merchantOrderId)) {
+    return processSubscriptionPhonePeWebhook({ payload, correlationId });
+  }
+
   const payment = await Payment.findOne({ gatewayOrderId: merchantOrderId });
   if (!payment) {
     return { accepted: true, ignored: true, reason: "Payment attempt not found" };

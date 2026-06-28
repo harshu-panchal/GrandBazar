@@ -12,9 +12,11 @@ import {
   parseStoreCategoriesInput,
   REQUIRED_SELLER_DOCUMENT_FIELDS,
   SELLER_DOCUMENT_FIELDS,
+  validateStoreKycPayload,
 } from "../../services/storeService.js";
 import { invalidateSellerName } from "../../services/entityNameCache.js";
 import { isOwnerAccountApproved } from "../../services/sellerAccountService.js";
+import { assertCanCreateStore } from "../../services/subscriptionService.js";
 
 async function resolveUploadedDocs(req) {
   const documentFiles = req.files || [];
@@ -67,40 +69,75 @@ export const createStore = async (req, res) => {
       );
     }
 
+    await assertCanCreateStore(accountId);
+
     const uploadedDocs = await resolveUploadedDocs(req);
     const body = { ...req.body, ...uploadedDocs };
-    const {
-      shopName,
-      aadharNumber,
-      panNumber,
-      accountHolder,
-      accountNumber,
-      ifsc,
-      bankName,
-    } = body;
-
-    if (!shopName || !aadharNumber || !panNumber || !accountHolder || !accountNumber || !ifsc || !bankName) {
-      return handleResponse(res, 400, "All store fields (including KYC and bank details) are required");
-    }
 
     const storePayload = buildStorePayloadFromBody(body, uploadedDocs);
     if (!storePayload.categories?.length) {
       return handleResponse(res, 400, "At least one store category is required");
     }
-    const missingDocs = getMissingRequiredSellerDocuments(storePayload.documents || {});
-    if (missingDocs.length > 0) {
-      const readableMissing = missingDocs
-        .map((field) => SELLER_DOCUMENT_FIELDS[field] || field)
-        .join(", ");
-      return handleResponse(res, 400, `All required documents must be uploaded: ${readableMissing}`);
-    }
+    validateStoreKycPayload(body, storePayload.documents || {}, { gstExempt: false });
 
     storePayload.ownerId = accountId;
     const store = await Store.create(storePayload);
 
     return handleResponse(res, 201, "Store created and pending admin approval", store);
   } catch (error) {
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const resubmitStoreKyc = async (req, res) => {
+  try {
+    const accountId = req.user.accountId;
+    if (!accountId) {
+      return handleResponse(res, 403, "Only store owners can resubmit KYC");
+    }
+
+    const { storeId } = req.params;
+    const store = await Store.findOne({ _id: storeId, ownerId: accountId });
+    if (!store) {
+      return handleResponse(res, 404, "Store not found");
+    }
+
+    if (store.applicationStatus !== "rejected") {
+      return handleResponse(res, 400, "Only rejected store applications can be resubmitted");
+    }
+
+    const uploadedDocs = await resolveUploadedDocs(req);
+    const body = { ...req.body, ...uploadedDocs };
+    const storePayload = buildStorePayloadFromBody(body, uploadedDocs);
+
+    if (!storePayload.categories?.length) {
+      const existingCategories = store.categories?.length ? store.categories : (store.category ? [store.category] : []);
+      if (existingCategories.length) {
+        storePayload.categories = existingCategories;
+        storePayload.category = existingCategories[0];
+      }
+    }
+    if (!storePayload.categories?.length) {
+      return handleResponse(res, 400, "At least one store category is required");
+    }
+
+    validateStoreKycPayload(body, storePayload.documents || {}, { gstExempt: store.gstExempt === true });
+
+    Object.assign(store, {
+      ...storePayload,
+      applicationStatus: "pending",
+      isVerified: false,
+      isActive: false,
+      rejectionReason: "",
+      reviewedAt: null,
+      reviewedBy: null,
+    });
+
+    await store.save();
+
+    return handleResponse(res, 200, "Store application resubmitted for admin approval", store);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

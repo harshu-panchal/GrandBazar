@@ -5,9 +5,21 @@ export const SELLER_DOCUMENT_FIELDS = {
   aadhar: "Aadhaar Card",
   pan: "PAN Card",
   bankProof: "Bank Proof",
+  gstCertificate: "GST Certificate",
 };
 
 export const REQUIRED_SELLER_DOCUMENT_FIELDS = Object.keys(SELLER_DOCUMENT_FIELDS);
+
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+export function isValidGstNumber(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return GSTIN_REGEX.test(normalized);
+}
+
+export function normalizeGstNumber(value) {
+  return String(value || "").trim().toUpperCase();
+}
 
 export function parseDocumentsPayload(documents) {
   if (!documents) return {};
@@ -33,6 +45,7 @@ export function resolveSellerDocuments(body = {}, parsedDocuments = {}) {
     aadhar: body.aadharUrl || body.aadhar,
     pan: body.panUrl || body.pan,
     bankProof: body.bankProofUrl || body.bankProof,
+    gstCertificate: body.gstCertificateUrl || body.gstCertificate,
   };
   for (const [field, candidate] of Object.entries(directFields)) {
     const normalized = String(candidate || "").trim();
@@ -47,6 +60,59 @@ export function getMissingRequiredSellerDocuments(documents = {}) {
   return REQUIRED_SELLER_DOCUMENT_FIELDS.filter(
     (fieldName) => !isValidUploadedDocumentReference(documents[fieldName]),
   );
+}
+
+export function getMissingKycTextFields(body = {}, { gstExempt = false } = {}) {
+  const missing = [];
+  const required = [
+    "shopName",
+    "aadharNumber",
+    "panNumber",
+    "accountHolder",
+    "accountNumber",
+    "ifsc",
+    "bankName",
+  ];
+  for (const field of required) {
+    if (!String(body[field] || "").trim()) {
+      missing.push(field);
+    }
+  }
+  if (!gstExempt) {
+    if (!String(body.gstNumber || "").trim()) {
+      missing.push("gstNumber");
+    } else if (!isValidGstNumber(body.gstNumber)) {
+      missing.push("gstNumber_invalid");
+    }
+  }
+  return missing;
+}
+
+export function validateStoreKycPayload(body = {}, documents = {}, { gstExempt = false } = {}) {
+  const missingText = getMissingKycTextFields(body, { gstExempt });
+  if (missingText.includes("gstNumber_invalid")) {
+    const err = new Error("Invalid GSTIN format. Use a valid 15-character GST number.");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (missingText.length > 0) {
+    const err = new Error("All store fields (including KYC, GST, and bank details) are required");
+    err.statusCode = 400;
+    err.missingFields = missingText;
+    throw err;
+  }
+  const missingDocs = getMissingRequiredSellerDocuments(documents);
+  if (!gstExempt && missingDocs.includes("gstCertificate")) {
+    // gstCertificate is in REQUIRED_SELLER_DOCUMENT_FIELDS now
+  }
+  if (missingDocs.length > 0) {
+    const readableMissing = missingDocs
+      .map((field) => SELLER_DOCUMENT_FIELDS[field] || field)
+      .join(", ");
+    const err = new Error(`All required documents must be uploaded: ${readableMissing}`);
+    err.statusCode = 400;
+    throw err;
+  }
 }
 
 export function isStoreApplicationApproved(store) {
@@ -161,6 +227,7 @@ export function buildStorePayloadFromBody(body = {}, uploadedDocs = {}) {
     radius,
     aadharNumber,
     panNumber,
+    gstNumber,
     accountHolder,
     accountNumber,
     ifsc,
@@ -186,6 +253,7 @@ export function buildStorePayloadFromBody(body = {}, uploadedDocs = {}) {
     state,
     aadharNumber,
     panNumber,
+    gstNumber: gstNumber ? normalizeGstNumber(gstNumber) : undefined,
     accountHolder,
     accountNumber,
     ifsc,

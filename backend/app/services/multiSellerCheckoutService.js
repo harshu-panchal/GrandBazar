@@ -10,8 +10,10 @@ import {
 
 /**
  * Multi-Seller Checkout Service
- * 
- * Coordinates checkout across multiple sellers with atomic order creation.
+ *
+ * @deprecated Production checkout uses checkoutPricingService + orderPlacementService.
+ * Retained for unit tests and reference implementations.
+ *
  * Handles item grouping, pricing calculation, payment allocation, and
  * stock reservation within MongoDB transactions.
  */

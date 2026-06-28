@@ -38,6 +38,7 @@ import PromoMarquee from "../components/home/PromoMarquee";
 import QuickCategorySlider from "../components/home/QuickCategorySlider";
 import LowestPriceSection from "../components/home/LowestPriceSection";
 import OfferSections from "../components/home/OfferSections";
+import BecomeSellerButton from "../components/shared/BecomeSellerButton";
 
 const DEFAULT_CATEGORY_THEME = {
   gradient: "linear-gradient(to bottom, var(--primary), var(--brand-400))",
@@ -485,6 +486,9 @@ const Home = () => {
 
           <PromoMarquee />
           <QuickCategorySlider categories={effectiveQuickCategories} onCategoryClick={(id) => navigate(`/category/${id}`)} />
+          <div className="container mx-auto px-4 md:px-8 lg:px-[50px] py-3 md:py-4 flex justify-center sm:justify-start">
+            <BecomeSellerButton />
+          </div>
           <LowestPriceSection products={products} onSeeAll={() => navigate("/category/all")} />
           <OfferSections sections={offerSections} noServiceData={noServiceData} />
 

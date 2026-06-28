@@ -81,6 +81,15 @@ const storeSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    gstNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    gstExempt: {
+      type: Boolean,
+      default: false,
+    },
     accountHolder: {
       type: String,
       trim: true,

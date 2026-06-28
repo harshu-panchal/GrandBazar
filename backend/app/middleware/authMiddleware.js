@@ -240,6 +240,73 @@ export const requireStoreOwner = (req, res, next) => {
   next();
 };
 
+export const requireBusinessModelChosen = async (req, res, next) => {
+  try {
+    if (req.user?.role !== "seller") {
+      return next();
+    }
+
+    if (req.user?.subSellerId) {
+      return next();
+    }
+
+    const ownerId = req.user?.accountId;
+    if (!ownerId) {
+      return next();
+    }
+
+    const seller = await Seller.findById(ownerId)
+      .select("businessModel businessModelChosenAt")
+      .lean();
+
+    if (!seller?.businessModel) {
+      return handleResponse(res, 403, "Please choose a business model before continuing.", {
+        businessModelRequired: true,
+      });
+    }
+
+    next();
+  } catch (error) {
+    return handleResponse(res, 500, "Unable to validate business model");
+  }
+};
+
+export const requireSellerOperational = async (req, res, next) => {
+  try {
+    if (req.user?.role !== "seller" || req.user?.subSellerId) {
+      return next();
+    }
+
+    const ownerId = req.user?.accountId;
+    if (!ownerId) {
+      return next();
+    }
+
+    const seller = await Seller.findById(ownerId).select("businessModel").lean();
+    if (!seller?.businessModel) {
+      return next();
+    }
+
+    if (seller.businessModel === "commission") {
+      return next();
+    }
+
+    if (seller.businessModel === "subscription") {
+      const { isSellerSubscriptionOperational } = await import("../services/subscriptionService.js");
+      const operational = await isSellerSubscriptionOperational(ownerId);
+      if (!operational) {
+        return handleResponse(res, 403, "Active subscription required. Complete payment or renew your plan.", {
+          subscriptionRequired: true,
+        });
+      }
+    }
+
+    next();
+  } catch (error) {
+    return handleResponse(res, 500, "Unable to validate subscription status");
+  }
+};
+
 export const checkSubSellerPermission = (module, level = "read") => {
   return (req, res, next) => {
     if (!req.user?.subSellerId) {

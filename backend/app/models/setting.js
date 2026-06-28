@@ -161,6 +161,20 @@ const settingSchema = new mongoose.Schema(
                 default: false,
             },
         },
+        defaultDeliveryProvider: {
+            type: String,
+            enum: ['zinto', 'external'],
+            default: 'zinto',
+        },
+
+        subscriptionPayment: {
+            bankName: { type: String, trim: true, default: "" },
+            accountHolder: { type: String, trim: true, default: "" },
+            accountNumber: { type: String, trim: true, default: "" },
+            ifsc: { type: String, trim: true, default: "" },
+            upiId: { type: String, trim: true, default: "" },
+            paymentInstructions: { type: String, trim: true, default: "" },
+        },
     },
     {
         timestamps: true,

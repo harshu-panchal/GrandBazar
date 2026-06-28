@@ -8,6 +8,7 @@ const CART_POPULATE_FIELDS =
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
+  isPublished: { $ne: false },
   ...getApprovedOrLegacyFilter(),
 };
 

@@ -880,6 +880,10 @@ export const updateOrderStatus = async (req, res) => {
       order.orderStatus = status;
     }
     if (deliveryBoyId) order.deliveryBoy = deliveryBoyId;
+    if (req.body.externalLogisticsProvider) order.externalLogisticsProvider = req.body.externalLogisticsProvider;
+    if (req.body.externalTrackingLink) order.externalTrackingLink = req.body.externalTrackingLink;
+    if (req.body.pickupProofImages) order.pickupProofImages = req.body.pickupProofImages;
+    if (req.body.deliveryProofImages) order.deliveryProofImages = req.body.deliveryProofImages;
 
     // Legacy orders: keep rider UI step in sync with status (delivery app refresh-safe)
     if (

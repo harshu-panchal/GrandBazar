@@ -1,13 +1,14 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle2, Clock3, ShieldAlert, Store } from "lucide-react";
 import { useAuth } from "@core/context/AuthContext";
 import { useSettings } from "@core/context/SettingsContext";
+import { sellerApi } from "../services/sellerApi";
 
 const ApplicationPending = () => {
   const location = useLocation();
-  const { isAuthenticated, role, user, isLoading } = useAuth();
+  const { isAuthenticated, role, user, isLoading, refreshUser } = useAuth();
   const { settings } = useSettings();
 
   const appName = settings?.appName || "App";
@@ -20,6 +21,31 @@ const ApplicationPending = () => {
     user?.applicationStatus ||
     (user?.isVerified ? "approved" : "pending");
   const rejectionReason = location.state?.rejectionReason || user?.rejectionReason || "";
+
+  useEffect(() => {
+    if (!isAuthenticated || role !== "seller" || isLoading) return;
+
+    const poll = async () => {
+      if (typeof refreshUser === "function") {
+        await refreshUser();
+        return;
+      }
+      try {
+        await sellerApi.getProfile();
+      } catch {
+        // ignore polling errors
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 30000);
+    const onFocus = () => poll();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [isAuthenticated, role, isLoading, refreshUser]);
 
   if (!isLoading && isAuthenticated && role === "seller") {
     if (isOwner) {
@@ -92,9 +118,18 @@ const ApplicationPending = () => {
             {isRejected
               ? "You cannot access the seller dashboard yet. Please contact admin support and re-submit with the required details."
               : isOwner
-                ? "Once admin approves your seller admin account, you can sign in and add your shops from My Stores."
+                ? "Once admin approves your seller admin account, you can choose a business model, add shops, and complete KYC."
                 : "Dashboard access unlocks automatically once admin approves your account."}
           </p>
+
+          {!isRejected && isOwner && (
+            <ol className="mt-6 space-y-2 text-sm text-slate-300 list-decimal list-inside">
+              <li>Admin approves your seller account</li>
+              <li>Choose commission or subscription model</li>
+              <li>Add shop with KYC, GST, and bank details</li>
+              <li>Admin approves each shop</li>
+            </ol>
+          )}
 
           {rejectionReason ? (
             <div className="mt-6 rounded-2xl border border-rose-300/25 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
@@ -107,7 +142,7 @@ const ApplicationPending = () => {
             <div className="mt-6 rounded-2xl border border-brand-400/30 bg-brand-500/10 px-4 py-3 text-sm text-brand-200 flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-brand-400" />
               <p className="font-semibold">
-                Approval usually takes less than 24 hours. You can return to login and check back later.
+                This page refreshes automatically. Approval usually takes less than 24 hours.
               </p>
             </div>
           ) : null}

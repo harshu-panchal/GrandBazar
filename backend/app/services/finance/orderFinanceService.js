@@ -353,6 +353,12 @@ export async function creditAdminEarning(order, { session, actorId } = {}) {
   return adminEarning;
 }
 
+/**
+ * Online payment escrow flow (platform holds customer funds until settlement):
+ * 1. Customer payment is captured and credited to the admin wallet (available bucket).
+ * 2. Seller payout remains on HOLD until delivery completes and the return window elapses.
+ * 3. Settlement releases seller share per business model (commission vs subscription).
+ */
 export async function handleOnlineOrderFinance(
   orderOrId,
   { actorId = null, transactionId = "", metadata = {} } = {},

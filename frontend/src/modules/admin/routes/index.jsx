@@ -48,6 +48,9 @@ const ProductManagement = React.lazy(
 const CatalogManagement = React.lazy(
   () => import("../pages/CatalogManagement"),
 );
+const CatalogBundleManagement = React.lazy(
+  () => import("../pages/CatalogBundleManagement"),
+);
 const ActiveSellers = React.lazy(() => import("../pages/ActiveSellers"));
 const PendingSellers = React.lazy(() => import("../pages/PendingSellers"));
 const SellerLocations = React.lazy(() => import("../pages/SellerLocations"));
@@ -77,6 +80,7 @@ const OrdersList = React.lazy(() => import("../pages/OrdersList"));
 const OrderDetail = React.lazy(() => import("../pages/OrderDetail"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const SellerDetail = React.lazy(() => import("../pages/SellerDetail"));
+const SubscriptionManagement = React.lazy(() => import("../pages/SubscriptionManagement"));
 const SupportTickets = React.lazy(() => import("../pages/SupportTickets"));
 const ReviewModeration = React.lazy(() => import("../pages/ReviewModeration"));
 const FleetTracking = React.lazy(() => import("../pages/FleetTracking"));
@@ -135,6 +139,13 @@ const navItems = [
     permission: "products",
   },
   {
+    label: "Catalog Bundles",
+    path: "/admin/catalog/bundles",
+    icon: Library,
+    color: "violet",
+    permission: "products",
+  },
+  {
     label: "Marketing Tools",
     icon: Sparkles,
     color: "amber",
@@ -166,6 +177,7 @@ const navItems = [
     children: [
       { label: "Active Sellers", path: "/admin/sellers/active" },
       { label: "Waiting for Review", path: "/admin/sellers/pending" },
+      { label: "Subscriptions", path: "/admin/subscriptions" },
       { label: "Seller Locations", path: "/admin/seller-locations" },
     ],
   },
@@ -336,12 +348,14 @@ const AdminRoutes = () => {
         )}
         
         {hasPermission("products") && <Route path="/products" element={<ProductManagement />} />}
+        {hasPermission("products") && <Route path="/catalog/bundles" element={<CatalogBundleManagement />} />}
         {hasPermission("products") && <Route path="/catalog" element={<CatalogManagement />} />}
         {hasPermission("sellers") && (
           <>
             <Route path="/sellers/active" element={<ActiveSellers />} />
             <Route path="/sellers/active/:id" element={<SellerDetail />} />
             <Route path="/sellers/pending" element={<PendingSellers />} />
+            <Route path="/subscriptions" element={<SubscriptionManagement />} />
             <Route path="/seller-locations" element={<SellerLocations />} />
           </>
         )}

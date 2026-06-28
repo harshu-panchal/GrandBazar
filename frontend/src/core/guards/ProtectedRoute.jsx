@@ -48,6 +48,8 @@ const ProtectedRoute = ({ children }) => {
 
     if (location.pathname.startsWith('/seller')) {
         const isStoresPage = location.pathname.startsWith('/seller/stores');
+        const isChooseModelPage = location.pathname.startsWith('/seller/choose-model');
+        const isSubscriptionPage = location.pathname.startsWith('/seller/subscription');
         const isOwner = Boolean(user && !user?.subSellerId);
         const stores = user?.stores || [];
 
@@ -71,8 +73,23 @@ const ProtectedRoute = ({ children }) => {
                 );
             }
 
+            if (!user?.businessModel && !isChooseModelPage && !isSubscriptionPage) {
+                return <Navigate to="/seller/choose-model" replace />;
+            }
+
+            if (
+                user?.businessModel === 'subscription'
+                && !user?.hasActiveSubscription
+                && !isSubscriptionPage
+                && !isStoresPage
+                && !isChooseModelPage
+                && location.pathname !== '/seller/profile'
+            ) {
+                return <Navigate to="/seller/subscription" replace />;
+            }
+
             const hasApprovedStore = stores.some(isStoreApproved);
-            if (!hasApprovedStore && !isStoresPage) {
+            if (!hasApprovedStore && !isStoresPage && !isChooseModelPage && !isSubscriptionPage) {
                 return <Navigate to="/seller/stores" replace />;
             }
         } else if (user?.subSellerId) {

@@ -400,6 +400,10 @@ const PendingSellers = () => {
                                                             <span>PAN No:</span>
                                                             <span className="font-mono text-slate-900 uppercase">{viewingSeller.panNumber || "N/A"}</span>
                                                         </p>
+                                                        <p className="text-xs font-bold text-slate-700 flex justify-between">
+                                                            <span>GSTIN:</span>
+                                                            <span className="font-mono text-slate-900 uppercase">{viewingSeller.gstNumber || "N/A"}</span>
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 <div className="bg-slate-50 p-4 rounded-xl">

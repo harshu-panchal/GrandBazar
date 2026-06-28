@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import { adminApi, unwrapList } from '../services/adminApi';
 import {
     ChevronLeft,
     Building2,
@@ -37,39 +38,125 @@ const SellerDetail = () => {
     const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('orders');
     const [isRefreshing, setIsRefreshing] = useState(false);
-
-    // Mock Data for Seller
+    const [isLoading, setIsLoading] = useState(true);
+    const [orders, setOrders] = useState([]);
+    const [businessModelData, setBusinessModelData] = useState(null);
+    const [commissionForm, setCommissionForm] = useState({
+        scope: 'category',
+        type: 'percentage',
+        value: 0,
+    });
     const [seller, setSeller] = useState({
-        id: id || 'SEL-001',
-        shopName: 'Fresh Mart Superstore',
-        ownerName: 'Rahul Sharma',
-        email: 'rahul@freshmart.com',
-        phone: '+91 98765 43210',
-        category: 'Grocery',
-        rating: 4.8,
+        id: id || '',
+        shopName: 'Loading...',
+        ownerName: '—',
+        email: '',
+        phone: '',
+        category: '—',
+        rating: null,
         status: 'active',
-        joinedDate: '12 Jan 2024',
-        location: 'Mumbai, Maharashtra',
-        image: 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?auto=format&fit=crop&q=80&w=200',
-        walletBalance: 24500,
-        totalOrders: 1450,
-        totalRevenue: 540000,
-        commissionRate: '10%',
-        coords: { lat: 19.0760, lng: 72.8777 },
+        joinedDate: '—',
+        location: '—',
+        image: '',
+        walletBalance: 0,
+        totalOrders: 0,
+        totalRevenue: 0,
+        commissionRate: '—',
+        coords: null,
         serviceRadius: 5,
         bankInfo: {
-            bankName: 'HDFC Bank',
-            accountNo: 'XXXX XXXX 1234',
-            ifsc: 'HDFC0001234'
-        }
+            bankName: '—',
+            accountNo: '—',
+            ifsc: '—',
+        },
     });
 
-    const handleRefresh = () => {
+    const loadSellerData = useCallback(async () => {
+        if (!id) return;
+        setIsLoading(true);
+        try {
+            const [detailRes, bmRes, ordersRes] = await Promise.all([
+                adminApi.getActiveSellerById(id),
+                adminApi.getSellerBusinessModel(id).catch(() => null),
+                adminApi.getOrders({ limit: 50 }).catch(() => null),
+            ]);
+
+            const detail = detailRes?.data?.result;
+            if (detail) {
+                setSeller((prev) => ({
+                    ...prev,
+                    id: detail.id || id,
+                    shopName: detail.shopName || prev.shopName,
+                    ownerName: detail.ownerName || prev.ownerName,
+                    email: detail.email || prev.email,
+                    phone: detail.phone || prev.phone,
+                    category: detail.category || prev.category,
+                    status: detail.status || prev.status,
+                    joinedDate: detail.joinedDate || prev.joinedDate,
+                    location: detail.location || prev.location,
+                    image: detail.image || prev.image,
+                    totalOrders: detail.totalOrders ?? prev.totalOrders,
+                    totalRevenue: detail.totalRevenue ?? prev.totalRevenue,
+                    serviceRadius: detail.serviceRadius ?? prev.serviceRadius,
+                    bankInfo: detail.bankInfo || prev.bankInfo,
+                }));
+            }
+
+            if (bmRes?.data?.result) {
+                const data = bmRes.data.result;
+                setBusinessModelData(data);
+                if (data?.commissionConfig) {
+                    setCommissionForm({
+                        scope: data.commissionConfig.scope || 'category',
+                        type: data.commissionConfig.type || 'percentage',
+                        value: data.commissionConfig.value ?? 0,
+                    });
+                }
+            }
+
+            const orderPayload = ordersRes?.data?.result || ordersRes?.data?.results || {};
+            const orderItems = Array.isArray(orderPayload.items)
+                ? orderPayload.items
+                : unwrapList(ordersRes);
+            const storeId = detail?.id || id;
+            setOrders(
+                orderItems
+                    .filter((order) => String(order.seller?._id || order.seller) === String(storeId))
+                    .slice(0, 10),
+            );
+        } catch {
+            showToast('Failed to load seller details', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [id, showToast]);
+
+    useEffect(() => {
+        loadSellerData();
+    }, [loadSellerData]);
+
+    const saveCommissionConfig = async () => {
+        try {
+            await adminApi.updateSellerCommission(id, commissionForm);
+            showToast('Commission settings updated', 'success');
+            const res = await adminApi.getSellerBusinessModel(id);
+            setBusinessModelData(res.data.result);
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update commission', 'error');
+        }
+    };
+
+    const commissionLabel = businessModelData?.commissionConfig?.scope === 'seller'
+        ? `${businessModelData.commissionConfig.value}${businessModelData.commissionConfig.type === 'percentage' ? '%' : ' fixed'} (seller-wise)`
+        : businessModelData?.businessModel === 'commission'
+            ? 'Category rates'
+            : seller.commissionRate;
+
+    const handleRefresh = async () => {
         setIsRefreshing(true);
-        setTimeout(() => {
-            setIsRefreshing(false);
-            showToast('Seller data synchronized', 'success');
-        }, 800);
+        await loadSellerData();
+        setIsRefreshing(false);
+        showToast('Seller data synchronized', 'success');
     };
 
     return (
@@ -110,10 +197,10 @@ const SellerDetail = () => {
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                    { label: 'Wallet Balance', value: `₹${seller.walletBalance.toLocaleString()}`, icon: Wallet, color: 'emerald', sub: 'Available for Payout' },
-                    { label: 'Total Revenue', value: `₹${(seller.totalRevenue / 1000).toFixed(1)}k`, icon: TrendingUp, color: 'blue', sub: 'Gross Sales' },
-                    { label: 'Orders Handled', value: seller.totalOrders, icon: ShoppingBag, color: 'indigo', sub: 'Lifetime Orders' },
-                    { label: 'Store Rating', value: `${seller.rating} / 5.0`, icon: Star, color: 'amber', sub: 'Based on 450+ reviews' },
+                    { label: 'Wallet Balance', value: '—', icon: Wallet, color: 'emerald', sub: 'Available for Payout' },
+                    { label: 'Total Revenue', value: seller.totalRevenue ? `₹${(seller.totalRevenue / 1000).toFixed(1)}k` : '—', icon: TrendingUp, color: 'blue', sub: 'Gross Sales' },
+                    { label: 'Orders Handled', value: seller.totalOrders || 0, icon: ShoppingBag, color: 'indigo', sub: 'Lifetime Orders' },
+                    { label: 'Store Rating', value: seller.rating ? `${seller.rating} / 5.0` : '—', icon: Star, color: 'amber', sub: 'Customer reviews' },
                 ].map((stat, i) => (
                     <Card key={i} className="p-6 border-none shadow-xl ring-1 ring-slate-100 bg-white group hover:ring-primary/20 transition-all">
                         <div className="flex items-center justify-between mb-4">
@@ -192,31 +279,39 @@ const SellerDetail = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
-                                            {[
-                                                { id: '#ORD-9912', customer: 'Aarav Patel', status: 'delivered', amount: 850, date: 'Today, 11:30 AM' },
-                                                { id: '#ORD-9884', customer: 'Ishani Roy', status: 'processing', amount: 1240, date: 'Today, 09:15 AM' },
-                                                { id: '#ORD-9821', customer: 'Kabir Singh', status: 'delivered', amount: 450, date: 'Yesterday' },
-                                                { id: '#ORD-9750', customer: 'Priya Verma', status: 'cancelled', amount: 2100, date: 'Yesterday' },
-                                                { id: '#ORD-9690', customer: 'Rohan Mehra', status: 'delivered', amount: 150, date: '14 Feb' },
-                                            ].map((order, i) => (
-                                                <tr key={i} className="group hover:bg-slate-50/50 transition-colors cursor-pointer">
+                                            {isLoading ? (
+                                                <tr>
+                                                    <td colSpan={4} className="px-4 py-8 text-center text-xs font-bold text-slate-400">
+                                                        Loading orders...
+                                                    </td>
+                                                </tr>
+                                            ) : orders.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} className="px-4 py-8 text-center text-xs font-bold text-slate-400">
+                                                        No orders found for this store
+                                                    </td>
+                                                </tr>
+                                            ) : orders.map((order) => (
+                                                <tr key={order._id || order.orderId} className="group hover:bg-slate-50/50 transition-colors cursor-pointer">
                                                     <td className="px-4 py-5">
-                                                        <span className="text-xs font-black text-slate-900">{order.id}</span>
-                                                        <p className="text-[10px] font-bold text-slate-400">{order.date}</p>
+                                                        <span className="text-xs font-black text-slate-900">#{order.orderId || order._id}</span>
+                                                        <p className="text-[10px] font-bold text-slate-400">
+                                                            {order.createdAt ? new Date(order.createdAt).toLocaleString() : '—'}
+                                                        </p>
                                                     </td>
                                                     <td className="px-4 py-5">
-                                                        <span className="text-xs font-bold text-slate-700">{order.customer}</span>
+                                                        <span className="text-xs font-bold text-slate-700">{order.customer?.name || 'Customer'}</span>
                                                     </td>
                                                     <td className="px-4 py-5 text-center">
                                                         <Badge
                                                             variant={order.status === 'delivered' ? 'success' : order.status === 'cancelled' ? 'danger' : 'warning'}
                                                             className="text-[9px] font-black"
                                                         >
-                                                            {order.status.toUpperCase()}
+                                                            {(order.status || 'pending').toUpperCase()}
                                                         </Badge>
                                                     </td>
                                                     <td className="px-4 py-5 text-right font-black text-slate-900">
-                                                        ₹{order.amount.toLocaleString()}
+                                                        ₹{Number(order.pricing?.total || order.paymentBreakdown?.grandTotal || 0).toLocaleString()}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -336,8 +431,50 @@ const SellerDetail = () => {
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Business model</p>
+                                                        <p className="text-xs font-black text-slate-900 capitalize">{businessModelData?.businessModel || 'Not set'}</p>
+                                                    </div>
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Commission</p>
-                                                        <p className="text-xs font-black text-slate-900">{seller.commissionRate}</p>
+                                                        <p className="text-xs font-black text-slate-900 mb-3">{commissionLabel}</p>
+                                                        {businessModelData?.businessModel === 'commission' && (
+                                                            <div className="space-y-2">
+                                                                <select
+                                                                    className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                    value={commissionForm.scope}
+                                                                    onChange={(e) => setCommissionForm((f) => ({ ...f, scope: e.target.value }))}
+                                                                >
+                                                                    <option value="category">Category rates</option>
+                                                                    <option value="seller">Seller-wise override</option>
+                                                                </select>
+                                                                {commissionForm.scope === 'seller' && (
+                                                                    <>
+                                                                        <select
+                                                                            className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                            value={commissionForm.type}
+                                                                            onChange={(e) => setCommissionForm((f) => ({ ...f, type: e.target.value }))}
+                                                                        >
+                                                                            <option value="percentage">Percentage</option>
+                                                                            <option value="fixed">Fixed</option>
+                                                                        </select>
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                            value={commissionForm.value}
+                                                                            onChange={(e) => setCommissionForm((f) => ({ ...f, value: Number(e.target.value) }))}
+                                                                        />
+                                                                    </>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={saveCommissionConfig}
+                                                                    className="w-full py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase"
+                                                                >
+                                                                    Save commission
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Joined</p>

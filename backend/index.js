@@ -30,6 +30,10 @@ import { registerScheduledJob, startScheduledJobs } from "./app/services/distrib
 import { getOrderAutoCancelJobHandler, getOrderAutoCancelJobInterval } from "./app/jobs/orderAutoCancelJob.js";
 import { getReturnWindowReleaseJobHandler, getReturnWindowReleaseJobInterval } from "./app/jobs/returnWindowReleaseJob.js";
 import {
+  getSubscriptionExpiryJobHandler,
+  getSubscriptionExpiryJobInterval,
+} from "./app/jobs/subscriptionExpiryJob.js";
+import {
   getPayoutBatchJobHandler,
   getPayoutBatchJobInterval,
   isPayoutBatchJobEnabled
@@ -261,6 +265,12 @@ async function startScheduler() {
     'returnWindowReleaseJob',
     getReturnWindowReleaseJobInterval(),
     getReturnWindowReleaseJobHandler()
+  );
+
+  registerScheduledJob(
+    'subscriptionExpiryJob',
+    getSubscriptionExpiryJobInterval(),
+    getSubscriptionExpiryJobHandler()
   );
   
   // Register payout batch job (if enabled)
