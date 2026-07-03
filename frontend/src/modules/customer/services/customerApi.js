@@ -86,8 +86,11 @@ export const customerApi = {
     ),
   getOrderRoute: (orderId, params) =>
     axiosInstance.get(`/orders/workflow/${orderId}/route`, { params }),
-  cancelOrder: (orderId, data) =>
-    axiosInstance.put(`/orders/cancel/${orderId}`, data),
+  cancelOrder: (orderId, data) => {
+    invalidateCache("/orders/my-orders");
+    invalidateCache("/orders/details/");
+    return axiosInstance.put(`/orders/cancel/${orderId}`, data);
+  },
   requestReturn: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/returns`, data),
   getReturnDetails: (orderId) =>

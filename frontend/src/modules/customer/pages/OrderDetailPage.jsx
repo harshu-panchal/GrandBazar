@@ -40,7 +40,12 @@ import {
   onReturnPickupOtp,
   onReturnDropOtp,
 } from "@/core/services/orderSocket";
-import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
+import {
+  CUSTOMER_CANCELLATION_STATE,
+  canCustomerCancelOrder,
+  getCustomerCancellationState,
+  getLegacyStatusFromOrder,
+} from "@/shared/utils/orderStatus";
 
 const coordsToLatLng = (coords) => {
   if (!Array.isArray(coords) || coords.length < 2) return null;
@@ -138,6 +143,7 @@ const OrderDetailPage = () => {
   const [returnDetails, setReturnDetails] = useState(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [requestingReturn, setRequestingReturn] = useState(false);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const [selectedReturnItems, setSelectedReturnItems] = useState({});
   const [returnReason, setReturnReason] = useState("");
   const [returnReasonDetail, setReturnReasonDetail] = useState("");
@@ -454,6 +460,9 @@ const OrderDetailPage = () => {
   };
 
   const status = order ? getLegacyStatusFromOrder(order) : null;
+  const cancellationState = getCustomerCancellationState(order);
+  const canCancelOrder = canCustomerCancelOrder(order);
+  const cancellationRequestStatus = String(order?.cancellationRequest?.status || "none").toLowerCase();
   const isAwaitingOnlinePayment =
     Boolean(order) &&
     order.paymentMode === "ONLINE" &&
@@ -748,6 +757,49 @@ const OrderDetailPage = () => {
         err?.message ||
         "Unable to start payment. Please try again later.",
       );
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!order || !canCustomerCancelOrder(order) || isCancellingOrder) {
+      return;
+    }
+
+    const cancellationState = getCustomerCancellationState(order);
+    const isApprovalFlow =
+      cancellationState === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED;
+    const confirmed = window.confirm(
+      isApprovalFlow
+        ? "Delivery partner assign hone se pehle cancellation request admin ke paas jayegi. Admin approve karega tabhi order cancel hoga. Kya aap request bhejna chahte ho?"
+        : "Seller accept karne se pehle tak hi order direct cancel ho sakta hai. Kya aap is order ko cancel karna chahte ho?",
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsCancellingOrder(true);
+      const cancelResponse = await customerApi.cancelOrder(resolveOrderLookupId(order), {
+        reason: isApprovalFlow
+          ? "Customer requested cancellation before delivery partner assignment"
+          : "Cancelled by customer before seller acceptance",
+      });
+
+      const updatedOrder = cancelResponse?.data?.result;
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+
+      if (cancelResponse?.status === 202 || isApprovalFlow) {
+        toast.success("Cancellation request admin ko bhej di gayi hai");
+      } else {
+        setReturnDetails(null);
+        setShowReturnModal(false);
+        toast.success("Order cancelled successfully");
+      }
+    } catch (error) {
+      console.error("Failed to cancel order:", error);
+      toast.error(error?.response?.data?.message || "Failed to cancel order");
+    } finally {
+      setIsCancellingOrder(false);
     }
   };
 
@@ -1081,7 +1133,64 @@ const OrderDetailPage = () => {
           </div>
         </motion.div>
 
+        {cancellationRequestStatus !== "none" && status !== "cancelled" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+            className={`rounded-3xl p-4 border ${
+              cancellationRequestStatus === "pending"
+                ? "bg-amber-50 border-amber-200"
+                : cancellationRequestStatus === "rejected"
+                  ? "bg-rose-50 border-rose-200"
+                  : "bg-slate-50 border-slate-200"
+            }`}
+          >
+            <p className="text-sm font-bold text-slate-900">
+              {cancellationRequestStatus === "pending"
+                ? "Cancellation request admin review me hai"
+                : cancellationRequestStatus === "rejected"
+                  ? "Cancellation request reject ho gayi"
+                  : "Cancellation request updated"}
+            </p>
+            {order?.cancellationRequest?.reason && (
+              <p className="mt-1 text-xs text-slate-600">
+                Reason: {order.cancellationRequest.reason}
+              </p>
+            )}
+            {order?.cancellationRequest?.adminNote && (
+              <p className="mt-1 text-xs text-slate-600">
+                Admin note: {order.cancellationRequest.adminNote}
+              </p>
+            )}
+          </motion.div>
+        )}
+
         {/* Action Buttons - Redesigned */}
+        {canCancelOrder && (
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.33 }}
+            onClick={handleCancelOrder}
+            disabled={isCancellingOrder}
+            className="w-full py-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-bold hover:bg-rose-100 transition-all flex items-center justify-center gap-2 text-sm shadow-sm disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
+          >
+            {isCancellingOrder ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Cancelling...
+              </>
+            ) : (
+              <>
+                <X size={18} />
+                {cancellationState === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED
+                  ? "Request Cancellation"
+                  : "Cancel Order"}
+              </>
+            )}
+          </motion.button>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

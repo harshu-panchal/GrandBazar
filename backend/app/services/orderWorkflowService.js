@@ -80,6 +80,46 @@ export function resolveWorkflowStatus(order) {
   return workflowFromLegacyStatus(order.status);
 }
 
+function resolveCustomerCancellationMode(order) {
+  if (!order) return "blocked";
+
+  const workflowStatus = resolveWorkflowStatus(order);
+  const rawStatus = String(order.status || "").toLowerCase();
+
+  if (
+    workflowStatus === WORKFLOW_STATUS.CANCELLED ||
+    workflowStatus === WORKFLOW_STATUS.DELIVERED ||
+    rawStatus === "cancelled" ||
+    rawStatus === "delivered"
+  ) {
+    return "blocked";
+  }
+
+  if (
+    workflowStatus === WORKFLOW_STATUS.SELLER_PENDING ||
+    rawStatus === "pending"
+  ) {
+    return "instant";
+  }
+
+  if (!order.deliveryBoy && ["confirmed", "packed"].includes(rawStatus)) {
+    return "approval";
+  }
+
+  if (
+    !order.deliveryBoy &&
+    [
+      WORKFLOW_STATUS.SELLER_ACCEPTED,
+      WORKFLOW_STATUS.DELIVERY_SEARCH,
+      WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING,
+    ].includes(workflowStatus)
+  ) {
+    return "approval";
+  }
+
+  return "blocked";
+}
+
 /**
  * After creating a new order document (v2), schedule seller timeout and emit.
  */
@@ -692,6 +732,206 @@ export async function customerCancelV2(customerId, orderId, reason) {
     customerMessage: "Your order has been cancelled successfully.",
     sellerMessage: `Order #${updated.orderId} was cancelled by customer.`,
   });
+  return updated;
+}
+
+export async function requestCustomerCancellationApproval(customerId, orderId, reason) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId, customer: customerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (order.cancellationRequest?.status === "pending") {
+    const err = new Error("Cancellation request is already pending admin approval");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const mode = resolveCustomerCancellationMode(order);
+  if (mode !== "approval") {
+    const err = new Error("Order cannot be cancelled after delivery partner assignment");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const now = new Date();
+  const updated = await Order.findOneAndUpdate(
+    {
+      orderId,
+      customer: customerId,
+      deliveryBoy: null,
+      status: { $nin: ["cancelled", "delivered"] },
+    },
+    {
+      $set: {
+        cancellationRequest: {
+          status: "pending",
+          reason: String(reason || "Cancellation requested by customer").trim(),
+          requestedAt: now,
+          requestedBy: "customer",
+          reviewedAt: null,
+          reviewedBy: null,
+          adminNote: "",
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("Unable to submit cancellation request");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return updated;
+}
+
+export async function approveCustomerCancellationRequest(adminId, orderId, adminNote) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (order.cancellationRequest?.status !== "pending") {
+    const err = new Error("No pending cancellation request found for this order");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (resolveCustomerCancellationMode(order) !== "approval") {
+    const err = new Error("Cancellation request can no longer be approved");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const now = new Date();
+  const cancellationNote = String(
+    adminNote || order.cancellationRequest?.reason || "Cancelled by admin on customer request",
+  )
+    .trim()
+    .slice(0, 500);
+
+  const updateSet = {
+    status: "cancelled",
+    orderStatus: "cancelled",
+    cancelledBy: "admin",
+    cancelReason: cancellationNote,
+    cancellationRequest: {
+      ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
+      status: "approved",
+      reviewedAt: now,
+      reviewedBy: adminId,
+      adminNote: cancellationNote,
+    },
+  };
+
+  if (order.workflowVersion >= 2 || order.workflowStatus) {
+    updateSet.workflowStatus = WORKFLOW_STATUS.CANCELLED;
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    {
+      _id: order._id,
+      "cancellationRequest.status": "pending",
+      deliveryBoy: null,
+      status: { $nin: ["cancelled", "delivered"] },
+    },
+    {
+      $set: updateSet,
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("Unable to approve cancellation request");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  await removeSellerTimeoutJob(orderId);
+  if (resolveWorkflowStatus(order) === WORKFLOW_STATUS.DELIVERY_SEARCH) {
+    await removeDeliveryTimeoutJob(orderId, order.deliverySearchMeta?.attempt || 1);
+  }
+
+  await compensateOrderCancellation(updated, orderId);
+  emitOrderStatusUpdate(
+    updated.orderId,
+    { workflowStatus: WORKFLOW_STATUS.CANCELLED },
+    updated.customer,
+  );
+  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+    orderId: updated.orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    sellerId: updated.seller,
+    customerMessage: "Your cancellation request was approved and the order has been cancelled.",
+    sellerMessage: `Order #${updated.orderId} was cancelled after admin approval.`,
+  });
+
+  return updated;
+}
+
+export async function rejectCustomerCancellationRequest(adminId, orderId, adminNote) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (order.cancellationRequest?.status !== "pending") {
+    const err = new Error("No pending cancellation request found for this order");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const rejectionNote = String(adminNote || "Cancellation request was rejected by admin")
+    .trim()
+    .slice(0, 500);
+
+  const updated = await Order.findOneAndUpdate(
+    {
+      _id: order._id,
+      "cancellationRequest.status": "pending",
+      status: { $nin: ["cancelled", "delivered"] },
+    },
+    {
+      $set: {
+        cancellationRequest: {
+          ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
+          status: "rejected",
+          reviewedAt: new Date(),
+          reviewedBy: adminId,
+          adminNote: rejectionNote,
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("Unable to reject cancellation request");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  emitToCustomer(updated.customer?.toString?.() || String(updated.customer), {
+    event: "order:cancellation-request:rejected",
+    payload: {
+      orderId: updated.orderId,
+      adminNote: rejectionNote,
+      status: "rejected",
+    },
+  });
+
   return updated;
 }
 

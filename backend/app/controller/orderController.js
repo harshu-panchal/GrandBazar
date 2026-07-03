@@ -20,6 +20,9 @@ import {
   sellerRejectAtomic,
   deliveryAcceptAtomic,
   customerCancelV2,
+  requestCustomerCancellationApproval,
+  approveCustomerCancellationRequest,
+  rejectCustomerCancellationRequest,
   resolveWorkflowStatus,
 } from "../services/orderWorkflowService.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
@@ -264,7 +267,7 @@ export const getMyOrders = async (req, res) => {
         const [orders, total] = await Promise.all([
           Order.find({ customer: customerId })
             .select(
-              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion returnStatus timeSlot createdAt",
+              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus timeSlot createdAt",
             )
             .sort({ createdAt: -1, _id: -1 })
             .skip(skip)
@@ -527,24 +530,49 @@ export const cancelOrder = async (req, res) => {
     }
 
     if (order.workflowVersion >= 2) {
+      const workflowStatus = resolveWorkflowStatus(order);
       try {
-        const updated = await customerCancelV2(
+        if (workflowStatus === WORKFLOW_STATUS.SELLER_PENDING) {
+          const updated = await customerCancelV2(
+            customerId,
+            order.orderId,
+            reason,
+          );
+          return handleResponse(res, 200, "Order cancelled successfully", updated);
+        }
+
+        const updated = await requestCustomerCancellationApproval(
           customerId,
           order.orderId,
           reason,
         );
-        return handleResponse(res, 200, "Order cancelled successfully", updated);
+        return handleResponse(
+          res,
+          202,
+          "Cancellation request sent to admin for approval",
+          updated,
+        );
       } catch (e) {
         return handleResponse(res, e.statusCode || 500, e.message);
       }
     }
 
     if (order.status !== "pending") {
-      return handleResponse(
-        res,
-        400,
-        "Order cannot be cancelled after confirmation",
-      );
+      try {
+        const updated = await requestCustomerCancellationApproval(
+          customerId,
+          order.orderId,
+          reason,
+        );
+        return handleResponse(
+          res,
+          202,
+          "Cancellation request sent to admin for approval",
+          updated,
+        );
+      } catch (e) {
+        return handleResponse(res, e.statusCode || 500, e.message);
+      }
     }
 
     order.status = "cancelled";
@@ -573,6 +601,46 @@ export const cancelOrder = async (req, res) => {
     return handleResponse(res, 200, "Order cancelled successfully", order);
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const approveCancelOrderRequest = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { note } = req.body || {};
+    const adminId = req.user.id;
+
+    const updated = await approveCustomerCancellationRequest(adminId, orderId, note);
+
+    try {
+      await invalidate(buildKey("orders", "customer", `${updated.customer.toString()}:*`));
+    } catch (cacheErr) {
+      console.warn("[approveCancelOrderRequest] cache invalidation failed:", cacheErr.message);
+    }
+
+    return handleResponse(res, 200, "Cancellation request approved", updated);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const rejectCancelOrderRequest = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { note } = req.body || {};
+    const adminId = req.user.id;
+
+    const updated = await rejectCustomerCancellationRequest(adminId, orderId, note);
+
+    try {
+      await invalidate(buildKey("orders", "customer", `${updated.customer.toString()}:*`));
+    } catch (cacheErr) {
+      console.warn("[rejectCancelOrderRequest] cache invalidation failed:", cacheErr.message);
+    }
+
+    return handleResponse(res, 200, "Cancellation request rejected", updated);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

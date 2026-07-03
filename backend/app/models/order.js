@@ -313,6 +313,39 @@ const orderSchema = new mongoose.Schema(
       enum: ["customer", "seller", "admin", "system"],
     },
     cancelReason: String,
+    cancellationRequest: {
+      status: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+      },
+      reason: {
+        type: String,
+        default: "",
+      },
+      requestedAt: {
+        type: Date,
+        default: null,
+      },
+      requestedBy: {
+        type: String,
+        enum: ["customer"],
+        default: undefined,
+      },
+      reviewedAt: {
+        type: Date,
+        default: null,
+      },
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Admin",
+        default: null,
+      },
+      adminNote: {
+        type: String,
+        default: "",
+      },
+    },
     deviceType: {
       type: String,
       enum: ["Mobile", "Desktop", "Tablet"],
@@ -474,6 +507,7 @@ orderSchema.index({ seller: 1, returnStatus: 1, returnRequestedAt: -1 });
 orderSchema.index({ workflowStatus: 1, sellerPendingExpiresAt: 1 });
 orderSchema.index({ workflowStatus: 1, deliverySearchExpiresAt: 1 });
 orderSchema.index({ deliveryBoy: 1, workflowStatus: 1 });
+orderSchema.index({ "cancellationRequest.status": 1, createdAt: -1 });
 orderSchema.index({ paymentMode: 1, paymentStatus: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1, "settlementStatus.overall": 1, createdAt: -1 });
 orderSchema.index({ seller: 1, "settlementStatus.sellerPayout": 1, status: 1 });

@@ -29,7 +29,9 @@ import {
     Info,
     MapPin,
     Globe,
-    Camera
+    Camera,
+    CheckCircle2,
+    XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -44,6 +46,7 @@ const OrderDetail = () => {
     const [externalProvider, setExternalProvider] = useState("");
     const [externalTracking, setExternalTracking] = useState("");
     const [isAssigningExternal, setIsAssigningExternal] = useState(false);
+    const [isReviewingCancel, setIsReviewingCancel] = useState(false);
     const invoiceRef = useRef(null);
 
     const fetchDetail = async () => {
@@ -89,6 +92,38 @@ const OrderDetail = () => {
             showToast("Failed to assign external logistics", "error");
         } finally {
             setIsAssigningExternal(false);
+        }
+    };
+
+    const handleApproveCancellationRequest = async () => {
+        if (!order?.cancellationRequest || order.cancellationRequest.status !== 'pending') return;
+        const note = window.prompt('Optional admin note for approval:', order.cancellationRequest.reason || '');
+        setIsReviewingCancel(true);
+        try {
+            await adminApi.approveOrderCancellationRequest(order.orderId, { note: note || '' });
+            showToast('Cancellation request approved', 'success');
+            fetchDetail();
+        } catch (error) {
+            console.error('Failed to approve cancellation request:', error);
+            showToast(error?.response?.data?.message || 'Failed to approve cancellation request', 'error');
+        } finally {
+            setIsReviewingCancel(false);
+        }
+    };
+
+    const handleRejectCancellationRequest = async () => {
+        if (!order?.cancellationRequest || order.cancellationRequest.status !== 'pending') return;
+        const note = window.prompt('Rejection reason (optional):', '');
+        setIsReviewingCancel(true);
+        try {
+            await adminApi.rejectOrderCancellationRequest(order.orderId, { note: note || '' });
+            showToast('Cancellation request rejected', 'success');
+            fetchDetail();
+        } catch (error) {
+            console.error('Failed to reject cancellation request:', error);
+            showToast(error?.response?.data?.message || 'Failed to reject cancellation request', 'error');
+        } finally {
+            setIsReviewingCancel(false);
         }
     };
 
@@ -561,6 +596,63 @@ const OrderDetail = () => {
                             "{order.cancelReason ? `Cancellation Payload: ${order.cancelReason}` : `Delivery window scheduled for ${order.timeSlot}. Instructions: Follow local logistical protocols.`}"
                         </p>
                     </Card>
+
+                    {order.cancellationRequest?.status && order.cancellationRequest.status !== 'none' && (
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6 text-left">
+                            <div className="flex items-start justify-between gap-4 mb-4">
+                                <div>
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                        <AlertCircle className="h-4 w-4" />
+                                        Cancellation Request
+                                    </h4>
+                                    <p className="text-sm font-black text-slate-900 uppercase">
+                                        {order.cancellationRequest.status === 'pending' ? 'Pending Admin Action' : order.cancellationRequest.status}
+                                    </p>
+                                </div>
+                                <Badge
+                                    className={cn(
+                                        "border-none text-[8px] font-black uppercase tracking-widest",
+                                        order.cancellationRequest.status === 'pending'
+                                            ? 'bg-amber-100 text-amber-700'
+                                            : order.cancellationRequest.status === 'approved'
+                                                ? 'bg-brand-100 text-brand-700'
+                                                : 'bg-rose-100 text-rose-700'
+                                    )}
+                                >
+                                    {order.cancellationRequest.status}
+                                </Badge>
+                            </div>
+                            <div className="space-y-2 text-xs font-bold text-slate-600">
+                                <p>Reason: {order.cancellationRequest.reason || 'Not provided'}</p>
+                                {order.cancellationRequest.requestedAt && (
+                                    <p>Requested at: {new Date(order.cancellationRequest.requestedAt).toLocaleString()}</p>
+                                )}
+                                {order.cancellationRequest.adminNote && (
+                                    <p>Admin note: {order.cancellationRequest.adminNote}</p>
+                                )}
+                            </div>
+                            {order.cancellationRequest.status === 'pending' && (
+                                <div className="mt-5 flex gap-3">
+                                    <button
+                                        onClick={handleApproveCancellationRequest}
+                                        disabled={isReviewingCancel}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
+                                    >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        {isReviewingCancel ? 'Processing...' : 'Approve'}
+                                    </button>
+                                    <button
+                                        onClick={handleRejectCancellationRequest}
+                                        disabled={isReviewingCancel}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all disabled:opacity-50"
+                                    >
+                                        <XCircle className="h-4 w-4" />
+                                        {isReviewingCancel ? 'Processing...' : 'Reject'}
+                                    </button>
+                                </div>
+                            )}
+                        </Card>
+                    )}
 
                     {/* Proof Images Section */}
                     {(order.pickupProofImages?.length > 0 || order.deliveryProofImages?.length > 0) && (

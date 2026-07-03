@@ -4,6 +4,8 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
+  approveCancelOrderRequest,
+  rejectCancelOrderRequest,
   updateOrderStatus,
   getSellerOrders,
   getAvailableOrders,
@@ -107,6 +109,18 @@ router.post(
 router.get("/my-orders", verifyToken, getMyOrders);
 router.get("/details/:orderId", verifyToken, getOrderDetails);
 router.put("/cancel/:orderId", verifyToken, cancelOrder);
+router.put(
+  "/cancel/:orderId/approve",
+  verifyToken,
+  allowRoles("admin"),
+  approveCancelOrderRequest,
+);
+router.put(
+  "/cancel/:orderId/reject",
+  verifyToken,
+  allowRoles("admin"),
+  rejectCancelOrderRequest,
+);
 router.post("/:orderId/returns", verifyToken, requestReturn);
 router.get("/:orderId/returns", verifyToken, getReturnDetails);
 

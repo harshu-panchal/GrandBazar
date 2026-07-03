@@ -89,6 +89,10 @@ export const adminApi = {
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
+    approveOrderCancellationRequest: (orderId, data = {}) =>
+        axiosInstance.put(`/orders/cancel/${orderId}/approve`, data),
+    rejectOrderCancellationRequest: (orderId, data = {}) =>
+        axiosInstance.put(`/orders/cancel/${orderId}/reject`, data),
     // Returns
     getReturns: (params) => axiosInstance.get('/orders/seller-returns', { params }),
     getReturnDetails: (orderId) => axiosInstance.get(`/orders/${orderId}/returns`),

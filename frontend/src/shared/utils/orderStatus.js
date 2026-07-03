@@ -85,6 +85,72 @@ export function getLegacyStatusFromOrder(order) {
   return "pending";
 }
 
+export const CUSTOMER_CANCELLATION_STATE = {
+  NONE: "none",
+  INSTANT: "instant",
+  APPROVAL_REQUIRED: "approval_required",
+  PENDING_APPROVAL: "pending_approval",
+};
+
+/**
+ * Customer cancellation behavior:
+ * - seller not accepted yet => instant cancel
+ * - seller accepted but rider not assigned => admin approval request
+ * - rider assigned / delivered / cancelled => no cancel action
+ */
+export function getCustomerCancellationState(order) {
+  if (!order) return CUSTOMER_CANCELLATION_STATE.NONE;
+
+  const workflowStatus = String(order.workflowStatus || "").toUpperCase();
+  const rawStatus = String(order.status || "").toLowerCase();
+  const requestStatus = String(order.cancellationRequest?.status || "none").toLowerCase();
+
+  if (
+    workflowStatus === WORKFLOW_STATUS.CANCELLED ||
+    workflowStatus === WORKFLOW_STATUS.DELIVERED ||
+    rawStatus === "cancelled" ||
+    rawStatus === "delivered"
+  ) {
+    return CUSTOMER_CANCELLATION_STATE.NONE;
+  }
+
+  if (requestStatus === "pending") {
+    return CUSTOMER_CANCELLATION_STATE.PENDING_APPROVAL;
+  }
+
+  if (
+    workflowStatus === WORKFLOW_STATUS.SELLER_PENDING ||
+    rawStatus === "pending"
+  ) {
+    return CUSTOMER_CANCELLATION_STATE.INSTANT;
+  }
+
+  if (!order.deliveryBoy && ["confirmed", "packed"].includes(rawStatus)) {
+    return CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED;
+  }
+
+  if (
+    !order.deliveryBoy &&
+    [
+      WORKFLOW_STATUS.SELLER_ACCEPTED,
+      WORKFLOW_STATUS.DELIVERY_SEARCH,
+      "EXTERNAL_LOGISTICS_PENDING",
+    ].includes(workflowStatus)
+  ) {
+    return CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED;
+  }
+
+  return CUSTOMER_CANCELLATION_STATE.NONE;
+}
+
+export function canCustomerCancelOrder(order) {
+  const state = getCustomerCancellationState(order);
+  return (
+    state === CUSTOMER_CANCELLATION_STATE.INSTANT ||
+    state === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED
+  );
+}
+
 const DISPLAY_LABELS = {
   pending: "Pending",
   confirmed: "Confirmed",

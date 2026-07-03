@@ -54,6 +54,7 @@ const OrdersList = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
+    const [reviewingCancelOrderId, setReviewingCancelOrderId] = useState('');
 
     const handleCSVExport = () => {
         setIsExporting(true);
@@ -109,6 +110,8 @@ const OrdersList = () => {
                     status: getLegacyStatusFromOrder(o),
                     workflowStatus: o.workflowStatus,
                     workflowVersion: o.workflowVersion,
+                    cancellationRequestStatus: o.cancellationRequest?.status || 'none',
+                    cancellationRequestReason: o.cancellationRequest?.reason || '',
                     returnStatus: o.returnStatus,
                     date: new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
                     payment: o.payment?.method === 'cod' ? 'COD' : 'Digital',
@@ -153,6 +156,35 @@ const OrdersList = () => {
         } catch (error) {
             console.error("Failed to update status:", error);
             showToast("Failed to update status", "error");
+        }
+    };
+
+    const handleApproveCancellationRequest = async (orderId) => {
+        setReviewingCancelOrderId(orderId);
+        try {
+            await adminApi.approveOrderCancellationRequest(orderId);
+            showToast('Cancellation request approved', 'success');
+            fetchOrders(page);
+        } catch (error) {
+            console.error('Failed to approve cancellation request:', error);
+            showToast(error?.response?.data?.message || 'Failed to approve cancellation request', 'error');
+        } finally {
+            setReviewingCancelOrderId('');
+        }
+    };
+
+    const handleRejectCancellationRequest = async (orderId) => {
+        const note = window.prompt('Rejection reason (optional):', '');
+        setReviewingCancelOrderId(orderId);
+        try {
+            await adminApi.rejectOrderCancellationRequest(orderId, { note: note || '' });
+            showToast('Cancellation request rejected', 'success');
+            fetchOrders(page);
+        } catch (error) {
+            console.error('Failed to reject cancellation request:', error);
+            showToast(error?.response?.data?.message || 'Failed to reject cancellation request', 'error');
+        } finally {
+            setReviewingCancelOrderId('');
         }
     };
 
@@ -417,7 +449,8 @@ const OrdersList = () => {
                                         </div>
                                     </td>
                                     <td className="px-4 py-5" onClick={(e) => e.stopPropagation()}>
-                                        <div className="relative inline-block w-40">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="relative inline-block w-40">
                                             <select
                                                 value={order.status}
                                                 onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
@@ -434,6 +467,12 @@ const OrdersList = () => {
                                                 <option value="cancelled">Cancelled</option>
                                             </select>
                                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none opacity-60" />
+                                            </div>
+                                            {order.cancellationRequestStatus === 'pending' && (
+                                                <Badge className="w-fit bg-amber-100 text-amber-700 border-none text-[8px] font-black uppercase tracking-widest">
+                                                    Cancel Request Pending
+                                                </Badge>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-4 py-5 text-right">
@@ -467,6 +506,32 @@ const OrdersList = () => {
                                                     <Truck className="h-3.5 w-3.5" />
                                                     DISPATCH
                                                 </button>
+                                            )}
+                                            {order.cancellationRequestStatus === 'pending' && (
+                                                <>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleApproveCancellationRequest(order.id);
+                                                        }}
+                                                        disabled={reviewingCancelOrderId === order.id}
+                                                        className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
+                                                    >
+                                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                                        Approve Cancel
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRejectCancellationRequest(order.id);
+                                                        }}
+                                                        disabled={reviewingCancelOrderId === order.id}
+                                                        className="flex items-center gap-1.5 px-3 py-2 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all disabled:opacity-50"
+                                                    >
+                                                        <XCircle className="h-3.5 w-3.5" />
+                                                        Reject
+                                                    </button>
+                                                </>
                                             )}
                                             <button
                                                 onClick={(e) => {
