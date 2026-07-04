@@ -16,6 +16,7 @@ import {
 import { handleOnlineOrderFinance } from "./finance/orderFinanceService.js";
 import { DEFAULT_SELLER_TIMEOUT_MS, WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
+import { computeSellerPendingExpiry } from "./orderSchedulingService.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
 import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -302,7 +303,18 @@ async function transitionPaymentState(payment, {
 
 async function moveOrderToSellerPendingAfterPayment(orderId) {
   const now = new Date();
-  const sellerPendingUntil = new Date(now.getTime() + DEFAULT_SELLER_TIMEOUT_MS());
+  const order = await Order.findById(orderId).select("fulfillmentType schedule workflowStatus").lean();
+  if (!order || order.workflowStatus !== WORKFLOW_STATUS.CREATED) return;
+
+  if (order.fulfillmentType === "preorder") {
+    return;
+  }
+
+  const sellerPendingUntil =
+    order.fulfillmentType === "scheduled"
+      ? computeSellerPendingExpiry(order, now)
+      : new Date(now.getTime() + DEFAULT_SELLER_TIMEOUT_MS());
+
   const updatedOrder = await Order.findOneAndUpdate(
     {
       _id: orderId,

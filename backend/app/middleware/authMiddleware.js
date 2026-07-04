@@ -324,3 +324,16 @@ export const checkSubSellerPermission = (module, level = "read") => {
     );
   };
 };
+
+export const checkAdminPermission = (permission) => {
+  return (req, res, next) => {
+    if (req.user?.role === "admin" || req.user?.role === "superadmin") {
+      return next();
+    }
+    if (req.user?.role === "assistant") {
+      const allowed = req.user.allowedPermissions || [];
+      if (allowed.includes(permission)) return next();
+    }
+    return handleResponse(res, 403, `Access denied. Missing permission: ${permission}`);
+  };
+};

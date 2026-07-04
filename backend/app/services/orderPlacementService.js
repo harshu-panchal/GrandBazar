@@ -5,7 +5,7 @@ import Order from "../models/order.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import Coupon from "../models/coupon.js";
-import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS } from "../constants/orderWorkflow.js";
+import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS, FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
 import {
@@ -29,6 +29,18 @@ import {
 } from "./idempotencyService.js";
 import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
+import {
+  inferFulfillmentType,
+  validateScheduleSelection,
+  buildSchedulePayload,
+  computeSellerPendingExpiry,
+  isInstantFulfillment,
+} from "./orderSchedulingService.js";
+import {
+  validatePreorderPlacement,
+  reserveCampaignAllocation,
+  assertCartPreorderRules,
+} from "./preOrderCampaignService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import * as logger from "./logger.js";
@@ -290,6 +302,8 @@ export async function placeOrderAtomic({
     const source = placementSource(normalizedPayload);
     const walletAmount = Math.max(0, Number(normalizedPayload.walletAmount || 0));
     const tipAmount = Math.max(0, Number(normalizedPayload.tipAmount || 0));
+    const fulfillmentType = inferFulfillmentType(normalizedPayload);
+    const isInstant = fulfillmentType === FULFILLMENT_TYPE.INSTANT && isInstantFulfillment(normalizedPayload);
 
     // 1. Fetch user and validate wallet
     const user = await User.findById(customerId).session(session);
@@ -340,6 +354,9 @@ export async function placeOrderAtomic({
       expiresAt: checkoutReservation.expiresAt || null,
       metadata: {
         timeSlot: normalizedPayload.timeSlot || "now",
+        deliveryDate: normalizedPayload.deliveryDate || null,
+        windowLabel: normalizedPayload.windowLabel || null,
+        fulfillmentType,
         tipAmount,
       },
     });
@@ -348,16 +365,73 @@ export async function placeOrderAtomic({
     const orders = [];
     const pendingLowStockAlerts = [];
     const sellerTimeoutMs = DEFAULT_SELLER_TIMEOUT_MS();
-    const shouldStartSellerWorkflow = paymentMode === "COD";
+    const shouldStartSellerWorkflow =
+      paymentMode === "COD" &&
+      (isInstant || fulfillmentType === FULFILLMENT_TYPE.SCHEDULED);
     const logisticsMode = await getPlatformDeliveryProvider();
+
+    await assertCartPreorderRules(
+      orderItemsInput.map((item) => ({
+        ...item,
+        campaignId: normalizedPayload.campaignId || normalizedPayload.preOrderCampaignId,
+      })),
+    );
 
     for (let index = 0; index < pricingSnapshot.sellerBreakdownEntries.length; index += 1) {
       const entry = pricingSnapshot.sellerBreakdownEntries[index];
       const orderId = await generateUniquePublicOrderId({ session });
       const orderReservation = computeStockReservationWindow(paymentMode);
-      const sellerPendingUntil = shouldStartSellerWorkflow
-        ? new Date(Date.now() + sellerTimeoutMs)
-        : null;
+
+      let scheduleFields = {};
+      let preOrderCampaignRef = null;
+      let initialWorkflow = shouldStartSellerWorkflow
+        ? WORKFLOW_STATUS.SELLER_PENDING
+        : WORKFLOW_STATUS.CREATED;
+      let legacyOrderStatus = "pending";
+
+      if (fulfillmentType === FULFILLMENT_TYPE.SCHEDULED) {
+        const scheduleMeta = await validateScheduleSelection({
+          sellerId: entry.sellerId,
+          deliveryDate: normalizedPayload.deliveryDate,
+          windowLabel: normalizedPayload.windowLabel,
+          fulfillmentType: FULFILLMENT_TYPE.SCHEDULED,
+        });
+        scheduleFields = buildSchedulePayload(scheduleMeta);
+        initialWorkflow =
+          paymentMode === "COD" ? WORKFLOW_STATUS.SELLER_PENDING : WORKFLOW_STATUS.CREATED;
+      } else if (fulfillmentType === FULFILLMENT_TYPE.PREORDER) {
+        const campaignId = normalizedPayload.campaignId || normalizedPayload.preOrderCampaignId;
+        const { campaign, scheduleMeta } = await validatePreorderPlacement({
+          campaignId,
+          sellerId: entry.sellerId,
+          items: entry.items,
+          deliveryDate: normalizedPayload.deliveryDate,
+          windowLabel: normalizedPayload.windowLabel,
+        });
+        preOrderCampaignRef = campaign._id;
+        scheduleFields = scheduleMeta;
+        for (const item of entry.items) {
+          await reserveCampaignAllocation(campaign.campaignId, item.productId, item.quantity, session);
+        }
+        initialWorkflow = WORKFLOW_STATUS.PREORDER_HOLD;
+        legacyOrderStatus = "preorder_confirmed";
+        emitNotificationEvent(NOTIFICATION_EVENTS.PREORDER_CONFIRMED, {
+          orderId,
+          campaignId: campaign.campaignId,
+          customerId,
+          sellerId: entry.sellerId,
+        });
+      }
+
+      const sellerPendingUntil =
+        initialWorkflow === WORKFLOW_STATUS.SELLER_PENDING
+          ? fulfillmentType === FULFILLMENT_TYPE.INSTANT
+            ? new Date(Date.now() + sellerTimeoutMs)
+            : computeSellerPendingExpiry(
+                { fulfillmentType, schedule: scheduleFields },
+                new Date(),
+              )
+          : null;
       const orderExpiresAt = orderReservation.expiresAt || sellerPendingUntil || null;
 
       const sellerLowStockAlerts = await reserveStockForItems({
@@ -396,13 +470,17 @@ export async function placeOrderAtomic({
           total: entry.breakdown.grandTotal,
           walletAmount: proportionateWallet,
         },
-        status: "pending",
-        orderStatus: "pending",
-        timeSlot: normalizedPayload.timeSlot || "now",
+        status: legacyOrderStatus,
+        orderStatus: legacyOrderStatus,
+        timeSlot:
+          scheduleFields.deliveryDate && scheduleFields.windowLabel
+            ? `${scheduleFields.deliveryDate.toISOString().slice(0, 10)}|${scheduleFields.windowLabel}`
+            : normalizedPayload.timeSlot || "now",
+        fulfillmentType,
+        schedule: scheduleFields.deliveryDate ? scheduleFields : undefined,
+        preOrderCampaign: preOrderCampaignRef,
         workflowVersion: 2,
-        workflowStatus: shouldStartSellerWorkflow
-          ? WORKFLOW_STATUS.SELLER_PENDING
-          : WORKFLOW_STATUS.CREATED,
+        workflowStatus: initialWorkflow,
         sellerPendingExpiresAt: sellerPendingUntil,
         expiresAt: orderExpiresAt,
         stockReservation: orderReservation,
@@ -502,6 +580,7 @@ export async function placeOrderAtomic({
 
     if (shouldStartSellerWorkflow) {
       for (const order of orders) {
+        if (order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING) continue;
         void afterPlaceOrderV2(order).catch((error) => {
           logger.warn("[placeOrderAtomic] afterPlaceOrderV2 failed", {
             orderId: order.orderId,

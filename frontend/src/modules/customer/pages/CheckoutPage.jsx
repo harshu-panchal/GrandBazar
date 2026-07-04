@@ -67,6 +67,7 @@ import CheckoutCouponSection from "./checkout/components/CheckoutCouponSection";
 import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommendedProducts";
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
+import DeliverySlotPicker from "../components/checkout/DeliverySlotPicker";
 
 const CheckoutPage = () => {
   const {
@@ -124,10 +125,20 @@ const CheckoutPage = () => {
     isFetchingLocation,
     updateLocation,
   } = useAppLocation();
-  const navigate = useNavigate();
+  const primarySellerId = useMemo(() => {
+    const item = cart[0];
+    return item?.sellerId?._id || item?.sellerId || item?.storeId || null;
+  }, [cart]);
 
-  // State management
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("now");
+  const [fulfillmentType, setFulfillmentType] = useState("instant");
+  const [schedulePayload, setSchedulePayload] = useState(null);
+
+  const handleScheduleChange = (payload) => {
+    setSchedulePayload(payload);
+    setFulfillmentType(payload?.fulfillmentType || "instant");
+    setSelectedTimeSlot(payload?.timeSlot || "now");
+  };
   const [selectedPayment, setSelectedPayment] = useState("cash");
   const [selectedTip, setSelectedTip] = useState(0);
   const [showAllCartItems, setShowAllCartItems] = useState(false);
@@ -681,6 +692,11 @@ const CheckoutPage = () => {
       tipAmount: selectedTip,
       paymentMode: selectedPayment === "online" ? "ONLINE" : "COD",
       timeSlot: selectedTimeSlot,
+      fulfillmentType,
+      deliveryDate: schedulePayload?.deliveryDate,
+      windowLabel: schedulePayload?.windowLabel,
+      campaignId: schedulePayload?.campaignId,
+      preOrderCampaignId: schedulePayload?.preOrderCampaignId,
     });
 
     const fetchPreview = async () => {
@@ -708,6 +724,8 @@ const CheckoutPage = () => {
     selectedTip,
     selectedTimeSlot,
     discountAmount,
+    fulfillmentType,
+    schedulePayload,
     savedRecipient,
     currentAddress,
     currentLocation,
@@ -789,6 +807,11 @@ const CheckoutPage = () => {
         taxTotal: taxAmount,
         tipAmount: selectedTip,
         timeSlot: selectedTimeSlot,
+      fulfillmentType,
+      deliveryDate: schedulePayload?.deliveryDate,
+      windowLabel: schedulePayload?.windowLabel,
+      campaignId: schedulePayload?.campaignId,
+      preOrderCampaignId: schedulePayload?.preOrderCampaignId,
         walletAmount: walletAmountToUse,
         items: cart.map((item) => ({
           product: item.id || item._id,
@@ -1087,6 +1110,36 @@ const CheckoutPage = () => {
               selectedCoupon={selectedCoupon}
               discountAmount={discountAmount}
             />
+
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Delivery mode</p>
+              <div className="flex gap-2">
+                {["instant", "scheduled"].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handleScheduleChange({
+                      fulfillmentType: mode,
+                      timeSlot: mode === "instant" ? "now" : selectedTimeSlot,
+                      deliveryDate: schedulePayload?.deliveryDate,
+                      windowLabel: schedulePayload?.windowLabel,
+                    })}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                      fulfillmentType === mode
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {mode === "instant" ? "Deliver now" : "Schedule"}
+                  </button>
+                ))}
+              </div>
+              <DeliverySlotPicker
+                sellerId={primarySellerId}
+                fulfillmentType={fulfillmentType}
+                onChange={handleScheduleChange}
+              />
+            </div>
 
             {/* Payment Selector */}
             <CheckoutPaymentSelector

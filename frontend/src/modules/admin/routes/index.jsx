@@ -78,6 +78,7 @@ const Profile = React.lazy(() => import("@/pages/Profile"));
 const FAQManagement = React.lazy(() => import("../pages/FAQManagement"));
 const OrdersList = React.lazy(() => import("../pages/OrdersList"));
 const OrderDetail = React.lazy(() => import("../pages/OrderDetail"));
+const DisputeConsolePage = React.lazy(() => import("../pages/DisputeConsolePage"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const SellerDetail = React.lazy(() => import("../pages/SellerDetail"));
 const SubscriptionManagement = React.lazy(() => import("../pages/SubscriptionManagement"));
@@ -405,6 +406,7 @@ const AdminRoutes = () => {
           <>
             <Route path="/orders/:status" element={<OrdersList />} />
             <Route path="/orders/view/:orderId" element={<OrderDetail />} />
+            <Route path="/disputes" element={<DisputeConsolePage />} />
             <Route path="/returns" element={<Returns />} />
           </>
         )}

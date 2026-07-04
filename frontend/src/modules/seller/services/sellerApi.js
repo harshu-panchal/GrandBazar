@@ -97,4 +97,17 @@ export const sellerApi = {
         axiosInstance.post('/seller/subscription/payment-request', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
+
+    // Scheduling & lifecycle
+    getSchedulingSettings: () => axiosInstance.get('/orders/scheduling/settings'),
+    updateSchedulingSettings: (data) => axiosInstance.put('/orders/scheduling/settings', data),
+    listCampaigns: (params) => axiosInstance.get('/orders/campaigns', { params }),
+    createCampaign: (data) => axiosInstance.post('/orders/campaigns', data),
+    updateCampaign: (campaignId, data) => axiosInstance.put(`/orders/campaigns/${campaignId}`, data),
+    cancelCampaign: (campaignId, data) => axiosInstance.put(`/orders/campaigns/${campaignId}/cancel`, data),
+    approveReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/approve`, data),
+    rejectReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/reject`, data),
+    adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
+    partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
+    updateSelfLogistics: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/self`, data),
 };

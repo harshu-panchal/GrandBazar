@@ -153,6 +153,31 @@ const storeSchema = new mongoose.Schema(
       type: Number,
       default: 5,
     },
+
+    timezone: {
+      type: String,
+      default: "Asia/Kolkata",
+      trim: true,
+    },
+
+    schedulingSettings: {
+      enabled: { type: Boolean, default: false },
+      maxDaysAhead: { type: Number, default: 7, min: 1, max: 90 },
+      rescheduleCutoffDays: { type: Number, default: 1, min: 0, max: 7 },
+      selfLogistics: { type: Boolean, default: false },
+      deliveryWindows: {
+        type: [
+          {
+            label: { type: String, trim: true },
+            start: { type: String, trim: true },
+            end: { type: String, trim: true },
+            capacityPerDay: { type: Number, default: 50, min: 1 },
+            enabled: { type: Boolean, default: true },
+          },
+        ],
+        default: [],
+      },
+    },
   },
   { timestamps: true },
 );

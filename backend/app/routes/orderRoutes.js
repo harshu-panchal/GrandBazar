@@ -51,7 +51,34 @@ import {
   requireSellerOperational,
   resolveActiveStore,
   checkSubSellerPermission,
+  checkAdminPermission,
+  allowSuperAdminOnly,
 } from "../middleware/authMiddleware.js";
+import {
+  getSellerSchedulingSettings,
+  updateSellerSchedulingSettings,
+  getAvailableDeliverySlots,
+  rescheduleOrder,
+  requestReschedule,
+  approveReschedule,
+  rejectReschedule,
+  adminRescheduleOrder,
+  adjustOrder,
+  partialCancelOrder,
+  payOrderDifference,
+  createDispute,
+  resolveDisputeHandler,
+  listDisputesHandler,
+  getOrderDispute,
+  createCampaign,
+  updateCampaign,
+  listCampaigns,
+  listCustomerCampaigns,
+  getCampaignDetail,
+  cancelCampaign,
+  updateSelfLogisticsStatus,
+  adminLogisticsOverride,
+} from "../controller/orderLifecycleController.js";
 
 const router = express.Router();
 const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
@@ -59,6 +86,12 @@ const sellerOrdersReadChain = [...sellerOrderChain, checkSubSellerPermission("or
 const sellerOrdersWriteChain = [...sellerOrderChain, checkSubSellerPermission("orders", "write")];
 const sellerReturnsReadChain = [...sellerOrderChain, checkSubSellerPermission("returns", "read")];
 const sellerReturnsWriteChain = [...sellerOrderChain, checkSubSellerPermission("returns", "write")];
+const sellerSchedulingReadChain = [...sellerOrderChain, checkSubSellerPermission("scheduling", "read")];
+const sellerSchedulingWriteChain = [...sellerOrderChain, checkSubSellerPermission("scheduling", "write")];
+const sellerCampaignReadChain = [...sellerOrderChain, checkSubSellerPermission("campaigns", "read")];
+const sellerCampaignWriteChain = [...sellerOrderChain, checkSubSellerPermission("campaigns", "write")];
+const sellerAdjustWriteChain = [...sellerOrderChain, checkSubSellerPermission("adjustments", "write")];
+const sellerTrackingWriteChain = [...sellerOrderChain, checkSubSellerPermission("tracking", "write")];
 
 // Finance-aware checkout/order flow
 router.post(
@@ -275,6 +308,134 @@ router.get(
   allowRoles("customer", "user", "delivery", "seller", "admin"),
   requireApprovedSeller,
   getOrderRoute,
+);
+
+// Scheduling & delivery windows
+router.get("/scheduling/slots", verifyToken, getAvailableDeliverySlots);
+router.get(
+  "/scheduling/settings",
+  ...sellerSchedulingReadChain,
+  getSellerSchedulingSettings,
+);
+router.put(
+  "/scheduling/settings",
+  ...sellerSchedulingWriteChain,
+  updateSellerSchedulingSettings,
+);
+
+// Rescheduling
+router.put("/reschedule/:orderId", verifyToken, allowRoles("customer", "user"), rescheduleOrder);
+router.post(
+  "/reschedule/:orderId/request",
+  verifyToken,
+  allowRoles("customer", "user"),
+  requestReschedule,
+);
+router.put(
+  "/reschedule/:orderId/approve",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  approveReschedule,
+);
+router.put(
+  "/reschedule/:orderId/reject",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  rejectReschedule,
+);
+router.put(
+  "/reschedule/:orderId/admin",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("scheduling:write"),
+  adminRescheduleOrder,
+);
+
+// Price adjustments
+router.put(
+  "/:orderId/adjust",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  adjustOrder,
+);
+router.put(
+  "/:orderId/partial-cancel",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  partialCancelOrder,
+);
+router.post(
+  "/:orderId/pay-difference",
+  verifyToken,
+  allowRoles("customer", "user"),
+  payOrderDifference,
+);
+
+// Disputes
+router.post(
+  "/:orderId/dispute",
+  verifyToken,
+  allowRoles("customer", "user", "seller", "admin"),
+  createDispute,
+);
+router.get("/:orderId/dispute", verifyToken, getOrderDispute);
+router.get(
+  "/disputes",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("disputes:read"),
+  listDisputesHandler,
+);
+router.put(
+  "/disputes/:disputeId/resolve",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("disputes:write"),
+  resolveDisputeHandler,
+);
+
+// Pre-order campaigns
+router.get("/campaigns/active", verifyToken, listCustomerCampaigns);
+router.get("/campaigns/:campaignId", verifyToken, getCampaignDetail);
+router.get(
+  "/campaigns",
+  ...sellerCampaignReadChain,
+  listCampaigns,
+);
+router.post(
+  "/campaigns",
+  ...sellerCampaignWriteChain,
+  createCampaign,
+);
+router.put(
+  "/campaigns/:campaignId",
+  ...sellerCampaignWriteChain,
+  updateCampaign,
+);
+router.put(
+  "/campaigns/:campaignId/cancel",
+  ...sellerCampaignWriteChain,
+  cancelCampaign,
+);
+
+// Self logistics & admin override
+router.put(
+  "/:orderId/logistics/self",
+  ...sellerTrackingWriteChain,
+  updateSelfLogisticsStatus,
+);
+router.put(
+  "/:orderId/logistics/override",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("logistics:override"),
+  adminLogisticsOverride,
 );
 
 export default router;

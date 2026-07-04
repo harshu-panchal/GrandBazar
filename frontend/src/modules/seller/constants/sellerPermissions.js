@@ -30,6 +30,26 @@ export const SELLER_PERMISSION_MODULES = [
     description: 'Delivery tracking and rider status',
   },
   {
+    id: 'scheduling',
+    label: 'Scheduling & Delivery Windows',
+    description: 'Scheduled delivery windows and rescheduling',
+  },
+  {
+    id: 'campaigns',
+    label: 'Pre-Order Campaigns',
+    description: 'Create and manage pre-order campaigns',
+  },
+  {
+    id: 'adjustments',
+    label: 'Price Adjustments',
+    description: 'Edit orders and apply price changes',
+  },
+  {
+    id: 'disputes',
+    label: 'Disputes',
+    description: 'View and respond to order disputes',
+  },
+  {
     id: 'coupons',
     label: 'Offers & Coupons',
     description: 'Discounts and coupon management',

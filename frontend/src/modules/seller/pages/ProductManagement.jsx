@@ -322,22 +322,50 @@ const ProductManagement = () => {
 
   const handleSave = async () => {
     try {
-      if (!formData.name || !formData.price || !formData.stock || !formData.header || !formData.category || !formData.subcategory) {
+      // Categories are inherited (read-only) from the Master Catalog for claimed
+      // products, so we don't force the seller to set them (they may be absent
+      // upstream and cannot be edited here).
+      const isClaimed = !!editingItem?.catalogProductId;
+
+      const isEmpty = (v) => v === "" || v === null || v === undefined;
+
+      if (isEmpty(formData.name) || String(formData.name).trim() === "") {
+        toast.error("Product name is required");
+        return;
+      }
+
+      // Pricing/stock are captured per-variant in this modal; the first variant
+      // is the "main" variant and drives the product's top-level price/stock
+      // (mirrors the Add Product flow and the required schema fields).
+      const firstVariant = (formData.variants && formData.variants[0]) || {};
+      if (isEmpty(firstVariant.price) || Number(firstVariant.price) <= 0) {
+        toast.error("Set a price greater than 0 on the main variant (Item Variants tab)");
+        return;
+      }
+      if (isEmpty(firstVariant.stock) || Number(firstVariant.stock) < 0) {
+        toast.error("Set a valid stock on the main variant (Item Variants tab)");
+        return;
+      }
+      if (!isClaimed && (!formData.header || !formData.category || !formData.subcategory)) {
         toast.error("Please fill all required fields, including categories");
         return;
       }
+
+      const derivedPrice = Number(firstVariant.price);
+      const derivedSalePrice = Number(firstVariant.salePrice) || 0;
+      const derivedStock = Number(firstVariant.stock);
 
       const data = new FormData();
       data.append("name", formData.name);
       data.append("slug", formData.slug);
       data.append("sku", formData.sku);
       data.append("description", formData.description);
-      data.append("price", Number(formData.price));
-      data.append("salePrice", Number(formData.salePrice) || 0);
-      data.append("stock", Number(formData.stock));
-      data.append("headerId", formData.header);
-      data.append("categoryId", formData.category);
-      data.append("subcategoryId", formData.subcategory);
+      data.append("price", derivedPrice);
+      data.append("salePrice", derivedSalePrice);
+      data.append("stock", derivedStock);
+      if (formData.header) data.append("headerId", formData.header);
+      if (formData.category) data.append("categoryId", formData.category);
+      if (formData.subcategory) data.append("subcategoryId", formData.subcategory);
       data.append("status", formData.status);
       data.append("brand", formData.brand);
       data.append("weight", formData.weight);
@@ -431,9 +459,9 @@ const ProductManagement = () => {
         slug: item.slug || "",
         sku: item.sku || "",
         description: item.description || "",
-        price: item.price || "",
-        salePrice: item.salePrice || "",
-        stock: item.stock || "",
+        price: item.price ?? "",
+        salePrice: item.salePrice ?? "",
+        stock: item.stock ?? "",
         lowStockAlert: item.lowStockAlert || 5,
         header: item.headerId?._id || item.headerId || "",
         category: item.categoryId?._id || item.categoryId || "",
@@ -448,9 +476,9 @@ const ProductManagement = () => {
           {
             id: Date.now(),
             name: "",
-            price: item.price || "",
-            salePrice: item.salePrice || "",
-            stock: item.stock || "",
+            price: item.price ?? "",
+            salePrice: item.salePrice ?? "",
+            stock: item.stock ?? "",
             sku: item.sku || "",
           },
         ],
@@ -514,6 +542,14 @@ const ProductManagement = () => {
           </p>
         </div>
 
+        {stats.needsPricing > 0 && (
+          <button
+            onClick={() => navigate("/seller/products/pricing")}
+            className="inline-flex items-center gap-2 self-start rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-violet-700">
+            <HiOutlineTag className="h-5 w-5" />
+            Set Prices &amp; Publish ({stats.needsPricing})
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

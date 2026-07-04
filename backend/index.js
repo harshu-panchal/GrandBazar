@@ -214,8 +214,9 @@ async function startHttpServer() {
   // Optionally enable inline queue workers (not recommended for production)
   if (process.env.ENABLE_INLINE_QUEUE_WORKER === "true") {
     logger.warn('Inline queue worker enabled - not recommended for production');
-    const { registerOrderQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
+    const { registerOrderQueueProcessors, registerLifecycleQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
     registerOrderQueueProcessors();
+    registerLifecycleQueueProcessors();
   }
   
   return new Promise((resolve) => {
@@ -234,10 +235,11 @@ async function startHttpServer() {
  * Start queue workers (Worker role)
  */
 async function startQueueWorkers() {
-  const { registerOrderQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
+  const { registerOrderQueueProcessors, registerLifecycleQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
   const { sellerTimeoutQueue, deliveryTimeoutQueue } = await import("./app/queues/orderQueues.js");
   
   registerOrderQueueProcessors();
+  registerLifecycleQueueProcessors();
   
   // Register queues for graceful shutdown
   registerBullQueue(sellerTimeoutQueue);

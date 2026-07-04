@@ -386,6 +386,130 @@ function eventDefinition(eventType) {
         title: (payload) => `${payload.shopName || "Shop"} application rejected`,
         body: (payload) => payload.reason || "Your shop application was rejected. You can resubmit from My Stores.",
       };
+    // ── Order Lifecycle: scheduling / reschedule / price / preorder / dispute ──
+    case NOTIFICATION_EVENTS.RESCHEDULE_REQUESTED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Reschedule Requested",
+        body: (payload) =>
+          payload.orderId
+            ? `Customer requested a reschedule for order #${payload.orderId}.`
+            : "A customer requested a reschedule.",
+      };
+    case NOTIFICATION_EVENTS.RESCHEDULE_APPROVED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Reschedule Approved ✅",
+        body: (payload) =>
+          payload.orderId
+            ? `Your reschedule for order #${payload.orderId} was approved.`
+            : "Your reschedule request was approved.",
+      };
+    case NOTIFICATION_EVENTS.RESCHEDULE_REJECTED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Reschedule Rejected",
+        body: (payload) =>
+          `Your reschedule request for order #${payload.orderId || ""} was rejected.${
+            payload.note ? " Reason: " + payload.note : ""
+          }`,
+      };
+    case NOTIFICATION_EVENTS.PRICE_REVISED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Order Price Revised",
+        body: (payload) =>
+          payload.amount
+            ? `Your order total changed by ₹${payload.amount}. A credit/refund has been applied where applicable.`
+            : "Your order price has been revised.",
+      };
+    case NOTIFICATION_EVENTS.EXTRA_PAYMENT_REQUIRED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Extra Payment Required 💳",
+        body: (payload) =>
+          payload.amount
+            ? `Please pay the additional ₹${payload.amount} to continue with order #${payload.orderId || ""}.`
+            : "Additional payment is required to continue your order.",
+      };
+    case NOTIFICATION_EVENTS.PREORDER_CONFIRMED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Pre-Order Confirmed",
+        body: (payload) =>
+          payload.orderId
+            ? `Your pre-order #${payload.orderId} is confirmed. We'll notify you when the sale starts.`
+            : "Your pre-order is confirmed.",
+      };
+    case NOTIFICATION_EVENTS.PREORDER_SALE_STARTED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Pre-Order Sale Started 🎉",
+        body: (payload) =>
+          payload.orderId
+            ? `The sale for your pre-order #${payload.orderId} has started and is being processed.`
+            : "Your pre-order sale has started.",
+      };
+    case NOTIFICATION_EVENTS.SCHEDULED_ACTIVATED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Order Being Prepared",
+        body: (payload) =>
+          payload.orderId
+            ? `Your scheduled order #${payload.orderId} is now being prepared for delivery.`
+            : "Your scheduled order is now being prepared.",
+      };
+    case NOTIFICATION_EVENTS.DISPUTE_RAISED:
+      return {
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) =>
+              payload.raisedBy === "customer"
+                ? normalizeIdList(payload.userId || payload.customerId)
+                : [],
+            title: () => "Dispute Submitted",
+            body: (payload) =>
+              `Your dispute for order #${payload.orderId || ""} has been submitted for review.`,
+          },
+          {
+            role: NOTIFICATION_ROLES.SELLER,
+            recipientIds: (payload) => normalizeIdList(payload.sellerId),
+            title: () => "Order Dispute Raised",
+            body: (payload) =>
+              `A dispute was raised on order #${payload.orderId || ""}. Platform is reviewing.`,
+          },
+        ],
+      };
+    case NOTIFICATION_EVENTS.DISPUTE_RESOLVED:
+      return {
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+            title: () => "Dispute Resolved",
+            body: (payload) =>
+              `Your dispute for order #${payload.orderId || ""} was resolved (${payload.resolution || "closed"}).`,
+          },
+          {
+            role: NOTIFICATION_ROLES.SELLER,
+            recipientIds: (payload) => normalizeIdList(payload.sellerId),
+            title: () => "Dispute Resolved",
+            body: (payload) =>
+              `Dispute for order #${payload.orderId || ""} was resolved by platform.`,
+          },
+        ],
+      };
     default:
       return null;
   }

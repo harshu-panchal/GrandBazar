@@ -9,6 +9,8 @@ import {
   workflowFromLegacyStatus,
   DEFAULT_SELLER_TIMEOUT_MS,
   DEFAULT_DELIVERY_TIMEOUT_MS,
+  FULFILLMENT_TYPE,
+  usesRelaxedSellerTimeout,
 } from "../constants/orderWorkflow.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
 import {
@@ -30,6 +32,10 @@ import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
+import {
+  scheduleOrderActivationJob,
+  computeSellerPendingExpiry,
+} from "./orderSchedulingService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
@@ -40,7 +46,7 @@ const INITIAL_DELIVERY_RADIUS_M = () =>
   parseInt(process.env.INITIAL_DELIVERY_RADIUS_METERS || "5000", 10);
 
 /** Payload for `delivery:broadcast` + Notification.data — lets the app show a modal without relying on GET /available alone. */
-function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
+export function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
   const seller =
     order.seller && typeof order.seller === "object" && order.seller !== null
       ? order.seller
@@ -266,10 +272,75 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
   const deliveryMs = DEFAULT_DELIVERY_TIMEOUT_MS();
 
   const existingOrder = await Order.findOne({ orderId, seller: sellerId })
-    .select("logisticsMode workflowStatus")
+    .select("logisticsMode workflowStatus fulfillmentType schedule")
     .lean();
   const logisticsMode = existingOrder?.logisticsMode || await getPlatformDeliveryProvider();
   const useExternalLogistics = logisticsMode === "external";
+  const isScheduled =
+    existingOrder?.fulfillmentType === FULFILLMENT_TYPE.SCHEDULED ||
+    existingOrder?.fulfillmentType === FULFILLMENT_TYPE.PREORDER;
+
+  if (isScheduled) {
+    const updatedScheduled = await Order.findOneAndUpdate(
+      {
+        orderId,
+        seller: sellerId,
+        workflowVersion: { $gte: 2 },
+        workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+        sellerPendingExpiresAt: { $gt: now },
+        $or: [
+          { paymentMode: { $ne: "ONLINE" } },
+          { paymentStatus: "PAID" },
+        ],
+      },
+      {
+        $set: {
+          workflowStatus: WORKFLOW_STATUS.SCHEDULED_HOLD,
+          status: legacyStatusFromWorkflow(WORKFLOW_STATUS.SCHEDULED_HOLD),
+          sellerAcceptedAt: now,
+        },
+        $unset: { expiresAt: 1 },
+      },
+      { new: true },
+    )
+      .populate("customer", "name phone")
+      .populate("seller", "shopName address name location serviceRadius");
+
+    if (!updatedScheduled) {
+      const err = new Error("Order not available for acceptance or expired");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    await removeSellerTimeoutJob(orderId);
+
+    const activationAt =
+      updatedScheduled.schedule?.activationAt ||
+      new Date(now.getTime() + 60 * 60 * 1000);
+    const jobId = await scheduleOrderActivationJob(orderId, activationAt);
+    await Order.updateOne(
+      { _id: updatedScheduled._id },
+      {
+        $set: {
+          "schedule.activationAt": activationAt,
+          "schedule.activationJobId": jobId,
+        },
+      },
+    );
+
+    emitOrderStatusUpdate(
+      updatedScheduled.orderId,
+      { workflowStatus: WORKFLOW_STATUS.SCHEDULED_HOLD, scheduledHold: true },
+      updatedScheduled.customer?._id || updatedScheduled.customer,
+    );
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CONFIRMED, {
+      orderId: updatedScheduled.orderId,
+      customerId: updatedScheduled.customer?._id || updatedScheduled.customer,
+      userId: updatedScheduled.customer?._id || updatedScheduled.customer,
+      sellerId: updatedScheduled.seller?._id || updatedScheduled.seller,
+    });
+    return updatedScheduled;
+  }
 
   const nextWorkflowStatus = useExternalLogistics
     ? WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING
@@ -557,6 +628,12 @@ export async function processSellerTimeoutJob({ orderId }) {
   const now = new Date();
   const order = await Order.findOne({ orderId, workflowVersion: { $gte: 2 } });
   if (!order || order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING) return;
+
+  if (usesRelaxedSellerTimeout(order.fulfillmentType)) {
+    const expiry = computeSellerPendingExpiry(order, now);
+    if (expiry && expiry > now) return;
+    if (order.schedule?.cutoffAt && new Date(order.schedule.cutoffAt) > now) return;
+  }
 
   if (order.sellerPendingExpiresAt && order.sellerPendingExpiresAt > now) {
     return;

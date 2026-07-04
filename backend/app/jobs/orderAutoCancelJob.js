@@ -3,6 +3,7 @@ import Order from "../models/order.js";
 import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { processSellerTimeoutJob, processDeliveryTimeoutJob } from "../services/orderWorkflowService.js";
 import { compensateOrderCancellation } from "../services/orderCompensation.js";
+import { activateDueScheduledOrdersSweep } from "../services/orderActivationService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import logger from "../services/logger.js";
@@ -44,6 +45,15 @@ const autoCancelExpiredOrders = async () => {
           error: err.message
         });
       }
+    }
+
+    try {
+      await activateDueScheduledOrdersSweep();
+    } catch (err) {
+      logger.error('scheduled activation sweep failed', {
+        jobName: 'orderAutoCancelJob',
+        error: err.message,
+      });
     }
 
     const v2DeliveryExpired = await Order.find({

@@ -1,8 +1,11 @@
-import { sellerTimeoutQueue, deliveryTimeoutQueue, JOB_NAMES } from "./orderQueues.js";
+import { sellerTimeoutQueue, deliveryTimeoutQueue, orderActivationQueue, preorderActivationQueue, extraPaymentDeadlineQueue, JOB_NAMES } from "./orderQueues.js";
 import {
   processSellerTimeoutJob,
   processDeliveryTimeoutJob,
 } from "../services/orderWorkflowService.js";
+import { processOrderActivationJob } from "../services/orderActivationService.js";
+import { processPreorderSaleStartJob } from "../services/preOrderCampaignService.js";
+import { processExtraPaymentDeadlineJob } from "../services/orderPriceAdjustmentService.js";
 import { isRedisEnabled } from "../config/redis.js";
 import logger from "../services/logger.js";
 import { incrementCounter, recordHistogram } from "../services/metrics.js";
@@ -157,6 +160,50 @@ export function registerOrderQueueProcessors() {
   });
   
   logger.info('Order queue processors registered', {
-    queues: [JOB_NAMES.SELLER_TIMEOUT, JOB_NAMES.DELIVERY_TIMEOUT]
+    queues: [
+      JOB_NAMES.SELLER_TIMEOUT,
+      JOB_NAMES.DELIVERY_TIMEOUT,
+      JOB_NAMES.ORDER_ACTIVATION,
+      JOB_NAMES.PREORDER_SALE_START,
+      JOB_NAMES.EXTRA_PAYMENT_DEADLINE,
+    ],
   });
+}
+
+function registerDelayedQueueProcessor(queue, jobName, handler, queueLabel) {
+  queue.process(jobName, async (job) => {
+    const startTime = Date.now();
+    try {
+      await handler(job.data);
+      recordHistogram("queue_job_duration_seconds", (Date.now() - startTime) / 1000, {
+        queue: queueLabel,
+      });
+      incrementCounter("queue_jobs_total", { queue: queueLabel, status: "completed" });
+    } catch (error) {
+      incrementCounter("queue_jobs_total", { queue: queueLabel, status: "failed" });
+      throw error;
+    }
+  });
+}
+
+export function registerLifecycleQueueProcessors() {
+  if (!isRedisEnabled()) return;
+  registerDelayedQueueProcessor(
+    orderActivationQueue,
+    JOB_NAMES.ORDER_ACTIVATION,
+    processOrderActivationJob,
+    "order-activation",
+  );
+  registerDelayedQueueProcessor(
+    preorderActivationQueue,
+    JOB_NAMES.PREORDER_SALE_START,
+    processPreorderSaleStartJob,
+    "preorder-activation",
+  );
+  registerDelayedQueueProcessor(
+    extraPaymentDeadlineQueue,
+    JOB_NAMES.EXTRA_PAYMENT_DEADLINE,
+    processExtraPaymentDeadlineJob,
+    "extra-payment-deadline",
+  );
 }

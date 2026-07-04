@@ -257,6 +257,13 @@ const orderSchema = new mongoose.Schema(
         "out_for_delivery",
         "delivered",
         "cancelled",
+        "reschedule_requested",
+        "rescheduled",
+        "price_revised",
+        "awaiting_extra_payment",
+        "partial_cancelled",
+        "disputed",
+        "preorder_confirmed",
       ],
       default: "pending",
     },
@@ -292,6 +299,123 @@ const orderSchema = new mongoose.Schema(
     timeSlot: {
       type: String,
       default: "now",
+    },
+    fulfillmentType: {
+      type: String,
+      enum: ["instant", "scheduled", "preorder"],
+      default: "instant",
+      index: true,
+    },
+    schedule: {
+      deliveryDate: { type: Date, default: null },
+      windowLabel: { type: String, default: "" },
+      windowStart: { type: String, default: "" },
+      windowEnd: { type: String, default: "" },
+      cutoffAt: { type: Date, default: null },
+      activationAt: { type: Date, default: null },
+      activationJobId: { type: String, default: null },
+      activatedAt: { type: Date, default: null },
+      timezone: { type: String, default: "Asia/Kolkata" },
+    },
+    preOrderCampaign: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PreOrderCampaign",
+      default: null,
+      index: true,
+    },
+    reschedule: {
+      status: {
+        type: String,
+        enum: ["none", "requested", "approved", "rejected"],
+        default: "none",
+      },
+      requestedDeliveryDate: { type: Date, default: null },
+      requestedWindowLabel: { type: String, default: "" },
+      requestedWindowStart: { type: String, default: "" },
+      requestedWindowEnd: { type: String, default: "" },
+      reason: { type: String, default: "" },
+      requestedAt: { type: Date, default: null },
+      requestedBy: {
+        type: String,
+        enum: ["customer", "seller", "admin", "assistant"],
+        default: undefined,
+      },
+      reviewedAt: { type: Date, default: null },
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: "reschedule.reviewedByModel",
+        default: null,
+      },
+      reviewedByModel: {
+        type: String,
+        enum: ["Admin", "Seller"],
+        default: undefined,
+      },
+      reviewNote: { type: String, default: "" },
+      history: {
+        type: [
+          {
+            fromDate: Date,
+            fromWindowLabel: String,
+            toDate: Date,
+            toWindowLabel: String,
+            changedBy: String,
+            changedAt: { type: Date, default: Date.now },
+            note: String,
+          },
+        ],
+        default: [],
+      },
+    },
+    priceAdjustment: {
+      status: {
+        type: String,
+        enum: ["none", "pending", "awaiting_payment", "applied", "cancelled"],
+        default: "none",
+      },
+      direction: {
+        type: String,
+        enum: ["none", "increase", "decrease"],
+        default: "none",
+      },
+      deltaAmount: { type: Number, default: 0 },
+      previousGrandTotal: { type: Number, default: 0 },
+      newGrandTotal: { type: Number, default: 0 },
+      reason: { type: String, default: "" },
+      creditNoteId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CreditNote",
+        default: null,
+      },
+      extraPaymentRef: { type: String, default: "" },
+      extraPaymentDeadlineAt: { type: Date, default: null },
+      extraPaymentJobId: { type: String, default: null },
+      priorWorkflowStatus: { type: String, default: "" },
+      priorLegacyStatus: { type: String, default: "" },
+      history: {
+        type: [
+          {
+            direction: String,
+            deltaAmount: Number,
+            reason: String,
+            changedBy: String,
+            changedAt: { type: Date, default: Date.now },
+          },
+        ],
+        default: [],
+      },
+    },
+    disputeRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Dispute",
+      default: null,
+      index: true,
+    },
+    partialCancellation: {
+      isPartial: { type: Boolean, default: false },
+      cancelledItemIndexes: { type: [Number], default: [] },
+      cancelledAt: { type: Date, default: null },
+      reason: { type: String, default: "" },
     },
     deliveryBoy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -506,6 +630,11 @@ orderSchema.index({ status: 1, expiresAt: 1 });
 orderSchema.index({ seller: 1, returnStatus: 1, returnRequestedAt: -1 });
 orderSchema.index({ workflowStatus: 1, sellerPendingExpiresAt: 1 });
 orderSchema.index({ workflowStatus: 1, deliverySearchExpiresAt: 1 });
+orderSchema.index({ fulfillmentType: 1, "schedule.deliveryDate": 1, workflowStatus: 1 });
+orderSchema.index({ "schedule.activationAt": 1, workflowStatus: 1 });
+orderSchema.index({ "reschedule.status": 1, createdAt: -1 });
+orderSchema.index({ "priceAdjustment.status": 1, createdAt: -1 });
+orderSchema.index({ preOrderCampaign: 1, workflowStatus: 1 });
 orderSchema.index({ deliveryBoy: 1, workflowStatus: 1 });
 orderSchema.index({ "cancellationRequest.status": 1, createdAt: -1 });
 orderSchema.index({ paymentMode: 1, paymentStatus: 1, createdAt: -1 });

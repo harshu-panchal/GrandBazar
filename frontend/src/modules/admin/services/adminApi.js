@@ -189,4 +189,10 @@ export const adminApi = {
     // Active Sessions & Login Activity
     getLoginActivities: (params) => axiosInstance.get('/admin/login-activities', { params }),
     terminateSession: (id) => axiosInstance.delete(`/admin/login-activities/${id}`),
+
+    // Order lifecycle
+    listDisputes: (params) => axiosInstance.get('/orders/disputes', { params }),
+    resolveDispute: (disputeId, data) => axiosInstance.put(`/orders/disputes/${disputeId}/resolve`, data),
+    adminRescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/admin`, data),
+    logisticsOverride: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/override`, data),
 };

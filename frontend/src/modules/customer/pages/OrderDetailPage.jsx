@@ -5,7 +5,7 @@ import InvoiceModal from "../components/order/InvoiceModal";
 import HelpModal from "../components/order/HelpModal";
 import LiveTrackingMap from "../components/order/LiveTrackingMap";
 import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
-import OrderProgressTracker from "../components/order/OrderProgressTracker";
+import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import {
@@ -188,6 +188,19 @@ const OrderDetailPage = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  const refreshOrder = async () => {
+    if (!orderId) return;
+    try {
+      refreshRef.current.inFlight = true;
+      const response = await customerApi.getOrderDetails(orderId);
+      setOrder(response.data.result);
+    } catch (error) {
+      console.error("Failed to refresh order details:", error);
+    } finally {
+      refreshRef.current.inFlight = false;
+    }
+  };
 
   useEffect(() => {
     const isInvalid = !orderId || orderId === "undefined" || orderId === "null";
@@ -1294,6 +1307,10 @@ const OrderDetailPage = () => {
             )}
           </motion.div>
         )}
+      </div>
+
+      <div className="px-4 pb-4">
+        <OrderLifecycleActions order={order} onRefresh={refreshOrder} />
       </div>
 
       {/* Modals */}

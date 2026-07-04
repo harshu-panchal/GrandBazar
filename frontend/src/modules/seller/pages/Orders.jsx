@@ -58,6 +58,10 @@ const Orders = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [adjustMode, setAdjustMode] = useState(false);
+    const [adjustItems, setAdjustItems] = useState([]);
+    const [adjustReason, setAdjustReason] = useState('');
+    const [adjustSaving, setAdjustSaving] = useState(false);
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
@@ -116,10 +120,22 @@ const Orders = () => {
                     qty: item.quantity,
                     image: item.image
                 })),
+                rawItems: (order.items || []).map(item => ({
+                    product: item.product?._id || item.product,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    variantSlot: item.variantSlot,
+                    image: item.image
+                })),
                 total: order.pricing?.total || 0,
                 status: getLegacyStatusFromOrder(order),
                 workflowStatus: order.workflowStatus,
                 workflowVersion: order.workflowVersion,
+                fulfillmentType: order.fulfillmentType || 'instant',
+                schedule: order.schedule || null,
+                reschedule: order.reschedule || null,
+                priceAdjustment: order.priceAdjustment || null,
                 date: order.createdAt
                     ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
                     : '',
@@ -225,8 +241,48 @@ const Orders = () => {
         }
     };
 
+    const getFulfillmentDisplay = (order) => {
+        const type = String(order.fulfillmentType || 'instant').toLowerCase();
+        const deliveryDate = order.schedule?.deliveryDate;
+        const windowLabel = order.schedule?.windowLabel;
+        const formattedDate = deliveryDate
+            ? new Date(deliveryDate).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+            })
+            : null;
+
+        if (type === 'scheduled') {
+            return {
+                badgeClassName: 'bg-blue-50 text-blue-700 border-blue-200',
+                label: 'Scheduled',
+                detail: formattedDate
+                    ? `${formattedDate}${windowLabel ? ` · ${windowLabel}` : ''}`
+                    : windowLabel || 'Future delivery',
+            };
+        }
+        if (type === 'preorder') {
+            return {
+                badgeClassName: 'bg-amber-50 text-amber-700 border-amber-200',
+                label: 'Pre-order',
+                detail: formattedDate
+                    ? `${formattedDate}${windowLabel ? ` · ${windowLabel}` : ''}`
+                    : 'Campaign delivery',
+            };
+        }
+        return {
+            badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            label: 'Instant',
+            detail: 'Deliver now',
+        };
+    };
+
     const handleViewDetails = (order) => {
         setSelectedOrder(order);
+        setAdjustMode(false);
+        setAdjustItems([]);
+        setAdjustReason('');
         setIsDetailsModalOpen(true);
     };
 
@@ -256,6 +312,87 @@ const Orders = () => {
         } catch (error) {
             console.error("Failed to update status:", error);
             showToast("Failed to update status", "error");
+        }
+    };
+
+    const handleApproveReschedule = async (order) => {
+        try {
+            const requested = order?.reschedule?.requestedDeliveryDate;
+            await sellerApi.approveReschedule(order._id || order.id, requested ? { deliveryDate: requested } : {});
+            showToast("Reschedule approved", "success");
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to approve reschedule", "error");
+        }
+    };
+
+    const handleRejectReschedule = async (order) => {
+        const reason = window.prompt("Reason for rejecting the reschedule request?", "");
+        if (reason === null) return;
+        try {
+            await sellerApi.rejectReschedule(order._id || order.id, { note: reason });
+            showToast("Reschedule rejected", "success");
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to reject reschedule", "error");
+        }
+    };
+
+    const openAdjustEditor = (order) => {
+        setAdjustItems((order.rawItems || []).map((it) => ({ ...it, quantity: it.quantity })));
+        setAdjustReason('');
+        setAdjustMode(true);
+    };
+
+    const closeAdjustEditor = () => {
+        setAdjustMode(false);
+        setAdjustItems([]);
+        setAdjustReason('');
+    };
+
+    const updateAdjustQty = (idx, qty) => {
+        setAdjustItems((prev) => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], quantity: Math.max(0, Number(qty) || 0) };
+            return next;
+        });
+    };
+
+    const adjustPreviewTotal = useMemo(
+        () => adjustItems.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0),
+        [adjustItems]
+    );
+
+    const handleApplyAdjustment = async () => {
+        const kept = adjustItems.filter((it) => Number(it.quantity) > 0);
+        if (!kept.length) {
+            showToast("At least one item must remain. Use cancel for a full cancellation.", "error");
+            return;
+        }
+        if (!adjustReason.trim()) {
+            showToast("Please provide a reason for the adjustment", "error");
+            return;
+        }
+        try {
+            setAdjustSaving(true);
+            await sellerApi.adjustOrder(selectedOrder._id || selectedOrder.id, {
+                items: kept.map((it) => ({
+                    product: it.product,
+                    variantSlot: it.variantSlot,
+                    quantity: Number(it.quantity),
+                })),
+                reason: adjustReason.trim(),
+            });
+            showToast("Price adjustment applied", "success");
+            closeAdjustEditor();
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to apply adjustment", "error");
+        } finally {
+            setAdjustSaving(false);
         }
     };
 
@@ -537,6 +674,17 @@ const Orders = () => {
                                                         <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
                                                         {order.date} • {order.time}
                                                     </p>
+                                                    {(() => {
+                                                        const fulfillment = getFulfillmentDisplay(order);
+                                                        return (
+                                                            <div className="mt-1.5 flex flex-col gap-0.5">
+                                                                <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.badgeClassName)}>
+                                                                    {fulfillment.label}
+                                                                </Badge>
+                                                                <span className="text-[10px] font-semibold text-slate-500">{fulfillment.detail}</span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <div className="h-7 w-7 rounded-full bg-slate-900 flex items-center justify-center text-[10px] font-black text-white shrink-0">
                                                             {order.customer.avatar}
@@ -615,6 +763,17 @@ const Orders = () => {
                                                                 <HiOutlineCalendarDays className="h-3 w-3" />
                                                                 {order.date} • {order.time}
                                                             </div>
+                                                            {(() => {
+                                                                const fulfillment = getFulfillmentDisplay(order);
+                                                                return (
+                                                                    <div className="mt-1.5 flex flex-col gap-0.5">
+                                                                        <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.badgeClassName)}>
+                                                                            {fulfillment.label}
+                                                                        </Badge>
+                                                                        <span className="text-[10px] font-semibold text-slate-500">{fulfillment.detail}</span>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
@@ -1000,7 +1159,94 @@ const Orders = () => {
                                             </div>
                                         </div>
 
-                                        <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-3 sm:mb-4">Items Ordered ({selectedOrder.items.length})</h4>
+                                        {(selectedOrder.fulfillmentType && selectedOrder.fulfillmentType !== 'instant') && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-brand-50 ring-1 ring-brand-100">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-600">{selectedOrder.fulfillmentType} order</p>
+                                                {selectedOrder.schedule?.deliveryDate && (
+                                                    <p className="text-xs font-semibold text-slate-700 mt-1">
+                                                        Delivery: {new Date(selectedOrder.schedule.deliveryDate).toLocaleDateString()} {selectedOrder.schedule.windowLabel ? `(${selectedOrder.schedule.windowLabel})` : ''}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {selectedOrder.reschedule?.status === 'requested' && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Reschedule Requested</p>
+                                                <p className="text-xs font-semibold text-slate-700 mt-1">
+                                                    New date: {selectedOrder.reschedule.requestedDeliveryDate ? new Date(selectedOrder.reschedule.requestedDeliveryDate).toLocaleDateString() : '—'}
+                                                </p>
+                                                <div className="flex gap-2 mt-2">
+                                                    <button onClick={() => handleApproveReschedule(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all">Approve</button>
+                                                    <button onClick={() => handleRejectReschedule(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all">Reject</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(() => {
+                                            const s = (selectedOrder.status || '').toLowerCase();
+                                            const canAdjust = !['delivered', 'cancelled', 'out_for_delivery', 'returned'].includes(s);
+                                            return (
+                                                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                                                    <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest">Items Ordered ({selectedOrder.items.length})</h4>
+                                                    {canAdjust && !adjustMode && (
+                                                        <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
+                                                    )}
+                                                    {adjustMode && (
+                                                        <button onClick={closeAdjustEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        {adjustMode ? (
+                                            <div className="space-y-3">
+                                                <div className="space-y-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
+                                                    {adjustItems.map((item, idx) => (
+                                                        <div key={idx} className="flex items-center justify-between gap-2 p-3 bg-white ring-1 ring-slate-100 rounded-2xl">
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <div className="h-10 w-10 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 shrink-0">
+                                                                    <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                                                                    <p className="text-xs font-semibold text-slate-600 mt-0.5">₹{Number(item.price).toFixed(2)} each</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <button onClick={() => updateAdjustQty(idx, Number(item.quantity) - 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">−</button>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    value={item.quantity}
+                                                                    onChange={(e) => updateAdjustQty(idx, e.target.value)}
+                                                                    className="w-12 text-center text-xs font-bold border border-slate-200 rounded-lg py-1"
+                                                                />
+                                                                <button onClick={() => updateAdjustQty(idx, Number(item.quantity) + 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">+</button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="flex items-center justify-between px-1">
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">New Items Subtotal</span>
+                                                    <span className="text-sm font-black text-primary">₹{adjustPreviewTotal.toFixed(2)}</span>
+                                                </div>
+                                                <textarea
+                                                    value={adjustReason}
+                                                    onChange={(e) => setAdjustReason(e.target.value)}
+                                                    placeholder="Reason for adjustment (shared with customer)"
+                                                    rows={2}
+                                                    className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                                                />
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={closeAdjustEditor} disabled={adjustSaving} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Discard</button>
+                                                    <button onClick={handleApplyAdjustment} disabled={adjustSaving} className="px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all flex items-center gap-2">
+                                                        {adjustSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                                        Apply Adjustment
+                                                    </button>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 leading-relaxed">
+                                                    Final pricing is recomputed from current product prices. Increases on prepaid orders will request an extra payment; decreases issue a credit note/refund automatically.
+                                                </p>
+                                            </div>
+                                        ) : (
                                         <div className="space-y-3 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
                                             {selectedOrder.items.map((item, idx) => (
                                                 <div key={idx} className="flex items-center justify-between p-3 bg-white ring-1 ring-slate-100 rounded-2xl group hover:shadow-md transition-all">
@@ -1019,6 +1265,7 @@ const Orders = () => {
                                                 </div>
                                             ))}
                                         </div>
+                                        )}
                                     </div>
 
                                     {/* Modal Footer */}

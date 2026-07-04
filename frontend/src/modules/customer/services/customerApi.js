@@ -84,6 +84,16 @@ export const customerApi = {
       {},
       { ttl: 0 },
     ),
+  getDeliverySlots: (params) => getWithDedupe("/orders/scheduling/slots", params, { ttl: 30000 }),
+  getActiveCampaigns: (params) => getWithDedupe("/orders/campaigns/active", params),
+  getCampaignDetail: (campaignId) => getWithDedupe(`/orders/campaigns/${campaignId}`),
+  rescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}`, data),
+  requestReschedule: (orderId, data) =>
+    axiosInstance.post(`/orders/reschedule/${orderId}/request`, data),
+  payOrderDifference: (orderId, data) =>
+    axiosInstance.post(`/orders/${orderId}/pay-difference`, data),
+  raiseDispute: (orderId, data) => axiosInstance.post(`/orders/${orderId}/dispute`, data),
+  getOrderDispute: (orderId) => axiosInstance.get(`/orders/${orderId}/dispute`),
   getOrderRoute: (orderId, params) =>
     axiosInstance.get(`/orders/workflow/${orderId}/route`, { params }),
   cancelOrder: (orderId, data) => {
