@@ -188,9 +188,7 @@ export function computeSellerPendingExpiry(order, now = new Date()) {
   if (order.fulfillmentType === FULFILLMENT_TYPE.INSTANT) {
     return null;
   }
-  if (order.schedule?.cutoffAt) {
-    return new Date(order.schedule.cutoffAt);
-  }
+  // Seller accept window — not schedule.cutoffAt (customer reschedule deadline).
   return new Date(now.getTime() + DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS());
 }
 

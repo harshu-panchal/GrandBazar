@@ -6,7 +6,8 @@ import {
   computeActivationAt,
   isPastCutoff,
 } from "../app/utils/scheduleDateUtils.js";
-import { inferFulfillmentType, isInstantFulfillment } from "../app/services/orderSchedulingService.js";
+import { inferFulfillmentType, isInstantFulfillment, computeSellerPendingExpiry } from "../app/services/orderSchedulingService.js";
+import { FULFILLMENT_TYPE, DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS } from "../app/constants/orderWorkflow.js";
 
 describe("order state machine extensions", () => {
   it("allows scheduled hold to delivery search", () => {
@@ -60,5 +61,24 @@ describe("fulfillment inference", () => {
 
   it("treats now as instant", () => {
     expect(isInstantFulfillment({ timeSlot: "now" })).toBe(true);
+  });
+});
+
+describe("seller pending expiry", () => {
+  it("uses relaxed seller window for scheduled orders, not customer cutoff", () => {
+    const placedAt = new Date("2026-07-04T10:00:00.000Z");
+    const cutoffAt = new Date("2026-07-07T06:00:00.000Z");
+    const expiry = computeSellerPendingExpiry(
+      { fulfillmentType: FULFILLMENT_TYPE.SCHEDULED, schedule: { cutoffAt } },
+      placedAt,
+    );
+    expect(expiry.getTime()).toBe(placedAt.getTime() + DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS());
+    expect(expiry.getTime()).toBeLessThan(cutoffAt.getTime());
+  });
+
+  it("returns null for instant fulfillment", () => {
+    expect(
+      computeSellerPendingExpiry({ fulfillmentType: FULFILLMENT_TYPE.INSTANT }, new Date()),
+    ).toBeNull();
   });
 });

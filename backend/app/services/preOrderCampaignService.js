@@ -5,9 +5,8 @@ import {
   WORKFLOW_STATUS,
   FULFILLMENT_TYPE,
   legacyStatusFromWorkflow,
-  DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS,
 } from "../constants/orderWorkflow.js";
-import { validateScheduleSelection, buildSchedulePayload } from "./orderSchedulingService.js";
+import { validateScheduleSelection, buildSchedulePayload, computeSellerPendingExpiry } from "./orderSchedulingService.js";
 import {
   preorderActivationQueue,
   JOB_NAMES,
@@ -125,9 +124,7 @@ export async function processPreorderSaleStartJob({ campaignId }) {
   });
 
   for (const order of orders) {
-    const sellerPendingUntil = new Date(
-      order.schedule?.cutoffAt || Date.now() + DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS(),
-    );
+    const sellerPendingUntil = computeSellerPendingExpiry(order, new Date());
     const updated = await Order.findOneAndUpdate(
       {
         _id: order._id,

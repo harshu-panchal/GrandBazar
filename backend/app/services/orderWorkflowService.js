@@ -10,7 +10,6 @@ import {
   DEFAULT_SELLER_TIMEOUT_MS,
   DEFAULT_DELIVERY_TIMEOUT_MS,
   FULFILLMENT_TYPE,
-  usesRelaxedSellerTimeout,
 } from "../constants/orderWorkflow.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
 import {
@@ -34,7 +33,6 @@ import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.const
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
 import {
   scheduleOrderActivationJob,
-  computeSellerPendingExpiry,
 } from "./orderSchedulingService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
@@ -312,21 +310,31 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
       throw err;
     }
 
-    await removeSellerTimeoutJob(orderId);
+    void removeSellerTimeoutJob(orderId);
 
     const activationAt =
       updatedScheduled.schedule?.activationAt ||
       new Date(now.getTime() + 60 * 60 * 1000);
-    const jobId = await scheduleOrderActivationJob(orderId, activationAt);
-    await Order.updateOne(
-      { _id: updatedScheduled._id },
-      {
-        $set: {
-          "schedule.activationAt": activationAt,
-          "schedule.activationJobId": jobId,
-        },
-      },
-    );
+    const orderMongoId = updatedScheduled._id;
+    void scheduleOrderActivationJob(orderId, activationAt)
+      .then((jobId) =>
+        Order.updateOne(
+          { _id: orderMongoId },
+          {
+            $set: {
+              "schedule.activationAt": activationAt,
+              "schedule.activationJobId": jobId,
+            },
+          },
+        ),
+      )
+      .catch((err) => {
+        console.warn(
+          "[sellerAcceptAtomic] activation job schedule failed",
+          orderId,
+          err.message,
+        );
+      });
 
     emitOrderStatusUpdate(
       updatedScheduled.orderId,
@@ -388,7 +396,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     throw err;
   }
 
-  await removeSellerTimeoutJob(orderId);
+  void removeSellerTimeoutJob(orderId);
 
   if (useExternalLogistics) {
     emitOrderStatusUpdate(
@@ -628,12 +636,6 @@ export async function processSellerTimeoutJob({ orderId }) {
   const now = new Date();
   const order = await Order.findOne({ orderId, workflowVersion: { $gte: 2 } });
   if (!order || order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING) return;
-
-  if (usesRelaxedSellerTimeout(order.fulfillmentType)) {
-    const expiry = computeSellerPendingExpiry(order, now);
-    if (expiry && expiry > now) return;
-    if (order.schedule?.cutoffAt && new Date(order.schedule.cutoffAt) > now) return;
-  }
 
   if (order.sellerPendingExpiresAt && order.sellerPendingExpiresAt > now) {
     return;

@@ -23,6 +23,9 @@ const isApprovedStore = (store) => {
     return store.isVerified === true && store.isActive === true && status === 'approved';
 };
 
+/** Match server scheduled seller accept window (24h default). */
+const SCHEDULED_ACCEPT_WINDOW_SEC = 24 * 60 * 60;
+
 /** Match server `sellerPendingExpiresAt` — never reset to a full 60s when the modal opens late. */
 function secondsLeftUntilSellerExpiry(order) {
     if (!order) return 0;
@@ -32,13 +35,80 @@ function secondsLeftUntilSellerExpiry(order) {
     return Math.max(0, Math.ceil(ms / 1000));
 }
 
+function isRelaxedFulfillment(order) {
+    const ft = String(order?.fulfillmentType || '').toLowerCase();
+    return ft === 'scheduled' || ft === 'preorder';
+}
+
+/** Scheduled orders may have legacy sellerPendingExpiresAt = schedule.cutoffAt — use 24h from placement instead. */
+function resolveAcceptSecondsLeft(order) {
+    const raw = secondsLeftUntilSellerExpiry(order);
+    if (!isRelaxedFulfillment(order)) return raw;
+
+    const placedMs = new Date(order.createdAt || order.date || 0).getTime();
+    if (!Number.isFinite(placedMs) || placedMs <= 0) return raw;
+
+    const relaxedLeft = Math.max(
+        0,
+        Math.ceil((placedMs + SCHEDULED_ACCEPT_WINDOW_SEC * 1000 - Date.now()) / 1000),
+    );
+
+    if (raw > SCHEDULED_ACCEPT_WINDOW_SEC + 60) {
+        return relaxedLeft;
+    }
+    return raw;
+}
+
+function formatAcceptCountdown(seconds) {
+    if (seconds <= 0) return 'expired';
+    if (seconds < 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+    if (seconds < 3600) {
+        const mins = Math.ceil(seconds / 60);
+        return `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        if (remHours === 0) return `${days} ${days === 1 ? 'day' : 'days'}`;
+        return `${days}d ${remHours}h`;
+    }
+    if (mins === 0) return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    return `${hours}h ${mins}m`;
+}
+
+function getOrderFulfillmentBadge(order) {
+    let type = String(order?.fulfillmentType || '').toLowerCase();
+    if (!type) {
+        type = order?.schedule?.deliveryDate || order?.schedule?.windowLabel ? 'scheduled' : 'instant';
+    }
+
+    if (type === 'scheduled') {
+        return {
+            badgeClassName: 'bg-blue-50 text-blue-700 border-blue-200',
+            label: 'Scheduled',
+        };
+    }
+    if (type === 'preorder') {
+        return {
+            badgeClassName: 'bg-amber-50 text-amber-700 border-amber-200',
+            label: 'Pre-order',
+        };
+    }
+    return {
+        badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        label: 'Instant',
+    };
+}
+
 function isSellerAlertEligible(order) {
     if (!order?.orderId) return false;
     const ws = String(order.workflowStatus || '').toUpperCase();
     const status = String(order.status || '').toLowerCase();
     const hasExpiry = Boolean(order.sellerPendingExpiresAt ?? order.expiresAt);
 
-    if (hasExpiry && secondsLeftUntilSellerExpiry(order) <= 0) return false;
+    if (hasExpiry && resolveAcceptSecondsLeft(order) <= 0) return false;
     if (ws) return ws === 'SELLER_PENDING';
 
     // Backward compatibility: older payloads may not include workflowStatus.
@@ -54,6 +124,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const [shownOrderIds, setShownOrderIds] = useState(() => new Set());
     const [shownReturnOrderIds, setShownReturnOrderIds] = useState(() => new Set());
     const [timeLeft, setTimeLeft] = useState(0);
+    const [acceptInFlight, setAcceptInFlight] = useState(false);
     /** Total seconds in this acceptance window (for progress bar), set when modal opens */
     const acceptWindowTotalRef = useRef(60);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -341,7 +412,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     useEffect(() => {
         if (!newOrderAlert) return undefined;
 
-        const left = secondsLeftUntilSellerExpiry(newOrderAlert);
+        const left = resolveAcceptSecondsLeft(newOrderAlert);
         if (left <= 0) {
             setNewOrderAlert(null);
             toast.error("This order has already expired — you can no longer accept it.");
@@ -352,7 +423,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
         setTimeLeft(left);
 
         const timer = setInterval(() => {
-            const next = secondsLeftUntilSellerExpiry(newOrderAlertRef.current);
+            const next = resolveAcceptSecondsLeft(newOrderAlertRef.current);
             setTimeLeft(next);
             if (next <= 0) {
                 clearInterval(timer);
@@ -365,6 +436,8 @@ const DashboardLayout = ({ children, navItems, title }) => {
     }, [newOrderAlert]);
 
     const handleAcceptOrder = async (orderId) => {
+        if (acceptInFlight) return;
+        setAcceptInFlight(true);
         try {
             await sellerApi.updateOrderStatus(orderId, { status: 'confirmed' });
             toast.success(`Order #${orderId} Accepted!`);
@@ -384,6 +457,8 @@ const DashboardLayout = ({ children, navItems, title }) => {
                 if (fetchOrdersRef.current) fetchOrdersRef.current();
             }
             toast.error(msg);
+        } finally {
+            setAcceptInFlight(false);
         }
     };
 
@@ -400,6 +475,11 @@ const DashboardLayout = ({ children, navItems, title }) => {
             toast.error(msg);
         }
     };
+
+    const orderTimerUrgent = newOrderAlert
+        ? (isRelaxedFulfillment(newOrderAlert) ? timeLeft < 3600 : timeLeft < 15)
+        : false;
+    const orderFulfillmentBadge = newOrderAlert ? getOrderFulfillmentBadge(newOrderAlert) : null;
 
     return (
         <div className="min-h-screen mesh-gradient-light relative overflow-x-hidden">
@@ -452,6 +532,16 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                 </div>
 
                                 <h2 className="text-2xl font-black text-slate-900 mb-2">New Order Received!</h2>
+                                {orderFulfillmentBadge && (
+                                    <span
+                                        className={cn(
+                                            'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border mb-4',
+                                            orderFulfillmentBadge.badgeClassName,
+                                        )}
+                                    >
+                                        {orderFulfillmentBadge.label}
+                                    </span>
+                                )}
                                 <p className="text-slate-600 font-medium mb-6">
                                     You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span> for <span className="text-slate-900 font-bold">₹{newOrderAlert.pricing?.total || newOrderAlert.total}</span>
                                 </p>
@@ -461,7 +551,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                     <div
                                         className={cn(
                                             "h-full transition-[width] duration-1000 ease-linear",
-                                            timeLeft < 15 ? "bg-rose-500" : "bg-primary",
+                                            orderTimerUrgent ? "bg-rose-500" : "bg-primary",
                                         )}
                                         style={{
                                             width: `${acceptWindowTotalRef.current > 0 ? (timeLeft / acceptWindowTotalRef.current) * 100 : 0}%`,
@@ -470,26 +560,28 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                 </div>
 
                                 <div className="flex items-center gap-4 text-sm font-bold mb-8">
-                                    <Clock className={cn("h-4 w-4", timeLeft < 15 ? "text-rose-500 animate-pulse" : "text-slate-600")} />
-                                    <span className={timeLeft < 15 ? "text-rose-500" : "text-slate-600"}>
-                                        Accept within {timeLeft} {timeLeft === 1 ? "second" : "seconds"}
+                                    <Clock className={cn("h-4 w-4", orderTimerUrgent ? "text-rose-500 animate-pulse" : "text-slate-600")} />
+                                    <span className={orderTimerUrgent ? "text-rose-500" : "text-slate-600"}>
+                                        Accept within {formatAcceptCountdown(timeLeft)}
                                     </span>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 w-full">
                                     <button
                                         onClick={() => handleDeclineOrder(newOrderAlert.orderId)}
-                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
+                                        disabled={acceptInFlight}
+                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
                                     >
                                         <X className="h-5 w-5" />
                                         Decline
                                     </button>
                                     <button
                                         onClick={() => handleAcceptOrder(newOrderAlert.orderId)}
-                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95"
+                                        disabled={acceptInFlight}
+                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-70 disabled:pointer-events-none"
                                     >
                                         <Check className="h-5 w-5" />
-                                        Accept
+                                        {acceptInFlight ? 'Accepting…' : 'Accept'}
                                     </button>
                                 </div>
                             </div>
