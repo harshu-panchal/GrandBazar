@@ -31,6 +31,12 @@ import {
   getCampaignProducts,
   cancelPreOrderCampaign,
 } from "../services/preOrderCampaignService.js";
+import {
+  createReplacementRequest,
+  reviewReplacementRequest,
+  createSplitDeliveries,
+  getOrderModificationTimeline,
+} from "../services/orderModificationService.js";
 import Order from "../models/order.js";
 import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { legacyStatusFromWorkflow } from "../constants/orderWorkflow.js";
@@ -197,6 +203,68 @@ export const payOrderDifference = async (req, res) => {
   }
 };
 
+export const requestProductReplacement = async (req, res) => {
+  try {
+    const { itemIndex, alternatives, reason } = req.body || {};
+    const order = await createReplacementRequest({
+      orderId: req.params.orderId,
+      itemIndex,
+      alternatives,
+      reason,
+      actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+      actorId: req.user?.id,
+    });
+    return handleResponse(res, 200, "Replacement request submitted to customer", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const reviewProductReplacement = async (req, res) => {
+  try {
+    const { decision, selectedAlternativeIndex, note } = req.body || {};
+    const order = await reviewReplacementRequest({
+      orderId: req.params.orderId,
+      requestId: req.params.requestId,
+      decision,
+      selectedAlternativeIndex,
+      customerId: req.user?.id,
+      note,
+    });
+    return handleResponse(res, 200, "Replacement decision recorded", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const splitOrderDelivery = async (req, res) => {
+  try {
+    const { splits } = req.body || {};
+    const order = await createSplitDeliveries({
+      orderId: req.params.orderId,
+      splits,
+      actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+      actorId: req.user?.id,
+    });
+    return handleResponse(res, 200, "Split delivery plan saved", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const getOrderModificationHistory = async (req, res) => {
+  try {
+    const data = await getOrderModificationTimeline({
+      orderId: req.params.orderId,
+      actorId: req.user?.id,
+      role: req.user?.role,
+    });
+    return handleResponse(res, 200, "Order modification history", data);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
 export const createDispute = async (req, res) => {
   try {
     const raisedBy = ["seller", "admin"].includes(req.user.role) ? "seller" : "customer";
@@ -321,8 +389,11 @@ export const updateSelfLogisticsStatus = async (req, res) => {
 
     const order = await Order.findOne({ orderId, seller: req.user.id });
     if (!order) return handleResponse(res, 404, "Order not found");
-    if (order.logisticsMode !== "external") {
-      return handleResponse(res, 400, "Self logistics updates only for external logistics mode");
+    if (
+      order.fulfillmentMethod !== "seller_delivery" &&
+      order.logisticsMode !== "external"
+    ) {
+      return handleResponse(res, 400, "Self logistics updates only for seller delivery orders");
     }
 
     const updated = await Order.findOneAndUpdate(

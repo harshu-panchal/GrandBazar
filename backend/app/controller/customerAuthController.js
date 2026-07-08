@@ -98,11 +98,11 @@ export const verifyCustomerOTP = async (req, res) => {
 ================================ */
 export const getCustomerProfile = async (req, res) => {
     try {
-        const customer = await Customer.findById(req.user.id);
+        const customer = await Customer.findById(req.user.id).lean();
         if (!customer) {
             return handleResponse(res, 404, "Customer not found");
         }
-        return handleResponse(res, 200, "Profile fetched successfully", customer);
+        return handleResponse(res, 200, "Profile fetched successfully", sanitizeCustomer(customer));
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }
@@ -126,7 +126,7 @@ export const updateCustomerProfile = async (req, res) => {
 
         await customer.save();
 
-        return handleResponse(res, 200, "Profile updated successfully", customer);
+        return handleResponse(res, 200, "Profile updated successfully", sanitizeCustomer(customer));
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }

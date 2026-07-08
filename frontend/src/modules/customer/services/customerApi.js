@@ -7,7 +7,10 @@ export const customerApi = {
     axiosInstance.post("/customer/send-signup-otp", data),
   verifyOtp: (data) => axiosInstance.post("/customer/verify-otp", data),
   getProfile: () => getWithDedupe("/customer/profile", {}, { ttl: 5000 }), // Short cache for profile
-  updateProfile: (data) => axiosInstance.put("/customer/profile", data),
+  updateProfile: (data) => {
+    invalidateCache("/customer/profile");
+    return axiosInstance.put("/customer/profile", data);
+  },
   getWalletTransactions: (params) =>
     getWithDedupe("/customer/transactions", params),
   getCategories: (params) =>
@@ -85,6 +88,9 @@ export const customerApi = {
       { ttl: 0 },
     ),
   getDeliverySlots: (params) => getWithDedupe("/orders/scheduling/slots", params, { ttl: 30000 }),
+  getDeliveryOptions: (params) => getWithDedupe("/orders/delivery-options", params, { ttl: 15000 }),
+  verifyCustomerPickup: (orderId, data) => axiosInstance.post(`/orders/${orderId}/pickup/verify`, data),
+  getPickupStatus: (orderId) => axiosInstance.get(`/orders/${orderId}/pickup/status`),
   getActiveCampaigns: (params) => getWithDedupe("/orders/campaigns/active", params),
   getCampaignDetail: (campaignId) => getWithDedupe(`/orders/campaigns/${campaignId}`),
   rescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}`, data),
@@ -92,6 +98,10 @@ export const customerApi = {
     axiosInstance.post(`/orders/reschedule/${orderId}/request`, data),
   payOrderDifference: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/pay-difference`, data),
+  reviewReplacementRequest: (orderId, requestId, data) =>
+    axiosInstance.put(`/orders/${orderId}/replacements/${requestId}/review`, data),
+  getOrderModificationHistory: (orderId) =>
+    axiosInstance.get(`/orders/${orderId}/modifications`),
   raiseDispute: (orderId, data) => axiosInstance.post(`/orders/${orderId}/dispute`, data),
   getOrderDispute: (orderId) => axiosInstance.get(`/orders/${orderId}/dispute`),
   getOrderRoute: (orderId, params) =>

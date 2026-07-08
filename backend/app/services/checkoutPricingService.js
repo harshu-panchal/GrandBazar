@@ -7,6 +7,7 @@ import {
   generateOrderPaymentBreakdown,
   hydrateOrderItems,
 } from "./finance/pricingService.js";
+import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 
 function normalizeLocation(location = null) {
   const lat = Number(location?.lat);
@@ -34,7 +35,12 @@ export function groupHydratedItemsBySeller(hydratedItems = []) {
   return grouped;
 }
 
-async function computeDistanceKmForSeller({ sellerId, addressLocation, session = null }) {
+async function computeDistanceKmForSeller({
+  sellerId,
+  addressLocation,
+  session = null,
+  skipRadiusCheck = false,
+}) {
   const normalizedLocation = normalizeLocation(addressLocation);
   if (!normalizedLocation) return 0;
 
@@ -57,12 +63,14 @@ async function computeDistanceKmForSeller({ sellerId, addressLocation, session =
     Number(sellerLng),
   );
   const distanceKm = Number((distanceInMeters / 1000).toFixed(3));
-  
-  const radius = Number(seller.serviceRadius || 5);
-  if (distanceKm > radius) {
-    const err = new Error(`${seller.shopName || "Store"} does not deliver to your current location (Distance: ${distanceKm}km, Service Radius: ${radius}km)`);
-    err.statusCode = 400;
-    throw err;
+
+  if (!skipRadiusCheck) {
+    const radius = Number(seller.serviceRadius || 5);
+    if (distanceKm > radius) {
+      const err = new Error(`${seller.shopName || "Store"} does not deliver to your current location (Distance: ${distanceKm}km, Service Radius: ${radius}km)`);
+      err.statusCode = 400;
+      throw err;
+    }
   }
 
   return distanceKm;
@@ -251,6 +259,8 @@ export async function buildCheckoutPricingSnapshot({
   tipAmount = 0,
   discountTotal = 0,
   session = null,
+  fulfillmentMethod = null,
+  fulfillmentMethodBySeller = null,
 }) {
   const hydratedItems = await hydrateOrderItems(orderItems, {
     session,
@@ -280,24 +290,37 @@ export async function buildCheckoutPricingSnapshot({
 
   for (const sellerId of sellerIds) {
     const sellerItems = itemsBySeller.get(sellerId) || [];
-    const distanceKm = await computeDistanceKmForSeller({
-      sellerId,
-      addressLocation: address?.location,
-      session,
-    });
+    const sellerFulfillmentMethod =
+      fulfillmentMethodBySeller?.[sellerId] ||
+      fulfillmentMethodBySeller?.[String(sellerId)] ||
+      fulfillmentMethod ||
+      FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
+    const isCustomerPickup =
+      sellerFulfillmentMethod === FULFILLMENT_METHOD.CUSTOMER_PICKUP;
+
+    const distanceKm = isCustomerPickup
+      ? 0
+      : await computeDistanceKmForSeller({
+          sellerId,
+          addressLocation: address?.location,
+          session,
+          skipRadiusCheck: isCustomerPickup,
+        });
     // Distribute discount proportionally by seller subtotal
     const sellerRatio = totalSubtotal > 0 ? (sellerSubtotals.get(sellerId) || 0) / totalSubtotal : 1 / sellerIds.length;
     const sellerDiscount = round2(discountTotal * sellerRatio);
     const breakdown = await generateOrderPaymentBreakdown({
       preHydratedItems: sellerItems,
-      distanceKm,
+      distanceKm: isCustomerPickup ? 0 : distanceKm,
       discountTotal: sellerDiscount,
       taxTotal: 0,
       session,
+      skipDeliveryFee: isCustomerPickup,
     });
     sellerBreakdownEntries.push({
       sellerId,
       distanceKm,
+      fulfillmentMethod: sellerFulfillmentMethod,
       items: sellerItems,
       breakdown: {
         ...breakdown,

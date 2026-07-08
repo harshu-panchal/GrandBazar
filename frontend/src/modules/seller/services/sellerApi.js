@@ -101,6 +101,10 @@ export const sellerApi = {
     // Scheduling & lifecycle
     getSchedulingSettings: () => axiosInstance.get('/orders/scheduling/settings'),
     updateSchedulingSettings: (data) => axiosInstance.put('/orders/scheduling/settings', data),
+    getDeliveryPolicy: () => axiosInstance.get('/orders/delivery-policy'),
+    updateDeliveryPolicy: (data) => axiosInstance.put('/orders/delivery-policy', data),
+    markOrderReadyForPickup: (orderId) => axiosInstance.post(`/orders/${orderId}/pickup/ready`),
+    verifyCustomerPickup: (orderId, data) => axiosInstance.post(`/orders/${orderId}/pickup/verify-seller`, data),
     listCampaigns: (params) => axiosInstance.get('/orders/campaigns', { params }),
     createCampaign: (data) => axiosInstance.post('/orders/campaigns', data),
     updateCampaign: (campaignId, data) => axiosInstance.put(`/orders/campaigns/${campaignId}`, data),
@@ -109,5 +113,8 @@ export const sellerApi = {
     rejectReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/reject`, data),
     adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
     partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
+    requestProductReplacement: (orderId, data) => axiosInstance.post(`/orders/${orderId}/replacements`, data),
+    splitOrderDelivery: (orderId, data) => axiosInstance.post(`/orders/${orderId}/split-delivery`, data),
+    getOrderModificationHistory: (orderId) => axiosInstance.get(`/orders/${orderId}/modifications`),
     updateSelfLogistics: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/self`, data),
 };

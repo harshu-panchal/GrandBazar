@@ -124,6 +124,18 @@ async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) 
   return creditNote;
 }
 
+function buildRevisedInvoiceEntry(order, { source, direction, deltaAmount, note, grandTotal }) {
+  return {
+    version: Number(order.modificationVersion || 0) + 1,
+    source: String(source || "adjustment"),
+    grandTotal: Number(grandTotal || 0),
+    deltaAmount: Number(deltaAmount || 0),
+    direction: String(direction || "none"),
+    note: String(note || "").trim(),
+    createdAt: new Date(),
+  };
+}
+
 export async function applyOrderPriceAdjustment({
   orderId,
   items,
@@ -237,7 +249,29 @@ export async function applyOrderPriceAdjustment({
           changedBy: actorLabel,
           changedAt: new Date(),
         },
+        revisedInvoices: buildRevisedInvoiceEntry(order, {
+          source: partialCancelIndexes.length > 0 ? "partial_cancel" : "price_adjustment",
+          direction,
+          deltaAmount: Math.abs(delta),
+          note: reason || "",
+          grandTotal: newGrandTotal,
+        }),
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: partialCancelIndexes.length > 0 ? "partial_cancelled" : "price_adjusted",
+          actorRole: actorLabel,
+          actorId: "",
+          note: reason || "",
+          meta: {
+            direction,
+            deltaAmount: Math.abs(delta),
+            previousGrandTotal,
+            newGrandTotal,
+          },
+          createdAt: new Date(),
+        },
       },
+      $inc: { modificationVersion: 1 },
     },
     { new: true },
   );
@@ -321,6 +355,21 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
         "priceAdjustment.status": "applied",
         "priceAdjustment.extraPaymentRef": `EXTRA-${orderId}`,
       },
+      $push: {
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: "extra_payment_recorded",
+          actorRole: "customer",
+          actorId: String(customerId || ""),
+          note: "Extra payment received",
+          meta: {
+            deltaAmount: delta,
+            walletUsed: walletUse,
+          },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
     },
     { new: true },
   );

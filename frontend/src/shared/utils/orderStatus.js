@@ -14,6 +14,7 @@ export const WORKFLOW_STATUS = {
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
   PICKUP_READY: "PICKUP_READY",
+  CUSTOMER_PICKUP_READY: "CUSTOMER_PICKUP_READY",
   OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
   DELIVERED: "DELIVERED",
   DISPUTED: "DISPUTED",
@@ -24,6 +25,7 @@ const LEGACY_ENUM = new Set([
   "pending",
   "confirmed",
   "packed",
+  "ready_for_pickup",
   "out_for_delivery",
   "delivered",
   "cancelled",
@@ -32,8 +34,14 @@ const LEGACY_ENUM = new Set([
   "price_revised",
   "awaiting_extra_payment",
   "partial_cancelled",
+  "partial_updated",
+  "customer_confirmation",
+  "preparing",
+  "completed",
+  "refunded",
   "disputed",
   "preorder_confirmed",
+  "scheduled",
 ]);
 
 function legacyFromWorkflow(workflowStatus) {
@@ -43,8 +51,9 @@ function legacyFromWorkflow(workflowStatus) {
       return "pending";
     case WORKFLOW_STATUS.PREORDER_HOLD:
       return "preorder_confirmed";
-    case WORKFLOW_STATUS.SELLER_ACCEPTED:
     case WORKFLOW_STATUS.SCHEDULED_HOLD:
+      return "scheduled";
+    case WORKFLOW_STATUS.SELLER_ACCEPTED:
     case WORKFLOW_STATUS.DELIVERY_SEARCH:
     case WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING:
       return "confirmed";
@@ -54,6 +63,8 @@ function legacyFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.PICKUP_READY:
       return "packed";
+    case WORKFLOW_STATUS.CUSTOMER_PICKUP_READY:
+      return "ready_for_pickup";
     case WORKFLOW_STATUS.OUT_FOR_DELIVERY:
       return "out_for_delivery";
     case WORKFLOW_STATUS.DELIVERED:
@@ -82,6 +93,11 @@ export function getLegacyStatusFromOrder(order) {
       "price_revised",
       "awaiting_extra_payment",
       "partial_cancelled",
+      "partial_updated",
+      "customer_confirmation",
+      "preparing",
+      "completed",
+      "refunded",
       "disputed",
       "preorder_confirmed",
     ].includes(explicit)
@@ -95,10 +111,10 @@ export function getLegacyStatusFromOrder(order) {
     if (workflowStatus === WORKFLOW_STATUS.OUT_FOR_DELIVERY) return "out_for_delivery";
     if (workflowStatus === WORKFLOW_STATUS.DELIVERED) return "delivered";
     if (workflowStatus === WORKFLOW_STATUS.PICKUP_READY) return "packed";
+    if (workflowStatus === WORKFLOW_STATUS.SCHEDULED_HOLD) return "scheduled";
     if (
       workflowStatus === WORKFLOW_STATUS.DELIVERY_ASSIGNED ||
       workflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH ||
-      workflowStatus === WORKFLOW_STATUS.SCHEDULED_HOLD ||
       workflowStatus === WORKFLOW_STATUS.SELLER_ACCEPTED
     ) {
       return "confirmed";
@@ -196,9 +212,28 @@ const DISPLAY_LABELS = {
   price_revised: "Price revised",
   awaiting_extra_payment: "Awaiting extra payment",
   partial_cancelled: "Partially cancelled",
+  partial_updated: "Partially updated",
+  customer_confirmation: "Awaiting customer confirmation",
+  preparing: "Preparing",
+  completed: "Completed",
+  refunded: "Refunded",
   disputed: "Dispute open",
   preorder_confirmed: "Pre-order confirmed",
+  scheduled: "Scheduled",
 };
+
+export function isScheduledHoldOrder(order) {
+  const ws = String(order?.workflowStatus || "").toUpperCase();
+  return ws === WORKFLOW_STATUS.SCHEDULED_HOLD;
+}
+
+export function canSellerManuallyUpdateStatus(order) {
+  if (!order) return false;
+  if (isScheduledHoldOrder(order)) return false;
+  const ws = String(order?.workflowStatus || "").toUpperCase();
+  if (ws === WORKFLOW_STATUS.PREORDER_HOLD) return false;
+  return true;
+}
 
 export function getOrderStatusLabel(order) {
   const rs = order?.returnStatus;
@@ -225,8 +260,9 @@ export function adminRouteMatchesOrder(routeStatus, order) {
   if (routeStatus === "all") return true;
   if (routeStatus === "pending") return legacy === "pending" || legacy === "preorder_confirmed";
   if (routeStatus === "processed") {
-    return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled"].includes(legacy);
+    return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
   }
+  if (routeStatus === "scheduled") return legacy === "scheduled";
   if (routeStatus === "out-for-delivery") return legacy === "out_for_delivery";
   if (routeStatus === "delivered") return legacy === "delivered";
   if (routeStatus === "cancelled") return legacy === "cancelled";

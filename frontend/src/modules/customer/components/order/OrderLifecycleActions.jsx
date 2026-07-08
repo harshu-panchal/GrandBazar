@@ -8,6 +8,7 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [paying, setPaying] = useState(false);
+  const [reviewingReplacement, setReviewingReplacement] = useState("");
 
   if (!order) return null;
 
@@ -18,6 +19,9 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
     order.status === "awaiting_extra_payment" ||
     order.workflowStatus === "AWAITING_EXTRA_PAYMENT";
   const canDispute = order.status === "delivered" || order.workflowStatus === "DELIVERED";
+  const pendingReplacementRequests = Array.isArray(order.replacementRequests)
+    ? order.replacementRequests.filter((request) => request?.customerDecision === "pending")
+    : [];
 
   const submitReschedule = async () => {
     try {
@@ -61,6 +65,26 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
       onRefresh?.();
     } catch (e) {
       toast.error(e.response?.data?.message || "Could not raise dispute");
+    }
+  };
+
+  const reviewReplacement = async (requestId, decision, selectedAlternativeIndex = 0) => {
+    try {
+      setReviewingReplacement(`${requestId}:${decision}`);
+      await customerApi.reviewReplacementRequest(order.orderId, requestId, {
+        decision,
+        selectedAlternativeIndex,
+      });
+      toast.success(
+        decision === "approved"
+          ? "Replacement approved. Order price/status updated."
+          : "Replacement rejected. Seller has been notified.",
+      );
+      onRefresh?.();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Could not update replacement request");
+    } finally {
+      setReviewingReplacement("");
     }
   };
 
@@ -122,6 +146,47 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
           >
             Raise dispute
           </button>
+        </div>
+      )}
+
+      {pendingReplacementRequests.length > 0 && (
+        <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">
+            Replacement approval required
+          </h4>
+          {pendingReplacementRequests.map((request) => (
+            <div key={request.requestId} className="rounded-lg border border-amber-200 bg-white p-3">
+              <p className="text-xs font-semibold text-slate-700">
+                Seller requested replacement for item #{Number(request.itemIndex) + 1}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">{request.reason || "No reason provided"}</p>
+              <div className="mt-2 space-y-2">
+                {(request.alternatives || []).map((alt, idx) => (
+                  <div key={`${request.requestId}-${idx}`} className="rounded-md border border-slate-200 p-2">
+                    <p className="text-xs font-semibold text-slate-700">
+                      {alt.name || "Alternative product"} - ₹{Number(alt.price || 0).toFixed(2)}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={reviewingReplacement === `${request.requestId}:approved`}
+                      onClick={() => reviewReplacement(request.requestId, "approved", idx)}
+                      className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      Approve this option
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={reviewingReplacement === `${request.requestId}:rejected`}
+                onClick={() => reviewReplacement(request.requestId, "rejected")}
+                className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-60"
+              >
+                Reject replacement
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

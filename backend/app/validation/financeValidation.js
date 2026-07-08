@@ -37,6 +37,9 @@ export const checkoutPreviewSchema = Joi.object({
   paymentMode: Joi.string().valid("ONLINE", "COD").default("COD"),
   timeSlot: Joi.string().allow("", null),
   fulfillmentType: Joi.string().valid("instant", "scheduled", "preorder").optional(),
+  fulfillmentMethod: Joi.string()
+    .valid("customer_pickup", "seller_delivery", "platform_logistics")
+    .optional(),
   deliveryDate: Joi.date().optional(),
   windowLabel: Joi.string().allow("", null).optional(),
   campaignId: Joi.string().allow("", null).optional(),

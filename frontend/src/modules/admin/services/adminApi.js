@@ -195,4 +195,6 @@ export const adminApi = {
     resolveDispute: (disputeId, data) => axiosInstance.put(`/orders/disputes/${disputeId}/resolve`, data),
     adminRescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/admin`, data),
     logisticsOverride: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/override`, data),
+    updateStoreDeliveryPolicy: (storeId, data) =>
+        axiosInstance.put(`/orders/stores/${storeId}/delivery-policy`, data),
 };

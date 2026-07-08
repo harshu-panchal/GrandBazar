@@ -7,6 +7,7 @@ import LiveTrackingMap from "../components/order/LiveTrackingMap";
 import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
 import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
+import OrderProgressTracker from "../components/order/OrderProgressTracker";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import {
   ChevronLeft,
@@ -155,6 +156,9 @@ const OrderDetailPage = () => {
   const [trail, setTrail] = useState([]);
   const [routePolyline, setRoutePolyline] = useState(null);
   const [handoffOtp, setHandoffOtp] = useState(null);
+  const [pickupOtp, setPickupOtp] = useState("");
+  const [pickupQr, setPickupQr] = useState("");
+  const [pickupVerifyInput, setPickupVerifyInput] = useState("");
   const [clockTick, setClockTick] = useState(Date.now());
   const parsedReturnWindowMinutes = parseInt(
     import.meta.env.VITE_RETURN_WINDOW_MINUTES || "2",
@@ -302,9 +306,16 @@ const OrderDetailPage = () => {
             ...(ws === "DELIVERED" && { status: "delivered" }),
             ...(ws === "DELIVERY_SEARCH" && { status: "confirmed" }),
             ...(ws === "OUT_FOR_DELIVERY" && { status: "out_for_delivery" }),
-            ...(ws === "CANCELLED" && { status: "cancelled" }),
+            ...(ws === "CUSTOMER_PICKUP_READY" && { status: "ready_for_pickup" }),
+            ...(payload?.customerPickupOtp && { customerPickupOtp: payload.customerPickupOtp }),
           };
         });
+      }
+      if (payload?.customerPickupOtp) {
+        setPickupOtp(payload.customerPickupOtp);
+      }
+      if (payload?.customerPickupQr) {
+        setPickupQr(payload.customerPickupQr);
       }
       refresh();
     });
@@ -938,6 +949,57 @@ const OrderDetailPage = () => {
           orderId={order?.orderId || orderId}
           checkoutGroupId={order?.checkoutGroupId || orderId}
         />
+
+        {order?.fulfillmentMethod === "customer_pickup" && (
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Store Pickup</p>
+            <p className="text-sm text-emerald-900">
+              {String(order.workflowStatus || "").toUpperCase() === "CUSTOMER_PICKUP_READY"
+                ? "Your order is ready. Show the OTP or QR code at the shop."
+                : "The seller will notify you when your order is ready for pickup."}
+            </p>
+            {pickupOtp && (
+              <div className="rounded-2xl bg-white p-4 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pickup OTP</p>
+                <p className="text-3xl font-black tracking-[0.3em] text-slate-900 mt-2">{pickupOtp}</p>
+              </div>
+            )}
+            {pickupQr && (
+              <div className="rounded-2xl bg-white p-4 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pickup QR Token</p>
+                <p className="text-sm font-mono break-all text-slate-800 mt-2">{pickupQr}</p>
+              </div>
+            )}
+            {String(order.workflowStatus || "").toUpperCase() === "CUSTOMER_PICKUP_READY" && (
+              <div className="flex gap-2">
+                <input
+                  value={pickupVerifyInput}
+                  onChange={(e) => setPickupVerifyInput(e.target.value)}
+                  placeholder="Enter OTP to confirm pickup"
+                  className="flex-1 rounded-xl border px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await customerApi.verifyCustomerPickup(order.orderId || orderId, {
+                        otp: pickupVerifyInput,
+                        orderNumber: order.orderId || orderId,
+                      });
+                      toast.success("Pickup confirmed");
+                      refreshOrder();
+                    } catch (e) {
+                      toast.error(e?.response?.data?.message || "Pickup verification failed");
+                    }
+                  }}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white"
+                >
+                  Verify
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Delivery Partner Card - Redesigned */}
         {order.deliveryBoy && status !== "delivered" && status !== "cancelled" && (

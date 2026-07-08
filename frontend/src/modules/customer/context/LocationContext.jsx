@@ -266,6 +266,10 @@ export const LocationProvider = ({ children }) => {
               .filter(Boolean)
               .join(", ") ||
             "",
+          city: addr.city || "",
+          state: addr.state || "",
+          pincode: addr.pincode || "",
+          landmark: addr.landmark || "",
           location:
             addr?.location &&
             typeof addr.location.lat === "number" &&
@@ -276,6 +280,7 @@ export const LocationProvider = ({ children }) => {
               : null,
           placeId: typeof addr?.placeId === "string" ? addr.placeId : null,
           phone: profile?.phone ?? "",
+          name: profile?.name ?? "",
           isCurrent: idx === 0,
         })),
       );

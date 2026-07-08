@@ -14,24 +14,24 @@ import {
     startForegroundPushListener
 } from '@core/firebase/pushClient';
 import BecomeSellerButton from '../components/shared/BecomeSellerButton';
+import {
+    getCustomerDisplayName,
+    getCustomerPhoneForDisplay,
+} from '@shared/utils/customerProfile';
 
 const TEST_PUSH_STATUS_POLL_INTERVAL_MS = 1500;
 const TEST_PUSH_STATUS_MAX_ATTEMPTS = 20;
 
 const ProfilePage = () => {
     const navigate = useNavigate();
-    const { user, role, logout } = useAuth();
+    const { user, role, logout, refreshUser } = useAuth();
     const { settings } = useSettings();
     const appName = settings?.appName || 'App';
     const [isTestingPush, setIsTestingPush] = React.useState(false);
 
-    const formatIndiaPhone = (value) => {
-        const raw = String(value || '').trim();
-        if (!raw) return '';
-        if (raw.startsWith('+91')) return raw.replace(/^\+91[\s-]*/, '');
-        if (raw.startsWith('91') && raw.length >= 12) return raw.replace(/^91[\s-]*/, '');
-        return raw;
-    };
+    React.useEffect(() => {
+        refreshUser({ forceRefresh: true });
+    }, [refreshUser]);
 
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -132,9 +132,14 @@ const ProfilePage = () => {
                             </div>
                         </div>
                         <div>
-                            <h2 className="text-base leading-tight font-semibold text-slate-900">{user?.name || 'Customer'}</h2>
+                            <h2 className="text-base leading-tight font-semibold text-slate-900">
+                                {getCustomerDisplayName(user)}
+                            </h2>
                             <p className="text-slate-500 text-xs font-medium flex items-center gap-1 mt-0.5">
-                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] uppercase">India</span> +91 {formatIndiaPhone(user?.phone)}
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] uppercase">India</span>
+                                {getCustomerPhoneForDisplay(user)
+                                    ? `+91 ${getCustomerPhoneForDisplay(user)}`
+                                    : '+91'}
                             </p>
                         </div>
                     </div>

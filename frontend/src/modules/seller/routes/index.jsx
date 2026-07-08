@@ -43,7 +43,7 @@ const StaffManagement = React.lazy(() => import("../pages/StaffManagement"));
 const MyStores = React.lazy(() => import("../pages/MyStores"));
 const SellerSubscription = React.lazy(() => import("../pages/SellerSubscription"));
 const SellerSubscriptionPaymentStatus = React.lazy(() => import("../pages/SellerSubscriptionPaymentStatus"));
-const SchedulingSettingsPage = React.lazy(() => import("../pages/SchedulingSettingsPage"));
+const DeliveryPolicyPage = React.lazy(() => import("../pages/DeliveryPolicyPage"));
 const PreOrderCampaigns = React.lazy(() => import("../pages/PreOrderCampaigns"));
 
 const navItems = [
@@ -53,7 +53,7 @@ const navItems = [
   { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
   { label: "Stock", path: "/seller/inventory", icon: HiOutlineArchiveBox, permission: "inventory" },
   { label: "Orders", path: "/seller/orders", icon: HiOutlineTruck, permission: "orders" },
-  { label: "Scheduling", path: "/seller/scheduling", icon: HiOutlineMapPin, permission: "scheduling" },
+  { label: "Delivery Policy", path: "/seller/scheduling", icon: HiOutlineMapPin, permission: "scheduling" },
   { label: "Pre-Order Campaigns", path: "/seller/campaigns", icon: HiOutlineMegaphone, permission: "campaigns" },
   { label: "Returns", path: "/seller/returns", icon: HiOutlineArchiveBox, permission: "returns" },
   { label: "Track Orders", path: "/seller/tracking", icon: HiOutlineMapPin, permission: "tracking" },
@@ -151,7 +151,7 @@ const SellerRoutes = () => {
         )}
         {hasPermission("inventory") && <Route path="inventory" element={<StockManagement />} />}
         {hasPermission("orders") && <Route path="orders" element={<Orders />} />}
-        {hasPermission("scheduling") && <Route path="scheduling" element={<SchedulingSettingsPage />} />}
+        {hasPermission("scheduling") && <Route path="scheduling" element={<DeliveryPolicyPage />} />}
         {hasPermission("campaigns") && <Route path="campaigns" element={<PreOrderCampaigns />} />}
         {hasPermission("returns") && <Route path="returns" element={<Returns />} />}
         {hasPermission("tracking") && <Route path="tracking" element={<DeliveryTracking />} />}

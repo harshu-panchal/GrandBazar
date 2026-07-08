@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import axiosInstance from '@core/api/axios';
-import { getWithDedupe } from '@core/api/dedupe';
+import { getWithDedupe, invalidateCache } from '@core/api/dedupe';
 import { getStoredAuthToken } from '@core/utils/authStorage';
 import { setRoleToken, clearRoleToken, syncRoleTokensFromStorage, getRoleToken } from '@core/utils/authSession';
 
@@ -14,6 +14,60 @@ const ROLE_STORAGE_KEYS = {
 };
 
 const LEGACY_TOKEN_KEY = 'token';
+const CUSTOMER_PROFILE_SNAPSHOT_KEY = 'auth_customer_profile_snapshot';
+
+function loadCustomerProfileSnapshot() {
+    try {
+        const raw = sessionStorage.getItem(CUSTOMER_PROFILE_SNAPSHOT_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveCustomerProfileSnapshot(profile) {
+    if (!profile) return;
+    try {
+        sessionStorage.setItem(
+            CUSTOMER_PROFILE_SNAPSHOT_KEY,
+            JSON.stringify({
+                _id: profile._id || profile.id,
+                name: profile.name || '',
+                phone: profile.phone || profile.mobile || '',
+                email: profile.email || '',
+            }),
+        );
+    } catch {
+        // Ignore storage failures.
+    }
+}
+
+function clearCustomerProfileSnapshot() {
+    sessionStorage.removeItem(CUSTOMER_PROFILE_SNAPSHOT_KEY);
+}
+
+function mergeAuthUser(previousUser, profile, { role, token }) {
+    if (!profile || typeof profile !== 'object') {
+        return previousUser;
+    }
+
+    const merged = {
+        ...(previousUser || {}),
+        ...profile,
+        role: profile.role || previousUser?.role || role,
+        token: previousUser?.token || token || profile.token,
+    };
+
+    if (role === 'customer') {
+        saveCustomerProfileSnapshot(merged);
+    }
+
+    return merged;
+}
+
+function isNotFoundError(error) {
+    return Number(error?.response?.status || 0) === 404;
+}
 
 export const AuthProvider = ({ children }) => {
     // Current role based on URL
@@ -38,7 +92,14 @@ export const AuthProvider = ({ children }) => {
     });
 
     const currentRole = getCurrentRoleFromUrl();
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(() => {
+        const role = getCurrentRoleFromUrl();
+        const initialToken = getRoleToken(role) || getStoredAuthToken(ROLE_STORAGE_KEYS[role]);
+        if (role === 'customer' && initialToken) {
+            return loadCustomerProfileSnapshot();
+        }
+        return null;
+    });
     const [isLoading, setIsLoading] = useState(true);
     const hasLoadedProfileRef = useRef(false);
     const token = authData[currentRole];
@@ -126,10 +187,16 @@ export const AuthProvider = ({ children }) => {
                     }
                     const endpoint = `/${currentRole}/profile`;
                     const response = await getWithDedupe(endpoint, {}, { ttl: 5000 });
-                    setUser(response.data.result);
+                    const profile = response.data?.result;
+                    setUser((previousUser) => mergeAuthUser(previousUser, profile, {
+                        role: currentRole,
+                        token,
+                    }));
                 } catch (error) {
-                    console.error('Failed to fetch profile:', error);
-                    setUser(null);
+                    if (!isNotFoundError(error)) {
+                        console.error('Failed to fetch profile:', error);
+                    }
+                    setUser((previousUser) => previousUser || (currentRole === 'customer' ? loadCustomerProfileSnapshot() : null));
                 } finally {
                     setIsLoading(false);
                     hasLoadedProfileRef.current = true;
@@ -151,10 +218,25 @@ export const AuthProvider = ({ children }) => {
         if (storageKey && userData.token) {
             setRoleToken(role, userData.token);
             setAuthData(prev => ({ ...prev, [role]: userData.token }));
-            setUser(userData);
+            setUser((previousUser) => mergeAuthUser(previousUser, userData, {
+                role,
+                token: userData.token,
+            }));
+        } else if (userData && Object.keys(userData).length > 0) {
+            setUser((previousUser) => mergeAuthUser(previousUser, userData, {
+                role: userData.role?.toLowerCase() || currentRole,
+                token: previousUser?.token || token,
+            }));
         } else {
             console.error('Invalid role or missing token for login:', role);
         }
+    };
+
+    const updateUser = (partialUser = {}) => {
+        setUser((previousUser) => mergeAuthUser(previousUser, partialUser, {
+            role: partialUser.role?.toLowerCase() || previousUser?.role || currentRole,
+            token: partialUser.token || previousUser?.token || token,
+        }));
     };
 
     const logout = async () => {
@@ -186,6 +268,10 @@ export const AuthProvider = ({ children }) => {
 
         hasLoadedProfileRef.current = false;
 
+        if (currentRole === 'customer') {
+            clearCustomerProfileSnapshot();
+        }
+
         // Clear the current user profile from memory
         setUser(null);
 
@@ -198,18 +284,34 @@ export const AuthProvider = ({ children }) => {
         else window.location.href = '/login';
     };
 
-    const refreshUser = async () => {
-        if (token) {
-            try {
-                const endpoint = `/${currentRole}/profile`;
-                const response = await axiosInstance.get(endpoint);
-                setUser(response.data.result);
-                return response.data.result;
-            } catch (error) {
+    const refreshUser = useCallback(async (options = {}) => {
+        if (!token) return null;
+
+        try {
+            const endpoint = `/${currentRole}/profile`;
+            if (options.forceRefresh) {
+                invalidateCache(endpoint);
+            }
+            const response = options.forceRefresh
+                ? await axiosInstance.get(endpoint)
+                : await getWithDedupe(endpoint, {}, { ttl: 5000 });
+            const profile = response.data?.result;
+            let mergedProfile = null;
+            setUser((previousUser) => {
+                mergedProfile = mergeAuthUser(previousUser, profile, {
+                    role: currentRole,
+                    token,
+                });
+                return mergedProfile;
+            });
+            return mergedProfile;
+        } catch (error) {
+            if (!isNotFoundError(error)) {
                 console.error('Failed to refresh profile:', error);
             }
+            return null;
         }
-    };
+    }, [token, currentRole]);
 
     const value = useMemo(() => ({
         user,
@@ -220,7 +322,8 @@ export const AuthProvider = ({ children }) => {
         authData,
         login,
         logout,
-        refreshUser
+        refreshUser,
+        updateUser
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [user, token, currentRole, isAuthenticated, isLoading, authData]);
 

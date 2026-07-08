@@ -1,21 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, Mail, Camera, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuth } from '@core/context/AuthContext';
 import { customerApi } from '../services/customerApi';
+import { formatIndiaPhoneForDisplay } from '@shared/utils/customerProfile';
 
 const EditProfilePage = () => {
     const navigate = useNavigate();
-    const { user, login } = useAuth();
+    const { user, updateUser } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: user?.name || '',
-        phone: user?.phone || '',
+        phone: formatIndiaPhoneForDisplay(user?.phone) || '',
         email: user?.email || '',
         bio: user?.bio || ''
     });
+
+    useEffect(() => {
+        if (!user) return;
+        setFormData({
+            name: user.name || '',
+            phone: formatIndiaPhoneForDisplay(user.phone) || '',
+            email: user.email || '',
+            bio: user.bio || '',
+        });
+    }, [user]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -28,8 +39,7 @@ const EditProfilePage = () => {
             const response = await customerApi.updateProfile(formData);
             const updatedUser = response.data.result;
 
-            // Update local auth state
-            login({ ...user, ...updatedUser });
+            updateUser(updatedUser);
 
             toast.success('Profile updated successfully!');
             navigate('/profile');

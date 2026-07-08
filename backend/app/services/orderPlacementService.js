@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Cart from "../models/cart.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
 import Order from "../models/order.js";
+import Store from "../models/store.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import Coupon from "../models/coupon.js";
@@ -27,8 +28,12 @@ import {
   isRetryableError,
   validateIdempotencyKey,
 } from "./idempotencyService.js";
-import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
-import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
+import { buildCheckoutPricingSnapshot, groupHydratedItemsBySeller } from "./checkoutPricingService.js";
+import {
+  resolveChosenFulfillmentMethod,
+} from "./deliveryOptionResolver.js";
+import { FULFILLMENT_METHOD, fulfillmentMethodToLogisticsMode } from "../constants/deliveryPolicy.js";
+import { hydrateOrderItems } from "./finance/pricingService.js";
 import {
   inferFulfillmentType,
   validateScheduleSelection,
@@ -75,6 +80,33 @@ function mapOrderItemsForPersistence(hydratedItems = []) {
     variantSlot: String(item.variantSku || item.variantSlot || "").trim() || undefined,
     image: item.image || "",
   }));
+}
+
+async function resolveFulfillmentMethodsForCheckout({
+  orderItems,
+  payload,
+  address,
+  fulfillmentType,
+  session = null,
+}) {
+  const hydratedItems = await hydrateOrderItems(orderItems, {
+    session,
+    enforceServerPricing: true,
+  });
+  const grouped = groupHydratedItemsBySeller(hydratedItems);
+  const map = {};
+  for (const sellerId of grouped.keys()) {
+    const store = await Store.findById(sellerId).session(session || null).lean();
+    if (!store) continue;
+    const resolved = await resolveChosenFulfillmentMethod({
+      store,
+      requestedMethod: payload.fulfillmentMethod,
+      customerLocation: address?.location,
+      fulfillmentType,
+    });
+    map[String(sellerId)] = resolved.fulfillmentMethod;
+  }
+  return map;
 }
 
 function placementSource(payload = {}) {
@@ -330,6 +362,14 @@ export async function placeOrderAtomic({
       tipAmount,
       discountTotal: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
       session,
+      fulfillmentMethod: normalizedPayload.fulfillmentMethod || null,
+      fulfillmentMethodBySeller: await resolveFulfillmentMethodsForCheckout({
+        orderItems: orderItemsInput,
+        payload: normalizedPayload,
+        address: normalizedAddress,
+        fulfillmentType,
+        session,
+      }),
     });
 
     const checkoutGroupId = await generateUniqueCheckoutGroupId({ session });
@@ -368,7 +408,6 @@ export async function placeOrderAtomic({
     const shouldStartSellerWorkflow =
       paymentMode === "COD" &&
       (isInstant || fulfillmentType === FULFILLMENT_TYPE.SCHEDULED);
-    const logisticsMode = await getPlatformDeliveryProvider();
 
     await assertCartPreorderRules(
       orderItemsInput.map((item) => ({
@@ -449,6 +488,12 @@ export async function placeOrderAtomic({
       const groupGrandTotal = Number(pricingSnapshot.aggregateBreakdown?.grandTotal || 1);
       const proportionateWallet = (orderGrandTotal / groupGrandTotal) * walletAmount;
 
+      const entryFulfillmentMethod =
+        entry.fulfillmentMethod ||
+        pricingSnapshot.sellerBreakdownEntries[index]?.fulfillmentMethod ||
+        FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
+      const logisticsMode = fulfillmentMethodToLogisticsMode(entryFulfillmentMethod);
+
       const order = new Order({
         orderId,
         customer: customerId,
@@ -487,6 +532,7 @@ export async function placeOrderAtomic({
         checkoutGroupId,
         checkoutGroupSize: pricingSnapshot.sellerCount,
         checkoutGroupIndex: index,
+        fulfillmentMethod: entryFulfillmentMethod,
         logisticsMode,
         placement: {
           idempotencyKey: idempotencyKey || undefined,

@@ -68,6 +68,81 @@ import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommend
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
 import DeliverySlotPicker from "../components/checkout/DeliverySlotPicker";
+import FulfillmentMethodPicker from "../components/checkout/FulfillmentMethodPicker";
+import {
+  formatIndiaPhoneForDisplay,
+  getCustomerDisplayName,
+  getCustomerPhoneForDisplay,
+} from "@/shared/utils/customerProfile";
+
+const EMPTY_CHECKOUT_ADDRESS = {
+  type: "Home",
+  name: "",
+  address: "",
+  landmark: "",
+  city: "",
+  phone: "",
+};
+
+function buildCheckoutAddressFromSources({
+  user,
+  savedAddresses = [],
+  currentLocation,
+  previous,
+}) {
+  const primarySaved = Array.isArray(savedAddresses)
+    ? savedAddresses.find((a) => a.isCurrent) || savedAddresses[0]
+    : null;
+
+  const displayName = getCustomerDisplayName(user);
+  const displayPhone = getCustomerPhoneForDisplay(user);
+
+  if (primarySaved?.address) {
+    return {
+      type: primarySaved.label || "Home",
+      name: displayName || primarySaved.name || previous?.name || "",
+      address: primarySaved.address || "",
+      landmark: primarySaved.landmark || "",
+      city:
+        [primarySaved.city, primarySaved.pincode].filter(Boolean).join(" - ") ||
+        [currentLocation?.city, currentLocation?.pincode].filter(Boolean).join(" - ") ||
+        "",
+      phone: formatIndiaPhoneForDisplay(primarySaved.phone || displayPhone) || previous?.phone || "",
+      ...(primarySaved.id ? { id: primarySaved.id } : {}),
+      ...(primarySaved.placeId ? { placeId: primarySaved.placeId } : {}),
+      ...(primarySaved.location ? { location: primarySaved.location } : {}),
+    };
+  }
+
+  if (currentLocation?.name) {
+    return {
+      type: previous?.type || "Home",
+      name: displayName || previous?.name || "",
+      address: currentLocation.name,
+      landmark: "",
+      city: [currentLocation.city, currentLocation.state, currentLocation.pincode]
+        .filter(Boolean)
+        .join(", "),
+      phone: displayPhone || previous?.phone || "",
+      ...(typeof currentLocation.latitude === "number" &&
+      typeof currentLocation.longitude === "number"
+        ? {
+            location: {
+              lat: currentLocation.latitude,
+              lng: currentLocation.longitude,
+            },
+          }
+        : {}),
+    };
+  }
+
+  return {
+    ...EMPTY_CHECKOUT_ADDRESS,
+    ...(previous || {}),
+    name: displayName || previous?.name || "",
+    phone: displayPhone || previous?.phone || "",
+  };
+}
 
 const CheckoutPage = () => {
   const {
@@ -132,6 +207,7 @@ const CheckoutPage = () => {
 
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("now");
   const [fulfillmentType, setFulfillmentType] = useState("instant");
+  const [fulfillmentMethod, setFulfillmentMethod] = useState("platform_logistics");
   const [schedulePayload, setSchedulePayload] = useState(null);
 
   const handleScheduleChange = (payload) => {
@@ -157,23 +233,9 @@ const CheckoutPage = () => {
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
-  const [currentAddress, setCurrentAddress] = useState({
-    type: "Home",
-    name: "Harshvardhan Panchal",
-    address: "81 Pipliyahana Road, Near 214",
-    landmark: "",
-    city: "Indore - 452018",
-    phone: "6268423925",
-  });
+  const [currentAddress, setCurrentAddress] = useState(EMPTY_CHECKOUT_ADDRESS);
   const [isEditAddressOpen, setIsEditAddressOpen] = useState(false);
-  const [editAddressForm, setEditAddressForm] = useState({
-    type: "Home",
-    name: "Harshvardhan Panchal",
-    address: "81 Pipliyahana Road, Near 214",
-    landmark: "",
-    city: "Indore - 452018",
-    phone: "6268423925",
-  });
+  const [editAddressForm, setEditAddressForm] = useState(EMPTY_CHECKOUT_ADDRESS);
   const [showRecipientForm, setShowRecipientForm] = useState(false);
   const [recipientData, setRecipientData] = useState({
     completeAddress: "",
@@ -234,12 +296,47 @@ const CheckoutPage = () => {
   const RECIPIENT_STORAGE_KEY = "appzeto_checkout_recipient_v1";
 
   // Derived display values for primary delivery card
-  const displayName = savedRecipient?.name || currentAddress.name;
+  const displayName = savedRecipient?.name || currentAddress.name || getCustomerDisplayName(user) || "Add name";
   const displayPhone =
-    savedRecipient?.phone || currentAddress.phone || "6268423925";
+    savedRecipient?.phone ||
+    formatIndiaPhoneForDisplay(currentAddress.phone) ||
+    getCustomerPhoneForDisplay(user) ||
+    "Add phone";
   const displayAddress = savedRecipient
     ? `${savedRecipient.completeAddress}${savedRecipient.landmark ? `, ${savedRecipient.landmark}` : ""}${savedRecipient.pincode ? ` - ${savedRecipient.pincode}` : ""}`
-    : `${currentAddress.address}${currentAddress.landmark ? `, ${currentAddress.landmark}` : ""}, ${currentAddress.city}`;
+    : [currentAddress.address, currentAddress.landmark, currentAddress.city]
+        .filter(Boolean)
+        .join(", ") || "Add delivery address";
+
+  useEffect(() => {
+    const next = buildCheckoutAddressFromSources({
+      user,
+      savedAddresses: locationSavedAddresses,
+      currentLocation,
+      previous: null,
+    });
+
+    setCurrentAddress((prev) => {
+      const hasSavedAddress = Array.isArray(locationSavedAddresses) && locationSavedAddresses.length > 0;
+      const shouldAdoptSaved = hasSavedAddress && !prev.id && next.address;
+      const shouldInitialFill = !prev.address && (next.address || next.name || next.phone);
+
+      if (shouldAdoptSaved || shouldInitialFill) {
+        setEditAddressForm(next);
+        return next;
+      }
+
+      return {
+        ...prev,
+        name: prev.name || next.name || getCustomerDisplayName(user) || "",
+        phone:
+          prev.phone ||
+          next.phone ||
+          getCustomerPhoneForDisplay(user) ||
+          "",
+      };
+    });
+  }, [user, locationSavedAddresses, currentLocation]);
 
   useEffect(() => {
     if (!paymentMethods.length) return;
@@ -260,6 +357,12 @@ const CheckoutPage = () => {
   }, [useWallet, user?.walletBalance, pricingPreview?.grandTotal]);
 
   const finalAmountToPay = Math.max(0, (pricingPreview?.grandTotal || 0) - walletAmountToUse);
+  const isCodPayment = selectedPayment === "cash";
+  const slideCtaText = finalAmountToPay === 0
+    ? "Place Free Order"
+    : isCodPayment
+      ? "Slide to Place Order"
+      : "Slide to Pay";
 
   const buildAddressForOrder = () => {
     if (savedRecipient) {
@@ -693,6 +796,7 @@ const CheckoutPage = () => {
       paymentMode: selectedPayment === "online" ? "ONLINE" : "COD",
       timeSlot: selectedTimeSlot,
       fulfillmentType,
+      fulfillmentMethod,
       deliveryDate: schedulePayload?.deliveryDate,
       windowLabel: schedulePayload?.windowLabel,
       campaignId: schedulePayload?.campaignId,
@@ -725,6 +829,7 @@ const CheckoutPage = () => {
     selectedTimeSlot,
     discountAmount,
     fulfillmentType,
+    fulfillmentMethod,
     schedulePayload,
     savedRecipient,
     currentAddress,
@@ -808,6 +913,7 @@ const CheckoutPage = () => {
         tipAmount: selectedTip,
         timeSlot: selectedTimeSlot,
       fulfillmentType,
+      fulfillmentMethod,
       deliveryDate: schedulePayload?.deliveryDate,
       windowLabel: schedulePayload?.windowLabel,
       campaignId: schedulePayload?.campaignId,
@@ -1111,6 +1217,14 @@ const CheckoutPage = () => {
               discountAmount={discountAmount}
             />
 
+            <FulfillmentMethodPicker
+              sellerId={primarySellerId}
+              fulfillmentType={fulfillmentType}
+              customerLocation={currentLocation}
+              value={fulfillmentMethod}
+              onChange={setFulfillmentMethod}
+            />
+
             <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-2">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Delivery mode</p>
               <div className="flex gap-2">
@@ -1172,7 +1286,7 @@ const CheckoutPage = () => {
                 amount={finalAmountToPay}
                 onSuccess={handlePlaceOrder}
                 isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
-                text={finalAmountToPay === 0 ? "Place Free Order" : "Order Now"}
+                text={slideCtaText}
               />
               <p className="text-center text-[10px] text-slate-400 font-bold mt-4 uppercase tracking-[0.1em]">
                 🔒 SSL encrypted secure checkout
@@ -1189,7 +1303,7 @@ const CheckoutPage = () => {
             amount={finalAmountToPay}
             onSuccess={handlePlaceOrder}
             isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
-            text={finalAmountToPay === 0 ? "Place Free Order" : "Slide to Pay"}
+            text={slideCtaText}
           />
         </div>
       </div>

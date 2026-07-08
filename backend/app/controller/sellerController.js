@@ -409,12 +409,27 @@ export const getPublicSellerProfile = async (req, res) => {
 
 export const getSellerDeliverySettings = async (req, res) => {
   try {
-    const provider = await getPlatformDeliveryProvider();
+    const storeId = req.user?.id;
+    const store = await Store.findById(storeId).lean();
+    if (!store) return handleResponse(res, 404, "Store not found");
+
+    const { resolveStoreDeliveryPolicy, resolveStoreAvailability } = await import(
+      "../services/deliveryOptionResolver.js"
+    );
+    const { resolveStoreSchedulingSettings } = await import(
+      "../services/orderSchedulingService.js"
+    );
+    const platformProvider = await getPlatformDeliveryProvider();
+
     return handleResponse(res, 200, "Delivery settings fetched", {
-      logisticsMode: provider,
-      description: provider === "external"
-        ? "Orders are fulfilled via external courier partners assigned by admin."
-        : "Orders are fulfilled via the platform delivery fleet.",
+      logisticsMode: platformProvider,
+      deliveryPolicy: resolveStoreDeliveryPolicy(store),
+      availability: resolveStoreAvailability(store),
+      schedulingSettings: resolveStoreSchedulingSettings(store),
+      serviceRadius: store.serviceRadius,
+      description: platformProvider === "external"
+        ? "Platform default is external logistics. Per-shop policy still applies at checkout."
+        : "Platform fleet is available. Configure per-shop fulfillment options in Delivery Policy.",
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);

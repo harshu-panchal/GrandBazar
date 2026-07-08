@@ -13,6 +13,7 @@ export const WORKFLOW_STATUS = {
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
   PICKUP_READY: "PICKUP_READY",
+  CUSTOMER_PICKUP_READY: "CUSTOMER_PICKUP_READY",
   OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
   DELIVERED: "DELIVERED",
   DISPUTED: "DISPUTED",
@@ -69,6 +70,8 @@ export function legacyStatusFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.PICKUP_READY:
       return "packed";
+    case WORKFLOW_STATUS.CUSTOMER_PICKUP_READY:
+      return "ready_for_pickup";
     case WORKFLOW_STATUS.OUT_FOR_DELIVERY:
       return "out_for_delivery";
     case WORKFLOW_STATUS.DELIVERED:

@@ -32,11 +32,90 @@ import { BlurFade } from '@/components/ui/blur-fade';
 import ShimmerButton from '@/components/ui/shimmer-button';
 import { sellerApi } from '../services/sellerApi';
 import { useToast } from '@shared/components/ui/Toast';
-import { getLegacyStatusFromOrder } from '@/shared/utils/orderStatus';
+import { getLegacyStatusFromOrder, getOrderStatusLabel, isScheduledHoldOrder, canSellerManuallyUpdateStatus } from '@/shared/utils/orderStatus';
+import { getSellerOrderPayout, getCustomerOrderTotal, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 
+function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
+    const readOnly = !canSellerManuallyUpdateStatus(order);
+    const normalizedStatus = String(order?.status || '').toLowerCase();
+    const editableStatuses = new Set([
+        'pending',
+        'confirmed',
+        'packed',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+    ]);
+    const requiresDisplayOnly = !editableStatuses.has(normalizedStatus);
+
+    if (readOnly || requiresDisplayOnly) {
+        const isScheduled = isScheduledHoldOrder(order) || order.status === 'scheduled';
+        return (
+            <div className={compact ? 'text-right' : ''}>
+                <span
+                    className={cn(
+                        'inline-flex items-center rounded-full font-black uppercase tracking-widest',
+                        compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
+                        isScheduled
+                            ? 'bg-blue-100 text-blue-700'
+                            : requiresDisplayOnly
+                                ? 'bg-violet-100 text-violet-700'
+                                : 'bg-amber-100 text-amber-700',
+                    )}
+                >
+                    {order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold'))}
+                </span>
+                {isScheduled && (
+                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                        Awaiting delivery slot
+                    </p>
+                )}
+                {requiresDisplayOnly && !isScheduled && (
+                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                        Customer-approved partial update
+                    </p>
+                )}
+            </div>
+        );
+    }
+
+    const selectClass = compact
+        ? 'w-full min-w-[100px] text-[10px] pl-2 pr-6 py-1.5 rounded-lg font-black uppercase cursor-pointer appearance-none border outline-none'
+        : 'w-full text-[10px] pl-2.5 pr-8 py-1.5 rounded-full font-black uppercase tracking-widest cursor-pointer appearance-none focus:ring-2 focus:ring-offset-1 transition-all border-none outline-none shadow-sm';
+
+    return (
+        <div className={compact ? '' : 'relative inline-block w-36'}>
+            <select
+                value={order.status}
+                onChange={(e) => onStatusUpdate(order.id, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                    selectClass,
+                    order.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        order.status === 'confirmed' ? 'bg-brand-100 text-brand-700' :
+                            order.status === 'packed' ? 'bg-brand-100 text-brand-700' :
+                                order.status === 'out_for_delivery' ? 'bg-purple-100 text-purple-700' :
+                                    order.status === 'delivered' ? 'bg-brand-100 text-brand-700' :
+                                        order.status === 'cancelled' ? 'bg-rose-100 text-rose-700' :
+                                            'bg-slate-100 text-slate-700',
+                )}
+            >
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="packed">Packed</option>
+                <option value="out_for_delivery">{compact ? 'Out' : 'Out for Delivery'}</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            {!compact && (
+                <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
+            )}
+        </div>
+    );
+}
 
 const Orders = () => {
     const [orders, setOrders] = useState([]);
@@ -68,6 +147,8 @@ const Orders = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [replacementSaving, setReplacementSaving] = useState(false);
+    const [splitSaving, setSplitSaving] = useState(false);
     const { showToast } = useToast();
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -128,14 +209,20 @@ const Orders = () => {
                     variantSlot: item.variantSlot,
                     image: item.image
                 })),
-                total: order.pricing?.total || 0,
+                total: getSellerOrderPayout(order),
+                customerTotal: getCustomerOrderTotal(order),
+                sellerPayout: getSellerOrderPayout(order),
                 status: getLegacyStatusFromOrder(order),
+                statusLabel: getOrderStatusLabel(order),
                 workflowStatus: order.workflowStatus,
                 workflowVersion: order.workflowVersion,
                 fulfillmentType: order.fulfillmentType || 'instant',
                 schedule: order.schedule || null,
                 reschedule: order.reschedule || null,
                 priceAdjustment: order.priceAdjustment || null,
+                replacementRequests: order.replacementRequests || [],
+                splitDeliveries: order.splitDeliveries || [],
+                revisedInvoices: order.revisedInvoices || [],
                 date: order.createdAt
                     ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
                     : '',
@@ -179,7 +266,7 @@ const Orders = () => {
         }
     };
 
-    const tabs = ['All', 'Pending', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
+    const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
     const todayStr = new Date().toISOString().split('T')[0];
 
     const safeOrders = useMemo(
@@ -191,7 +278,9 @@ const Orders = () => {
         return safeOrders.filter(order => {
             const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 order.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const statusToMatch = activeTab === 'Out for Delivery' ? 'out_for_delivery' : activeTab.toLowerCase();
+            const statusToMatch = activeTab === 'Out for Delivery'
+                ? 'out_for_delivery'
+                : activeTab.toLowerCase();
             const matchesTab = activeTab === 'All' || order.status.toLowerCase() === statusToMatch;
             return matchesSearch && matchesTab;
         });
@@ -211,6 +300,13 @@ const Orders = () => {
             icon: HiOutlineClock,
             color: 'text-amber-600',
             bg: 'bg-amber-50'
+        },
+        {
+            label: 'Scheduled',
+            value: safeOrders.filter((o) => o.status === 'scheduled').length,
+            icon: HiOutlineCalendarDays,
+            color: 'text-blue-600',
+            bg: 'bg-blue-50'
         },
         {
             label: 'Confirmed',
@@ -233,6 +329,7 @@ const Orders = () => {
         switch (s) {
             case 'pending': return 'warning';
             case 'confirmed': return 'info';
+            case 'scheduled': return 'info';
             case 'packed': return 'primary';
             case 'out_for_delivery': return 'secondary';
             case 'delivered': return 'success';
@@ -396,6 +493,111 @@ const Orders = () => {
         }
     };
 
+    const handleRequestReplacement = async () => {
+        if (!selectedOrder) return;
+        const itemIndexInput = window.prompt('Enter item index to replace (starting from 1):', '1');
+        if (itemIndexInput === null) return;
+        const itemIndex = Math.max(0, Number(itemIndexInput) - 1);
+        if (!selectedOrder?.rawItems?.[itemIndex]) {
+            showToast('Invalid item index for this order', 'error');
+            return;
+        }
+
+        let replacementProducts = [];
+        try {
+            const productsRes = await sellerApi.getProducts({ limit: 100, status: 'active' });
+            replacementProducts = productsRes?.data?.result?.items
+                || productsRes?.data?.results
+                || productsRes?.data?.result
+                || [];
+            if (!Array.isArray(replacementProducts)) replacementProducts = [];
+        } catch {
+            replacementProducts = [];
+        }
+
+        if (!replacementProducts.length) {
+            showToast('No active products found to offer as replacement', 'error');
+            return;
+        }
+
+        const productChoices = replacementProducts
+            .slice(0, 20)
+            .map((p, idx) => `${idx + 1}. ${p.name} (₹${Number(p.salePrice || p.price || 0)})`)
+            .join('\n');
+        const chosenInput = window.prompt(
+            `Pick replacement product number:\n${productChoices}`,
+            '1',
+        );
+        if (chosenInput === null) return;
+        const chosenIdx = Math.max(0, Number(chosenInput) - 1);
+        const chosenProduct = replacementProducts[chosenIdx];
+        if (!chosenProduct?._id) {
+            showToast('Invalid replacement product selected', 'error');
+            return;
+        }
+
+        const defaultPrice = Number(chosenProduct.salePrice || chosenProduct.price || 0);
+        const altPriceInput = window.prompt('Replacement price:', String(defaultPrice));
+        if (altPriceInput === null) return;
+        const altPrice = Number(altPriceInput);
+        const reason = window.prompt('Reason for replacement request:', 'Item unavailable') || 'Item unavailable';
+
+        try {
+            setReplacementSaving(true);
+            await sellerApi.requestProductReplacement(selectedOrder.id, {
+                itemIndex,
+                reason,
+                alternatives: [
+                    {
+                        product: chosenProduct._id,
+                        name: chosenProduct.name,
+                        price: Number.isFinite(altPrice) ? altPrice : defaultPrice,
+                        quantity: Number(selectedOrder?.rawItems?.[itemIndex]?.quantity || 1),
+                        variantSlot: chosenProduct.variants?.[0]?.sku || '',
+                    },
+                ],
+            });
+            showToast('Replacement request sent to customer', 'success');
+            fetchOrders(page, false);
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to create replacement request', 'error');
+        } finally {
+            setReplacementSaving(false);
+        }
+    };
+
+    const handleSplitDeliveryPlan = async () => {
+        if (!selectedOrder || !Array.isArray(selectedOrder.rawItems) || selectedOrder.rawItems.length < 2) {
+            showToast('At least 2 items required for split delivery', 'error');
+            return;
+        }
+        const firstLegIndexes = [0];
+        const secondLegIndexes = selectedOrder.rawItems.map((_, idx) => idx).filter((idx) => idx !== 0);
+        try {
+            setSplitSaving(true);
+            await sellerApi.splitOrderDelivery(selectedOrder.id, {
+                splits: [
+                    {
+                        label: 'Part 1 - Immediate',
+                        itemIndexes: firstLegIndexes,
+                        additionalDeliveryFee: 0,
+                    },
+                    {
+                        label: 'Part 2 - Next delivery',
+                        itemIndexes: secondLegIndexes,
+                        additionalDeliveryFee: 20,
+                    },
+                ],
+            });
+            showToast('Split delivery plan created', 'success');
+            fetchOrders(page, false);
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to create split delivery', 'error');
+        } finally {
+            setSplitSaving(false);
+        }
+    };
+
     const handlePickupImageUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -445,7 +647,7 @@ const Orders = () => {
             const s = String(v ?? "").replace(/"/g, '""');
             return /[",\n\r]/.test(s) ? `"${s}"` : s;
         };
-        const headers = ["Order ID", "Customer", "Phone", "Date", "Time", "Total (₹)", "Status", "Address", "Payment"];
+        const headers = ["Order ID", "Customer", "Phone", "Date", "Time", "Your Earnings (₹)", "Status", "Address", "Payment"];
         const rows = data.map((o) => [
             o.id,
             o.customer?.name ?? "",
@@ -695,26 +897,13 @@ const Orders = () => {
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2 shrink-0">
                                                     <Badge variant={getStatusColor(order.status)} className="text-[10px] font-black uppercase px-2 py-0">
-                                                        {order.status}
+                                                        {order.statusLabel || order.status}
                                                     </Badge>
-                                                    <select
-                                                        value={order.status}
-                                                        onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className={cn(
-                                                            "w-full min-w-[100px] text-[10px] pl-2 pr-6 py-1.5 rounded-lg font-black uppercase cursor-pointer appearance-none border outline-none",
-                                                            order.status === 'pending' ? "bg-amber-100 text-amber-700" :
-                                                                order.status === 'delivered' ? "bg-brand-100 text-brand-700" :
-                                                                    order.status === 'cancelled' ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-700"
-                                                        )}
-                                                    >
-                                                        <option value="pending">Pending</option>
-                                                        <option value="confirmed">Confirmed</option>
-                                                        <option value="packed">Packed</option>
-                                                        <option value="out_for_delivery">Out</option>
-                                                        <option value="delivered">Delivered</option>
-                                                        <option value="cancelled">Cancelled</option>
-                                                    </select>
+                                                    <OrderStatusControl
+                                                        order={order}
+                                                        onStatusUpdate={handleStatusUpdate}
+                                                        compact
+                                                    />
                                                     <button
                                                         onClick={() => handleViewDetails(order)}
                                                         className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
@@ -736,7 +925,7 @@ const Orders = () => {
                                         <tr className="bg-slate-50/50 border-b border-slate-100">
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Order Details</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Customer</th>
-                                            <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Total</th>
+                                            <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Earnings</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Status</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest text-right">Actions</th>
                                         </tr>
@@ -794,30 +983,10 @@ const Orders = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
-                                                        <div className="relative inline-block w-36">
-                                                            <select
-                                                                value={order.status}
-                                                                onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                                                                className={cn(
-                                                                    "w-full text-[10px] pl-2.5 pr-8 py-1.5 rounded-full font-black uppercase tracking-widest cursor-pointer appearance-none focus:ring-2 focus:ring-offset-1 transition-all border-none outline-none shadow-sm",
-                                                                    order.status === 'pending' ? "bg-amber-100 text-amber-700 focus:ring-amber-200" :
-                                                                        order.status === 'confirmed' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                            order.status === 'packed' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                                order.status === 'out_for_delivery' ? "bg-purple-100 text-purple-700 focus:ring-purple-200" :
-                                                                                    order.status === 'delivered' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                                        order.status === 'cancelled' ? "bg-rose-100 text-rose-700 focus:ring-rose-200" :
-                                                                                            "bg-slate-100 text-slate-700 focus:ring-slate-200"
-                                                                )}
-                                                            >
-                                                                <option value="pending">Pending</option>
-                                                                <option value="confirmed">Confirmed</option>
-                                                                <option value="packed">Packed</option>
-                                                                <option value="out_for_delivery">Out for Delivery</option>
-                                                                <option value="delivered">Delivered</option>
-                                                                <option value="cancelled">Cancelled</option>
-                                                            </select>
-                                                            <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
-                                                        </div>
+                                                        <OrderStatusControl
+                                                            order={order}
+                                                            onStatusUpdate={handleStatusUpdate}
+                                                        />
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4 text-right">
                                                         <div className="flex items-center justify-end space-x-1.5">
@@ -1132,21 +1301,15 @@ const Orders = () => {
                                             </div>
                                             <div className="space-y-3 sm:space-y-4">
                                                 <div className="bg-primary/5 p-3 sm:p-4 rounded-3xl border border-primary/10">
-                                                    <h4 className="text-xs font-black text-primary uppercase tracking-widest mb-3">Order Summary</h4>
+                                                    <h4 className="text-xs font-black text-primary uppercase tracking-widest mb-3">Your Earnings</h4>
                                                     <div className="space-y-2">
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="font-bold text-slate-600">Subtotal</span>
-                                                            <span className="font-black text-slate-900">₹{(selectedOrder.total - 10).toFixed(2)}</span>
-                                                        </div>
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="font-bold text-slate-600">Delivery Fee</span>
-                                                            <span className="font-black text-brand-600">₹10.00</span>
-                                                        </div>
-                                                        <div className="h-px bg-primary/10 my-2" />
                                                         <div className="flex justify-between text-sm">
-                                                            <span className="font-black text-slate-900">Total</span>
-                                                            <span className="font-black text-primary">₹{selectedOrder.total.toFixed(2)}</span>
+                                                            <span className="font-black text-slate-900">You receive</span>
+                                                            <span className="font-black text-primary">₹{formatInr(selectedOrder.sellerPayout ?? selectedOrder.total)}</span>
                                                         </div>
+                                                        <p className="text-[10px] text-slate-500 font-medium">
+                                                            Customer order value: ₹{formatInr(selectedOrder.customerTotal ?? selectedOrder.total)}
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 <div className="bg-slate-900 p-3 sm:p-4 rounded-3xl text-white shadow-xl shadow-slate-900/10">
@@ -1167,6 +1330,11 @@ const Orders = () => {
                                                         Delivery: {new Date(selectedOrder.schedule.deliveryDate).toLocaleDateString()} {selectedOrder.schedule.windowLabel ? `(${selectedOrder.schedule.windowLabel})` : ''}
                                                     </p>
                                                 )}
+                                                {isScheduledHoldOrder(selectedOrder) && (
+                                                    <p className="text-xs font-semibold text-blue-700 mt-2">
+                                                        Accepted and on hold. Logistics will start automatically before the delivery window.
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                         {selectedOrder.reschedule?.status === 'requested' && (
@@ -1183,12 +1351,21 @@ const Orders = () => {
                                         )}
                                         {(() => {
                                             const s = (selectedOrder.status || '').toLowerCase();
-                                            const canAdjust = !['delivered', 'cancelled', 'out_for_delivery', 'returned'].includes(s);
+                                            const canAdjust = !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
+                                                && canSellerManuallyUpdateStatus(selectedOrder);
                                             return (
                                                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                                                     <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest">Items Ordered ({selectedOrder.items.length})</h4>
                                                     {canAdjust && !adjustMode && (
-                                                        <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
+                                                            <button onClick={handleRequestReplacement} disabled={replacementSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-60">
+                                                                {replacementSaving ? 'Sending...' : 'Replacement'}
+                                                            </button>
+                                                            <button onClick={handleSplitDeliveryPlan} disabled={splitSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60">
+                                                                {splitSaving ? 'Saving...' : 'Split Delivery'}
+                                                            </button>
+                                                        </div>
                                                     )}
                                                     {adjustMode && (
                                                         <button onClick={closeAdjustEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
@@ -1272,30 +1449,10 @@ const Orders = () => {
                                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end">
                                         <div className="flex gap-2 items-center">
                                             <button onClick={() => setIsDetailsModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all">CLOSE</button>
-                                            <div className="relative inline-block w-40">
-                                                <select
-                                                    value={selectedOrder.status.toLowerCase()}
-                                                    onChange={(e) => handleStatusUpdate(selectedOrder.id, e.target.value)}
-                                                    className={cn(
-                                                        "w-full text-xs pl-3 pr-8 py-2 rounded-xl font-black uppercase tracking-wider border appearance-none cursor-pointer focus:ring-2 focus:ring-offset-1 transition-all outline-none shadow-sm",
-                                                        getStatusColor(selectedOrder.status) === 'warning' ? "bg-amber-100 text-amber-700 focus:ring-amber-200" :
-                                                            getStatusColor(selectedOrder.status) === 'info' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                getStatusColor(selectedOrder.status) === 'primary' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                    getStatusColor(selectedOrder.status) === 'secondary' ? "bg-purple-100 text-purple-700 focus:ring-purple-200" :
-                                                                        getStatusColor(selectedOrder.status) === 'success' ? "bg-brand-100 text-brand-700 focus:ring-brand-200" :
-                                                                            getStatusColor(selectedOrder.status) === 'error' ? "bg-rose-100 text-rose-700 focus:ring-rose-200" :
-                                                                                "bg-slate-100 text-slate-700 focus:ring-slate-200"
-                                                    )}
-                                                >
-                                                    <option value="pending">Pending</option>
-                                                    <option value="confirmed">Confirmed</option>
-                                                    <option value="packed">Packed</option>
-                                                    <option value="out_for_delivery">Out for Delivery</option>
-                                                    <option value="delivered">Delivered</option>
-                                                    <option value="cancelled">Cancelled</option>
-                                                </select>
-                                                <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
-                                            </div>
+                                            <OrderStatusControl
+                                                order={selectedOrder}
+                                                onStatusUpdate={handleStatusUpdate}
+                                            />
                                         </div>
                                     </div>
                                 </motion.div>

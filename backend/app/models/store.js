@@ -178,6 +178,40 @@ const storeSchema = new mongoose.Schema(
         default: [],
       },
     },
+
+    deliveryPolicy: {
+      customerPickup: { type: Boolean, default: false },
+      sellerDelivery: { type: Boolean, default: false },
+      platformLogistics: { type: Boolean, default: true },
+      autoSwitchToPlatform: { type: Boolean, default: false },
+      platformLogisticsEnabledByAdmin: { type: Boolean, default: true },
+      sameDayCutoffTime: { type: String, default: "18:00", trim: true },
+    },
+
+    availability: {
+      workingDays: { type: [Number], default: [0, 1, 2, 3, 4, 5, 6] },
+      openTime: { type: String, default: "09:00", trim: true },
+      closeTime: { type: String, default: "21:00", trim: true },
+      weeklyOff: { type: [Number], default: [] },
+      holidays: { type: [String], default: [] },
+      vacation: {
+        active: { type: Boolean, default: false },
+        startAt: { type: Date, default: null },
+        endAt: { type: Date, default: null },
+        message: { type: String, default: "", trim: true },
+      },
+      temporaryClosure: {
+        active: { type: Boolean, default: false },
+        reason: {
+          type: String,
+          enum: ["vacation", "festival", "emergency", "staff_unavailable", "other", ""],
+          default: "",
+        },
+        message: { type: String, default: "", trim: true },
+        restoreAt: { type: Date, default: null },
+        previousPolicy: { type: mongoose.Schema.Types.Mixed, default: null },
+      },
+    },
   },
   { timestamps: true },
 );

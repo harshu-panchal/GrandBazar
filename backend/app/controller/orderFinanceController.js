@@ -40,6 +40,7 @@ export const previewCheckoutFinance = async (req, res) => {
       address: payload.address,
       tipAmount: payload.tipAmount,
       discountTotal: payload.discountTotal || 0,
+      fulfillmentMethod: payload.fulfillmentMethod || null,
     });
 
     const sellerBreakdowns = pricingSnapshot.sellerBreakdownEntries.map((entry) => ({
@@ -82,6 +83,7 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
       paymentMode: validated.paymentMode,
       timeSlot: validated.timeSlot || "now",
       fulfillmentType: validated.fulfillmentType,
+      fulfillmentMethod: validated.fulfillmentMethod,
       deliveryDate: validated.deliveryDate,
       windowLabel: validated.windowLabel,
       campaignId: validated.campaignId,

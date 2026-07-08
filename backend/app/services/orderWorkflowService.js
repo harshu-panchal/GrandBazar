@@ -32,6 +32,11 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
 import {
+  resolveFulfillmentAtSellerAccept,
+  resolveStoreDeliveryPolicy,
+} from "./deliveryOptionResolver.js";
+import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
+import {
   scheduleOrderActivationJob,
 } from "./orderSchedulingService.js";
 
@@ -270,10 +275,20 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
   const deliveryMs = DEFAULT_DELIVERY_TIMEOUT_MS();
 
   const existingOrder = await Order.findOne({ orderId, seller: sellerId })
-    .select("logisticsMode workflowStatus fulfillmentType schedule")
+    .select("logisticsMode workflowStatus fulfillmentType schedule fulfillmentMethod fulfillmentMeta")
     .lean();
-  const logisticsMode = existingOrder?.logisticsMode || await getPlatformDeliveryProvider();
-  const useExternalLogistics = logisticsMode === "external";
+
+  const store = await Store.findById(sellerId).lean();
+  const acceptResolution = await resolveFulfillmentAtSellerAccept(existingOrder, store);
+  const fulfillmentMethod =
+    acceptResolution.fulfillmentMethod ||
+    existingOrder?.fulfillmentMethod ||
+    FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
+  const logisticsMode = acceptResolution.logisticsMode || existingOrder?.logisticsMode;
+  const useCustomerPickup = fulfillmentMethod === FULFILLMENT_METHOD.CUSTOMER_PICKUP;
+  const useExternalLogistics =
+    fulfillmentMethod === FULFILLMENT_METHOD.SELLER_DELIVERY ||
+    logisticsMode === "external";
   const isScheduled =
     existingOrder?.fulfillmentType === FULFILLMENT_TYPE.SCHEDULED ||
     existingOrder?.fulfillmentType === FULFILLMENT_TYPE.PREORDER;
@@ -350,17 +365,27 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     return updatedScheduled;
   }
 
-  const nextWorkflowStatus = useExternalLogistics
-    ? WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING
-    : WORKFLOW_STATUS.DELIVERY_SEARCH;
+  let nextWorkflowStatus = WORKFLOW_STATUS.DELIVERY_SEARCH;
+  if (useCustomerPickup) {
+    nextWorkflowStatus = WORKFLOW_STATUS.SELLER_ACCEPTED;
+  } else if (useExternalLogistics) {
+    nextWorkflowStatus = WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING;
+  }
 
   const updateSet = {
     workflowStatus: nextWorkflowStatus,
     status: legacyStatusFromWorkflow(nextWorkflowStatus),
     sellerAcceptedAt: now,
+    fulfillmentMethod,
+    logisticsMode,
   };
 
-  if (!useExternalLogistics) {
+  if (acceptResolution.autoSwitched) {
+    updateSet["fulfillmentMeta.autoSwitched"] = true;
+    updateSet["fulfillmentMeta.switchReason"] = acceptResolution.switchReason || "";
+  }
+
+  if (nextWorkflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH) {
     updateSet.deliverySearchExpiresAt = new Date(now.getTime() + deliveryMs);
     updateSet.deliverySearchMeta = {
       radiusMeters: INITIAL_DELIVERY_RADIUS_M(),
@@ -398,10 +423,14 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
 
   void removeSellerTimeoutJob(orderId);
 
-  if (useExternalLogistics) {
+  if (useExternalLogistics || useCustomerPickup) {
     emitOrderStatusUpdate(
       updated.orderId,
-      { workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING },
+      {
+        workflowStatus: nextWorkflowStatus,
+        fulfillmentMethod,
+        autoSwitched: acceptResolution.autoSwitched || false,
+      },
       updated.customer?._id || updated.customer,
     );
     emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CONFIRMED, {
@@ -726,6 +755,86 @@ export async function processDeliveryTimeoutJob({ orderId, attempt }) {
       );
     }
     return;
+  }
+
+  const orderForFallback = await Order.findOne({
+    orderId,
+    workflowVersion: { $gte: 2 },
+    workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
+  }).lean();
+
+  if (orderForFallback) {
+    const store = await Store.findById(orderForFallback.seller).lean();
+    const policy = resolveStoreDeliveryPolicy(store || {});
+
+    if (
+      policy.sellerDelivery &&
+      orderForFallback.fulfillmentMethod === FULFILLMENT_METHOD.PLATFORM_LOGISTICS
+    ) {
+      const fallback = await Order.findOneAndUpdate(
+        { orderId, workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
+        {
+          $set: {
+            workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING,
+            status: legacyStatusFromWorkflow(WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING),
+            fulfillmentMethod: FULFILLMENT_METHOD.SELLER_DELIVERY,
+            logisticsMode: "external",
+            "fulfillmentMeta.autoSwitched": true,
+            "fulfillmentMeta.switchReason": "platform_rider_unavailable",
+          },
+        },
+        { new: true },
+      );
+      if (fallback) {
+        emitOrderStatusUpdate(
+          orderId,
+          {
+            workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING,
+            fulfillmentMethod: FULFILLMENT_METHOD.SELLER_DELIVERY,
+            autoSwitched: true,
+          },
+          fallback.customer,
+        );
+        return;
+      }
+    }
+
+    if (policy.customerPickup) {
+      const fallback = await Order.findOneAndUpdate(
+        { orderId, workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
+        {
+          $set: {
+            workflowStatus: WORKFLOW_STATUS.SELLER_ACCEPTED,
+            status: legacyStatusFromWorkflow(WORKFLOW_STATUS.SELLER_ACCEPTED),
+            fulfillmentMethod: FULFILLMENT_METHOD.CUSTOMER_PICKUP,
+            logisticsMode: "pickup",
+            "fulfillmentMeta.autoSwitched": true,
+            "fulfillmentMeta.switchReason": "platform_rider_unavailable_pickup",
+          },
+        },
+        { new: true },
+      );
+      if (fallback) {
+        emitOrderStatusUpdate(
+          orderId,
+          {
+            workflowStatus: WORKFLOW_STATUS.SELLER_ACCEPTED,
+            fulfillmentMethod: FULFILLMENT_METHOD.CUSTOMER_PICKUP,
+            autoSwitched: true,
+          },
+          fallback.customer,
+        );
+        emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CONFIRMED, {
+          orderId: fallback.orderId,
+          customerId: fallback.customer,
+          userId: fallback.customer,
+          sellerId: fallback.seller,
+          customerMessage:
+            "No rider was available. Your order was switched to store pickup.",
+        });
+        return;
+      }
+    }
   }
 
   const updated = await Order.findOneAndUpdate(

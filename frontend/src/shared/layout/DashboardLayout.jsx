@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BellRing, Check, X, Clock, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import SellerOrdersContext from '@/modules/seller/context/SellerOrdersContext';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
 import { getOrderSocket, onSellerOrderNew, onReturnDropOtp } from '@/core/services/orderSocket';
@@ -543,7 +544,10 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                     </span>
                                 )}
                                 <p className="text-slate-600 font-medium mb-6">
-                                    You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span> for <span className="text-slate-900 font-bold">₹{newOrderAlert.pricing?.total || newOrderAlert.total}</span>
+                                    You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span>.
+                                    <br />
+                                    <span className="text-slate-500 text-sm">You will receive</span>{' '}
+                                    <span className="text-slate-900 font-bold">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
                                 </p>
 
                                 {/* Timer Bar — width from real server deadline */}

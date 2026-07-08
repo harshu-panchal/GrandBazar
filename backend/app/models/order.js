@@ -254,6 +254,7 @@ const orderSchema = new mongoose.Schema(
         "pending",
         "confirmed",
         "packed",
+        "ready_for_pickup",
         "out_for_delivery",
         "delivered",
         "cancelled",
@@ -262,6 +263,11 @@ const orderSchema = new mongoose.Schema(
         "price_revised",
         "awaiting_extra_payment",
         "partial_cancelled",
+        "partial_updated",
+        "customer_confirmation",
+        "preparing",
+        "completed",
+        "refunded",
         "disputed",
         "preorder_confirmed",
       ],
@@ -405,6 +411,94 @@ const orderSchema = new mongoose.Schema(
         default: [],
       },
     },
+    modificationVersion: {
+      type: Number,
+      default: 0,
+    },
+    modificationTimeline: {
+      type: [
+        {
+          version: { type: Number, default: 0 },
+          type: { type: String, default: "" },
+          actorRole: { type: String, default: "" },
+          actorId: { type: String, default: "" },
+          note: { type: String, default: "" },
+          meta: { type: Object, default: {} },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    replacementRequests: {
+      type: [
+        {
+          requestId: { type: String, required: true },
+          status: {
+            type: String,
+            enum: ["requested", "approved", "rejected", "expired"],
+            default: "requested",
+          },
+          itemIndex: { type: Number, required: true },
+          originalItem: { type: Object, default: {} },
+          alternatives: {
+            type: [
+              {
+                product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+                name: { type: String, default: "" },
+                price: { type: Number, default: 0 },
+                variantSlot: { type: String, default: "" },
+                quantity: { type: Number, default: 1 },
+              },
+            ],
+            default: [],
+          },
+          requestedBy: { type: String, enum: ["seller", "admin", "assistant"], default: "seller" },
+          requestedAt: { type: Date, default: Date.now },
+          reason: { type: String, default: "" },
+          customerDecision: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+          customerDecisionAt: { type: Date, default: null },
+          selectedAlternativeIndex: { type: Number, default: null },
+          customerNote: { type: String, default: "" },
+        },
+      ],
+      default: [],
+    },
+    splitDeliveries: {
+      type: [
+        {
+          splitId: { type: String, required: true },
+          label: { type: String, default: "" },
+          itemIndexes: { type: [Number], default: [] },
+          status: {
+            type: String,
+            enum: ["pending", "processing", "out_for_delivery", "delivered", "cancelled"],
+            default: "pending",
+          },
+          deliveryDate: { type: Date, default: null },
+          windowLabel: { type: String, default: "" },
+          additionalDeliveryFee: { type: Number, default: 0 },
+          assignedDeliveryBoy: { type: mongoose.Schema.Types.ObjectId, ref: "Delivery", default: null },
+          trackingLink: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+          deliveredAt: { type: Date, default: null },
+        },
+      ],
+      default: [],
+    },
+    revisedInvoices: {
+      type: [
+        {
+          version: { type: Number, default: 1 },
+          source: { type: String, default: "" },
+          grandTotal: { type: Number, default: 0 },
+          deltaAmount: { type: Number, default: 0 },
+          direction: { type: String, default: "none" },
+          note: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
     disputeRef: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Dispute",
@@ -427,10 +521,27 @@ const orderSchema = new mongoose.Schema(
     },
     externalLogisticsProvider: String,
     externalTrackingLink: String,
+    fulfillmentMethod: {
+      type: String,
+      enum: ["customer_pickup", "seller_delivery", "platform_logistics"],
+      default: "platform_logistics",
+    },
     logisticsMode: {
       type: String,
-      enum: ["zinto", "external"],
+      enum: ["zinto", "external", "pickup"],
       default: "zinto",
+    },
+    customerPickup: {
+      readyAt: { type: Date, default: null },
+      otpHash: { type: String, default: null },
+      qrTokenHash: { type: String, default: null },
+      expiresAt: { type: Date, default: null },
+      verifiedAt: { type: Date, default: null },
+      verifiedBy: { type: String, enum: ["customer", "seller", ""], default: "" },
+    },
+    fulfillmentMeta: {
+      autoSwitched: { type: Boolean, default: false },
+      switchReason: { type: String, default: "" },
     },
     cancelledBy: {
       type: String,

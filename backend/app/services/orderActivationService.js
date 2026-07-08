@@ -15,6 +15,7 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
+import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 import {
   scheduleDeliveryTimeoutJob,
   deliveryBroadcastPayloadFromOrder,
@@ -81,11 +82,17 @@ export async function processOrderActivationJob({ orderId }) {
     return;
   }
 
-  const logisticsMode = order.logisticsMode || (await getPlatformDeliveryProvider());
-  const useExternal = logisticsMode === "external";
-  const nextStatus = useExternal
-    ? WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING
-    : WORKFLOW_STATUS.DELIVERY_SEARCH;
+  const fulfillmentMethod = order.fulfillmentMethod || FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
+  const useCustomerPickup = fulfillmentMethod === FULFILLMENT_METHOD.CUSTOMER_PICKUP;
+  const useExternal =
+    fulfillmentMethod === FULFILLMENT_METHOD.SELLER_DELIVERY ||
+    order.logisticsMode === "external";
+  let nextStatus = WORKFLOW_STATUS.DELIVERY_SEARCH;
+  if (useCustomerPickup) {
+    nextStatus = WORKFLOW_STATUS.SELLER_ACCEPTED;
+  } else if (useExternal) {
+    nextStatus = WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING;
+  }
 
   const updateSet = {
     workflowStatus: nextStatus,
@@ -93,7 +100,7 @@ export async function processOrderActivationJob({ orderId }) {
     "schedule.activatedAt": now,
   };
 
-  if (!useExternal) {
+  if (!useExternal && !useCustomerPickup) {
     const deliveryMs = DEFAULT_DELIVERY_TIMEOUT_MS();
     updateSet.deliverySearchExpiresAt = new Date(now.getTime() + deliveryMs);
     updateSet.deliverySearchMeta = {
@@ -117,7 +124,7 @@ export async function processOrderActivationJob({ orderId }) {
 
   if (!updated) return;
 
-  if (!useExternal) {
+  if (!useExternal && !useCustomerPickup) {
     await scheduleDeliveryTimeoutJob(orderId, 1);
     await DeliveryAssignment.create({
       orderMongoId: updated._id,

@@ -66,6 +66,10 @@ import {
   adjustOrder,
   partialCancelOrder,
   payOrderDifference,
+  requestProductReplacement,
+  reviewProductReplacement,
+  splitOrderDelivery,
+  getOrderModificationHistory,
   createDispute,
   resolveDisputeHandler,
   listDisputesHandler,
@@ -79,6 +83,16 @@ import {
   updateSelfLogisticsStatus,
   adminLogisticsOverride,
 } from "../controller/orderLifecycleController.js";
+import {
+  getDeliveryOptionsForStore,
+  getSellerDeliveryPolicy,
+  updateSellerDeliveryPolicy,
+  sellerMarkReadyForPickup,
+  customerVerifyPickup,
+  sellerVerifyPickup,
+  getPickupStatus,
+  adminUpdateStoreDeliveryPolicy,
+} from "../controller/deliveryPolicyController.js";
 
 const router = express.Router();
 const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
@@ -311,6 +325,17 @@ router.get(
 );
 
 // Scheduling & delivery windows
+router.get("/delivery-options", verifyToken, getDeliveryOptionsForStore);
+router.get(
+  "/delivery-policy",
+  ...sellerSchedulingReadChain,
+  getSellerDeliveryPolicy,
+);
+router.put(
+  "/delivery-policy",
+  ...sellerSchedulingWriteChain,
+  updateSellerDeliveryPolicy,
+);
 router.get("/scheduling/slots", verifyToken, getAvailableDeliverySlots);
 router.get(
   "/scheduling/settings",
@@ -376,6 +401,34 @@ router.post(
   allowRoles("customer", "user"),
   payOrderDifference,
 );
+router.post(
+  "/:orderId/replacements",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  requestProductReplacement,
+);
+router.put(
+  "/:orderId/replacements/:requestId/review",
+  verifyToken,
+  allowRoles("customer", "user"),
+  reviewProductReplacement,
+);
+router.post(
+  "/:orderId/split-delivery",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  splitOrderDelivery,
+);
+router.get(
+  "/:orderId/modifications",
+  verifyToken,
+  allowRoles("customer", "user", "seller", "admin"),
+  getOrderModificationHistory,
+);
 
 // Disputes
 router.post(
@@ -436,6 +489,37 @@ router.put(
   allowRoles("admin"),
   checkAdminPermission("logistics:override"),
   adminLogisticsOverride,
+);
+
+// Customer pickup verification
+router.post(
+  "/:orderId/pickup/ready",
+  ...sellerOrdersWriteChain,
+  sellerMarkReadyForPickup,
+);
+router.post(
+  "/:orderId/pickup/verify",
+  verifyToken,
+  allowRoles("customer", "user"),
+  customerVerifyPickup,
+);
+router.post(
+  "/:orderId/pickup/verify-seller",
+  ...sellerOrdersWriteChain,
+  sellerVerifyPickup,
+);
+router.get(
+  "/:orderId/pickup/status",
+  verifyToken,
+  allowRoles("customer", "user"),
+  getPickupStatus,
+);
+router.put(
+  "/stores/:storeId/delivery-policy",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("logistics:override"),
+  adminUpdateStoreDeliveryPolicy,
 );
 
 export default router;
