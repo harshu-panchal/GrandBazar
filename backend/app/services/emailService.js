@@ -125,6 +125,49 @@ export async function sendSellerVerificationOtpEmail({
   };
 }
 
+export async function sendPasswordResetOtpEmail({
+  email,
+  otp,
+  expiresInMinutes,
+  role = "seller",
+}) {
+  const roleLabel = role === "admin" ? "admin" : "seller";
+
+  if (!useRealEmailOTP()) {
+    logger.info("Password reset email OTP generated in mock mode", {
+      email,
+      otp,
+      role: roleLabel,
+      mode: "mock",
+    });
+    return {
+      delivered: false,
+      mode: "mock",
+    };
+  }
+
+  const transporter = getTransporter();
+  await transporter.sendMail({
+    from: getMailFrom(),
+    to: email,
+    subject: `Reset your ${roleLabel} password`,
+    text: `Your ${roleLabel} password reset code is ${otp}. This code expires in ${expiresInMinutes} minutes. If you did not request a password reset, you can ignore this email.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #0f172a;">
+        <p>Your ${roleLabel} password reset code is:</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 6px;">${otp}</p>
+        <p>This code expires in ${expiresInMinutes} minutes.</p>
+        <p style="color: #64748b; font-size: 13px;">If you did not request a password reset, you can ignore this email.</p>
+      </div>
+    `,
+  });
+
+  return {
+    delivered: true,
+    mode: "real",
+  };
+}
+
 export async function sendStaffWelcomeEmail({
   email,
   name,

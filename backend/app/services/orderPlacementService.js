@@ -105,7 +105,10 @@ async function resolveFulfillmentMethodsForCheckout({
       customerLocation: address?.location,
       fulfillmentType,
     });
-    map[String(sellerId)] = resolved.fulfillmentMethod;
+    map[String(sellerId)] = {
+      fulfillmentMethod: resolved.fulfillmentMethod,
+      logisticsMode: resolved.logisticsMode,
+    };
   }
   return map;
 }
@@ -490,11 +493,20 @@ export async function placeOrderAtomic({
       const groupGrandTotal = Number(pricingSnapshot.aggregateBreakdown?.grandTotal || 1);
       const proportionateWallet = (orderGrandTotal / groupGrandTotal) * walletAmount;
 
+      const fulfillmentEntry =
+        pricingSnapshot.fulfillmentMethodBySeller?.[String(entry.sellerId)] ||
+        pricingSnapshot.fulfillmentMethodBySeller?.[entry.sellerId] ||
+        null;
       const entryFulfillmentMethod =
         entry.fulfillmentMethod ||
+        (typeof fulfillmentEntry === "object" && fulfillmentEntry
+          ? fulfillmentEntry.fulfillmentMethod
+          : fulfillmentEntry) ||
         pricingSnapshot.sellerBreakdownEntries[index]?.fulfillmentMethod ||
         FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
-      const logisticsMode = fulfillmentMethodToLogisticsMode(entryFulfillmentMethod);
+      const logisticsMode =
+        (typeof fulfillmentEntry === "object" && fulfillmentEntry?.logisticsMode) ||
+        fulfillmentMethodToLogisticsMode(entryFulfillmentMethod);
 
       const order = new Order({
         orderId,

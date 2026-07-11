@@ -15,7 +15,7 @@ const METHOD_META = {
   },
   platform_logistics: {
     label: "Platform Delivery",
-    description: "Fast delivery via platform riders",
+    description: "Delivered via platform logistics",
     icon: Truck,
   },
 };
@@ -73,6 +73,9 @@ export default function FulfillmentMethodPicker({
   if (!sellerId) return null;
 
   const availableOptions = options.filter((o) => o.available);
+  // Only show methods the shop has enabled; hide unavailable ones that are temporarily blocked
+  // but still surface blocked enabled methods with a reason so customers understand why.
+  const displayOptions = options.filter((o) => METHOD_META[o.method]);
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-3">
@@ -84,14 +87,20 @@ export default function FulfillmentMethodPicker({
         <p className="text-xs text-slate-400 font-medium">Loading delivery options...</p>
       )}
 
-      {!loading && availableOptions.length === 0 && (
+      {!loading && displayOptions.length === 0 && (
         <p className="text-xs text-rose-600 font-semibold">
           {blockers[0]?.message || "No delivery options available for this shop right now."}
         </p>
       )}
 
+      {!loading && displayOptions.length > 0 && availableOptions.length === 0 && (
+        <p className="text-xs text-rose-600 font-semibold">
+          {blockers[0]?.message || "This shop cannot fulfill orders right now."}
+        </p>
+      )}
+
       <div className="grid gap-2">
-        {options.map((option) => {
+        {displayOptions.map((option) => {
           const meta = METHOD_META[option.method] || {
             label: option.label,
             description: "",
@@ -124,7 +133,9 @@ export default function FulfillmentMethodPicker({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-900">{meta.label}</p>
-                <p className="text-xs text-slate-500">{meta.description}</p>
+                <p className="text-xs text-slate-500">
+                  {option.description || meta.description}
+                </p>
                 {option.estimatedMinutes != null && option.available && (
                   <p className="text-[11px] font-semibold text-emerald-700 mt-1">
                     Est. {option.estimatedMinutes} mins

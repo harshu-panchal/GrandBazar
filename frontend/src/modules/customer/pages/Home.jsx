@@ -172,7 +172,7 @@ const getCachedHomePageData = (location) =>
 const Home = () => {
   const { scrollY } = useScroll();
   const { isOpen: isProductDetailOpen } = useProductDetail();
-  const { currentLocation } = useLocation();
+  const { currentLocation, needsLocationSetup, openLocationPicker } = useLocation();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const quickCatsRef = useRef(null);
@@ -454,17 +454,36 @@ const Home = () => {
   };
 
   return (
-    <div className={`min-h-screen pt-[190px] md:pt-[250px] ${products.length === 0 && !isLoading ? "bg-white" : "bg-[#F5F7F8]"}`}>
+    <div className={`min-h-screen pt-[190px] md:pt-[250px] ${(needsLocationSetup || (products.length === 0 && !isLoading)) ? "bg-white" : "bg-[#F5F7F8]"}`}>
       <div className={cn("contents", isProductDetailOpen && "hidden md:contents")}>
         <MainLocationHeader categories={categories} activeCategory={activeCategory} onCategorySelect={setActiveCategory} />
       </div>
 
-      {products.length === 0 && !isLoading ? (
+      {needsLocationSetup ? (
+        <div className="flex flex-col items-center justify-center pt-16 pb-48 px-6">
+          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <h3 className="text-2xl md:text-4xl font-black text-slate-800 text-center">
+            Select your location
+          </h3>
+          <p className="text-slate-500 font-semibold max-w-md text-center mt-3 text-sm md:text-base">
+            Tell us where you are so we can show products and stores available near you.
+          </p>
+          <button
+            type="button"
+            onClick={openLocationPicker}
+            className="mt-10 px-10 py-4 bg-primary text-white font-black rounded-[24px] uppercase text-[13px] tracking-widest transition-all active:scale-95 shadow-lg shadow-primary/20"
+          >
+            Choose location
+          </button>
+        </div>
+      ) : products.length === 0 && !isLoading ? (
         <div className="flex flex-col items-center justify-center pt-24 pb-48">
           <div className="w-64 h-64 md:w-96 md:h-96 mb-8">{noServiceData && <Lottie animationData={noServiceData} loop={true} />}</div>
           <h3 className="text-3xl md:text-5xl font-black text-slate-800 text-center uppercase">Service <span className="text-primary">Unavailable</span></h3>
           <p className="text-slate-500 font-bold max-w-md text-center px-10 text-sm md:text-lg opacity-80">Ah! We haven't reached your neighborhood yet.</p>
-          <button onClick={() => window.location.reload()} className="mt-12 px-10 py-4 bg-primary text-white font-black rounded-[24px] uppercase text-[13px] tracking-widest transition-all active:scale-95">Check Again</button>
+          <button onClick={() => openLocationPicker()} className="mt-12 px-10 py-4 bg-primary text-white font-black rounded-[24px] uppercase text-[13px] tracking-widest transition-all active:scale-95">Change location</button>
         </div>
       ) : (
         <>

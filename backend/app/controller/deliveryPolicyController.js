@@ -67,14 +67,46 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
     const update = {};
 
     if (deliveryPolicy && typeof deliveryPolicy === "object") {
-      update.deliveryPolicy = {
+      const existingStore = await Store.findById(storeId)
+        .select("deliveryPolicy sameDayCutoffTime")
+        .lean();
+      if (!existingStore) {
+        return handleResponse(res, 404, "Store not found");
+      }
+
+      const adminAllowsPlatform =
+        existingStore.deliveryPolicy?.platformLogisticsEnabledByAdmin !== false;
+
+      const nextPolicy = {
         customerPickup: Boolean(deliveryPolicy.customerPickup),
         sellerDelivery: Boolean(deliveryPolicy.sellerDelivery),
-        platformLogistics: deliveryPolicy.platformLogistics !== false,
+        platformLogistics: adminAllowsPlatform
+          ? deliveryPolicy.platformLogistics !== false
+          : false,
         autoSwitchToPlatform: Boolean(deliveryPolicy.autoSwitchToPlatform),
+        platformLogisticsEnabledByAdmin: adminAllowsPlatform,
         sameDayCutoffTime:
-          deliveryPolicy.sameDayCutoffTime || DEFAULT_DELIVERY_POLICY.sameDayCutoffTime,
+          deliveryPolicy.sameDayCutoffTime ||
+          existingStore.deliveryPolicy?.sameDayCutoffTime ||
+          DEFAULT_DELIVERY_POLICY.sameDayCutoffTime,
       };
+
+      if (
+        !nextPolicy.customerPickup &&
+        !nextPolicy.sellerDelivery &&
+        !nextPolicy.platformLogistics
+      ) {
+        return handleResponse(
+          res,
+          400,
+          "Enable at least one fulfillment method: Customer Pickup, Seller Self Delivery, or Platform Logistics",
+        );
+      }
+
+      update.deliveryPolicy = nextPolicy;
+      if (!(schedulingSettings && typeof schedulingSettings === "object")) {
+        update["schedulingSettings.selfLogistics"] = nextPolicy.sellerDelivery;
+      }
     }
 
     if (availability && typeof availability === "object") {
@@ -103,17 +135,29 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
     }
 
     if (schedulingSettings && typeof schedulingSettings === "object") {
-      update.schedulingSettings = {
-        enabled: Boolean(schedulingSettings.enabled),
-        maxDaysAhead: Number(schedulingSettings.maxDaysAhead || 7),
-        rescheduleCutoffDays: Number(schedulingSettings.rescheduleCutoffDays ?? 1),
-        selfLogistics: Boolean(
-          schedulingSettings.selfLogistics ?? deliveryPolicy?.sellerDelivery,
-        ),
-        deliveryWindows: Array.isArray(schedulingSettings.deliveryWindows)
-          ? schedulingSettings.deliveryWindows
-          : [],
-      };
+      const hasFullSchedulingPayload =
+        schedulingSettings.enabled !== undefined ||
+        schedulingSettings.maxDaysAhead !== undefined ||
+        schedulingSettings.rescheduleCutoffDays !== undefined ||
+        Array.isArray(schedulingSettings.deliveryWindows);
+
+      if (hasFullSchedulingPayload) {
+        update.schedulingSettings = {
+          enabled: Boolean(schedulingSettings.enabled),
+          maxDaysAhead: Number(schedulingSettings.maxDaysAhead || 7),
+          rescheduleCutoffDays: Number(schedulingSettings.rescheduleCutoffDays ?? 1),
+          selfLogistics: Boolean(
+            schedulingSettings.selfLogistics ?? deliveryPolicy?.sellerDelivery,
+          ),
+          deliveryWindows: Array.isArray(schedulingSettings.deliveryWindows)
+            ? schedulingSettings.deliveryWindows
+            : [],
+        };
+      } else if (schedulingSettings.selfLogistics !== undefined) {
+        update["schedulingSettings.selfLogistics"] = Boolean(
+          schedulingSettings.selfLogistics,
+        );
+      }
     }
 
     if (serviceRadius !== undefined) {

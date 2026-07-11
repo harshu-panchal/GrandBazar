@@ -11,6 +11,7 @@ import Lottie from "lottie-react";
 import storePin from "@/assets/store-pin.png";
 import customerPin from "@/assets/customer-pin.png";
 import BecomeSellerButton from "../components/shared/BecomeSellerButton";
+import { getGoogleMapsJsApiLoaderOptions } from "@/core/services/googleMapsLoader";
 
 const STORE_THEMES = {
   grocery: {
@@ -99,10 +100,9 @@ const StoresPage = () => {
   const [filterDistance, setFilterDistance] = useState("all");
   const [isMapView, setIsMapView] = useState(false);
 
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
+  const { isLoaded } = useJsApiLoader(
+    getGoogleMapsJsApiLoaderOptions(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""),
+  );
 
   const storeMarkerIcon = useMemo(() => {
     return isLoaded && window.google ? {

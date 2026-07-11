@@ -4,9 +4,17 @@ import handleResponse from "../utils/helper.js";
 import {
   bootstrapAdminSchema,
   loginAdminSchema,
+  forgotPasswordSendOtpSchema,
+  forgotPasswordVerifyOtpSchema,
+  forgotPasswordResetSchema,
   validateSchema,
 } from "../validation/adminAuthValidation.js";
 import { recordLogin } from "../services/loginActivityService.js";
+import {
+  sendPasswordResetOtp,
+  verifyPasswordResetOtp,
+  resetPasswordWithToken,
+} from "../services/passwordResetService.js";
 
 const PUBLIC_ADMIN_SIGNUP_ENABLED = () =>
   process.env.ENABLE_PUBLIC_ADMIN_SIGNUP === "true";
@@ -139,6 +147,54 @@ export const loginAdmin = async (req, res) => {
       token,
       admin: sanitizeAdmin(admin),
     });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const sendAdminForgotPasswordOtp = async (req, res) => {
+  try {
+    const payload = validateSchema(forgotPasswordSendOtpSchema, req.body || {});
+    const result = await sendPasswordResetOtp({
+      role: "admin",
+      email: payload.email,
+      ipAddress: req.ip,
+    });
+    return handleResponse(
+      res,
+      200,
+      "If an account exists for this email, a reset code has been sent.",
+      result,
+    );
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const verifyAdminForgotPasswordOtp = async (req, res) => {
+  try {
+    const payload = validateSchema(forgotPasswordVerifyOtpSchema, req.body || {});
+    const result = await verifyPasswordResetOtp({
+      role: "admin",
+      email: payload.email,
+      otp: payload.otp,
+      ipAddress: req.ip,
+    });
+    return handleResponse(res, 200, "OTP verified successfully", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const resetAdminPassword = async (req, res) => {
+  try {
+    const payload = validateSchema(forgotPasswordResetSchema, req.body || {});
+    const result = await resetPasswordWithToken({
+      role: "admin",
+      resetToken: payload.resetToken,
+      newPassword: payload.newPassword,
+    });
+    return handleResponse(res, 200, "Password reset successfully", result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

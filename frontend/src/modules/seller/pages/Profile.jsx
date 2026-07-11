@@ -32,6 +32,13 @@ const SellerProfile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState(null);
+  const [deliveryPolicy, setDeliveryPolicy] = useState({
+    customerPickup: false,
+    sellerDelivery: false,
+    platformLogistics: true,
+    autoSwitchToPlatform: false,
+  });
+  const [isSavingDeliveryPolicy, setIsSavingDeliveryPolicy] = useState(false);
   const [businessModelData, setBusinessModelData] = useState(null);
   const [switchLoading, setSwitchLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -49,8 +56,20 @@ const SellerProfile = () => {
 
   useEffect(() => {
     fetchProfile();
-    sellerApi.getDeliverySettings()
-      .then((response) => setDeliverySettings(response.data.result))
+    sellerApi
+      .getDeliverySettings()
+      .then((response) => {
+        const result = response.data.result;
+        setDeliverySettings(result);
+        if (result?.deliveryPolicy) {
+          setDeliveryPolicy({
+            customerPickup: Boolean(result.deliveryPolicy.customerPickup),
+            sellerDelivery: Boolean(result.deliveryPolicy.sellerDelivery),
+            platformLogistics: result.deliveryPolicy.platformLogistics !== false,
+            autoSwitchToPlatform: Boolean(result.deliveryPolicy.autoSwitchToPlatform),
+          });
+        }
+      })
       .catch(() => setDeliverySettings(null));
   }, []);
 
@@ -73,6 +92,40 @@ const SellerProfile = () => {
       toast.error(error.response?.data?.message || "Failed to submit switch request");
     } finally {
       setSwitchLoading(false);
+    }
+  };
+
+  const handleSaveDeliveryPolicy = async () => {
+    if (
+      !deliveryPolicy.customerPickup &&
+      !deliveryPolicy.sellerDelivery &&
+      !deliveryPolicy.platformLogistics
+    ) {
+      toast.error(
+        "Enable at least one: Customer Pickup, Seller Self Delivery, or Platform Logistics",
+      );
+      return;
+    }
+
+    setIsSavingDeliveryPolicy(true);
+    try {
+      await sellerApi.updateDeliveryPolicy({
+        deliveryPolicy: {
+          ...deliveryPolicy,
+        },
+      });
+      setDeliverySettings((prev) => ({
+        ...prev,
+        deliveryPolicy: {
+          ...(prev?.deliveryPolicy || {}),
+          ...deliveryPolicy,
+        },
+      }));
+      toast.success("Delivery options saved. Customers will see enabled methods at checkout.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save delivery options");
+    } finally {
+      setIsSavingDeliveryPolicy(false);
     }
   };
 
@@ -651,25 +704,103 @@ const SellerProfile = () => {
           )}
 
           <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
-            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
-              Delivery Settings
-            </h4>
-            <div className="flex items-start gap-4">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-2">
+                  Delivery Settings
+                </h4>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Configure fulfillment for the active shop. Only enabled options appear for customers at checkout.
+                </p>
+              </div>
               <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
                 <Truck size={20} className="text-slate-700" />
               </div>
-              <div>
-                <p className="text-sm font-black text-slate-900">
+            </div>
+
+            {!deliverySettings ? (
+              <p className="text-xs text-slate-500 font-medium">
+                Select or create an active shop to configure delivery options.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {[
+                  {
+                    key: "customerPickup",
+                    label: "Customer Pickup",
+                    hint: "Customers collect orders from your shop",
+                  },
+                  {
+                    key: "sellerDelivery",
+                    label: "Seller Self Delivery",
+                    hint: "You deliver with your own riders",
+                  },
+                  {
+                    key: "platformLogistics",
+                    label: "Platform Logistics",
+                    hint: "Platform riders deliver to the customer",
+                    disabled: deliverySettings?.deliveryPolicy?.platformLogisticsEnabledByAdmin === false,
+                  },
+                  {
+                    key: "autoSwitchToPlatform",
+                    label: "Auto Switch to Platform Logistics",
+                    hint: "If you cannot deliver, switch to platform logistics automatically",
+                  },
+                ].map((toggle) => (
+                  <label
+                    key={toggle.key}
+                    className={`flex items-start gap-3 rounded-2xl border px-4 py-3 ${
+                      toggle.disabled
+                        ? "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed"
+                        : "border-slate-100 hover:bg-slate-50 cursor-pointer"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(deliveryPolicy[toggle.key])}
+                      disabled={Boolean(toggle.disabled)}
+                      onChange={(e) =>
+                        setDeliveryPolicy((prev) => ({
+                          ...prev,
+                          [toggle.key]: e.target.checked,
+                        }))
+                      }
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-300"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black text-slate-900">{toggle.label}</span>
+                      <span className="block text-xs text-slate-500 font-medium mt-0.5">
+                        {toggle.hint}
+                        {toggle.disabled ? " (disabled by admin)" : ""}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+
+                <p className="text-[11px] text-slate-400 font-medium pt-1">
+                  Platform mode:{" "}
                   {deliverySettings?.logisticsMode === "external"
-                    ? "External courier partners"
+                    ? "External courier partners (Platform Logistics still shown at checkout)"
                     : "Platform delivery fleet"}
                 </p>
-                <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
-                  {deliverySettings?.description
-                    || "Your orders are fulfilled via the platform logistics network."}
-                </p>
+
+                <Button
+                  type="button"
+                  onClick={handleSaveDeliveryPolicy}
+                  disabled={isSavingDeliveryPolicy}
+                  className="w-full mt-2 rounded-2xl"
+                >
+                  {isSavingDeliveryPolicy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </span>
+                  ) : (
+                    "Save delivery options"
+                  )}
+                </Button>
               </div>
-            </div>
+            )}
           </Card>
 
           <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px] bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-800 text-white">

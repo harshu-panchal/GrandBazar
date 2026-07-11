@@ -10,27 +10,48 @@ import { customerApi } from "../services/customerApi";
 import { hasValidStoredAuthToken } from "@core/utils/authStorage";
 
 const LocationContext = createContext(undefined);
-// v2 key to force one-time refresh from Google Maps for users
-// who previously only had the default/static location cached.
-const STORAGE_KEY = "location_v2";
+// v3 clears the old hardcoded Indore default that was auto-persisted into location_v2.
+const STORAGE_KEY = "location_v3";
+const LEGACY_STORAGE_KEY = "location_v2";
+
+const UNSET_LOCATION = {
+  name: "Select your location",
+  time: "",
+  city: "",
+  state: "",
+  pincode: "",
+  latitude: null,
+  longitude: null,
+};
+
+function hasValidCoordinates(location) {
+  const lat = location?.latitude;
+  const lng = location?.longitude;
+  // Number(null) === 0, so null must be rejected explicitly.
+  if (lat == null || lng == null || lat === "" || lng === "") return false;
+  const latN = Number(lat);
+  const lngN = Number(lng);
+  return Number.isFinite(latN) && Number.isFinite(lngN);
+}
 
 export const LocationProvider = ({ children }) => {
-  // Default location (used until we can resolve a better one)
-  const [currentLocation, setCurrentLocation] = useState({
-    name: "214, Rajshri Palace Colony, Pipliyahana, Indore, Madhya Pradesh 452018, India",
-    time: "12-15 mins",
-    city: "Indore",
-    state: "Madhya Pradesh",
-    pincode: "452018",
-    latitude: 22.711140989838025,
-    longitude: 75.9001552518043,
-  });
+  const [currentLocation, setCurrentLocation] = useState(UNSET_LOCATION);
+  const [hasHydratedLocation, setHasHydratedLocation] = useState(false);
 
   // Address list for drawer UI – will be hydrated from profile API.
   const [savedAddresses, setSavedAddresses] = useState([]);
 
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+
+  const openLocationPicker = useCallback(() => {
+    setIsLocationPickerOpen(true);
+  }, []);
+
+  const closeLocationPicker = useCallback(() => {
+    setIsLocationPickerOpen(false);
+  }, []);
 
   // Update the current location.
   // By default this does NOT change saved addresses; only explicit
@@ -39,9 +60,9 @@ export const LocationProvider = ({ children }) => {
     newLoc,
     { persist = true, updateSavedHome = false } = {},
   ) => {
-    setCurrentLocation(newLoc);
+    setCurrentLocation(newLoc || UNSET_LOCATION);
 
-    if (updateSavedHome) {
+    if (updateSavedHome && newLoc?.name) {
       setSavedAddresses((prev) =>
         prev.map((addr) =>
           addr.label === "Home" ? { ...addr, address: newLoc.name } : addr,
@@ -49,7 +70,7 @@ export const LocationProvider = ({ children }) => {
       );
     }
 
-    if (persist && typeof window !== "undefined") {
+    if (persist && typeof window !== "undefined" && hasValidCoordinates(newLoc)) {
       try {
         const payload = {
           address: newLoc.name,
@@ -103,9 +124,9 @@ export const LocationProvider = ({ children }) => {
       const fallbackFromCoords = (latitude, longitude) => ({
         name: `Lat ${Number(latitude).toFixed(5)}, Lng ${Number(longitude).toFixed(5)}`,
         time: "12-15 mins",
-        city: currentLocation?.city || "Indore",
-        state: currentLocation?.state || "Madhya Pradesh",
-        pincode: currentLocation?.pincode || "452018",
+        city: "",
+        state: "",
+        pincode: "",
         latitude,
         longitude,
       });
@@ -156,7 +177,6 @@ export const LocationProvider = ({ children }) => {
               components.find((c) => types.every((t) => c.types.includes(t)))
                 ?.long_name;
 
-            // Build address from components to match: "214, Rajshri Palace Colony, Pipliyahana, Indore, Madhya Pradesh 452018, India"
             const premise = getComponent(["premise"]);
             const neighborhood = getComponent(["neighborhood"]);
             const sublocality = getComponent([
@@ -215,7 +235,10 @@ export const LocationProvider = ({ children }) => {
       };
 
       const handleLocationError = (error) => {
-        const message = typeof error === 'string' ? error : (error.message || "Location permission denied");
+        const message =
+          typeof error === "string"
+            ? error
+            : error.message || "Location permission denied";
         setLocationError(message);
         setIsFetchingLocation(false);
         resolve({ ok: false, error: message });
@@ -223,21 +246,27 @@ export const LocationProvider = ({ children }) => {
 
       // Native Flutter Bridge
       if (window.Flutter) {
-        import("../../../lib/appZetoBridge").then(async (m) => {
-          const AppZetoBridge = m.default;
-          const coords = await AppZetoBridge.getLocation();
-          if (coords && coords.lat && coords.lng) {
-            handleLocationSuccess(coords.lat, coords.lng);
-          } else {
-            handleLocationError("Native location failed");
-          }
-        }).catch(() => handleLocationError("Bridge not found"));
+        import("../../../lib/appZetoBridge")
+          .then(async (m) => {
+            const AppZetoBridge = m.default;
+            const coords = await AppZetoBridge.getLocation();
+            if (coords && coords.lat && coords.lng) {
+              handleLocationSuccess(coords.lat, coords.lng);
+            } else {
+              handleLocationError("Native location failed");
+            }
+          })
+          .catch(() => handleLocationError("Bridge not found"));
         return;
       }
 
       // Standard Browser Geolocation
       navigator.geolocation.getCurrentPosition(
-        (position) => handleLocationSuccess(position.coords.latitude, position.coords.longitude),
+        (position) =>
+          handleLocationSuccess(
+            position.coords.latitude,
+            position.coords.longitude,
+          ),
         handleLocationError,
         {
           enableHighAccuracy: true,
@@ -294,55 +323,81 @@ export const LocationProvider = ({ children }) => {
     refreshAddresses();
   }, [refreshAddresses]);
 
-  // On mount: only restore from cache. Do NOT auto-fetch – browsers block the
-  // location prompt unless it's triggered by a user gesture (e.g. tap).
+  // On mount: only restore a previously chosen location. Never seed a fake default.
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     try {
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         const addressName = parsed.address || parsed.name;
-        if (parsed && addressName) {
-          updateLocation(
-            {
-              name: addressName,
-              time: parsed.time || "12-15 mins",
-              city: parsed.city,
-              state: parsed.state,
-              pincode: parsed.pincode,
-              latitude: parsed.latitude,
-              longitude: parsed.longitude,
-            },
-            { persist: false, updateSavedHome: false },
-          );
+        const restored = {
+          name: addressName || UNSET_LOCATION.name,
+          time: parsed.time || "12-15 mins",
+          city: parsed.city || "",
+          state: parsed.state || "",
+          pincode: parsed.pincode || "",
+          latitude: parsed.latitude,
+          longitude: parsed.longitude,
+        };
+        if (hasValidCoordinates(restored) && addressName) {
+          updateLocation(restored, { persist: false, updateSavedHome: false });
         }
-      } else {
-        // If no location is stored, persist the default one immediately
-        updateLocation(currentLocation, {
-          persist: true,
-          updateSavedHome: false,
-        });
       }
     } catch {
       // ignore parse errors
+    } finally {
+      setHasHydratedLocation(true);
     }
     // Live fetch happens only when user taps location pill or "Use current location"
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const locationValue = useMemo(() => ({
-    currentLocation,
-    savedAddresses,
-    updateLocation,
-    addAddress,
-    refreshAddresses,
-    isFetchingLocation,
-    locationError,
-    refreshLocation: fetchAndCacheLocation,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [currentLocation, savedAddresses, isFetchingLocation, locationError, refreshAddresses]);
+  const needsLocationSetup =
+    hasHydratedLocation && !hasValidCoordinates(currentLocation);
+
+  // Open picker until location is chosen; force-close once we have valid coords
+  // so the blur backdrop never gets stuck after selection.
+  useEffect(() => {
+    if (!hasHydratedLocation) return;
+    if (needsLocationSetup) {
+      setIsLocationPickerOpen(true);
+    } else {
+      setIsLocationPickerOpen(false);
+    }
+  }, [hasHydratedLocation, needsLocationSetup]);
+
+  const locationValue = useMemo(
+    () => ({
+      currentLocation,
+      savedAddresses,
+      updateLocation,
+      addAddress,
+      refreshAddresses,
+      isFetchingLocation,
+      locationError,
+      refreshLocation: fetchAndCacheLocation,
+      needsLocationSetup,
+      hasValidLocation: hasValidCoordinates(currentLocation),
+      isLocationPickerOpen,
+      openLocationPicker,
+      closeLocationPicker,
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }),
+    [
+      currentLocation,
+      savedAddresses,
+      isFetchingLocation,
+      locationError,
+      refreshAddresses,
+      needsLocationSetup,
+      isLocationPickerOpen,
+      openLocationPicker,
+      closeLocationPicker,
+    ],
+  );
 
   return (
     <LocationContext.Provider value={locationValue}>

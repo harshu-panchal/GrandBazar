@@ -90,6 +90,10 @@ export const verifyToken = (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    if (decoded?.purpose === "password_reset") {
+      return handleResponse(res, 401, "Invalid or expired token");
+    }
+
     req.user = decoded;
 
     const activityId = decoded.accountId || decoded.subSellerId || decoded.id;
@@ -115,7 +119,7 @@ export const optionalVerifyToken = (req, res, next) => {
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
+        req.user = decoded?.purpose === "password_reset" ? null : decoded;
       } catch {
         req.user = null;
       }

@@ -159,6 +159,7 @@ const CheckoutPage = () => {
   const { showToast } = useToast();
   const { user, isAuthenticated } = useAuth();
   const { settings } = useSettings();
+  const navigate = useNavigate();
 
   const wishlistSectionRef = useRef(null);
   const wishlistFetchedRef = useRef(false);

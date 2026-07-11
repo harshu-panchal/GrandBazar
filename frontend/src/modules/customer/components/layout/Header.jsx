@@ -6,7 +6,6 @@ import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 import { useLocation as useAppLocation } from "../../context/LocationContext";
 import { useSettings } from '@core/context/SettingsContext';
-import LocationDrawer from '../shared/LocationDrawer';
 
 const Header = () => {
     const { settings } = useSettings();
@@ -14,8 +13,12 @@ const Header = () => {
     const { cartCount } = useCart();
     const location = useLocation();
     const isCheckoutPage = location.pathname === '/checkout';
-    const [isLocationOpen, setIsLocationOpen] = useState(false);
-    const { currentLocation, refreshLocation } = useAppLocation();
+    const {
+        currentLocation,
+        openLocationPicker,
+    } = useAppLocation();
+
+    const locationLabel = currentLocation?.name || "Select your location";
 
     // Search placeholder animation
     const [searchPlaceholder, setSearchPlaceholder] = useState('Search ');
@@ -79,8 +82,7 @@ const Header = () => {
                         data-lenis-prevent
                         data-lenis-prevent-touch
                         onClick={() => {
-                            refreshLocation();
-                            setIsLocationOpen(true);
+                            openLocationPicker();
                         }}
                         className="flex items-center gap-3 cursor-pointer active:scale-95 transition-transform border-0 bg-transparent p-0 text-left"
                     >
@@ -93,7 +95,7 @@ const Header = () => {
                                 {currentLocation.time}
                             </span>
                             <div className="flex items-center gap-1 font-black text-white text-base">
-                                <span className="max-w-[150px] truncate">{currentLocation.name}</span> <span className="text-[10px] opacity-70">▼</span>
+                                <span className="max-w-[150px] truncate">{locationLabel}</span> <span className="text-[10px] opacity-70">▼</span>
                             </div>
                         </div>
                     </button>
@@ -113,8 +115,7 @@ const Header = () => {
                             data-lenis-prevent
                             data-lenis-prevent-touch
                             onClick={() => {
-                                refreshLocation();
-                                setIsLocationOpen(true);
+                                openLocationPicker();
                             }}
                             className="hidden md:flex items-center gap-2 pl-6 border-l border-slate-200 cursor-pointer active:scale-95 transition-transform border-0 bg-transparent p-0"
                         >
@@ -123,7 +124,7 @@ const Header = () => {
                                     Delivery in {currentLocation.time}
                                 </span>
                                 <div className="flex items-center gap-1 font-bold text-slate-700 text-sm group-hover:text-[var(--primary)] transition-colors">
-                                    <span className="max-w-[150px] truncate">{currentLocation.name}</span> <MapPin size={14} className="fill-current" />
+                                    <span className="max-w-[150px] truncate">{locationLabel}</span> <MapPin size={14} className="fill-current" />
                                 </div>
                             </div>
                         </button>
@@ -177,12 +178,6 @@ const Header = () => {
                     </div>
                 </div>
             </div>
-
-            {/* Location Selection Drawer */}
-            <LocationDrawer
-                isOpen={isLocationOpen}
-                onClose={() => setIsLocationOpen(false)}
-            />
         </header>
     );
 };

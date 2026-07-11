@@ -457,9 +457,9 @@ const ProductManagement = () => {
                             }}
                             className={cn(
                                 "flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
-                                filterStatus === 'active' ? "bg-brand-500 text-primary-foreground shadow-md shadow-brand-100" :
+                                filterStatus === 'active' ? "bg-emerald-600 text-white shadow-md shadow-emerald-100" :
                                     filterStatus === 'inactive' ? "bg-amber-500 text-white shadow-md shadow-amber-100" :
-                                        "bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
+                                        "bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50"
                             )}
                             >
                             <HiOutlineFunnel className="h-4 w-4" />

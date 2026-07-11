@@ -6,6 +6,21 @@
 let mapsLoadPromise = null;
 let isLoaded = false;
 
+/** Shared @react-google-maps/api loader options — must be identical across every useJsApiLoader call */
+export const GOOGLE_MAPS_SCRIPT_ID = "google-map-script";
+export const GOOGLE_MAPS_LIBRARIES = Object.freeze(["places", "geometry"]);
+
+export function getGoogleMapsJsApiLoaderOptions(apiKey) {
+  return {
+    id: GOOGLE_MAPS_SCRIPT_ID,
+    googleMapsApiKey:
+      apiKey ||
+      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
+      "",
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  };
+}
+
 const ensurePlacesLibrary = async () => {
   if (!window.google?.maps) return;
   if (window.google.maps.places) return;
@@ -45,7 +60,7 @@ export const loadGoogleMaps = (apiKey) => {
     }
 
     // Create script element
-    const script = document.createElement('script');
+    const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,places`;
     script.async = true;
     script.defer = true;
@@ -58,7 +73,7 @@ export const loadGoogleMaps = (apiKey) => {
 
     script.onerror = () => {
       mapsLoadPromise = null; // Reset so it can be retried
-      reject(new Error('Failed to load Google Maps'));
+      reject(new Error("Failed to load Google Maps"));
     };
 
     document.head.appendChild(script);

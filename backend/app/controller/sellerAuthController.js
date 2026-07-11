@@ -6,6 +6,11 @@ import {
     verifySellerOtpCode,
     verifySellerVerificationToken,
 } from "../services/sellerVerificationService.js";
+import {
+    sendPasswordResetOtp,
+    verifyPasswordResetOtp,
+    resetPasswordWithToken,
+} from "../services/passwordResetService.js";
 import { recordLogin } from "../services/loginActivityService.js";
 import {
     generateSellerToken,
@@ -221,5 +226,56 @@ export const loginSeller = async (req, res) => {
         });
     } catch (error) {
         return handleResponse(res, 500, error.message);
+    }
+};
+
+/* ===============================
+   FORGOT PASSWORD (email OTP)
+================================ */
+export const sendSellerForgotPasswordOtp = async (req, res) => {
+    try {
+        const { email } = req.body || {};
+        const result = await sendPasswordResetOtp({
+            role: "seller",
+            email,
+            ipAddress: req.ip,
+        });
+        return handleResponse(
+            res,
+            200,
+            "If an account exists for this email, a reset code has been sent.",
+            result,
+        );
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+export const verifySellerForgotPasswordOtp = async (req, res) => {
+    try {
+        const { email, otp } = req.body || {};
+        const result = await verifyPasswordResetOtp({
+            role: "seller",
+            email,
+            otp,
+            ipAddress: req.ip,
+        });
+        return handleResponse(res, 200, "OTP verified successfully", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+export const resetSellerPassword = async (req, res) => {
+    try {
+        const { resetToken, newPassword } = req.body || {};
+        const result = await resetPasswordWithToken({
+            role: "seller",
+            resetToken,
+            newPassword,
+        });
+        return handleResponse(res, 200, "Password reset successfully", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
     }
 };

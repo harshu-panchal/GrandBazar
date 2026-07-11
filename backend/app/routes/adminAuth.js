@@ -24,6 +24,9 @@ import {
     bootstrapAdmin,
     signupAdmin,
     loginAdmin,
+    sendAdminForgotPasswordOtp,
+    verifyAdminForgotPasswordOtp,
+    resetAdminPassword,
 } from "../controller/adminAuthController.js";
 import {
     getAdminProfile,
@@ -79,6 +82,7 @@ import {
     adminBootstrapRateLimiter,
     authRouteRateLimiter,
     createContentLengthGuard,
+    otpRouteRateLimiter,
 } from "../middleware/securityMiddlewares.js";
 
 const router = express.Router();
@@ -90,6 +94,27 @@ const smallAdminPayload = createContentLengthGuard(
 router.post("/bootstrap", adminBootstrapRateLimiter, smallAdminPayload, bootstrapAdmin);
 router.post("/signup", adminBootstrapRateLimiter, smallAdminPayload, signupAdmin);
 router.post("/login", authRouteRateLimiter, smallAdminPayload, loginAdmin);
+
+router.post(
+    "/forgot-password/send-otp",
+    authRouteRateLimiter,
+    otpRouteRateLimiter,
+    smallAdminPayload,
+    sendAdminForgotPasswordOtp,
+);
+router.post(
+    "/forgot-password/verify-otp",
+    authRouteRateLimiter,
+    otpRouteRateLimiter,
+    smallAdminPayload,
+    verifyAdminForgotPasswordOtp,
+);
+router.post(
+    "/forgot-password/reset",
+    authRouteRateLimiter,
+    smallAdminPayload,
+    resetAdminPassword,
+);
 
 // Profile routes
 router.get(

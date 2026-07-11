@@ -19,6 +19,26 @@ export const loginAdminSchema = Joi.object({
   password: Joi.string().min(6).max(128).required(),
 });
 
+export const forgotPasswordSendOtpSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+});
+
+export const forgotPasswordVerifyOtpSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+  otp: Joi.string().trim().pattern(/^\d{4}$/).required(),
+});
+
+export const forgotPasswordResetSchema = Joi.object({
+  resetToken: Joi.string().trim().required(),
+  newPassword: Joi.string()
+    .min(10)
+    .max(128)
+    .pattern(/[a-z]/, "lowercase")
+    .pattern(/[A-Z]/, "uppercase")
+    .pattern(/[0-9]/, "number")
+    .required(),
+});
+
 export function validateSchema(schema, payload) {
   const { error, value } = schema.validate(payload, {
     abortEarly: false,
