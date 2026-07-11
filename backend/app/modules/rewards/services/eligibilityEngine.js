@@ -1,4 +1,4 @@
-import Order from "../../models/order.js";
+import Order from "../../../models/order.js";
 import RewardCampaign from "../models/rewardCampaign.model.js";
 import RewardGrant from "../models/rewardGrant.model.js";
 import {
