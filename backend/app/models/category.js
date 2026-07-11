@@ -45,6 +45,10 @@ const categorySchema = new mongoose.Schema(
       ref: "Category",
       default: null,
     },
+    applyCommission: {
+      type: Boolean,
+      default: false,
+    },
     adminCommission: {
       type: Number,
       default: 0, // Percentage

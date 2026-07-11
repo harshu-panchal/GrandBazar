@@ -142,7 +142,7 @@ export const getCategories = async (req, res) => {
 export const createCategory = async (req, res) => {
   try {
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
     
     // Strict Whitelisting and Sanitization
     for (const key of allowedKeys) {
@@ -151,6 +151,10 @@ export const createCategory = async (req, res) => {
         // Stripping objects {} that could cause cast errors in Mongoose
         if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof mongoose.Types.ObjectId)) {
            continue;
+        }
+        if (key === "applyCommission") {
+          categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
+          continue;
         }
         categoryData[key] = val;
       }
@@ -223,13 +227,17 @@ export const updateCategory = async (req, res) => {
     }
 
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue"];
     
     for (const key of allowedKeys) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
         const val = req.body[key];
         if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof mongoose.Types.ObjectId)) {
            continue;
+        }
+        if (key === "applyCommission") {
+          categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
+          continue;
         }
         categoryData[key] = val;
       }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import Pagination from "@shared/components/ui/Pagination";
@@ -51,6 +52,8 @@ const Level2Categories = () => {
     parentId: "",
     priorityStartTime: "",
     priorityEndTime: "",
+    applyCommission: false,
+    adminCommission: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -60,6 +63,17 @@ const Level2Categories = () => {
   useEffect(() => {
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+    const modalOpen = isAddModalOpen || isDeleteModalOpen;
+    if (!modalOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isAddModalOpen, isDeleteModalOpen]);
 
   const fetchCategories = async () => {
     setIsLoading(true);
@@ -156,7 +170,16 @@ const Level2Categories = () => {
       // Only append fields that have actual values to avoid sending empty objects/junk
       Object.keys(formData).forEach((key) => {
         const val = formData[key];
-        if (key !== "type" && val !== undefined && val !== null && val !== "") {
+        if (key === "type") return;
+        if (key === "applyCommission") {
+          data.append(key, formData.applyCommission ? "true" : "false");
+          return;
+        }
+        if (key === "adminCommission") {
+          data.append(key, formData[key] === "" ? "0" : String(formData[key]));
+          return;
+        }
+        if (val !== undefined && val !== null && val !== "") {
           data.append(key, val);
         }
       });
@@ -211,6 +234,8 @@ const Level2Categories = () => {
       parentId: "",
       priorityStartTime: "",
       priorityEndTime: "",
+      applyCommission: false,
+      adminCommission: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -228,6 +253,10 @@ const Level2Categories = () => {
       parentId: item.parentId?._id || item.parentId || "",
       priorityStartTime: item.priorityStartTime || "",
       priorityEndTime: item.priorityEndTime || "",
+      applyCommission:
+        item.applyCommission === true ||
+        (item.applyCommission !== false && Number(item.adminCommission || 0) > 0),
+      adminCommission: item.adminCommission ?? "",
     });
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
@@ -377,6 +406,9 @@ const Level2Categories = () => {
                   Slug
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Comm (%)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -387,13 +419,13 @@ const Level2Categories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500">
                     No categories found
                   </td>
                 </tr>
@@ -434,6 +466,12 @@ const Level2Categories = () => {
                       </Badge>
                     </td>
                     <td className="py-3 px-4 text-gray-500">{cat.slug}</td>
+                    <td className="py-3 px-4 text-gray-500 font-medium">
+                      {cat.applyCommission === true ||
+                      (cat.applyCommission !== false && Number(cat.adminCommission || 0) > 0)
+                        ? `${cat.adminCommission ?? 0}%`
+                        : "—"}
+                    </td>
                     <td className="py-3 px-4">
                       <Badge
                         variant={
@@ -480,212 +518,260 @@ const Level2Categories = () => {
       </Card>
 
       {/* Add/Edit Modal */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-lg font-bold text-gray-900">
-                  {editingItem ? "Edit Category" : "Add Category"}
-                </h2>
-                <button
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                {/* Image Upload */}
-                <div className="flex justify-center">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-brand-500 overflow-hidden transition-colors">
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        <Image className="w-8 h-8 text-gray-400 mx-auto" />
-                        <span className="text-xs text-gray-500 mt-1">
-                          Upload
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={handleImageChange}
-                    accept="image/*"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Parent Header Category
-                  </label>
-                  <select
-                    value={formData.parentId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, parentId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
-                    <option value="">Select Header Category</option>
-                    {headerCategories.map((h) => (
-                      <option key={h._id || h.id} value={h._id || h.id}>
-                        {h.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        name: e.target.value,
-                        slug: makeSlug(e.target.value),
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    placeholder="e.g., Laptops"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Slug
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.slug}
-                    readOnly
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    placeholder="e.g., laptops"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) =>
-                      setFormData({ ...formData, status: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Priority Start Time
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.priorityStartTime}
-                      onChange={(e) =>
-                        setFormData({ ...formData, priorityStartTime: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Priority End Time
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.priorityEndTime}
-                      onChange={(e) =>
-                        setFormData({ ...formData, priorityEndTime: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-                <button
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-black  text-primary-foreground rounded-lg hover:bg-brand-700 font-medium disabled:opacity-50 flex items-center gap-2">
-                  {isSaving && (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  )}
-                  {editingItem ? "Update Category" : "Create Category"}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Delete Confirmation Modal */}
-      <AnimatePresence>
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
-              <div className="p-6 text-center">
-                <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
-                  <Trash className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">
-                  Delete Category?
-                </h3>
-                <p className="text-gray-500 text-sm mb-6">
-                  Are you sure you want to delete{" "}
-                  <span className="font-semibold text-gray-900">
-                    {deleteTarget?.name}
-                  </span>
-                  ? This action cannot be undone.
-                </p>
-                <div className="flex gap-3 justify-center">
+      {createPortal(
+        <AnimatePresence>
+          {isAddModalOpen && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-none">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {editingItem ? "Edit Category" : "Add Category"}
+                  </h2>
                   <button
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="text-gray-400 hover:text-gray-600">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div
+                  className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain touch-pan-y"
+                  tabIndex={0}
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                >
+                  {/* Image Upload */}
+                  <div className="flex justify-center">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-brand-500 overflow-hidden transition-colors">
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <Image className="w-8 h-8 text-gray-400 mx-auto" />
+                          <span className="text-xs text-gray-500 mt-1">
+                            Upload
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={handleImageChange}
+                      accept="image/*"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Parent Header Category
+                    </label>
+                    <select
+                      value={formData.parentId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, parentId: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                      <option value="">Select Header Category</option>
+                      {headerCategories.map((h) => (
+                        <option key={h._id || h.id} value={h._id || h.id}>
+                          {h.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          name: e.target.value,
+                          slug: makeSlug(e.target.value),
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      placeholder="e.g., Laptops"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Slug
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.slug}
+                      readOnly
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      placeholder="e.g., laptops"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) =>
+                        setFormData({ ...formData, status: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Priority Start Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.priorityStartTime}
+                        onChange={(e) =>
+                          setFormData({ ...formData, priorityStartTime: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Priority End Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.priorityEndTime}
+                        onChange={(e) =>
+                          setFormData({ ...formData, priorityEndTime: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!formData.applyCommission}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            applyCommission: e.target.checked,
+                          })
+                        }
+                        className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      Apply commission at this level
+                    </label>
+                    <p className="text-xs text-gray-500">
+                      Used when Header commission is not applied. If Header also has commission, Header wins.
+                    </p>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Admin Commission (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.adminCommission}
+                        disabled={!formData.applyCommission}
+                        onChange={(e) =>
+                          setFormData({ ...formData, adminCommission: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                        placeholder="0"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 shrink-0">
+                  <button
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">
                     Cancel
                   </button>
                   <button
-                    onClick={handleDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
-                    Delete
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-black  text-primary-foreground rounded-lg hover:bg-brand-700 font-medium disabled:opacity-50 flex items-center gap-2">
+                    {isSaving && (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    {editingItem ? "Update Category" : "Create Category"}
                   </button>
                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {createPortal(
+        <AnimatePresence>
+          {isDeleteModalOpen && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-none">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+                <div className="p-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+                    <Trash className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    Delete Category?
+                  </h3>
+                  <p className="text-gray-500 text-sm mb-6">
+                    Are you sure you want to delete{" "}
+                    <span className="font-semibold text-gray-900">
+                      {deleteTarget?.name}
+                    </span>
+                    ? This action cannot be undone.
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => setIsDeleteModalOpen(false)}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 };

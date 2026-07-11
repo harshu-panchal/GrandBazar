@@ -75,6 +75,55 @@ function resolveCommissionConfig(category) {
   };
 }
 
+/**
+ * Whether this category level should supply commission.
+ * Prefer explicit `applyCommission`; legacy docs without the flag count as
+ * applied when their commission value is > 0.
+ */
+export function categoryAppliesCommission(category) {
+  if (!category) return false;
+  if (category.applyCommission === true || category.applyCommission === "true") {
+    return true;
+  }
+  if (category.applyCommission === false || category.applyCommission === "false") {
+    return false;
+  }
+  return resolveCommissionConfig(category).value > 0;
+}
+
+/**
+ * Resolve commission from category hierarchy: header → level2 → subcategory.
+ * First level with applyCommission wins (so if all three are set, top wins).
+ */
+export function resolveCategoryHierarchyCommission({
+  headerCategory = null,
+  level2Category = null,
+  subcategory = null,
+} = {}) {
+  const chain = [
+    { level: "header", category: headerCategory },
+    { level: "category", category: level2Category },
+    { level: "subcategory", category: subcategory },
+  ];
+
+  for (const entry of chain) {
+    if (categoryAppliesCommission(entry.category)) {
+      return {
+        category: entry.category,
+        level: entry.level,
+        categoryId: entry.category?._id ? String(entry.category._id) : null,
+      };
+    }
+  }
+
+  const fallback = headerCategory || level2Category || subcategory || null;
+  return {
+    category: fallback,
+    level: null,
+    categoryId: fallback?._id ? String(fallback._id) : null,
+  };
+}
+
 function resolveHandlingConfig(category) {
   if (!category) {
     return { type: HANDLING_FEE_TYPE.NONE, value: 0 };
@@ -376,6 +425,8 @@ export async function hydrateOrderItems(
       price: inferredUnitPrice,
       image: item.image || product.mainImage,
       headerCategoryId: String(product.headerId),
+      categoryId: product.categoryId ? String(product.categoryId) : null,
+      subcategoryId: product.subcategoryId ? String(product.subcategoryId) : null,
       sellerId: String(product.sellerId),
       variantSku: rawVariantSku || "",
       variantName: resolvedVariant ? String(resolvedVariant?.name || "").trim() : "",
@@ -428,13 +479,21 @@ export async function generateOrderPaymentBreakdown({
     commissionConfig: { scope: "category" },
   };
 
-  const headerIds = Array.from(
-    new Set(normalizedItems.map((item) => item.headerCategoryId).filter(Boolean)),
+  const categoryIds = Array.from(
+    new Set(
+      normalizedItems
+        .flatMap((item) => [
+          item.headerCategoryId,
+          item.categoryId,
+          item.subcategoryId,
+        ])
+        .filter(Boolean),
+    ),
   );
 
-  const categoryQuery = Category.find({ _id: { $in: headerIds } })
+  const categoryQuery = Category.find({ _id: { $in: categoryIds } })
     .select(
-      "_id name adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue",
+      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue",
     )
     .lean();
   if (session) categoryQuery.session(session);
@@ -451,11 +510,22 @@ export async function generateOrderPaymentBreakdown({
   let adminProductCommissionTotal = 0;
 
   const lineItems = normalizedItems.map((item) => {
-    const category = categoryById.get(String(item.headerCategoryId));
+    const headerCategory = categoryById.get(String(item.headerCategoryId));
+    const level2Category = item.categoryId
+      ? categoryById.get(String(item.categoryId))
+      : null;
+    const subcategory = item.subcategoryId
+      ? categoryById.get(String(item.subcategoryId))
+      : null;
+    const hierarchy = resolveCategoryHierarchyCommission({
+      headerCategory,
+      level2Category,
+      subcategory,
+    });
     const { config, source } = resolveSellerCommissionConfig(
       effectiveOwner,
       item.headerCategoryId,
-      category,
+      hierarchy.category,
     );
     if (!config) {
       const err = new Error("Seller business model is not configured for checkout");
@@ -479,7 +549,12 @@ export async function generateOrderPaymentBreakdown({
       sellerPayout: commission.sellerPayout,
       adminProductCommission: commission.adminCommission,
       headerCategoryId: item.headerCategoryId,
-      headerCategoryName: category?.name || "Unknown",
+      categoryId: item.categoryId || null,
+      subcategoryId: item.subcategoryId || null,
+      headerCategoryName: headerCategory?.name || "Unknown",
+      appliedCommissionCategoryId: hierarchy.categoryId,
+      appliedCommissionCategoryLevel: hierarchy.level,
+      appliedCommissionCategoryName: hierarchy.category?.name || null,
       appliedCommissionType: commission.appliedCommissionType,
       appliedCommissionValue: commission.appliedCommissionValue,
       appliedCommissionFixedRule: commission.appliedFixedRule,
@@ -487,9 +562,22 @@ export async function generateOrderPaymentBreakdown({
     };
   });
 
+  // Handling fees still use header categories only.
+  const headerCategoryById = new Map(
+    categories
+      .filter((category) => category.type === "header" || !category.type)
+      .map((category) => [String(category._id), category]),
+  );
+  for (const item of normalizedItems) {
+    const headerId = String(item.headerCategoryId || "");
+    if (headerId && !headerCategoryById.has(headerId) && categoryById.has(headerId)) {
+      headerCategoryById.set(headerId, categoryById.get(headerId));
+    }
+  }
+
   const handling = calculateHandlingFee(normalizedItems, {
     handlingFeeStrategy: effectiveHandlingStrategy,
-    categoryById,
+    categoryById: headerCategoryById,
   });
   const delivery = skipDeliveryFee
     ? { deliveryFeeCharged: 0, distanceKmActual: 0, distanceKmRounded: 0 }
@@ -539,6 +627,11 @@ export async function generateOrderPaymentBreakdown({
       ...effectiveSettings,
     },
     categoryCommissionSettings: categories.map((category) => ({
+      categoryId: String(category._id),
+      categoryName: category.name,
+      categoryType: category.type || null,
+      applyCommission: categoryAppliesCommission(category),
+      // Keep legacy header keys for older consumers reading header-only snapshots.
       headerCategoryId: String(category._id),
       headerCategoryName: category.name,
       adminCommissionType:
