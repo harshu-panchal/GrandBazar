@@ -176,9 +176,9 @@ const ProfilePage = () => {
                             />
                             <MenuItem
                                 icon={Wallet}
-                                label="Wallet"
-                                sub="Balance & return refunds"
-                                path="/wallet"
+                                label="Rewards & Wallet"
+                                sub="Cashback, coupons & referrals"
+                                path="/rewards"
                                 color="#10b981"
                                 bg="rgba(16,185,129,0.10)"
                             />

@@ -109,6 +109,25 @@ const userSchema = new mongoose.Schema(
             default: 0,
         },
 
+        referralCode: {
+            type: String,
+            unique: true,
+            sparse: true,
+            trim: true,
+            uppercase: true,
+        },
+
+        referredBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+        },
+
+        dateOfBirth: {
+            type: Date,
+            default: null,
+        },
+
         isActive: {
             type: Boolean,
             default: true,

@@ -75,6 +75,12 @@ export const sellerApi = {
     updateCoupon: (id, data) => axiosInstance.put(`/seller/coupons/${id}`, data),
     deleteCoupon: (id) => axiosInstance.delete(`/seller/coupons/${id}`),
 
+    // Rewards
+    getRewardCampaigns: () => axiosInstance.get('/rewards/seller/campaigns'),
+    createRewardCampaign: (data) => axiosInstance.post('/rewards/seller/campaigns', data),
+    updateRewardCampaign: (id, data) => axiosInstance.put(`/rewards/seller/campaigns/${id}`, data),
+    getRewardAnalytics: () => axiosInstance.get('/rewards/seller/analytics'),
+
     // Sub-Seller/Staff Management
     getStaffList: () => axiosInstance.get('/seller/staff'),
     getStaffOverview: () => axiosInstance.get('/seller/staff/overview'),

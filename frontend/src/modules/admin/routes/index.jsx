@@ -86,6 +86,8 @@ const SupportTickets = React.lazy(() => import("../pages/SupportTickets"));
 const ReviewModeration = React.lazy(() => import("../pages/ReviewModeration"));
 const FleetTracking = React.lazy(() => import("../pages/FleetTracking"));
 const CouponManagement = React.lazy(() => import("../pages/CouponManagement"));
+const RewardCampaigns = React.lazy(() => import("../pages/RewardCampaigns"));
+const RewardAnalytics = React.lazy(() => import("../pages/RewardAnalytics"));
 const ContentManager = React.lazy(() => import("../pages/ContentManager"));
 const HeroCategoriesPerPage = React.lazy(() => import("../pages/HeroCategoriesPerPage"));
 const NotificationComposer = React.lazy(
@@ -156,6 +158,8 @@ const navItems = [
       { label: "Hero & categories per page", path: "/admin/hero-categories" },
       { label: "Send Notifications", path: "/admin/notifications" },
       { label: "Coupons & Promos", path: "/admin/coupons" },
+      { label: "Reward Campaigns", path: "/admin/reward-campaigns" },
+      { label: "Reward Analytics", path: "/admin/reward-analytics" },
       { label: "Offer Sections", path: "/admin/offer-sections" },
       { label: "Shop by Store", path: "/admin/shop-by-store" },
     ],
@@ -377,6 +381,8 @@ const AdminRoutes = () => {
             <Route path="/offer-sections" element={<OfferSectionsManagement />} />
             <Route path="/shop-by-store" element={<ShopByStoreManagement />} />
             <Route path="/coupons" element={<CouponManagement />} />
+            <Route path="/reward-campaigns" element={<RewardCampaigns />} />
+            <Route path="/reward-analytics" element={<RewardAnalytics />} />
           </>
         )}
         

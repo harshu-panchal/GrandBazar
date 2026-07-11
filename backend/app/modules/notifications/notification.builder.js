@@ -510,6 +510,45 @@ function eventDefinition(eventType) {
           },
         ],
       };
+    case NOTIFICATION_EVENTS.CASHBACK_CREDITED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Cashback Credited! 💰",
+        body: (payload) =>
+          `₹${payload.amount || 0} cashback added to your wallet${payload.orderId ? ` for order #${payload.orderId}` : ""}.`,
+      };
+    case NOTIFICATION_EVENTS.REWARD_EARNED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Reward Earned! 🎁",
+        body: (payload) =>
+          `You earned ₹${payload.amount || 0}${payload.campaignName ? ` from ${payload.campaignName}` : ""}.`,
+      };
+    case NOTIFICATION_EVENTS.REWARD_EXPIRING:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Reward Expiring Soon",
+        body: (payload) =>
+          `Your reward of ₹${payload.amount || 0} expires soon. Use it before it's gone!`,
+      };
+    case NOTIFICATION_EVENTS.COUPON_ISSUED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "New Coupon Issued",
+        body: (payload) => `A new coupon ${payload.couponCode || ""} is available in your rewards.`,
+      };
+    case NOTIFICATION_EVENTS.REFERRAL_SUCCESS:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Referral Reward! 🎉",
+        body: (payload) =>
+          `Your friend completed their first order. ₹${payload.amount || 0} credited to your wallet!`,
+      };
     default:
       return null;
   }

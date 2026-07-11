@@ -45,6 +45,8 @@ export const checkoutPreviewSchema = Joi.object({
   campaignId: Joi.string().allow("", null).optional(),
   preOrderCampaignId: Joi.string().allow("", null).optional(),
   couponId: Joi.string().allow("", null).optional(),
+  couponCode: Joi.string().allow("", null).optional(),
+  freeDelivery: Joi.boolean().default(false),
 });
 
 export const createFinanceOrderSchema = checkoutPreviewSchema.keys({

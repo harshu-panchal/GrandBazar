@@ -1,6 +1,7 @@
 import Coupon from "../models/coupon.js";
 import handleResponse from "../utils/helper.js";
 import Order from "../models/order.js";
+import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
 
 export const listCoupons = async (req, res) => {
     try {
@@ -114,9 +115,10 @@ export const validateCoupon = async (req, res) => {
                 0
             );
 
-            // We are not storing coupon reference on order yet, so this is a soft check.
-            // Once couponId gets stored on orders, we can count exact usages.
-            userUsageCount = 0;
+            userUsageCount = await CouponRedemption.countDocuments({
+                couponId: coupon._id,
+                customerId,
+            });
         }
 
         if (coupon.perUserLimit && userUsageCount >= coupon.perUserLimit) {

@@ -6,6 +6,7 @@ import Store from "../models/store.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import Coupon from "../models/coupon.js";
+import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
 import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS, FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
@@ -361,6 +362,7 @@ export async function placeOrderAtomic({
       address: normalizedAddress,
       tipAmount,
       discountTotal: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
+      freeDelivery: Boolean(normalizedPayload.freeDelivery),
       session,
       fulfillmentMethod: normalizedPayload.fulfillmentMethod || null,
       fulfillmentMethodBySeller: await resolveFulfillmentMethodsForCheckout({
@@ -545,6 +547,9 @@ export async function placeOrderAtomic({
           riderPayout: "PENDING",
           adminEarningCredited: false,
         },
+        couponId: normalizedPayload.couponId || null,
+        couponCode: normalizedPayload.couponCode || null,
+        freeDeliveryApplied: Boolean(normalizedPayload.freeDelivery),
       });
 
       freezeFinancialSnapshot(order, entry.breakdown);
@@ -609,10 +614,19 @@ export async function placeOrderAtomic({
 
     await session.commitTransaction();
 
-    // Increment coupon usedCount after successful order placement (outside transaction — best effort)
+    // Increment coupon usedCount and record redemption after successful order placement
     const couponId = normalizedPayload.couponId;
     if (couponId) {
       Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
+      const primaryOrder = orders[0];
+      CouponRedemption.create({
+        couponId,
+        customerId,
+        orderId: primaryOrder?._id || null,
+        orderPublicId: primaryOrder?.orderId || null,
+        couponCode: normalizedPayload.couponCode || null,
+        discountAmount: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
+      }).catch(() => {});
     }
 
     const resultPayload = buildResultPayload({

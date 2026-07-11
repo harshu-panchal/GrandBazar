@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
 import {
@@ -76,6 +76,8 @@ const CustomerAuth = () => {
     const appName = settings?.appName || 'App';
     const logoUrl = settings?.logoUrl || '';
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const referralCode = searchParams.get('ref') || '';
 
     const [formData, setFormData] = useState({
         phone: '',
@@ -131,7 +133,11 @@ const CustomerAuth = () => {
         }
         setIsLoading(true);
         try {
-            const response = await customerApi.verifyOtp({ phone: formData.phone, otp: formData.otp });
+            const response = await customerApi.verifyOtp({
+                phone: formData.phone,
+                otp: formData.otp,
+                ...(referralCode ? { referralCode } : {}),
+            });
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
             toast.success('Successfully Logged In!');

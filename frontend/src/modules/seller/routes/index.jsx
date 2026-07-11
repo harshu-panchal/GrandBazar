@@ -20,6 +20,7 @@ import {
   HiOutlineUserGroup,
   HiOutlineInboxStack,
   HiOutlineMegaphone,
+  HiOutlineGift,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -45,6 +46,8 @@ const SellerSubscription = React.lazy(() => import("../pages/SellerSubscription"
 const SellerSubscriptionPaymentStatus = React.lazy(() => import("../pages/SellerSubscriptionPaymentStatus"));
 const DeliveryPolicyPage = React.lazy(() => import("../pages/DeliveryPolicyPage"));
 const PreOrderCampaigns = React.lazy(() => import("../pages/PreOrderCampaigns"));
+const SellerRewardCampaigns = React.lazy(() => import("../pages/SellerRewardCampaigns"));
+const SellerRewards = React.lazy(() => import("../pages/SellerRewards"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
@@ -58,6 +61,8 @@ const navItems = [
   { label: "Returns", path: "/seller/returns", icon: HiOutlineArchiveBox, permission: "returns" },
   { label: "Track Orders", path: "/seller/tracking", icon: HiOutlineMapPin, permission: "tracking" },
   { label: "Offers & Coupons", path: "/seller/coupons", icon: HiOutlineTag, permission: "coupons" },
+  { label: "Reward Campaigns", path: "/seller/reward-campaigns", icon: HiOutlineGift, permission: "rewards" },
+  { label: "Rewards Dashboard", path: "/seller/rewards", icon: HiOutlineChartBarSquare, permission: "rewards" },
   {
     label: "Sales Reports",
     path: "/seller/analytics",
@@ -156,6 +161,8 @@ const SellerRoutes = () => {
         {hasPermission("returns") && <Route path="returns" element={<Returns />} />}
         {hasPermission("tracking") && <Route path="tracking" element={<DeliveryTracking />} />}
         {hasPermission("coupons") && <Route path="coupons" element={<SellerCoupons />} />}
+        {hasPermission("rewards") && <Route path="reward-campaigns" element={<SellerRewardCampaigns />} />}
+        {hasPermission("rewards") && <Route path="rewards" element={<SellerRewards />} />}
         {hasPermission("analytics") && <Route path="analytics" element={<Analytics />} />}
         {hasPermission("withdrawals") && (
           <>

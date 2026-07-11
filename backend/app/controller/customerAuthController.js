@@ -74,6 +74,17 @@ export const verifyCustomerOTP = async (req, res) => {
             otp: payload.otp,
             ipAddress: req.ip,
         });
+
+        if (payload.referralCode) {
+            const { attachReferralOnSignup } = await import("../modules/rewards/services/referralService.js");
+            await attachReferralOnSignup({
+                refereeId: customer._id,
+                referralCode: payload.referralCode,
+            }).catch(() => {});
+        }
+
+        const { ensureCustomerReferralCode } = await import("../modules/rewards/services/referralService.js");
+        await ensureCustomerReferralCode(customer._id).catch(() => {});
         const token = generateToken(customer);
 
         // Record active login session

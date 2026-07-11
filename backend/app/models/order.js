@@ -240,6 +240,19 @@ const orderSchema = new mongoose.Schema(
         default: [],
       },
     },
+    couponId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Coupon",
+      default: null,
+    },
+    couponCode: { type: String, default: null, trim: true },
+    freeDeliveryApplied: { type: Boolean, default: false },
+    rewardGrants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "RewardGrant",
+      },
+    ],
     financeFlags: {
       onlinePaymentCaptured: { type: Boolean, default: false },
       codMarkedCollected: { type: Boolean, default: false },
@@ -247,6 +260,7 @@ const orderSchema = new mongoose.Schema(
       sellerPayoutQueued: { type: Boolean, default: false },
       riderPayoutQueued: { type: Boolean, default: false },
       adminEarningCredited: { type: Boolean, default: false },
+      rewardsApplied: { type: Boolean, default: false },
     },
     status: {
       type: String,

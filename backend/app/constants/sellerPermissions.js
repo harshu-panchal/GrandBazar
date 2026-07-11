@@ -10,6 +10,7 @@ export const SELLER_PERMISSION_MODULES = Object.freeze([
   { id: "adjustments", label: "Price Adjustments" },
   { id: "disputes", label: "Disputes" },
   { id: "coupons", label: "Offers & Coupons" },
+  { id: "rewards", label: "Reward Campaigns" },
   { id: "analytics", label: "Sales Reports" },
   { id: "withdrawals", label: "Money & Earnings" },
 ]);

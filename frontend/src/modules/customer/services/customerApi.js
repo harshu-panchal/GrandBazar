@@ -159,6 +159,15 @@ export const customerApi = {
   validateCoupon: (data) => axiosInstance.post("/coupons/validate", data),
   getActiveCoupons: () => getWithDedupe("/coupons", { status: "active" }),
 
+  // Rewards
+  getRewardSummary: () => getWithDedupe("/rewards/customer/summary", {}, { ttl: 5000 }),
+  getRewardGrants: (params) => getWithDedupe("/rewards/customer/grants", params),
+  getRewardTransactions: (params) => getWithDedupe("/rewards/customer/transactions", params),
+  getMyRewardCoupons: () => getWithDedupe("/rewards/customer/coupons"),
+  getMyReferrals: (params) => getWithDedupe("/rewards/customer/referrals", params),
+  getReferralCode: () => getWithDedupe("/rewards/customer/referral-code"),
+  inviteReferral: (data) => axiosInstance.post("/rewards/customer/referrals/invite", data),
+
   // Maps (server-side geocoding)
   geocodeAddress: (address, params = {}) =>
     axiosInstance.get("/maps/geocode", { params: { address, ...params } }),

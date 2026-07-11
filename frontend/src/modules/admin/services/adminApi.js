@@ -178,7 +178,16 @@ export const adminApi = {
     getCoupons: (params) => axiosInstance.get('/admin/coupons', { params }),
     createCoupon: (data) => axiosInstance.post('/admin/coupons', data),
     updateCoupon: (id, data) => axiosInstance.put(`/admin/coupons/${id}`, data),
-    deleteCoupon: (id) => axiosInstance.delete('/admin/coupons/${id}'),
+    deleteCoupon: (id) => axiosInstance.delete(`/admin/coupons/${id}`),
+
+    // Reward campaigns
+    getRewardCampaigns: (params) => axiosInstance.get('/rewards/admin/campaigns', { params }),
+    createRewardCampaign: (data) => axiosInstance.post('/rewards/admin/campaigns', data),
+    updateRewardCampaign: (id, data) => axiosInstance.put(`/rewards/admin/campaigns/${id}`, data),
+    updateRewardCampaignStatus: (id, status) => axiosInstance.put(`/rewards/admin/campaigns/${id}/status`, { status }),
+    deleteRewardCampaign: (id) => axiosInstance.delete(`/rewards/admin/campaigns/${id}`),
+    getRewardAnalytics: (params) => axiosInstance.get('/rewards/admin/analytics', { params }),
+    getRewardSettlements: (params) => axiosInstance.get('/rewards/admin/settlements', { params }),
 
     // Staff/Sub-admin Management
     getStaffList: () => axiosInstance.get('/admin/staff'),

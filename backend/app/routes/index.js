@@ -23,6 +23,7 @@ import healthRoute from "./healthRoutes.js";
 import metricsRoute from "./metricsRoutes.js";
 import authOtpRoute from "../modules/otp/otp.routes.js";
 import catalogRoute from "./catalogRoutes.js";
+import rewardRoute from "../modules/rewards/reward.routes.js";
 
 import express from "express";
 
@@ -51,6 +52,7 @@ const setupRoutes = (app) => {
     router.use("/", experienceRoute);
     router.use("/", offerRoute);
     router.use("/", couponRoute);
+    router.use("/rewards", rewardRoute);
     router.use("/notifications", notificationRoute);
     router.use("/auth/otp", authOtpRoute);
     router.use("/push", pushRoute);

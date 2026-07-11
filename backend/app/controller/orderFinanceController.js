@@ -40,6 +40,7 @@ export const previewCheckoutFinance = async (req, res) => {
       address: payload.address,
       tipAmount: payload.tipAmount,
       discountTotal: payload.discountTotal || 0,
+      freeDelivery: Boolean(payload.freeDelivery),
       fulfillmentMethod: payload.fulfillmentMethod || null,
     });
 

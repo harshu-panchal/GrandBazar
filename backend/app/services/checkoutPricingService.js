@@ -258,6 +258,7 @@ export async function buildCheckoutPricingSnapshot({
   address = {},
   tipAmount = 0,
   discountTotal = 0,
+  freeDelivery = false,
   session = null,
   fulfillmentMethod = null,
   fulfillmentMethodBySeller = null,
@@ -315,7 +316,7 @@ export async function buildCheckoutPricingSnapshot({
       discountTotal: sellerDiscount,
       taxTotal: 0,
       session,
-      skipDeliveryFee: isCustomerPickup,
+      skipDeliveryFee: isCustomerPickup || Boolean(freeDelivery),
     });
     sellerBreakdownEntries.push({
       sellerId,

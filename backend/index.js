@@ -38,6 +38,10 @@ import {
   getPayoutBatchJobInterval,
   isPayoutBatchJobEnabled
 } from "./app/jobs/payoutBatchJob.js";
+import {
+  getRewardMaintenanceJobHandler,
+  getRewardMaintenanceJobInterval,
+} from "./app/jobs/rewardMaintenanceJob.js";
 import logger from "./app/services/logger.js";
 import { stopScheduledJobs } from "./app/services/distributedScheduler.js";
 
@@ -237,9 +241,11 @@ async function startHttpServer() {
 async function startQueueWorkers() {
   const { registerOrderQueueProcessors, registerLifecycleQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
   const { sellerTimeoutQueue, deliveryTimeoutQueue } = await import("./app/queues/orderQueues.js");
+  const { registerRewardQueueProcessors } = await import("./app/modules/rewards/reward.worker.js");
   
   registerOrderQueueProcessors();
   registerLifecycleQueueProcessors();
+  registerRewardQueueProcessors();
   
   // Register queues for graceful shutdown
   registerBullQueue(sellerTimeoutQueue);
@@ -273,6 +279,12 @@ async function startScheduler() {
     'subscriptionExpiryJob',
     getSubscriptionExpiryJobInterval(),
     getSubscriptionExpiryJobHandler()
+  );
+
+  registerScheduledJob(
+    'rewardMaintenanceJob',
+    getRewardMaintenanceJobInterval(),
+    getRewardMaintenanceJobHandler()
   );
   
   // Register payout batch job (if enabled)
