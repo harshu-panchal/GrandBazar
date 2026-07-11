@@ -72,6 +72,10 @@ const normalizeSeller = (seller) => {
     avgOrderValue: safeNumber(seller.avgOrderValue),
     fulfillmentRate: safeNumber(seller.fulfillmentRate),
     serviceRadius: safeNumber(seller.serviceRadius) || 5,
+    ownerAccountApproved: seller.ownerAccountApproved !== false,
+    ownerAccountStatus: seller.ownerAccountStatus || "approved",
+    ownerAccountId: seller.ownerAccountId || "",
+    ownerRejectionReason: seller.ownerRejectionReason || "",
     joinedDate: joinedAt
       ? new Date(joinedAt).toLocaleDateString("en-GB", {
           day: "2-digit",
@@ -114,6 +118,7 @@ const ActiveSellers = () => {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [isReactivatingOwner, setIsReactivatingOwner] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -181,6 +186,30 @@ const ActiveSellers = () => {
 
     loadSellers();
   }, [debouncedSearch, categoryFilter, sortBy, page, pageSize, refreshTick]);
+
+  const handleReactivateOwner = async (seller) => {
+    const ownerAccountId = seller?.ownerAccountId;
+    if (!ownerAccountId) {
+      toast.error("Owner account ID not found for this store.");
+      return;
+    }
+
+    if (!window.confirm(`Reactivate seller admin account for ${seller.ownerName}? They will regain dashboard access.`)) {
+      return;
+    }
+
+    setIsReactivatingOwner(true);
+    try {
+      await adminApi.reactivateSellerAccount(ownerAccountId);
+      toast.success("Seller admin account reactivated successfully");
+      setSelectedSeller(null);
+      setRefreshTick((value) => value + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to reactivate seller account");
+    } finally {
+      setIsReactivatingOwner(false);
+    }
+  };
 
   const summaryCards = useMemo(
     () => [
@@ -456,8 +485,23 @@ const ActiveSellers = () => {
                           variant="success"
                           className="w-fit text-[8px] font-black uppercase tracking-widest"
                         >
-                          Active
+                          Store Active
                         </Badge>
+                        {seller.ownerAccountApproved ? (
+                          <Badge
+                            variant="success"
+                            className="w-fit text-[8px] font-black uppercase tracking-widest"
+                          >
+                            Owner Approved
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="error"
+                            className="w-fit text-[8px] font-black uppercase tracking-widest"
+                          >
+                            Owner {seller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
+                          </Badge>
+                        )}
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                           Last order: {seller.lastOrderLabel || "No orders yet"}
                         </span>
@@ -544,13 +588,28 @@ const ActiveSellers = () => {
                     <p className="text-sm font-semibold text-slate-500">
                       Owned by {selectedSeller.ownerName}
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <Badge
                         variant="success"
                         className="text-[8px] font-black uppercase tracking-widest"
                       >
-                        Active
+                        Store Active
                       </Badge>
+                      {selectedSeller.ownerAccountApproved ? (
+                        <Badge
+                          variant="success"
+                          className="text-[8px] font-black uppercase tracking-widest"
+                        >
+                          Owner Approved
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="error"
+                          className="text-[8px] font-black uppercase tracking-widest"
+                        >
+                          Owner {selectedSeller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
+                        </Badge>
+                      )}
                       <Badge
                         variant="primary"
                         className="text-[8px] font-black uppercase tracking-widest"
@@ -680,7 +739,31 @@ const ActiveSellers = () => {
                     </div>
                   </div>
 
+                  {!selectedSeller.ownerAccountApproved && (
+                    <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-4">
+                      <p className="text-sm font-bold text-rose-800">
+                        Seller admin account is blocked
+                      </p>
+                      <p className="text-xs font-medium text-rose-700 mt-1 leading-relaxed">
+                        This store is active, but the owner cannot access the seller dashboard.
+                        {selectedSeller.ownerRejectionReason
+                          ? ` Reason: ${selectedSeller.ownerRejectionReason}`
+                          : ""}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="mt-6 flex items-center justify-end gap-3">
+                    {!selectedSeller.ownerAccountApproved && selectedSeller.ownerAccountId ? (
+                      <button
+                        onClick={() => handleReactivateOwner(selectedSeller)}
+                        disabled={isReactivatingOwner}
+                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <HiOutlineArrowPath className={cn("h-4 w-4", isReactivatingOwner && "animate-spin")} />
+                        {isReactivatingOwner ? "Reactivating..." : "Reactivate Owner Account"}
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => setSelectedSeller(null)}
                       className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"

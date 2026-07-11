@@ -85,6 +85,8 @@ export function formatSellerApplication(seller) {
     status:
       seller.applicationStatus ||
       (seller.isVerified ? "approved" : "pending"),
+    rejectionReason: seller.rejectionReason || "",
+    reviewedAt: seller.reviewedAt || null,
     documents: docs,
     documentFiles,
     location: seller.address || (applicationType === "seller_admin" ? "Account registration" : "Not provided"),
@@ -111,6 +113,45 @@ export function formatSellerApplication(seller) {
 
 export function escapeRegExp(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function buildOwnerAccountFields(owner) {
+  if (!owner || typeof owner !== "object" || !owner._id) {
+    return {
+      ownerAccountId: "",
+      ownerAccountStatus: "unknown",
+      ownerAccountApproved: true,
+      ownerRejectionReason: "",
+    };
+  }
+
+  const hasExplicitApprovalState =
+    owner.applicationStatus != null ||
+    owner.isVerified != null ||
+    owner.isActive != null;
+
+  if (!hasExplicitApprovalState) {
+    return {
+      ownerAccountId: String(owner._id),
+      ownerAccountStatus: "approved",
+      ownerAccountApproved: true,
+      ownerRejectionReason: "",
+    };
+  }
+
+  const ownerAccountStatus =
+    owner.applicationStatus || (owner.isVerified ? "approved" : "pending");
+  const ownerAccountApproved =
+    owner.isVerified === true &&
+    ownerAccountStatus === "approved" &&
+    owner.isActive !== false;
+
+  return {
+    ownerAccountId: String(owner._id),
+    ownerAccountStatus,
+    ownerAccountApproved,
+    ownerRejectionReason: owner.rejectionReason || "",
+  };
 }
 
 export function getSellerDisplayLocation(seller) {

@@ -181,7 +181,7 @@ const navItems = [
     permission: "sellers",
     children: [
       { label: "Active Sellers", path: "/admin/sellers/active" },
-      { label: "Waiting for Review", path: "/admin/sellers/pending" },
+      { label: "Seller Applications", path: "/admin/sellers/pending" },
       { label: "Subscriptions", path: "/admin/subscriptions" },
       { label: "Seller Locations", path: "/admin/seller-locations" },
     ],

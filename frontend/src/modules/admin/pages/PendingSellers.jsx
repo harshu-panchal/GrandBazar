@@ -24,9 +24,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { adminApi } from '../services/adminApi';
 
+const STATUS_TABS = [
+    { value: 'pending', label: 'Pending Review' },
+    { value: 'rejected', label: 'Rejected / Deactivated' },
+    { value: 'all', label: 'All Open' },
+];
+
 const PendingSellers = () => {
     const navigate = useNavigate();
     const [pendingSellers, setPendingSellers] = useState([]);
+    const [statusFilter, setStatusFilter] = useState('pending');
     const [summaryStats, setSummaryStats] = useState({
         totalApplications: 0,
         receivedToday: 0,
@@ -42,7 +49,10 @@ const PendingSellers = () => {
     const fetchPendingSellers = async () => {
         setIsLoading(true);
         try {
-            const response = await adminApi.getPendingSellers({ q: searchTerm || undefined });
+            const response = await adminApi.getPendingSellers({
+                q: searchTerm || undefined,
+                status: statusFilter,
+            });
             const payload = response.data.result || {};
             const items = Array.isArray(payload.items) ? payload.items : [];
             setPendingSellers(items);
@@ -63,7 +73,9 @@ const PendingSellers = () => {
     useEffect(() => {
         fetchPendingSellers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [statusFilter]);
+
+    const isRejectedView = statusFilter === 'rejected';
 
     const stats = useMemo(() => ({
         total: summaryStats.totalApplications,
@@ -108,13 +120,13 @@ const PendingSellers = () => {
         }));
     }, [viewingSeller]);
 
-    const handleApprove = async (id) => {
+    const handleApprove = async (id, { reactivate = false } = {}) => {
         setIsProcessing(true);
         try {
             await adminApi.approveSeller(id);
             setIsReviewModalOpen(false);
             setViewingSeller(null);
-            toast.success('Seller approved successfully');
+            toast.success(reactivate ? 'Seller account reactivated successfully' : 'Seller approved successfully');
             await fetchPendingSellers();
         } catch (error) {
             console.error('Failed to approve seller', error);
@@ -122,6 +134,13 @@ const PendingSellers = () => {
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleReactivate = (id) => {
+        if (!window.confirm('Reactivate this seller admin account? The owner will regain dashboard access.')) {
+            return;
+        }
+        handleApprove(id, { reactivate: true });
     };
 
     const handleReject = async (id) => {
@@ -149,15 +168,43 @@ const PendingSellers = () => {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                     <h1 className="ds-h1 flex items-center gap-2">
-                        Pending Approvals
-                        <Badge variant="warning" className="admin-tiny px-1.5 py-0 font-bold animate-pulse">Action Required</Badge>
+                        Seller Applications
+                        {statusFilter === 'pending' && (
+                            <Badge variant="warning" className="admin-tiny px-1.5 py-0 font-bold animate-pulse">Action Required</Badge>
+                        )}
+                        {isRejectedView && (
+                            <Badge variant="error" className="admin-tiny px-1.5 py-0 font-bold">Needs Reactivation</Badge>
+                        )}
                     </h1>
-                    <p className="ds-description mt-0.5">Check new seller applications before they can start selling.</p>
+                    <p className="ds-description mt-0.5">
+                        {isRejectedView
+                            ? 'Review rejected or deactivated seller admin accounts and shops. Reactivate to restore dashboard access.'
+                            : 'Check new seller applications before they can start selling.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-xl ring-1 ring-amber-100">
                     <HiOutlineClock className="h-4 w-4 text-amber-600" />
                     <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Avg Review Time: {summaryStats.avgReviewTimeHours}h</span>
                 </div>
+            </div>
+
+            {/* Status Tabs */}
+            <div className="flex flex-wrap gap-2">
+                {STATUS_TABS.map((tab) => (
+                    <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => setStatusFilter(tab.value)}
+                        className={cn(
+                            'px-4 py-2.5 rounded-xl text-xs font-bold transition-all ring-1',
+                            statusFilter === tab.value
+                                ? 'bg-slate-900 text-white ring-slate-900 shadow-lg'
+                                : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
+                        )}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
             {/* Quick Stats */}
@@ -206,6 +253,9 @@ const PendingSellers = () => {
                             <tr className="bg-slate-50/50 border-b border-slate-100">
                                 <th className="ds-table-header-cell px-6">Applicant</th>
                                 <th className="ds-table-header-cell px-6">Documentation</th>
+                                {isRejectedView && (
+                                    <th className="ds-table-header-cell px-6">Rejection Reason</th>
+                                )}
                                 <th className="ds-table-header-cell px-6">Applied On</th>
                                 <th className="ds-table-header-cell px-6 !text-right">Actions</th>
                             </tr>
@@ -213,7 +263,7 @@ const PendingSellers = () => {
                         <tbody className="divide-y divide-slate-50">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-20 text-center">
+                                    <td colSpan={isRejectedView ? 5 : 4} className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center justify-center gap-3">
                                             <HiOutlineArrowPath className="h-8 w-8 text-slate-300 animate-spin" />
                                             <p className="text-slate-500 font-bold text-sm">Loading seller applications...</p>
@@ -252,6 +302,13 @@ const PendingSellers = () => {
                                             ))}
                                         </div>
                                     </td>
+                                    {isRejectedView && (
+                                        <td className="px-6 py-5 align-middle">
+                                            <p className="text-xs font-semibold text-rose-600 max-w-[220px]">
+                                                {s.rejectionReason || 'No reason provided'}
+                                            </p>
+                                        </td>
+                                    )}
                                     <td className="px-6 py-5 align-middle">
                                         <div className="flex flex-col justify-center">
                                             <span className="text-xs font-bold text-slate-700">{s.applicationDate}</span>
@@ -260,22 +317,35 @@ const PendingSellers = () => {
                                     </td>
                                     <td className="px-6 py-5 text-right align-middle">
                                         <div className="flex items-center justify-end gap-3 h-full">
-                                            {canQuickApprove(s) && (
+                                            {(isRejectedView || s.status === 'rejected') ? (
                                                 <button
-                                                    onClick={() => handleApprove(s.id)}
-                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all ring-1 ring-emerald-100"
-                                                    title="Quick Approve"
+                                                    onClick={() => handleReactivate(s.id)}
+                                                    className="h-9 px-4 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-md flex items-center gap-2"
+                                                    title="Reactivate account"
                                                 >
-                                                    <HiOutlineCheckCircle className="h-5 w-5" />
+                                                    <HiOutlineArrowPath className="h-4 w-4" />
+                                                    REACTIVATE
                                                 </button>
+                                            ) : (
+                                                <>
+                                                    {canQuickApprove(s) && (
+                                                        <button
+                                                            onClick={() => handleApprove(s.id)}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all ring-1 ring-emerald-100"
+                                                            title="Quick Approve"
+                                                        >
+                                                            <HiOutlineCheckCircle className="h-5 w-5" />
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleReject(s.id)}
+                                                        className="h-8 w-8 flex items-center justify-center rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all ring-1 ring-rose-100"
+                                                        title="Quick Reject"
+                                                    >
+                                                        <HiOutlineXCircle className="h-5 w-5" />
+                                                    </button>
+                                                </>
                                             )}
-                                            <button
-                                                onClick={() => handleReject(s.id)}
-                                                className="h-8 w-8 flex items-center justify-center rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all ring-1 ring-rose-100"
-                                                title="Quick Reject"
-                                            >
-                                                <HiOutlineXCircle className="h-5 w-5" />
-                                            </button>
                                             <div className="w-[1px] h-4 bg-slate-200 mx-1" />
                                             <button
                                                 onClick={() => { setViewingSeller(s); setIsReviewModalOpen(true); }}
@@ -289,12 +359,16 @@ const PendingSellers = () => {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-20 text-center">
+                                    <td colSpan={isRejectedView ? 5 : 4} className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center justify-center">
                                             <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
                                                 <HiOutlineCheckCircle className="h-8 w-8 text-slate-200" />
                                             </div>
-                                            <p className="text-slate-500 font-bold text-sm">All caught up! No pending applications.</p>
+                                            <p className="text-slate-500 font-bold text-sm">
+                                                {isRejectedView
+                                                    ? 'No rejected or deactivated applications found.'
+                                                    : 'All caught up! No pending applications.'}
+                                            </p>
                                         </div>
                                     </td>
                                 </tr>
@@ -495,6 +569,13 @@ const PendingSellers = () => {
                                                 )}
                                             </div>
 
+                                            {viewingSeller.rejectionReason ? (
+                                                <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
+                                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Rejection Reason</p>
+                                                    <p className="text-xs font-semibold text-rose-700 mt-1">{viewingSeller.rejectionReason}</p>
+                                                </div>
+                                            ) : null}
+
                                             <div className="bg-amber-50 rounded-xl p-6 border border-amber-100/50">
                                                 <div className="flex gap-4">
                                                     <div className="h-10 w-10 rounded-full bg-amber-200 flex items-center justify-center shrink-0">
@@ -513,31 +594,53 @@ const PendingSellers = () => {
 
                                             {/* Action Bar */}
                                             <div className="flex items-center gap-4 pt-6">
-                                                <button
-                                                    disabled={isProcessing}
-                                                    onClick={() => handleReject(viewingSeller.id)}
-                                                    className="flex-1 py-4 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-2xl text-[10px] font-bold tracking-widest transition-all uppercase"
-                                                >
-                                                    REJECT APPLICATION
-                                                </button>
-                                                {canQuickApprove(viewingSeller) && (
+                                                {(isRejectedView || viewingSeller.status === 'rejected') ? (
                                                     <button
                                                         disabled={isProcessing}
-                                                        onClick={() => handleApprove(viewingSeller.id)}
-                                                        className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-bold tracking-widest shadow-2xl hover:bg-slate-800 transition-all transform active:scale-[0.98] uppercase flex items-center justify-center gap-2"
+                                                        onClick={() => handleReactivate(viewingSeller.id)}
+                                                        className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-bold tracking-widest shadow-2xl hover:bg-emerald-700 transition-all transform active:scale-[0.98] uppercase flex items-center justify-center gap-2"
                                                     >
                                                         {isProcessing ? (
                                                             <>
                                                                 <HiOutlineArrowPath className="h-4 w-4 animate-spin" />
-                                                                <span>FINALIZING...</span>
+                                                                <span>REACTIVATING...</span>
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <HiOutlineCheckCircle className="h-4 w-4" />
-                                                                <span>APPROVE SELLER</span>
+                                                                <HiOutlineArrowPath className="h-4 w-4" />
+                                                                <span>REACTIVATE ACCOUNT</span>
                                                             </>
                                                         )}
                                                     </button>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            disabled={isProcessing}
+                                                            onClick={() => handleReject(viewingSeller.id)}
+                                                            className="flex-1 py-4 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-2xl text-[10px] font-bold tracking-widest transition-all uppercase"
+                                                        >
+                                                            REJECT APPLICATION
+                                                        </button>
+                                                        {canQuickApprove(viewingSeller) && (
+                                                            <button
+                                                                disabled={isProcessing}
+                                                                onClick={() => handleApprove(viewingSeller.id)}
+                                                                className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-bold tracking-widest shadow-2xl hover:bg-slate-800 transition-all transform active:scale-[0.98] uppercase flex items-center justify-center gap-2"
+                                                            >
+                                                                {isProcessing ? (
+                                                                    <>
+                                                                        <HiOutlineArrowPath className="h-4 w-4 animate-spin" />
+                                                                        <span>FINALIZING...</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <HiOutlineCheckCircle className="h-4 w-4" />
+                                                                        <span>APPROVE SELLER</span>
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>

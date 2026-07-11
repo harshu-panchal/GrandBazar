@@ -12,6 +12,7 @@ import {
   normalizeRadiusKm,
   resolveSellerLifecycleStatus,
   sortActiveSellerRows,
+  buildOwnerAccountFields,
 } from "./shared/sellerAdminUtils.js";
 
 export async function getSellerLocationsData({
@@ -298,7 +299,12 @@ export async function getActiveSellersData({
   const query = filters.length > 1 ? { $and: filters } : baseQuery;
 
   const [stores, totalActiveCount, allActiveStores] = await Promise.all([
-    Store.find(query).populate("ownerId", "name email phone").lean(),
+    Store.find(query)
+      .populate(
+        "ownerId",
+        "name email phone applicationStatus isVerified isActive rejectionReason",
+      )
+      .lean(),
     Store.countDocuments(baseQuery),
     Store.find(baseQuery)
       .select("_id createdAt category")
@@ -449,6 +455,7 @@ export async function getActiveSellersData({
       avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
         store.shopName || owner.name || owner.email || "seller",
       )}`,
+      ...buildOwnerAccountFields(owner),
     };
   });
 
@@ -513,7 +520,10 @@ export async function getActiveSellerByIdData(id) {
     isVerified: true,
     applicationStatus: "approved",
   })
-    .populate("ownerId", "name email phone")
+    .populate(
+      "ownerId",
+      "name email phone applicationStatus isVerified isActive rejectionReason",
+    )
     .lean();
 
   if (!store) {
@@ -522,7 +532,10 @@ export async function getActiveSellerByIdData(id) {
       isVerified: true,
       applicationStatus: "approved",
     })
-      .populate("ownerId", "name email phone")
+      .populate(
+        "ownerId",
+        "name email phone applicationStatus isVerified isActive rejectionReason",
+      )
       .lean();
   }
 
@@ -622,6 +635,7 @@ export async function getActiveSellerByIdData(id) {
     image: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
       store.shopName || owner.name || "seller",
     )}`,
+    ...buildOwnerAccountFields(owner),
   };
 }
 
