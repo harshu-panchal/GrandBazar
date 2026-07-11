@@ -236,6 +236,8 @@ export const getSellerProfile = async (req, res) => {
       activeStoreId: String(store._id),
       shopName: store.shopName,
       name: account?.name || store.shopName,
+      phone: account?.phone || "",
+      email: account?.email || "",
       isAccountApproved: isOwnerAccountApproved(account),
       accountApplicationStatus: getOwnerAccountApplicationStatus(account),
       ...(account ? formatBusinessModelPayload(account) : {}),
@@ -252,6 +254,8 @@ export const getSellerProfile = async (req, res) => {
         result.subName = subSeller.name;
         result.subSellerId = subSeller._id;
         result.name = subSeller.name;
+        result.phone = subSeller.phone || "";
+        result.email = subSeller.email || "";
       }
     }
 
@@ -281,6 +285,7 @@ export const updateSellerProfile = async (req, res) => {
       name,
       shopName,
       phone,
+      email,
       address,
       locality,
       pincode,
@@ -295,8 +300,52 @@ export const updateSellerProfile = async (req, res) => {
       isActive,
     } = req.body;
 
-    if (req.user.accountId && name) {
-      await Seller.findByIdAndUpdate(req.user.accountId, { name });
+    // Contact details live on the Seller account, not the store.
+    // Staff members must not overwrite the owner's contact info.
+    if (req.user.accountId && !req.user.subSellerId) {
+      const accountUpdates = {};
+      if (name) accountUpdates.name = name;
+
+      if (phone !== undefined && phone !== null && String(phone).trim()) {
+        const normalizedPhone = String(phone).trim();
+        if (!/^[0-9]{10}$/.test(normalizedPhone)) {
+          return handleResponse(res, 400, "Please provide a valid 10-digit phone number");
+        }
+        accountUpdates.phone = normalizedPhone;
+      }
+
+      if (email !== undefined && email !== null && String(email).trim()) {
+        const normalizedEmail = String(email).trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+          return handleResponse(res, 400, "Please provide a valid email address");
+        }
+        accountUpdates.email = normalizedEmail;
+      }
+
+      if (accountUpdates.phone || accountUpdates.email) {
+        const duplicateQuery = [];
+        if (accountUpdates.phone) duplicateQuery.push({ phone: accountUpdates.phone });
+        if (accountUpdates.email) duplicateQuery.push({ email: accountUpdates.email });
+
+        const duplicate = await Seller.findOne({
+          _id: { $ne: req.user.accountId },
+          $or: duplicateQuery,
+        }).lean();
+
+        if (duplicate) {
+          const conflictField =
+            accountUpdates.email && duplicate.email === accountUpdates.email
+              ? "Email address"
+              : "Phone number";
+          return handleResponse(res, 400, `${conflictField} already in use by another account`);
+        }
+      }
+
+      if (Object.keys(accountUpdates).length) {
+        await Seller.findByIdAndUpdate(req.user.accountId, accountUpdates, {
+          runValidators: true,
+        });
+      }
     }
 
     if (shopName) store.shopName = shopName;
@@ -343,7 +392,7 @@ export const updateSellerProfile = async (req, res) => {
     );
   } catch (error) {
     if (error.code === 11000) {
-      return handleResponse(res, 400, "Phone number already in use");
+      return handleResponse(res, 400, "Phone number or email already in use");
     }
     return handleResponse(res, 500, error.message);
   }

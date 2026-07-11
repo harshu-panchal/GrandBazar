@@ -75,6 +75,7 @@ const HeaderCategories = () => {
     type: "header",
     parentId: null,
     iconId: "",
+    applyCommission: false,
     adminCommission: "",
     handlingFees: "",
     headerColor: "#FF1E1E",
@@ -185,6 +186,10 @@ const HeaderCategories = () => {
       data.append("type", "header");
       Object.keys(formData).forEach((key) => {
         if (key === "type") return;
+        if (key === "applyCommission") {
+          data.append(key, formData.applyCommission ? "true" : "false");
+          return;
+        }
         if (key === "adminCommission" || key === "handlingFees") {
           data.append(key, formData[key] === "" ? "0" : String(formData[key]));
           return;
@@ -240,6 +245,7 @@ const HeaderCategories = () => {
       type: "header",
       parentId: null,
       iconId: "",
+      applyCommission: false,
       adminCommission: "",
       handlingFees: "",
       headerColor: "#FF1E1E",
@@ -261,6 +267,9 @@ const HeaderCategories = () => {
       type: "header",
       parentId: null,
       iconId: item.iconId || "",
+      applyCommission:
+        item.applyCommission === true ||
+        (item.applyCommission !== false && Number(item.adminCommission || 0) > 0),
       adminCommission: item.adminCommission ?? "",
       handlingFees: item.handlingFees ?? "",
       headerColor: item.headerColor || "#FF1E1E",
@@ -407,7 +416,10 @@ const HeaderCategories = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-500">{cat.slug}</td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
-                      {cat.adminCommission ?? 0}%
+                      {cat.applyCommission === true ||
+                      (cat.applyCommission !== false && Number(cat.adminCommission || 0) > 0)
+                        ? `${cat.adminCommission ?? 0}%`
+                        : "—"}
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
                       ₹{cat.handlingFees ?? 0}
@@ -704,37 +716,57 @@ const HeaderCategories = () => {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Admin Commission (%)
-                    </label>
+                <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <input
-                      type="number"
-                      value={formData.adminCommission}
+                      type="checkbox"
+                      checked={!!formData.applyCommission}
                       onChange={(e) =>
-                        setFormData({ ...formData, adminCommission: e.target.value })
+                        setFormData({
+                          ...formData,
+                          applyCommission: e.target.checked,
+                        })
                       }
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                      placeholder="0"
-                      min="0"
-                      max="100"
+                      className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Handling Fees (₹)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.handlingFees}
-                      onChange={(e) =>
-                        setFormData({ ...formData, handlingFees: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                      placeholder="0"
-                      min="0"
-                    />
+                    Apply commission at this level
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    If unchecked, commission falls through to Level 2, then Subcategory.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Admin Commission (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.adminCommission}
+                        disabled={!formData.applyCommission}
+                        onChange={(e) =>
+                          setFormData({ ...formData, adminCommission: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                        placeholder="0"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Handling Fees (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.handlingFees}
+                        onChange={(e) =>
+                          setFormData({ ...formData, handlingFees: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                        placeholder="0"
+                        min="0"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

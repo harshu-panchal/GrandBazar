@@ -52,8 +52,10 @@ const {
   calculateHandlingFee,
   calculateProductSubtotal,
   calculateRiderPayout,
+  categoryAppliesCommission,
   generateOrderPaymentBreakdown,
   hydrateOrderItems,
+  resolveCategoryHierarchyCommission,
 } = await import("../app/services/finance/pricingService.js");
 
 describe("finance pricing flow", () => {
@@ -102,6 +104,114 @@ describe("finance pricing flow", () => {
     expect(fixedPerItem.itemSubtotal).toBe(150);
     expect(fixedPerItem.adminCommission).toBe(12);
     expect(fixedPerItem.sellerPayout).toBe(138);
+  });
+
+  it("resolves category commission hierarchy top-down", () => {
+    const header = {
+      _id: "h1",
+      name: "Header",
+      applyCommission: true,
+      adminCommissionValue: 15,
+    };
+    const level2 = {
+      _id: "c1",
+      name: "Level2",
+      applyCommission: true,
+      adminCommissionValue: 10,
+    };
+    const sub = {
+      _id: "s1",
+      name: "Sub",
+      applyCommission: true,
+      adminCommissionValue: 5,
+    };
+
+    expect(
+      resolveCategoryHierarchyCommission({
+        headerCategory: header,
+        level2Category: level2,
+        subcategory: sub,
+      }).level,
+    ).toBe("header");
+
+    expect(
+      resolveCategoryHierarchyCommission({
+        headerCategory: { ...header, applyCommission: false },
+        level2Category: level2,
+        subcategory: sub,
+      }).level,
+    ).toBe("category");
+
+    expect(
+      resolveCategoryHierarchyCommission({
+        headerCategory: { ...header, applyCommission: false },
+        level2Category: { ...level2, applyCommission: false },
+        subcategory: sub,
+      }).category.adminCommissionValue,
+    ).toBe(5);
+
+    expect(categoryAppliesCommission({ adminCommissionValue: 8 })).toBe(true);
+    expect(
+      categoryAppliesCommission({ applyCommission: false, adminCommissionValue: 8 }),
+    ).toBe(false);
+  });
+
+  it("falls back to level2 commission during checkout when header is missing", async () => {
+    mockCategoryFind.mockReturnValue(
+      createQueryChain([
+        {
+          _id: "h1",
+          name: "Header",
+          type: "header",
+          applyCommission: false,
+          adminCommissionValue: 0,
+          handlingFeeType: "fixed",
+          handlingFeeValue: 0,
+        },
+        {
+          _id: "c1",
+          name: "Level2",
+          type: "category",
+          applyCommission: true,
+          adminCommissionType: "percentage",
+          adminCommissionValue: 20,
+        },
+      ]),
+    );
+
+    mockGetOrCreateFinanceSettings.mockResolvedValue({
+      deliveryPricingMode: "fixed",
+      fixedDeliveryFee: 0,
+      customerBaseDeliveryFee: 0,
+      riderBasePayout: 0,
+      baseDistanceCapacityKm: 0.5,
+      incrementalKmSurcharge: 0,
+      deliveryPartnerRatePerKm: 0,
+      handlingFeeStrategy: "highest_category_fee",
+      codEnabled: true,
+      onlineEnabled: true,
+    });
+
+    const breakdown = await generateOrderPaymentBreakdown({
+      preHydratedItems: [
+        {
+          productId: "prod-1",
+          productName: "Item",
+          quantity: 1,
+          price: 100,
+          headerCategoryId: "h1",
+          categoryId: "c1",
+          subcategoryId: null,
+          sellerId: "seller-1",
+        },
+      ],
+      distanceKm: 0,
+      skipDeliveryFee: true,
+    });
+
+    expect(breakdown.adminProductCommissionTotal).toBe(20);
+    expect(breakdown.lineItems[0].appliedCommissionCategoryLevel).toBe("category");
+    expect(breakdown.lineItems[0].appliedCommissionValue).toBe(20);
   });
 
   it("supports handling fee strategies with category snapshots", () => {

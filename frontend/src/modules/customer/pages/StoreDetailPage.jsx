@@ -79,13 +79,25 @@ const StoreDetailPage = () => {
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
 
+  const storeBanners = useMemo(
+    () =>
+      (Array.isArray(seller?.banners) ? seller.banners : []).filter((banner) =>
+        Boolean(banner && String(banner).trim()),
+      ),
+    [seller?.banners],
+  );
+
   useEffect(() => {
-    if (!seller?.banners || seller.banners.length <= 1) return;
+    if (storeBanners.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentBannerIndex((prev) => (prev + 1) % seller.banners.length);
+      setCurrentBannerIndex((prev) => (prev + 1) % storeBanners.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, [seller?.banners]);
+  }, [storeBanners]);
+
+  useEffect(() => {
+    setCurrentBannerIndex(0);
+  }, [sellerId, storeBanners.length]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -230,6 +242,45 @@ const StoreDetailPage = () => {
           </div>
         ) : (
           <div className="flex flex-col gap-8">
+
+            {storeBanners.length > 0 && (
+              <div className="relative overflow-hidden rounded-[2rem] md:rounded-[2.5rem] bg-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
+                <div className="relative aspect-[21/9] min-h-[160px] md:min-h-[220px]">
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={`${sellerId}-banner-${currentBannerIndex}`}
+                      src={storeBanners[currentBannerIndex]}
+                      alt={`${seller.shopName || seller.name || "Store"} banner ${currentBannerIndex + 1}`}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      initial={{ opacity: 0, scale: 1.02 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.45 }}
+                    />
+                  </AnimatePresence>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10 pointer-events-none" />
+                </div>
+
+                {storeBanners.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
+                    {storeBanners.map((_, index) => (
+                      <button
+                        key={`banner-dot-${index}`}
+                        type="button"
+                        aria-label={`Show banner ${index + 1}`}
+                        onClick={() => setCurrentBannerIndex(index)}
+                        className={cn(
+                          "h-2.5 rounded-full transition-all",
+                          currentBannerIndex === index
+                            ? "w-7 bg-white"
+                            : "w-2.5 bg-white/50 hover:bg-white/80",
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Store Branding Banner */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">

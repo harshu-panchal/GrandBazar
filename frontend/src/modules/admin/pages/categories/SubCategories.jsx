@@ -50,6 +50,8 @@ const SubCategories = () => {
     status: "active",
     type: "subcategory",
     parentId: "",
+    applyCommission: false,
+    adminCommission: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -184,7 +186,16 @@ const SubCategories = () => {
       const data = new FormData();
       data.append("type", "subcategory");
       Object.keys(formData).forEach((key) => {
-        if (key !== "type") data.append(key, formData[key]);
+        if (key === "type") return;
+        if (key === "applyCommission") {
+          data.append(key, formData.applyCommission ? "true" : "false");
+          return;
+        }
+        if (key === "adminCommission") {
+          data.append(key, formData[key] === "" ? "0" : String(formData[key]));
+          return;
+        }
+        data.append(key, formData[key]);
       });
 
       if (imageFile) {
@@ -236,6 +247,8 @@ const SubCategories = () => {
       status: "active",
       type: "subcategory",
       parentId: "",
+      applyCommission: false,
+      adminCommission: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -251,6 +264,10 @@ const SubCategories = () => {
       status: item.status,
       type: "subcategory",
       parentId: item.parentId?._id || item.parentId || "",
+      applyCommission:
+        item.applyCommission === true ||
+        (item.applyCommission !== false && Number(item.adminCommission || 0) > 0),
+      adminCommission: item.adminCommission ?? "",
     });
     const currentImage = item.image && typeof item.image === 'object' ? item.image.url : (item.image || null);
     setPreviewUrl(currentImage);
@@ -384,6 +401,9 @@ const SubCategories = () => {
                   Slug
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Comm (%)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -394,13 +414,13 @@ const SubCategories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500">
                     No subcategories found
                   </td>
                 </tr>
@@ -447,6 +467,12 @@ const SubCategories = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-gray-500">{cat.slug}</td>
+                      <td className="py-3 px-4 text-gray-500 font-medium">
+                        {cat.applyCommission === true ||
+                        (cat.applyCommission !== false && Number(cat.adminCommission || 0) > 0)
+                          ? `${cat.adminCommission ?? 0}%`
+                          : "—"}
+                      </td>
                       <td className="py-3 px-4">
                         <Badge
                           variant={
@@ -607,6 +633,43 @@ const SubCategories = () => {
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.applyCommission}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          applyCommission: e.target.checked,
+                        })
+                      }
+                      className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                    />
+                    Apply commission at this level
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Used only when Header and Level 2 do not apply commission. Topmost applied level always wins.
+                  </p>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Admin Commission (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.adminCommission}
+                      disabled={!formData.applyCommission}
+                      onChange={(e) =>
+                        setFormData({ ...formData, adminCommission: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      placeholder="0"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
                 </div>
               </div>
 

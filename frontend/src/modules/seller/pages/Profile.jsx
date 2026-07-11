@@ -86,10 +86,10 @@ const SellerProfile = () => {
       const data = response.data.result;
       setProfile(data);
       setFormData({
-        name: data.name,
-        shopName: data.shopName,
-        phone: data.phone,
-        email: data.email,
+        name: data.name || "",
+        shopName: data.shopName || "",
+        phone: data.phone || data.account?.phone || "",
+        email: data.email || data.account?.email || "",
         lat: data.location?.coordinates[1] || null,
         lng: data.location?.coordinates[0] || null,
         radius: data.serviceRadius || 5,
