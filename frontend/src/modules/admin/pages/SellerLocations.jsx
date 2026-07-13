@@ -20,8 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
+import { getGoogleMapsJsApiLoaderOptions } from "@/core/services/googleMapsLoader";
 
-const MAP_LIBRARIES = ["geometry"];
 const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
 const PAGE_SIZE = 25;
 const TARGET_VIEW_RADIUS_KM = 25;
@@ -114,11 +114,9 @@ const ActiveSellerMap = ({
   getCircleOptions,
 }) => {
   const mapRef = useRef(null);
-  const { isLoaded: mapLoaded, loadError: mapLoadError } = useJsApiLoader({
-    id: "admin-seller-locations-map",
-    googleMapsApiKey: googleMapApiKey,
-    libraries: MAP_LIBRARIES,
-  });
+  const { isLoaded: mapLoaded, loadError: mapLoadError } = useJsApiLoader(
+    getGoogleMapsJsApiLoaderOptions(googleMapApiKey),
+  );
 
   useEffect(() => {
     if (!mapLoaded || !mapRef.current || !window.google) return;

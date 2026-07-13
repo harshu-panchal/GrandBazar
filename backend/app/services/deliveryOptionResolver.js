@@ -39,7 +39,6 @@ function getZonedParts(date, timeZone) {
 export function resolveStoreDeliveryPolicy(store) {
   const raw = store?.deliveryPolicy || {};
   const scheduling = store?.schedulingSettings || {};
-  const platformProvider = raw._platformProvider;
 
   const policy = {
     ...DEFAULT_DELIVERY_POLICY,
@@ -53,10 +52,6 @@ export function resolveStoreDeliveryPolicy(store) {
 
   if (policy.platformLogisticsEnabledByAdmin === false) {
     policy.platformLogistics = false;
-  }
-
-  if (platformProvider === "external" && !policy.sellerDelivery) {
-    policy.sellerDelivery = true;
   }
 
   return policy;
@@ -182,13 +177,7 @@ export async function resolveDeliveryOptions({
   }
 
   const platformProvider = await getPlatformDeliveryProvider();
-  const policy = resolveStoreDeliveryPolicy({
-    ...store,
-    deliveryPolicy: {
-      ...(store.deliveryPolicy || {}),
-      _platformProvider: platformProvider,
-    },
-  });
+  const policy = resolveStoreDeliveryPolicy(store);
 
   const operational = isStoreOperationallyOpen(store, now);
   const withinRadius =
@@ -239,17 +228,21 @@ export async function resolveDeliveryOptions({
     });
   }
 
-  if (policy.platformLogistics && platformProvider === "zinto") {
+  if (policy.platformLogistics) {
     const sameDayBlocked =
       fulfillmentType === "instant" && isSameDayCutoffPassed(store, now);
     const available =
       operational.open && withinRadius && !sameDayBlocked;
     options.push({
       method: FULFILLMENT_METHOD.PLATFORM_LOGISTICS,
-      label: "Platform Delivery",
+      label: platformProvider === "external" ? "Platform Delivery" : "Platform Delivery",
+      description:
+        platformProvider === "external"
+          ? "Delivered via platform courier partners"
+          : "Fast delivery via platform riders",
       available,
       deliveryFee: null,
-      estimatedMinutes: 30,
+      estimatedMinutes: platformProvider === "external" ? 60 : 30,
       reason: !operational.open
         ? operational.message
         : !withinRadius
@@ -267,6 +260,7 @@ export async function resolveDeliveryOptions({
     shopName: store.shopName,
     operational,
     withinRadius,
+    platformProvider,
     policy: {
       customerPickup: policy.customerPickup,
       sellerDelivery: policy.sellerDelivery,
@@ -320,7 +314,10 @@ export async function resolveChosenFulfillmentMethod({
 
   return {
     fulfillmentMethod: method,
-    logisticsMode: fulfillmentMethodToLogisticsMode(method),
+    logisticsMode: fulfillmentMethodToLogisticsMode(
+      method,
+      resolved.platformProvider,
+    ),
     deliveryOptions: resolved,
   };
 }
@@ -331,6 +328,7 @@ export async function resolveChosenFulfillmentMethod({
 export async function resolveFulfillmentAtSellerAccept(order, store) {
   const policy = resolveStoreDeliveryPolicy(store);
   const operational = isStoreOperationallyOpen(store);
+  const platformProvider = await getPlatformDeliveryProvider();
   let fulfillmentMethod = order.fulfillmentMethod;
   let logisticsMode = order.logisticsMode;
   let autoSwitched = false;
@@ -342,7 +340,10 @@ export async function resolveFulfillmentAtSellerAccept(order, store) {
   ) {
     if (policy.autoSwitchToPlatform && policy.platformLogistics) {
       fulfillmentMethod = FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
-      logisticsMode = fulfillmentMethodToLogisticsMode(fulfillmentMethod);
+      logisticsMode = fulfillmentMethodToLogisticsMode(
+        fulfillmentMethod,
+        platformProvider,
+      );
       autoSwitched = true;
       switchReason = operational.reason;
     } else if (policy.customerPickup) {

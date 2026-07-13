@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Lottie from "lottie-react";
-import LocationDrawer from "./LocationDrawer";
 import { useLocation } from "../../context/LocationContext";
 import { useProductDetail } from "../../context/ProductDetailContext";
 import { useSettings } from "@core/context/SettingsContext";
@@ -150,7 +149,6 @@ const MainLocationHeader = ({
   onCategorySelect,
 }) => {
   const { scrollY } = useScroll();
-  const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [cartAnimData, setCartAnimData] = useState(null);
 
   // Dynamically load shopping-cart Lottie on mount
@@ -159,13 +157,20 @@ const MainLocationHeader = ({
       .then((m) => setCartAnimData(m.default))
       .catch(() => {});
   }, []);
-  const { currentLocation, refreshLocation, isFetchingLocation } =
-    useLocation();
+  const {
+    currentLocation,
+    isFetchingLocation,
+    openLocationPicker,
+  } = useLocation();
   const { isOpen: isProductDetailOpen } = useProductDetail();
   const { settings } = useSettings();
   const appName = settings?.appName || "App";
   const logoUrl = settings?.logoUrl || LogoImage;
   const navigate = useNavigate();
+
+  const locationLabel = isFetchingLocation
+    ? "Detecting location..."
+    : currentLocation?.name || "Select your location";
 
   // Search Logic
   const handleSearchClick = () => {
@@ -368,7 +373,7 @@ const MainLocationHeader = ({
                   data-lenis-prevent
                   data-lenis-prevent-touch
                   onClick={() => {
-                    setIsLocationOpen(true);
+                    openLocationPicker();
                   }}
                   className="flex items-center gap-1 text-slate-900 hover:text-slate-700 cursor-pointer group active:scale-95 transition-all border-0 bg-transparent p-0 text-left">
                   <LocationOnIcon sx={{ fontSize: 14, color: "inherit" }} />
@@ -376,9 +381,7 @@ const MainLocationHeader = ({
                     className="text-[13px] font-bold leading-tight max-w-[250px] lg:max-w-[320px] truncate"
                     style={{ color: headerFontColor }}
                   >
-                    {isFetchingLocation
-                      ? "Detecting location..."
-                      : currentLocation.name}
+                    {locationLabel}
                   </div>
                   <ChevronDownIcon
                     sx={{ fontSize: 12, opacity: 0.5, color: headerFontColor }}
@@ -482,7 +485,7 @@ const MainLocationHeader = ({
                     data-lenis-prevent
                     data-lenis-prevent-touch
                     onClick={() => {
-                      setIsLocationOpen(true);
+                      openLocationPicker();
                     }}
                     className="flex items-center gap-1 text-slate-800 cursor-pointer group active:scale-95 transition-transform border-0 bg-transparent p-0 text-left">
                     <LocationOnIcon sx={{ fontSize: 14, color: headerFontColor }} />
@@ -490,9 +493,7 @@ const MainLocationHeader = ({
                       className="text-[10px] font-medium leading-tight max-w-[280px] truncate"
                       style={{ color: headerFontColor }}
                     >
-                      {isFetchingLocation
-                        ? "Detecting location..."
-                        : currentLocation.name}
+                      {locationLabel}
                     </div>
                     <ChevronDownIcon
                       sx={{ fontSize: 12, opacity: 0.5, color: headerFontColor }}
@@ -564,11 +565,6 @@ const MainLocationHeader = ({
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full blur-[100px] -mr-40 -mt-40 pointer-events-none" />
         </motion.div>
       </div>
-
-      <LocationDrawer
-        isOpen={isLocationOpen}
-        onClose={() => setIsLocationOpen(false)}
-      />
     </>
   );
 };

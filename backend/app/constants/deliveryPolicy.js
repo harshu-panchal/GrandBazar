@@ -42,14 +42,15 @@ export const DEFAULT_AVAILABILITY = {
   },
 };
 
-export function fulfillmentMethodToLogisticsMode(method) {
+export function fulfillmentMethodToLogisticsMode(method, platformProvider = "zinto") {
   switch (method) {
     case FULFILLMENT_METHOD.CUSTOMER_PICKUP:
       return "pickup";
     case FULFILLMENT_METHOD.SELLER_DELIVERY:
       return "external";
     case FULFILLMENT_METHOD.PLATFORM_LOGISTICS:
+      return platformProvider === "external" ? "external" : "zinto";
     default:
-      return "zinto";
+      return platformProvider === "external" ? "external" : "zinto";
   }
 }

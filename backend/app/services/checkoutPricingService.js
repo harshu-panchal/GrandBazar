@@ -291,9 +291,14 @@ export async function buildCheckoutPricingSnapshot({
 
   for (const sellerId of sellerIds) {
     const sellerItems = itemsBySeller.get(sellerId) || [];
-    const sellerFulfillmentMethod =
+    const sellerFulfillmentEntry =
       fulfillmentMethodBySeller?.[sellerId] ||
       fulfillmentMethodBySeller?.[String(sellerId)] ||
+      null;
+    const sellerFulfillmentMethod =
+      (typeof sellerFulfillmentEntry === "object" && sellerFulfillmentEntry
+        ? sellerFulfillmentEntry.fulfillmentMethod
+        : sellerFulfillmentEntry) ||
       fulfillmentMethod ||
       FULFILLMENT_METHOD.PLATFORM_LOGISTICS;
     const isCustomerPickup =

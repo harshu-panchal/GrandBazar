@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { X, Search, MapPin, Plus, Home, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,6 +17,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
     refreshLocation,
     isFetchingLocation,
     locationError,
+    needsLocationSetup,
   } = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -331,33 +333,52 @@ const LocationDrawer = ({ isOpen, onClose }) => {
   // Saved addresses should remain static and not be part of Google search.
   const visibleSavedAddresses = savedAddresses;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
           {/* Backdrop */}
           <motion.div
-            onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[600]"
+            key="location-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => {
+              if (!needsLocationSetup) onClose();
+            }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000]"
           />
 
           <motion.div
+            key="location-sheet"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             data-lenis-prevent
             style={{ overscrollBehavior: "contain" }}
-            className="fixed bottom-0 left-0 right-0 bg-[#F3F4F6] rounded-t-[32px] z-[610] max-h-[90vh] overflow-y-auto outline-none shadow-2xl pb-8">
+            className="fixed bottom-0 left-0 right-0 bg-[#F3F4F6] rounded-t-[32px] z-[1010] max-h-[90vh] overflow-y-auto outline-none shadow-2xl pb-8">
             {/* Header */}
             <div className="sticky top-0 bg-[#F3F4F6] px-6 pt-6 pb-4 flex flex-col gap-4 z-20">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-extrabold text-[#1A1A1A]">
-                  Select delivery location
-                </h2>
+                <div>
+                  <h2 className="text-xl font-extrabold text-[#1A1A1A]">
+                    Select delivery location
+                  </h2>
+                  {needsLocationSetup && (
+                    <p className="text-xs font-semibold text-slate-500 mt-1">
+                      Choose a location to see products near you
+                    </p>
+                  )}
+                </div>
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="h-10 w-10 bg-black/5 hover:bg-black/10 rounded-full flex items-center justify-center transition-colors">
+                  disabled={needsLocationSetup}
+                  className="h-10 w-10 bg-black/5 hover:bg-black/10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 disabled:pointer-events-none">
                   <X size={20} className="text-[#1A1A1A]" />
                 </button>
               </div>
@@ -462,7 +483,9 @@ const LocationDrawer = ({ isOpen, onClose }) => {
                       : "Use current location"}
                   </h3>
                   <p className="text-[12px] text-slate-400 font-medium truncate opacity-60">
-                    ({currentLocation.name})
+                    ({currentLocation?.name && Number.isFinite(Number(currentLocation?.latitude))
+                      ? currentLocation.name
+                      : "Tap to detect"})
                   </p>
                 </div>
                 <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
@@ -548,7 +571,8 @@ const LocationDrawer = ({ isOpen, onClose }) => {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
 

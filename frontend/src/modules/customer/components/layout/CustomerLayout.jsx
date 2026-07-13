@@ -5,7 +5,9 @@ import BottomNav from './BottomNav';
 import MiniCart from '../shared/MiniCart';
 import ProductDetailSheet from '../shared/ProductDetailSheet';
 import MobileFooterMessage from './MobileFooterMessage';
+import LocationDrawer from '../shared/LocationDrawer';
 import { useProductDetail } from '../../context/ProductDetailContext';
+import { useLocation as useAppLocation } from '../../context/LocationContext';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
@@ -17,6 +19,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
     const location = useLocation();
     const { isOpen: isProductDetailOpen } = useProductDetail();
     const { user, token } = useAuth();
+    const { isLocationPickerOpen, closeLocationPicker } = useAppLocation();
 
     // Listen for Return OTPs (Real-time Alert for Customer)
     useEffect(() => {
@@ -120,6 +123,10 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
 
             {showCart && <MiniCart />}
             <ProductDetailSheet />
+            <LocationDrawer
+                isOpen={isLocationPickerOpen}
+                onClose={closeLocationPicker}
+            />
 
             <div className="hidden md:block">
                 <Footer />

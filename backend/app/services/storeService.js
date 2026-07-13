@@ -234,7 +234,20 @@ export function buildStorePayloadFromBody(body = {}, uploadedDocs = {}) {
     bankName,
     banners,
     storeVideo,
+    customerPickup,
+    sellerDelivery,
+    platformLogistics,
+    autoSwitchToPlatform,
   } = body;
+
+  const parseBool = (value, fallback = false) => {
+    if (value === undefined || value === null || value === "") return fallback;
+    if (typeof value === "boolean") return value;
+    const normalized = String(value).trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+    return fallback;
+  };
 
   const parsedLat = lat !== undefined ? Number(lat) : undefined;
   const parsedLng = lng !== undefined ? Number(lng) : undefined;
@@ -242,6 +255,34 @@ export function buildStorePayloadFromBody(body = {}, uploadedDocs = {}) {
 
   const parsedDocuments = parseDocumentsPayload(documents);
   const storeDocuments = resolveSellerDocuments({ ...body, ...uploadedDocs }, parsedDocuments);
+
+  const hasDeliveryPolicyInput =
+    customerPickup !== undefined ||
+    sellerDelivery !== undefined ||
+    platformLogistics !== undefined ||
+    autoSwitchToPlatform !== undefined;
+
+  const deliveryPolicy = hasDeliveryPolicyInput
+    ? {
+        customerPickup: parseBool(customerPickup, false),
+        sellerDelivery: parseBool(sellerDelivery, false),
+        platformLogistics: parseBool(platformLogistics, true),
+        autoSwitchToPlatform: parseBool(autoSwitchToPlatform, false),
+      }
+    : null;
+
+  if (
+    deliveryPolicy &&
+    !deliveryPolicy.customerPickup &&
+    !deliveryPolicy.sellerDelivery &&
+    !deliveryPolicy.platformLogistics
+  ) {
+    const error = new Error(
+      "Enable at least one fulfillment method: Customer Pickup, Seller Self Delivery, or Platform Logistics",
+    );
+    error.statusCode = 400;
+    throw error;
+  }
 
   const payload = {
     shopName,
@@ -263,6 +304,13 @@ export function buildStorePayloadFromBody(body = {}, uploadedDocs = {}) {
     isVerified: false,
     isActive: false,
   };
+
+  if (deliveryPolicy) {
+    payload.deliveryPolicy = deliveryPolicy;
+    payload.schedulingSettings = {
+      selfLogistics: deliveryPolicy.sellerDelivery,
+    };
+  }
 
   if (banners !== undefined) payload.banners = banners;
   if (storeVideo !== undefined) payload.storeVideo = storeVideo;

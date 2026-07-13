@@ -52,7 +52,34 @@ const INITIAL_FORM_DATA = {
   accountNumber: '',
   ifsc: '',
   bankName: '',
+  customerPickup: false,
+  sellerDelivery: false,
+  platformLogistics: true,
+  autoSwitchToPlatform: false,
 };
+
+const FULFILLMENT_TOGGLES = [
+  {
+    key: 'customerPickup',
+    label: 'Customer Pickup',
+    hint: 'Customers can collect orders from your shop',
+  },
+  {
+    key: 'sellerDelivery',
+    label: 'Seller Self Delivery',
+    hint: 'You deliver orders with your own riders',
+  },
+  {
+    key: 'platformLogistics',
+    label: 'Platform Logistics',
+    hint: 'Platform riders deliver to the customer',
+  },
+  {
+    key: 'autoSwitchToPlatform',
+    label: 'Auto Switch to Platform Logistics',
+    hint: 'If you cannot deliver, switch to platform logistics automatically',
+  },
+];
 
 const EMPTY_DOCUMENTS = { aadhar: null, pan: null, bankProof: null, gstCertificate: null };
 
@@ -197,6 +224,10 @@ const MyStores = () => {
     const payload = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
       if (key === 'categories') return;
+      if (typeof value === 'boolean') {
+        payload.append(key, value ? 'true' : 'false');
+        return;
+      }
       if (value !== null && value !== undefined && value !== '') {
         payload.append(key, value);
       }
@@ -210,12 +241,25 @@ const MyStores = () => {
     return payload;
   };
 
+  const assertFulfillmentSelection = () => {
+    if (
+      !formData.customerPickup &&
+      !formData.sellerDelivery &&
+      !formData.platformLogistics
+    ) {
+      toast.error('Enable at least one: Customer Pickup, Seller Self Delivery, or Platform Logistics');
+      return false;
+    }
+    return true;
+  };
+
   const handleCreateStore = async (e) => {
     e.preventDefault();
     if (!formData.categories.length) {
       toast.error('Please select at least one store category');
       return;
     }
+    if (!assertFulfillmentSelection()) return;
     const missingDocs = REQUIRED_DOCS.filter((d) => !documents[d.id]);
     if (missingDocs.length) {
       toast.error(`Upload required documents: ${missingDocs.map((d) => d.label).join(', ')}`);
@@ -271,6 +315,12 @@ const MyStores = () => {
       accountNumber: store.accountNumber || '',
       ifsc: store.ifsc || '',
       bankName: store.bankName || '',
+      customerPickup: Boolean(store.deliveryPolicy?.customerPickup),
+      sellerDelivery: Boolean(
+        store.deliveryPolicy?.sellerDelivery ?? store.schedulingSettings?.selfLogistics,
+      ),
+      platformLogistics: store.deliveryPolicy?.platformLogistics !== false,
+      autoSwitchToPlatform: Boolean(store.deliveryPolicy?.autoSwitchToPlatform),
     });
     setDocuments(EMPTY_DOCUMENTS);
     setShowCreate(true);
@@ -283,6 +333,7 @@ const MyStores = () => {
       toast.error('Please select at least one store category');
       return;
     }
+    if (!assertFulfillmentSelection()) return;
     const missingDocs = REQUIRED_DOCS.filter((d) => !documents[d.id]);
     if (missingDocs.length) {
       toast.error(`Upload required documents: ${missingDocs.map((d) => d.label).join(', ')}`);
@@ -555,6 +606,34 @@ const MyStores = () => {
                   <Navigation className="h-4 w-4" />
                   {formData.lat ? formData.address || 'Location selected' : 'Pick store location *'}
                 </button>
+
+                <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-800">Delivery & Fulfillment *</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Choose how customers can receive orders from this shop. Enabled options appear at checkout.
+                    </p>
+                  </div>
+                  {FULFILLMENT_TOGGLES.map((toggle) => (
+                    <label
+                      key={toggle.key}
+                      className="flex items-start gap-3 rounded-lg border border-slate-100 px-3 py-2.5 cursor-pointer hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formData[toggle.key])}
+                        onChange={(e) =>
+                          setFormData({ ...formData, [toggle.key]: e.target.checked })
+                        }
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-slate-800">{toggle.label}</span>
+                        <span className="block text-xs text-slate-500 mt-0.5">{toggle.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {KYC_TEXT_FIELDS.map((field) => (

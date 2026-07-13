@@ -10,6 +10,7 @@ import {
   User,
   Phone,
   ArrowRight,
+  ArrowLeft,
   Store,
   Rocket,
   Globe,
@@ -59,6 +60,14 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'otp' | 'reset'
+  const [forgotOtp, setForgotOtp] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [maskedForgotEmail, setMaskedForgotEmail] = useState("");
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -75,6 +84,106 @@ const Auth = () => {
     name: "",
     phone: "",
   });
+
+  const exitForgotPassword = () => {
+    setForgotStep(null);
+    setForgotOtp("");
+    setResetToken("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setMaskedForgotEmail("");
+  };
+
+  const openForgotPassword = () => {
+    setIsLogin(true);
+    setForgotStep("email");
+    setForgotOtp("");
+    setResetToken("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  const handleForgotSendOtp = async (e) => {
+    e.preventDefault();
+    const email = (formData.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await sellerApi.sendForgotPasswordOtp({ email });
+      const result = response.data?.result || {};
+      setMaskedForgotEmail(result.maskedTarget || email);
+      setForgotStep("otp");
+      setForgotOtp("");
+      toast.success(response.data?.message || "If an account exists, a reset code has been sent.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send reset code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (forgotOtp.length !== 4) {
+      toast.error("Please enter the 4-digit OTP.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await sellerApi.verifyForgotPasswordOtp({
+        email: formData.email,
+        otp: forgotOtp,
+      });
+      const token = response.data?.result?.resetToken || "";
+      if (!token) {
+        toast.error("Could not start password reset. Please try again.");
+        return;
+      }
+      setResetToken(token);
+      setForgotStep("reset");
+      toast.success("OTP verified. Set your new password.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Invalid or expired OTP");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotResetPassword = async (e) => {
+    e.preventDefault();
+    const pwd = (newPassword || "").trim();
+    if (pwd.length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    if (pwd !== confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await sellerApi.resetPassword({
+        resetToken,
+        newPassword: pwd,
+      });
+      toast.success("Password reset successfully. Please sign in.");
+      setFormData((prev) => ({ ...prev, password: "" }));
+      exitForgotPassword();
+      setIsLogin(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reset password");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const updateVerificationState = (field, updates) => {
     setVerifications((prev) => ({
@@ -386,7 +495,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#fcfaff] p-6 font-['Outfit'] overflow-hidden relative">
+    <div className="flex min-h-[100dvh] items-stretch md:items-center justify-center bg-[#fcfaff] p-0 md:p-6 font-['Outfit'] overflow-x-hidden overflow-y-auto relative">
       {/* Elegant Ambient Background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-5%] w-[60%] h-[60%] bg-slate-100/50 rounded-full blur-[120px]" />
@@ -396,7 +505,7 @@ const Auth = () => {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative z-10 w-full max-w-[1000px] min-h-[600px] max-h-[90vh] bg-white rounded-lg shadow-[0_50px_120px_rgba(0,0,0,0.04)] border border-white flex flex-col md:flex-row overflow-hidden">
+        className="relative z-10 w-full max-w-[1000px] min-h-[100dvh] md:min-h-[600px] md:max-h-[90vh] bg-white rounded-none md:rounded-lg shadow-none md:shadow-[0_50px_120px_rgba(0,0,0,0.04)] border-0 md:border md:border-white flex flex-col md:flex-row overflow-hidden">
         {/* Visual Side Panel */}
         <div className="hidden md:flex w-[45%] bg-linear-to-br from-slate-900 via-slate-950 to-black relative flex-col items-center justify-center p-10 overflow-hidden">
           {/* Abstract Decorative Circles */}
@@ -424,7 +533,7 @@ const Auth = () => {
                 Multi-Shop <span className="text-slate-600">Admin.</span>
               </h2>
               {!isLogin && (
-                <p className="text-xs text-slate-400 font-medium max-w-[260px] mx-auto leading-relaxed">
+                <p className="text-xs text-slate-400 font-medium max-w-[260px] mx-auto leading-relaxed text-center">
                   One admin account. Unlimited shops. Each location gets its own approval and operations.
                 </p>
               )}
@@ -435,7 +544,7 @@ const Auth = () => {
                 {ONBOARDING_STEPS.map((item, index) => (
                   <div
                     key={item.title}
-                    className={`flex gap-3 rounded-xl border px-3 py-3 transition-all ${
+                    className={`flex gap-3 rounded-xl border px-3 py-3 transition-all text-left ${
                       index === 0
                         ? "border-white/20 bg-white/10"
                         : "border-white/5 bg-white/[0.03]"
@@ -446,7 +555,7 @@ const Auth = () => {
                     }`}>
                       {index + 1}
                     </div>
-                    <div>
+                    <div className="min-w-0 text-left">
                       <p className="text-[11px] font-black uppercase tracking-wide text-white">{item.title}</p>
                       <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{item.description}</p>
                     </div>
@@ -475,9 +584,10 @@ const Auth = () => {
 
         {/* Form Content Side */}
         <div
-          className="w-full md:w-[55%] min-h-0 p-8 pt-12 md:p-12 md:pt-16 flex flex-col justify-center bg-white overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar relative"
+          className="w-full md:w-[55%] min-h-0 flex-1 p-5 pb-10 sm:p-8 md:p-12 md:pt-16 flex flex-col justify-start md:justify-center bg-white overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar relative"
           onWheelCapture={handlePanelWheel}
           style={{ WebkitOverflowScrolling: "touch" }}>
+          {/* Desktop logo */}
           <div className="hidden md:flex absolute top-8 right-8 z-20">
             <div className="w-20 h-20 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
               {logoUrl ? (
@@ -491,49 +601,216 @@ const Auth = () => {
               )}
             </div>
           </div>
+
+          {/* Mobile logo + brand */}
+          <div className="md:hidden flex flex-col items-center text-center pt-2 pb-6">
+            <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden mb-3">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={`${appName} logo`}
+                  className="w-full h-full object-contain p-1.5"
+                />
+              ) : (
+                <Store size={28} className="text-slate-700" />
+              )}
+            </div>
+            <p className="text-base font-black text-slate-900 tracking-tight">{appName}</p>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+              Seller Partner
+            </p>
+          </div>
+
           <AnimatePresence mode="wait">
             <motion.div
-              key={isLogin ? "login" : "signup"}
+              key={forgotStep || (isLogin ? "login" : "signup")}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-8 py-4 md:py-6">
-              <div className="space-y-4">
+              className="space-y-6 md:space-y-8 py-2 md:py-6 w-full max-w-md mx-auto md:max-w-none">
+              <div className="space-y-3 md:space-y-4 text-center md:text-left">
                 <span className="inline-block px-4 py-1 bg-slate-100 text-slate-800 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200">
-                  {isLogin ? "Welcome Back" : "Seller Admin Registration"}
+                  {forgotStep
+                    ? "Account Recovery"
+                    : isLogin
+                      ? "Welcome Back"
+                      : "Seller Admin Registration"}
                 </span>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tighter">
-                  {isLogin ? (
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter leading-tight">
+                  {forgotStep === "email" && <>Forgot <span className="text-slate-900">Password</span></>}
+                  {forgotStep === "otp" && <>Verify <span className="text-slate-900">OTP</span></>}
+                  {forgotStep === "reset" && <>Set New <span className="text-slate-900">Password</span></>}
+                  {!forgotStep && isLogin && (
                     <>Seller <span className="text-slate-900">Login</span></>
-                  ) : (
+                  )}
+                  {!forgotStep && !isLogin && (
                     <>Create <span className="text-slate-900">Admin Account</span></>
                   )}
                 </h1>
-                <p className="text-slate-600 font-medium text-base leading-relaxed">
-                  {isLogin
-                    ? "Access your multi-shop dashboard, switch stores, and manage operations."
-                    : "Set up your seller admin profile. You will add individual shops with location and KYC from My Stores after signup."}
+                <p className="text-slate-600 font-medium text-sm sm:text-base leading-relaxed max-w-sm mx-auto md:mx-0 md:max-w-none">
+                  {forgotStep === "email" &&
+                    "Enter your business email and we will send a one-time code to reset your password."}
+                  {forgotStep === "otp" &&
+                    `Enter the 4-digit code sent to ${maskedForgotEmail || "your email"}.`}
+                  {forgotStep === "reset" &&
+                    "Choose a new password for your seller account."}
+                  {!forgotStep && isLogin &&
+                    "Access your multi-shop dashboard, switch stores, and manage operations."}
+                  {!forgotStep && !isLogin &&
+                    "Set up your seller admin profile. You will add individual shops with location and KYC from My Stores after signup."}
                 </p>
               </div>
 
-              {!isLogin && (
-                <div className="grid grid-cols-2 gap-3 md:hidden">
+              {!isLogin && !forgotStep && (
+                <div className="grid grid-cols-2 gap-2.5 md:hidden">
                   {[
                     { icon: Building2, label: "Admin account" },
                     { icon: Layers, label: "Multiple shops" },
                     { icon: ShieldCheck, label: "Per-shop approval" },
                     { icon: Store, label: "One dashboard" },
                   ].map(({ icon: Icon, label }) => (
-                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-slate-500" />
-                      <span className="text-[10px] font-bold text-slate-600">{label}</span>
+                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 flex items-center gap-2 text-left">
+                      <Icon className="h-4 w-4 text-slate-500 shrink-0" />
+                      <span className="text-[10px] font-bold text-slate-600 leading-snug">{label}</span>
                     </div>
                   ))}
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {forgotStep === "email" && (
+                <form onSubmit={handleForgotSendOtp} className="space-y-4 text-left">
+                  <div className="relative group">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                      <Mail size={18} />
+                    </div>
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      inputMode="email"
+                      autoComplete="email"
+                      placeholder="Business Email"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                      value={formData.email}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-xs sm:text-sm font-black tracking-[1.5px] sm:tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
+                    {isLoading ? "SENDING..." : "SEND RESET CODE"}
+                    <ArrowRight className="group-hover:translate-x-2 transition-transform shrink-0" size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exitForgotPassword}
+                    className="w-full flex items-center justify-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
+                    <ArrowLeft size={16} />
+                    Back to login
+                  </button>
+                </form>
+              )}
+
+              {forgotStep === "otp" && (
+                <form onSubmit={handleForgotVerifyOtp} className="space-y-4 text-left">
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      required
+                      placeholder="Enter 4-digit OTP"
+                      value={forgotOtp}
+                      onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                      className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none placeholder:text-slate-400 tracking-[0.3em]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading || forgotOtp.length !== 4}
+                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-xs sm:text-sm font-black tracking-[1.5px] sm:tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
+                    {isLoading ? "VERIFYING..." : "VERIFY OTP"}
+                    <ArrowRight className="group-hover:translate-x-2 transition-transform shrink-0" size={20} />
+                  </button>
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={handleForgotSendOtp}
+                      className="text-sm font-bold text-slate-900 underline underline-offset-2 hover:text-black disabled:opacity-50">
+                      Resend code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep("email")}
+                      className="flex items-center justify-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
+                      <ArrowLeft size={16} />
+                      Change email
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {forgotStep === "reset" && (
+                <form onSubmit={handleForgotResetPassword} className="space-y-4 text-left">
+                  <div className="relative group">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      required
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="New password"
+                      className="w-full pl-12 pr-14 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors px-2"
+                      tabIndex="-1">
+                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <div className="relative group">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      required
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="Confirm new password"
+                      className="w-full pl-12 pr-14 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors px-2"
+                      tabIndex="-1">
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-xs sm:text-sm font-black tracking-[1.5px] sm:tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
+                    {isLoading ? "SAVING..." : "RESET PASSWORD"}
+                    <ArrowRight className="group-hover:translate-x-2 transition-transform shrink-0" size={20} />
+                  </button>
+                </form>
+              )}
+
+              {!forgotStep && (
+              <form onSubmit={handleSubmit} className="space-y-4 text-left">
                     {!isLogin && (
                       <div className="relative group">
                         <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-violet-600 transition-colors">
@@ -719,8 +996,19 @@ const Auth = () => {
                       </button>
                     </div>
 
+                    {isLogin && (
+                      <div className="flex justify-end -mt-1">
+                        <button
+                          type="button"
+                          onClick={openForgotPassword}
+                          className="text-xs font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors">
+                          Forgot password?
+                        </button>
+                      </div>
+                    )}
+
                     {!isLogin && (
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 leading-relaxed">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 leading-relaxed text-left">
                         Shop location, categories, KYC documents, and bank details are collected when you add each shop from <span className="font-bold text-slate-800">My Stores</span> after creating your admin account.
                       </div>
                     )}
@@ -729,22 +1017,24 @@ const Auth = () => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-sm font-black tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
+                    className="w-full bg-slate-900 text-white rounded-lg py-4 text-xs sm:text-sm font-black tracking-[1.5px] sm:tracking-[2px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 group">
                     {isLoading
                       ? "WORKING..."
                       : isLogin
                         ? "ENTER DASHBOARD"
                         : "CREATE ADMIN ACCOUNT"}
                     <ArrowRight
-                      className="group-hover:translate-x-2 transition-transform"
+                      className="group-hover:translate-x-2 transition-transform shrink-0"
                       size={20}
                     />
                   </button>
                 </div>
               </form>
+              )}
 
-              <div className="pt-1 border-t border-slate-50 flex flex-col items-center gap-1">
-                <p className="text-slate-600 font-bold text-sm">
+              {!forgotStep && (
+              <div className="pt-1 border-t border-slate-50 flex flex-col items-center gap-1 text-center">
+                <p className="text-slate-600 font-bold text-sm leading-relaxed">
                   {isLogin ? "New to the platform?" : "Already part of us?"}{" "}
                   <button
                     onClick={() => {
@@ -754,18 +1044,19 @@ const Auth = () => {
                         phone: createInitialVerificationState(),
                       });
                     }}
-                    className="text-slate-900 hover:text-black transition-colors px-2">
+                    className="text-slate-900 hover:text-black transition-colors px-1 underline underline-offset-2">
                     {isLogin ? "Register Seller Admin" : "Sign In"}
                   </button>
                 </p>
               </div>
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
       </motion.div>
 
-      {/* Bottom Tagline */}
-      <div className="absolute bottom-6 flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-[6px]">
+      {/* Bottom Tagline — desktop only */}
+      <div className="hidden md:flex absolute bottom-6 items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-[6px]">
         Empowering Business Digitalization
       </div>
     </div>
