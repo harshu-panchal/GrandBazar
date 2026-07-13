@@ -15,9 +15,16 @@ const statusStyles = {
   rejected: 'bg-rose-500/15 text-rose-300 border-rose-500/20',
 };
 
+const statusStylesSidebar = {
+  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
+  pending: 'bg-amber-50 text-amber-700 border-amber-200/60',
+  rejected: 'bg-rose-50 text-rose-700 border-rose-200/60',
+};
+
 function StoreOption({ store, isActive, isSwitching, onSelect, variant = 'dropdown' }) {
   const status = getStoreStatus(store);
   const statusClass = statusStyles[status] || statusStyles.pending;
+  const statusClassSidebar = statusStylesSidebar[status] || statusStylesSidebar.pending;
 
   if (variant === 'sidebar') {
     return (
@@ -28,22 +35,22 @@ function StoreOption({ store, isActive, isSwitching, onSelect, variant = 'dropdo
         className={cn(
           'w-full text-left rounded-xl px-3 py-2.5 border transition-all',
           isActive
-            ? 'bg-primary/15 border-primary/30 text-white'
-            : 'bg-white/5 border-white/5 text-gray-300 hover:bg-white/10 hover:border-white/10',
+            ? 'bg-primary/10 border-primary/20 text-primary'
+            : 'bg-slate-50 border-slate-100 text-slate-700 hover:bg-slate-100 hover:border-slate-200',
           isSwitching && 'opacity-60 cursor-wait',
         )}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold truncate">{store.shopName}</p>
-            <p className="text-[10px] text-gray-500 truncate mt-0.5">
+            <p className="text-[10px] text-slate-400 truncate mt-0.5">
               {store.city || store.locality || store.address || 'Location not set'}
             </p>
           </div>
           {isActive ? (
             <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
           ) : (
-            <span className={cn('text-[9px] font-black uppercase px-1.5 py-0.5 rounded border shrink-0', statusClass)}>
+            <span className={cn('text-[9px] font-black uppercase px-1.5 py-0.5 rounded border shrink-0', statusClassSidebar)}>
               {status}
             </span>
           )}
@@ -81,14 +88,14 @@ export function StoreSwitcherSidebar() {
   const { stores, activeStore, switchStore, isSwitching } = storeCtx;
 
   return (
-    <div className="px-3 pb-3 border-b border-white/5">
+    <div className="px-3 pb-3 border-b border-slate-100">
       <div className="flex items-center justify-between px-1 mb-2">
-        <p className="text-[9px] font-black uppercase tracking-[0.25em] text-gray-500">
+        <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
           Your stores
         </p>
         {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
       </div>
-      <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar-dark pr-1">
+      <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar-light pr-1">
         {stores.map((store) => {
           const isActive = String(store._id) === String(activeStore?._id);
           return (
