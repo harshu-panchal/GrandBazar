@@ -67,7 +67,7 @@ const SellerRewardCampaigns = () => {
     try {
       setLoading(true);
       const res = await sellerApi.getRewardCampaigns();
-      setCampaigns(res.data?.result ?? []);
+      setCampaigns(res.data?.results ?? res.data?.result ?? []);
     } catch {
       showToast("Failed to load campaigns", "error");
     } finally {

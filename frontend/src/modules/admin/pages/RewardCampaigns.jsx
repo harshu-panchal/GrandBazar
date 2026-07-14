@@ -130,7 +130,7 @@ const RewardCampaigns = () => {
         campaignType: typeFilter === "all" ? undefined : typeFilter,
         search: searchTerm.trim() || undefined,
       });
-      setCampaigns(res.data?.result ?? []);
+      setCampaigns(res.data?.results ?? res.data?.result ?? []);
     } catch {
       showToast("Failed to load campaigns", "error");
     } finally {

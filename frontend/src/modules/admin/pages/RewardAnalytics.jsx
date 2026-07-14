@@ -47,7 +47,7 @@ const RewardAnalytics = () => {
         adminApi.getRewardSettlements(params),
       ]);
       setData(analyticsRes.data?.result ?? null);
-      setSettlements(settlementsRes.data?.result ?? []);
+      setSettlements(settlementsRes.data?.results ?? settlementsRes.data?.result ?? []);
     } catch (err) {
       console.error(err);
     } finally {
