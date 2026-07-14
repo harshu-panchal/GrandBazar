@@ -23,6 +23,9 @@ const DISCOUNT_TYPES = [
   { value: "free_delivery", label: "Free Delivery" },
 ];
 
+const normalizeCouponCode = (code = "") =>
+  String(code).trim().toUpperCase().replace(/\s+/g, " ");
+
 const emptyForm = {
   code: "",
   title: "",
@@ -96,8 +99,15 @@ const SellerCoupons = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const normalizedCode = normalizeCouponCode(formData.code);
+      if (!normalizedCode) {
+        showToast("Coupon code is required", "error");
+        return;
+      }
+
       const payload = {
         ...formData,
+        code: normalizedCode,
         discountValue: Number(formData.discountValue) || 0,
         maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : undefined,
         minOrderValue: formData.minOrderValue ? Number(formData.minOrderValue) : 0,
@@ -142,10 +152,10 @@ const SellerCoupons = () => {
         <button
           type="button"
           onClick={() => openModal()}
-          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-sm font-semibold shadow-sm transition-colors shrink-0"
         >
           <HiOutlinePlus className="w-5 h-5" />
-          Create New Coupon
+          Create Coupon
         </button>
       </div>
 
@@ -169,11 +179,19 @@ const SellerCoupons = () => {
         <p className="text-gray-500">Loading coupons...</p>
       ) : coupons.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-8 text-center">
-          <HiOutlineTag className="w-12 h-12 text-primary-600 mx-auto mb-4" />
+          <HiOutlineTag className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Coupons Yet</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
+          <p className="text-gray-500 max-w-md mx-auto mb-6">
             Create promotional coupons to boost your sales and attract more customers.
           </p>
+          <button
+            type="button"
+            onClick={() => openModal()}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-sm font-semibold shadow-sm transition-colors"
+          >
+            <HiOutlinePlus className="w-5 h-5" />
+            Create Coupon
+          </button>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -258,9 +276,13 @@ const SellerCoupons = () => {
               <input
                 required
                 value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                onChange={(e) =>
+                  setFormData({ ...formData, code: normalizeCouponCode(e.target.value) })
+                }
                 className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
+                placeholder="e.g. SALE20"
               />
+              <p className="mt-1 text-xs text-gray-500">Use letters and numbers; spaces are allowed.</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Title</label>
@@ -349,7 +371,10 @@ const SellerCoupons = () => {
             >
               Cancel
             </button>
-            <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-lg font-medium"
+            >
               {editingCoupon ? "Update" : "Create"}
             </button>
           </div>

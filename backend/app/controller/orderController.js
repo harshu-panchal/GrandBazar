@@ -38,6 +38,7 @@ import { distanceMeters } from "../utils/geoUtils.js";
 import {
   fetchAvailableOrdersForDelivery,
   fetchSellerOrdersPage,
+  attachDeliveryPartners,
 } from "../services/orderQueryService.js";
 import {
   orderMatchQueryFromRouteParam,
@@ -379,10 +380,15 @@ export const getOrderDetails = async (req, res) => {
     let order = await Order.findOne(orderKey)
       .populate("customer", "name email phone")
       .populate("items.product", "name mainImage price salePrice")
-      .populate("deliveryBoy", "name phone")
+      .populate("deliveryBoy", "name phone profileImage")
+      .populate("deliveryPartner", "name phone profileImage")
       .populate("returnDeliveryBoy", "name phone")
       .populate("seller", "shopName name address phone location")
       .lean();
+
+    if (order) {
+      [order] = await attachDeliveryPartners([order]);
+    }
 
     if (!order) {
       if (orderId && orderId.startsWith("CHK-")) {
