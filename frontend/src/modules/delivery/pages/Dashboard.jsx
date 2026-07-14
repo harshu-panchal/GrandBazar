@@ -124,9 +124,15 @@ const Dashboard = () => {
             className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary ring-2 ring-primary/20 shadow-sm cursor-pointer"
             onClick={() => navigate("/delivery/profile")}>
             <img
-              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+              src={
+                user?.profileImage ||
+                `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user?.name || "DP")}`
+              }
               alt="Profile"
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user?.name || "DP")}`;
+              }}
             />
           </div>
           <div
@@ -136,12 +142,19 @@ const Dashboard = () => {
               {user?.name || "Delivery Partner"}
             </h2>
             <div className="flex items-center text-sm font-medium">
-              <span className="flex items-center bg-yellow-50 text-yellow-600 px-1.5 py-0.5 rounded border border-yellow-100">
-                <Star size={12} fill="currentColor" className="mr-1" />
-                4.8
-              </span>
+              {user?.isOnline ? (
+                <span className="flex items-center bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded border border-brand-100">
+                  Online
+                </span>
+              ) : (
+                <span className="flex items-center bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded border border-gray-100">
+                  Offline
+                </span>
+              )}
               <span className="text-gray-300 mx-2">•</span>
-              <span className="ds-caption text-gray-500">ID: 882190</span>
+              <span className="ds-caption text-gray-500">
+                ID: {String(user?._id || user?.id || "").slice(-6).toUpperCase() || "—"}
+              </span>
             </div>
           </div>
         </div>

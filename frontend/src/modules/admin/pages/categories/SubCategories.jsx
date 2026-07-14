@@ -62,6 +62,21 @@ const SubCategories = () => {
     fetchCategories();
   }, []);
 
+  // Cover navbar (via high z-index overlay) and lock page scroll while any modal is open
+  useEffect(() => {
+    if (isAddModalOpen || isDeleteModalOpen) {
+      const prevBody = document.body.style.overflow;
+      const prevHtml = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevBody;
+        document.documentElement.style.overflow = prevHtml;
+      };
+    }
+    return undefined;
+  }, [isAddModalOpen, isDeleteModalOpen]);
+
   const fetchCategories = async () => {
     setIsLoading(true);
     try {
@@ -522,13 +537,17 @@ const SubCategories = () => {
       {/* Add/Edit Modal */}
       <AnimatePresence>
         {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-contain">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden relative z-10"
+              data-lenis-prevent
+              data-lenis-prevent-touch
+              data-lenis-prevent-wheel
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
                 <h2 className="text-lg font-bold text-gray-900">
                   {editingItem ? "Edit Subcategory" : "Add Subcategory"}
                 </h2>
@@ -539,7 +558,12 @@ const SubCategories = () => {
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
+              <div
+                className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain touch-pan-y"
+                tabIndex={0}
+                onWheel={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              >
                 {/* Image Upload */}
                 <div className="flex justify-center">
                   <div
@@ -673,7 +697,7 @@ const SubCategories = () => {
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+              <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 shrink-0">
                 <button
                   onClick={() => setIsAddModalOpen(false)}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">
@@ -697,12 +721,12 @@ const SubCategories = () => {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-contain">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden relative z-10">
               <div className="p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
                   <Trash className="w-6 h-6" />

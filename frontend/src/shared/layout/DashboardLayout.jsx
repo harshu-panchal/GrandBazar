@@ -11,6 +11,7 @@ import { BellRing, Check, X, Clock, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
+import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
 import SellerOrdersContext from '@/modules/seller/context/SellerOrdersContext';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
 import { getOrderSocket, onSellerOrderNew, onReturnDropOtp } from '@/core/services/orderSocket';
@@ -77,30 +78,6 @@ function formatAcceptCountdown(seconds) {
     }
     if (mins === 0) return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     return `${hours}h ${mins}m`;
-}
-
-function getOrderFulfillmentBadge(order) {
-    let type = String(order?.fulfillmentType || '').toLowerCase();
-    if (!type) {
-        type = order?.schedule?.deliveryDate || order?.schedule?.windowLabel ? 'scheduled' : 'instant';
-    }
-
-    if (type === 'scheduled') {
-        return {
-            badgeClassName: 'bg-blue-50 text-blue-700 border-blue-200',
-            label: 'Scheduled',
-        };
-    }
-    if (type === 'preorder') {
-        return {
-            badgeClassName: 'bg-amber-50 text-amber-700 border-amber-200',
-            label: 'Pre-order',
-        };
-    }
-    return {
-        badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        label: 'Instant',
-    };
 }
 
 function isSellerAlertEligible(order) {
@@ -480,7 +457,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const orderTimerUrgent = newOrderAlert
         ? (isRelaxedFulfillment(newOrderAlert) ? timeLeft < 3600 : timeLeft < 15)
         : false;
-    const orderFulfillmentBadge = newOrderAlert ? getOrderFulfillmentBadge(newOrderAlert) : null;
+    const orderFulfillment = newOrderAlert ? getFulfillmentDisplay(newOrderAlert) : null;
 
     return (
         <div className="min-h-screen mesh-gradient-light relative overflow-x-hidden">
@@ -533,15 +510,25 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                 </div>
 
                                 <h2 className="text-2xl font-black text-slate-900 mb-2">New Order Received!</h2>
-                                {orderFulfillmentBadge && (
-                                    <span
-                                        className={cn(
-                                            'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border mb-4',
-                                            orderFulfillmentBadge.badgeClassName,
-                                        )}
-                                    >
-                                        {orderFulfillmentBadge.label}
-                                    </span>
+                                {orderFulfillment && (
+                                    <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4">
+                                        <span
+                                            className={cn(
+                                                'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border',
+                                                orderFulfillment.typeBadgeClassName,
+                                            )}
+                                        >
+                                            {orderFulfillment.typeLabel}
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border',
+                                                orderFulfillment.methodBadgeClassName,
+                                            )}
+                                        >
+                                            {orderFulfillment.methodLabel}
+                                        </span>
+                                    </div>
                                 )}
                                 <p className="text-slate-600 font-medium mb-6">
                                     You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span>.

@@ -117,6 +117,21 @@ const HeaderCategories = () => {
     return () => clearTimeout(timer);
   }, [searchTerm, pageSize]);
 
+  // Cover navbar (via high z-index overlay) and lock page scroll while any modal is open
+  useEffect(() => {
+    if (isAddModalOpen || isDeleteModalOpen || isIconSelectorOpen) {
+      const prevBody = document.body.style.overflow;
+      const prevHtml = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevBody;
+        document.documentElement.style.overflow = prevHtml;
+      };
+    }
+    return undefined;
+  }, [isAddModalOpen, isDeleteModalOpen, isIconSelectorOpen]);
+
   const fetchCategories = async (requestedPage = 1) => {
     setIsLoading(true);
     try {
@@ -472,12 +487,16 @@ const HeaderCategories = () => {
       {/* Add/Edit Modal */}
       <AnimatePresence>
         {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-contain">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden relative z-10"
+              data-lenis-prevent
+              data-lenis-prevent-touch
+              data-lenis-prevent-wheel
+            >
               <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
                 <h2 className="text-lg font-bold text-gray-900">
                   {editingItem ? "Edit Header Category" : "Add Header Category"}
@@ -809,12 +828,12 @@ const HeaderCategories = () => {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-hidden overscroll-contain">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden relative z-10">
               <div className="p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
                   <Trash2 className="w-6 h-6" />

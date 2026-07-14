@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
+import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 
 const OrderDetail = () => {
     const { orderId } = useParams();
@@ -264,6 +265,22 @@ const OrderDetail = () => {
                             <Calendar className="h-3.5 w-3.5" />
                             {new Date(order.createdAt).toLocaleDateString()} • <Clock className="h-3.5 w-3.5 ml-1" /> {new Date(order.createdAt).toLocaleTimeString()}
                         </p>
+                        {(() => {
+                            const fulfillment = getFulfillmentDisplay(order);
+                            return (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.typeBadgeClassName)}>
+                                        {fulfillment.typeLabel}
+                                    </Badge>
+                                    <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.methodBadgeClassName)}>
+                                        {fulfillment.methodLabel}
+                                    </Badge>
+                                    <span className="text-[10px] font-bold text-slate-500 normal-case tracking-normal">
+                                        {fulfillment.detail}
+                                    </span>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -411,6 +428,27 @@ const OrderDetail = () => {
                             </div>
                         </div>
                         <div className="space-y-6 text-left mt-6">
+                            {(() => {
+                                const fulfillment = getFulfillmentDisplay(order);
+                                return (
+                                    <div className="p-4 bg-brand-50 rounded-2xl border border-brand-100 space-y-2">
+                                        <span className="text-[10px] font-black text-brand-700 uppercase tracking-widest">
+                                            Delivery Type
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.typeBadgeClassName)}>
+                                                {fulfillment.typeLabel}
+                                            </Badge>
+                                            <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.methodBadgeClassName)}>
+                                                {fulfillment.methodLabel}
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-600">
+                                            {fulfillment.detail}
+                                        </p>
+                                    </div>
+                                );
+                            })()}
                             <div className="flex flex-col gap-2">
                                 <span className="text-[10px] font-bold text-slate-400 flex items-center gap-3">
                                     <Mail className="h-3.5 w-3.5" /> {order.customer?.email}
