@@ -16,8 +16,12 @@ import { useAuth } from '@core/context/AuthContext';
 
 const BottomNav = ({ navItems }) => {
     const { role } = useAuth();
-    const isLightTheme = role === 'admin' || role === 'seller';
     const location = useLocation();
+    const isLightTheme =
+      role === 'admin' ||
+      role === 'seller' ||
+      location.pathname.startsWith('/admin') ||
+      location.pathname.startsWith('/seller');
 
     // Define the primary bottom nav items based on user role
     const primaryItems = role === 'admin' ? [

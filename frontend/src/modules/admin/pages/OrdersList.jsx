@@ -28,6 +28,7 @@ import {
     getLegacyStatusFromOrder,
     adminRouteMatchesOrder,
 } from '@/shared/utils/orderStatus';
+import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 
 const OrdersList = () => {
     const { status = 'all' } = useParams();
@@ -113,6 +114,10 @@ const OrdersList = () => {
                     cancellationRequestStatus: o.cancellationRequest?.status || 'none',
                     cancellationRequestReason: o.cancellationRequest?.reason || '',
                     returnStatus: o.returnStatus,
+                    fulfillmentType: o.fulfillmentType || 'instant',
+                    logisticsMode: o.logisticsMode || null,
+                    fulfillmentMethod: resolveFulfillmentMethod(o),
+                    schedule: o.schedule || null,
                     date: new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
                     payment: o.payment?.method === 'cod' ? 'COD' : 'Digital',
                 }));
@@ -433,6 +438,19 @@ const OrdersList = () => {
                                                     <span className="text-[10px] font-bold text-slate-300">•</span>
                                                     <span className="text-[10px] font-bold text-slate-400">{order.date}</span>
                                                 </div>
+                                                {(() => {
+                                                    const fulfillment = getFulfillmentDisplay(order);
+                                                    return (
+                                                        <div className="mt-1.5 flex flex-wrap gap-1">
+                                                            <Badge className={cn('text-[8px] font-black uppercase border', fulfillment.typeBadgeClassName)}>
+                                                                {fulfillment.typeLabel}
+                                                            </Badge>
+                                                            <Badge className={cn('text-[8px] font-black uppercase border', fulfillment.methodBadgeClassName)}>
+                                                                {fulfillment.methodLabel}
+                                                            </Badge>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </td>

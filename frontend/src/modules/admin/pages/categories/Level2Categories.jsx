@@ -65,14 +65,17 @@ const Level2Categories = () => {
   }, []);
 
   useEffect(() => {
-    const modalOpen = isAddModalOpen || isDeleteModalOpen;
-    if (!modalOpen) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
+    if (isAddModalOpen || isDeleteModalOpen) {
+      const prevBody = document.body.style.overflow;
+      const prevHtml = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevBody;
+        document.documentElement.style.overflow = prevHtml;
+      };
+    }
+    return undefined;
   }, [isAddModalOpen, isDeleteModalOpen]);
 
   const fetchCategories = async () => {

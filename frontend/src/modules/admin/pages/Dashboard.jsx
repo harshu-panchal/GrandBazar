@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import PageHeader from '@shared/components/ui/PageHeader';
 import StatCard from '@shared/components/ui/StatCard';
@@ -9,9 +10,6 @@ import {
     Store,
     Truck,
     BarChart3,
-    Activity,
-    Database,
-    RotateCw,
     Loader2
 } from 'lucide-react';
 import {
@@ -30,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
     const [statsData, setStatsData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -90,7 +89,8 @@ const AdminDashboard = () => {
             color: 'text-brand-600',
             bg: 'bg-brand-50',
             trend: '+12.5%',
-            description: 'Active this month'
+            description: 'Active this month',
+            path: '/admin/customers',
         },
         {
             label: 'Active Sellers',
@@ -99,7 +99,8 @@ const AdminDashboard = () => {
             color: 'text-purple-600',
             bg: 'bg-purple-50',
             trend: '+5.2%',
-            description: 'Verified stores'
+            description: 'Verified stores',
+            path: '/admin/sellers/active',
         },
         {
             label: 'Total Orders',
@@ -108,7 +109,8 @@ const AdminDashboard = () => {
             color: 'text-orange-600',
             bg: 'bg-orange-50',
             trend: '+18.4%',
-            description: 'Last 30 days'
+            description: 'Last 30 days',
+            path: '/admin/orders/all',
         },
         {
             label: 'Revenue',
@@ -117,7 +119,8 @@ const AdminDashboard = () => {
             color: 'text-brand-600',
             bg: 'bg-brand-50',
             trend: '+8.2%',
-            description: 'Net earnings'
+            description: 'Net earnings',
+            path: '/admin/billing',
         },
     ];
 
@@ -153,6 +156,7 @@ const AdminDashboard = () => {
                         color={stat.color}
                         bg={stat.bg}
                         className={cn("ring-1 ring-gray-100", stat.bg + "/30")}
+                        onClick={() => navigate(stat.path)}
                     />
                 ))}
             </div>
@@ -224,7 +228,6 @@ const AdminDashboard = () => {
                                 <PieChart>
                                     <Pie
                                         data={categoryData}
-
                                         cx="50%"
                                         cy="50%"
                                         innerRadius={60}
@@ -279,7 +282,11 @@ const AdminDashboard = () => {
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                     {recentOrders.map((order) => (
-                                        <tr key={order.id} className="group hover:bg-gray-50/50 transition-all">
+                                        <tr
+                                            key={order.id}
+                                            className="group hover:bg-gray-50/50 transition-all cursor-pointer"
+                                            onClick={() => navigate('/admin/orders/all')}
+                                        >
                                             <td className="py-4 text-sm font-semibold text-primary">{order.id}</td>
                                             <td className="py-4">
                                                 <div className="flex items-center space-x-2">
@@ -301,7 +308,11 @@ const AdminDashboard = () => {
                                 </tbody>
                             </table>
                         </div>
-                        <button className="w-full mt-6 py-3 rounded-xl bg-gray-50 text-xs font-bold text-gray-500 hover:bg-primary hover:text-white transition-all">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/orders/all')}
+                            className="w-full mt-6 py-3 rounded-xl bg-gray-50 text-xs font-bold text-gray-500 hover:bg-primary hover:text-white transition-all"
+                        >
                             VIEW ALL ORDERS
                         </button>
                     </Card>
@@ -316,7 +327,11 @@ const AdminDashboard = () => {
                     >
                         <div className="space-y-4">
                             {topProducts.length > 0 ? topProducts.map((product, i) => (
-                                <div key={i} className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100 group">
+                                <div
+                                    key={i}
+                                    className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100 group cursor-pointer"
+                                    onClick={() => navigate('/admin/products')}
+                                >
                                     <div className="flex items-center space-x-3">
                                         <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform overflow-hidden", !product.image ? (product.color + " text-2xl") : "bg-gray-50")}>
                                             {product.image ? (
@@ -339,7 +354,11 @@ const AdminDashboard = () => {
                                 <div className="py-12 text-center text-slate-300 italic text-xs">No sales data yet</div>
                             )}
                         </div>
-                        <button className="w-full mt-6 py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-primary hover:text-primary transition-all">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/products')}
+                            className="w-full mt-6 py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-primary hover:text-primary transition-all"
+                        >
                             VIEW ALL PRODUCTS
                         </button>
                     </Card>
@@ -350,4 +369,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-

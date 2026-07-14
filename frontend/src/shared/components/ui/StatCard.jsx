@@ -19,9 +19,21 @@ const StatCard = ({
             onClick={onClick}
             className={cn(
                 "ds-stat-card group",
-                onClick && "cursor-pointer",
+                onClick && "cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
                 className
             )}
+            role={onClick ? "button" : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={
+                onClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onClick(e);
+                        }
+                    }
+                    : undefined
+            }
         >
             <div className="flex flex-col space-y-3">
                 <div className="flex justify-between items-start">

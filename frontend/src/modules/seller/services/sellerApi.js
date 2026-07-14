@@ -46,6 +46,7 @@ export const sellerApi = {
     // Others
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
+    getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
     getEarnings: () => axiosInstance.get('/seller/earnings'),
     getWalletSummary: () => axiosInstance.get('/seller/wallet/summary'),

@@ -33,6 +33,7 @@ import ShimmerButton from '@/components/ui/shimmer-button';
 import { sellerApi } from '../services/sellerApi';
 import { useToast } from '@shared/components/ui/Toast';
 import { getLegacyStatusFromOrder, getOrderStatusLabel, isScheduledHoldOrder, canSellerManuallyUpdateStatus } from '@/shared/utils/orderStatus';
+import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 import { getSellerOrderPayout, getCustomerOrderTotal, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
@@ -217,6 +218,8 @@ const Orders = () => {
                 workflowStatus: order.workflowStatus,
                 workflowVersion: order.workflowVersion,
                 fulfillmentType: order.fulfillmentType || 'instant',
+                logisticsMode: order.logisticsMode || null,
+                fulfillmentMethod: resolveFulfillmentMethod(order),
                 schedule: order.schedule || null,
                 reschedule: order.reschedule || null,
                 priceAdjustment: order.priceAdjustment || null,
@@ -338,49 +341,30 @@ const Orders = () => {
         }
     };
 
-    const getFulfillmentDisplay = (order) => {
-        const type = String(order.fulfillmentType || 'instant').toLowerCase();
-        const deliveryDate = order.schedule?.deliveryDate;
-        const windowLabel = order.schedule?.windowLabel;
-        const formattedDate = deliveryDate
-            ? new Date(deliveryDate).toLocaleDateString('en-IN', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-            })
-            : null;
-
-        if (type === 'scheduled') {
-            return {
-                badgeClassName: 'bg-blue-50 text-blue-700 border-blue-200',
-                label: 'Scheduled',
-                detail: formattedDate
-                    ? `${formattedDate}${windowLabel ? ` · ${windowLabel}` : ''}`
-                    : windowLabel || 'Future delivery',
-            };
-        }
-        if (type === 'preorder') {
-            return {
-                badgeClassName: 'bg-amber-50 text-amber-700 border-amber-200',
-                label: 'Pre-order',
-                detail: formattedDate
-                    ? `${formattedDate}${windowLabel ? ` · ${windowLabel}` : ''}`
-                    : 'Campaign delivery',
-            };
-        }
-        return {
-            badgeClassName: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            label: 'Instant',
-            detail: 'Deliver now',
-        };
-    };
-
-    const handleViewDetails = (order) => {
+    const handleViewDetails = async (order) => {
         setSelectedOrder(order);
         setAdjustMode(false);
         setAdjustItems([]);
         setAdjustReason('');
         setIsDetailsModalOpen(true);
+
+        try {
+            const response = await sellerApi.getOrderDetails(order.id);
+            if (response.data?.success) {
+                const full = response.data.result || {};
+                setSelectedOrder((prev) => ({
+                    ...prev,
+                    fulfillmentType: full.fulfillmentType || prev?.fulfillmentType,
+                    logisticsMode: full.logisticsMode || prev?.logisticsMode,
+                    workflowStatus: full.workflowStatus || prev?.workflowStatus,
+                    fulfillmentMethod: resolveFulfillmentMethod(full),
+                    schedule: full.schedule || prev?.schedule,
+                    reschedule: full.reschedule || prev?.reschedule,
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to load order fulfillment details:', error);
+        }
     };
 
     const handleStatusUpdate = async (orderId, newStatus, additionalData = {}) => {
@@ -880,9 +864,14 @@ const Orders = () => {
                                                         const fulfillment = getFulfillmentDisplay(order);
                                                         return (
                                                             <div className="mt-1.5 flex flex-col gap-0.5">
-                                                                <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.badgeClassName)}>
-                                                                    {fulfillment.label}
-                                                                </Badge>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.typeBadgeClassName)}>
+                                                                        {fulfillment.typeLabel}
+                                                                    </Badge>
+                                                                    <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.methodBadgeClassName)}>
+                                                                        {fulfillment.methodLabel}
+                                                                    </Badge>
+                                                                </div>
                                                                 <span className="text-[10px] font-semibold text-slate-500">{fulfillment.detail}</span>
                                                             </div>
                                                         );
@@ -956,9 +945,14 @@ const Orders = () => {
                                                                 const fulfillment = getFulfillmentDisplay(order);
                                                                 return (
                                                                     <div className="mt-1.5 flex flex-col gap-0.5">
-                                                                        <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.badgeClassName)}>
-                                                                            {fulfillment.label}
-                                                                        </Badge>
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.typeBadgeClassName)}>
+                                                                                {fulfillment.typeLabel}
+                                                                            </Badge>
+                                                                            <Badge className={cn('text-[9px] font-bold uppercase w-fit', fulfillment.methodBadgeClassName)}>
+                                                                                {fulfillment.methodLabel}
+                                                                            </Badge>
+                                                                        </div>
                                                                         <span className="text-[10px] font-semibold text-slate-500">{fulfillment.detail}</span>
                                                                     </div>
                                                                 );
@@ -1322,21 +1316,32 @@ const Orders = () => {
                                             </div>
                                         </div>
 
-                                        {(selectedOrder.fulfillmentType && selectedOrder.fulfillmentType !== 'instant') && (
-                                            <div className="mb-4 p-3 rounded-2xl bg-brand-50 ring-1 ring-brand-100">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-600">{selectedOrder.fulfillmentType} order</p>
-                                                {selectedOrder.schedule?.deliveryDate && (
-                                                    <p className="text-xs font-semibold text-slate-700 mt-1">
-                                                        Delivery: {new Date(selectedOrder.schedule.deliveryDate).toLocaleDateString()} {selectedOrder.schedule.windowLabel ? `(${selectedOrder.schedule.windowLabel})` : ''}
+                                        {(() => {
+                                            const fulfillment = getFulfillmentDisplay(selectedOrder);
+                                            return (
+                                                <div className="mb-4 p-3 rounded-2xl bg-brand-50 ring-1 ring-brand-100">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-600 mb-2">
+                                                        Delivery type
                                                     </p>
-                                                )}
-                                                {isScheduledHoldOrder(selectedOrder) && (
-                                                    <p className="text-xs font-semibold text-blue-700 mt-2">
-                                                        Accepted and on hold. Logistics will start automatically before the delivery window.
+                                                    <div className="flex flex-wrap gap-1.5 mb-2">
+                                                        <Badge className={cn('text-[9px] font-bold uppercase', fulfillment.typeBadgeClassName)}>
+                                                            {fulfillment.typeLabel}
+                                                        </Badge>
+                                                        <Badge className={cn('text-[9px] font-bold uppercase', fulfillment.methodBadgeClassName)}>
+                                                            {fulfillment.methodLabel}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs font-semibold text-slate-700">
+                                                        {fulfillment.detail}
                                                     </p>
-                                                )}
-                                            </div>
-                                        )}
+                                                    {isScheduledHoldOrder(selectedOrder) && (
+                                                        <p className="text-xs font-semibold text-blue-700 mt-2">
+                                                            Accepted and on hold. Logistics will start automatically before the delivery window.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                         {selectedOrder.reschedule?.status === 'requested' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200">
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Reschedule Requested</p>

@@ -43,8 +43,12 @@ const SidebarItem = ({
   onMouseLeave,
 }) => {
   const { role } = useAuth();
-  const isLightTheme = role === "admin" || role === "seller";
   const location = useLocation();
+  const isLightTheme =
+    role === "admin" ||
+    role === "seller" ||
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/seller");
   const badgeCount = Number(item?.badgeCount || 0);
   const badgeLabel = badgeCount > 99 ? "99+" : String(badgeCount);
 
@@ -256,7 +260,12 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
   const { settings } = useSettings();
   const appName = settings?.appName || 'App';
   const { role } = useAuth();
-  const isLightTheme = role === "admin" || role === "seller";
+  const location = useLocation();
+  const isLightTheme =
+    role === "admin" ||
+    role === "seller" ||
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/seller");
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -397,7 +406,12 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
 
 const Sidebar = ({ items, title, isOpen, onClose }) => {
   const { role } = useAuth();
-  const isLightTheme = role === "admin" || role === "seller";
+  const location = useLocation();
+  const isLightTheme =
+    role === "admin" ||
+    role === "seller" ||
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/seller");
   const [openMenu, setOpenMenu] = useState(null);
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
