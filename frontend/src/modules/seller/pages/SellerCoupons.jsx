@@ -8,6 +8,11 @@ import {
 import { useToast } from "@shared/components/ui/Toast";
 import Modal from "@shared/components/ui/Modal";
 import { sellerApi } from "../services/sellerApi";
+import {
+  getCouponStatus,
+  getCouponStatusClassName,
+  getCouponStatusLabel,
+} from "@shared/utils/couponStatus";
 
 const COUPON_TYPES = [
   { value: "generic", label: "Generic" },
@@ -68,7 +73,7 @@ const SellerCoupons = () => {
   const stats = useMemo(
     () => ({
       total: coupons.length,
-      active: coupons.filter((c) => c.isActive).length,
+      active: coupons.filter((c) => getCouponStatus(c) === "active").length,
       redeemed: coupons.reduce((sum, c) => sum + (c.usedCount || 0), 0),
     }),
     [coupons],
@@ -211,7 +216,9 @@ const SellerCoupons = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {coupons.map((coupon) => (
+              {coupons.map((coupon) => {
+                const status = getCouponStatus(coupon);
+                return (
                 <tr key={coupon._id}>
                   <td className="px-4 py-3 font-mono text-sm">{coupon.code}</td>
                   <td className="px-4 py-3 text-sm">{coupon.title || "—"}</td>
@@ -230,13 +237,9 @@ const SellerCoupons = () => {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        coupon.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`text-xs px-2 py-1 rounded-full ${getCouponStatusClassName(status)}`}
                     >
-                      {coupon.isActive ? "Active" : "Inactive"}
+                      {getCouponStatusLabel(status)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -258,7 +261,8 @@ const SellerCoupons = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>

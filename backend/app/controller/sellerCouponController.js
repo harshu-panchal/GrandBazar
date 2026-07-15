@@ -1,5 +1,6 @@
 import Coupon from "../models/coupon.js";
 import mongoose from "mongoose";
+import { normalizeCouponDateInput } from "../services/couponEligibilityService.js";
 
 const normalizeCouponCode = (code = "") =>
   String(code).trim().toUpperCase().replace(/\s+/g, " ");
@@ -58,8 +59,8 @@ export const createSellerCoupon = async (req, res) => {
             discountValue,
             maxDiscount,
             minOrderValue,
-            validFrom,
-            validTill,
+            validFrom: normalizeCouponDateInput(validFrom, "start"),
+            validTill: normalizeCouponDateInput(validTill, "end"),
             isActive: isActive !== undefined ? isActive : true,
             couponType: "generic"
         });
@@ -125,6 +126,13 @@ export const updateSellerCoupon = async (req, res) => {
             }
 
             updates.code = normalizedCode;
+        }
+
+        if (updates.validFrom) {
+            updates.validFrom = normalizeCouponDateInput(updates.validFrom, "start");
+        }
+        if (updates.validTill) {
+            updates.validTill = normalizeCouponDateInput(updates.validTill, "end");
         }
 
         const coupon = await Coupon.findOneAndUpdate(

@@ -91,7 +91,11 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
       preOrderCampaignId: validated.preOrderCampaignId,
       tipAmount: validated.tipAmount || 0,
       walletAmount: validated.walletAmount || 0,
+      // Only one coupon allowed per checkout
       couponId: validated.couponId || null,
+      couponCode: validated.couponCode || null,
+      discountTotal: validated.discountTotal || 0,
+      freeDelivery: Boolean(validated.freeDelivery),
     };
     const idempotencyKey = String(req.headers["idempotency-key"] || "").trim() || null;
 

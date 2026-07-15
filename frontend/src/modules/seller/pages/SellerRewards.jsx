@@ -40,7 +40,7 @@ const SellerRewards = () => {
           sellerApi.getRewardCampaigns(),
         ]);
         setAnalytics(analyticsRes.data?.result ?? null);
-        setCampaigns(campaignsRes.data?.result ?? []);
+        setCampaigns(campaignsRes.data?.results ?? campaignsRes.data?.result ?? []);
       } catch (e) {
         console.error(e);
       } finally {

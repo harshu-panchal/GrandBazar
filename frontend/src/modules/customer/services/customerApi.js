@@ -157,7 +157,8 @@ export const customerApi = {
 
   // Coupons
   validateCoupon: (data) => axiosInstance.post("/coupons/validate", data),
-  getActiveCoupons: () => getWithDedupe("/coupons", { status: "active" }),
+  getActiveCoupons: (params = {}, options = {}) =>
+    getWithDedupe("/coupons", { status: "active", ...params }, { ttl: 5000, ...options }),
 
   // Rewards
   getRewardSummary: () => getWithDedupe("/rewards/customer/summary", {}, { ttl: 5000 }),

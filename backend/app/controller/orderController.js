@@ -16,8 +16,7 @@ import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS } from "../constants/orderWo
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import {
   afterPlaceOrderV2,
-  sellerAcceptAtomic,
-  sellerRejectAtomic,
+  sellerUpdateStatusAtomic,
   deliveryAcceptAtomic,
   customerCancelV2,
   requestCustomerCancellationApproval,
@@ -913,22 +912,19 @@ export const updateOrderStatus = async (req, res) => {
 
     const canonicalOrderId = order.orderId;
 
-    if (order.workflowVersion >= 2 && role === "seller") {
-      if (status === "confirmed") {
-        try {
-          const updated = await sellerAcceptAtomic(userId, canonicalOrderId);
-          return handleResponse(res, 200, "Order accepted", updated);
-        } catch (e) {
-          return handleResponse(res, e.statusCode || 500, e.message);
+    if (order.workflowVersion >= 2 && role === "seller" && status) {
+      try {
+        const updated = await sellerUpdateStatusAtomic(
+          userId,
+          canonicalOrderId,
+          String(status).toLowerCase(),
+        );
+        if (updated) {
+          return handleResponse(res, 200, "Order status updated", updated);
         }
-      }
-      if (status === "cancelled") {
-        try {
-          const updated = await sellerRejectAtomic(userId, canonicalOrderId);
-          return handleResponse(res, 200, "Order rejected", updated);
-        } catch (e) {
-          return handleResponse(res, e.statusCode || 500, e.message);
-        }
+        // null => legacy order path below (workflowVersion check already done, so shouldn't happen)
+      } catch (e) {
+        return handleResponse(res, e.statusCode || 500, e.message || "Failed to update status");
       }
     }
 

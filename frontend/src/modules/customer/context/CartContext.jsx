@@ -29,9 +29,12 @@ export const CartProvider = ({ children }) => {
       const product = item.productId;
       const variantKey = String(item.variantSku || "").trim();
       const { price, salePrice, variantName } = resolveVariantPricing(product, variantKey);
+      const sellerId =
+        product?.sellerId?._id || product?.sellerId || product?.branch?._id || product?.branch || null;
       return {
         ...product,
         id: product?._id, // Normalize ID
+        sellerId: sellerId ? String(sellerId) : product?.sellerId,
         quantity: item.quantity,
         variantSku: variantKey,
         variantName,

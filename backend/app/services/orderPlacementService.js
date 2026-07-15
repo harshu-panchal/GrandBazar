@@ -7,6 +7,7 @@ import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import Coupon from "../models/coupon.js";
 import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
+import { applySingleCoupon } from "./couponApplicationService.js";
 import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS, FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
@@ -360,12 +361,50 @@ export async function placeOrderAtomic({
       session,
     });
 
+    // Enforce exactly one coupon per order — re-validate server-side
+    let resolvedDiscountTotal = 0;
+    let resolvedFreeDelivery = false;
+    let resolvedCouponId = null;
+    let resolvedCouponCode = null;
+    const requestedCouponId = normalizedPayload.couponId || null;
+    const requestedCouponCode = normalizedPayload.couponCode || null;
+
+    if (requestedCouponId || requestedCouponCode) {
+      const hydratedForCoupon = await hydrateOrderItems(orderItemsInput, {
+        session,
+        enforceServerPricing: true,
+      });
+      const cartTotalForCoupon = hydratedForCoupon.reduce((sum, item) => {
+        const price = Number(item.price || 0);
+        const qty = Number(item.quantity || 1);
+        return sum + price * qty;
+      }, 0);
+
+      const applied = await applySingleCoupon({
+        code: requestedCouponCode,
+        couponId: requestedCouponId,
+        cartTotal: cartTotalForCoupon,
+        items: hydratedForCoupon,
+        customerId,
+      });
+
+      resolvedCouponId = applied.couponId;
+      resolvedCouponCode = applied.code;
+      resolvedDiscountTotal = Math.max(0, Number(applied.discountAmount || 0));
+      resolvedFreeDelivery = Boolean(applied.freeDelivery);
+    }
+
+    normalizedPayload.couponId = resolvedCouponId;
+    normalizedPayload.couponCode = resolvedCouponCode;
+    normalizedPayload.discountTotal = resolvedDiscountTotal;
+    normalizedPayload.freeDelivery = resolvedFreeDelivery;
+
     const pricingSnapshot = await buildCheckoutPricingSnapshot({
       orderItems: orderItemsInput,
       address: normalizedAddress,
       tipAmount,
-      discountTotal: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
-      freeDelivery: Boolean(normalizedPayload.freeDelivery),
+      discountTotal: resolvedDiscountTotal,
+      freeDelivery: resolvedFreeDelivery,
       session,
       fulfillmentMethod: normalizedPayload.fulfillmentMethod || null,
       fulfillmentMethodBySeller: await resolveFulfillmentMethodsForCheckout({

@@ -303,7 +303,15 @@ export const getSellerEarnings = async (req, res) => {
 
         const transactions = await Transaction.find({ user: sellerId, userModel: 'Seller' })
             .sort({ createdAt: -1 })
-            .populate("order", "orderId");
+            .populate({
+                path: "order",
+                select:
+                    "orderId status pricing payment address paymentBreakdown items createdAt customer",
+                populate: {
+                    path: "customer",
+                    select: "name phone email",
+                },
+            });
 
         const settledBalance = transactions
             .filter(t => t.status === 'Settled')
@@ -385,16 +393,62 @@ export const getSellerEarnings = async (req, res) => {
                 totalWithdrawn: totalWithdrawn
             },
             monthlyChart: chartData,
-            ledger: transactions.map(t => ({
-                id: (t.reference || t._id).toString(),
-                type: t.type,
-                amount: t.amount,
-                status: t.status,
-                date: t.createdAt.toISOString().split('T')[0],
-                time: t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                customer: t.type === 'Withdrawal' ? 'Bank Transfer' : 'Customer',
-                ref: t.order ? `#${t.order.orderId}` : t.reference || t._id
-            }))
+            ledger: transactions.map((t) => {
+                const order = t.order || null;
+                const customerDoc = order?.customer || null;
+                const customerName =
+                    order?.address?.name ||
+                    customerDoc?.name ||
+                    (t.type === "Withdrawal" ? "Bank Transfer" : "Customer");
+                const customerPhone =
+                    order?.address?.phone || customerDoc?.phone || "";
+                const customerEmail = customerDoc?.email || "";
+                const orderTotal = Number(
+                    order?.paymentBreakdown?.grandTotal ??
+                        order?.pricing?.total ??
+                        0,
+                );
+                const sellerPayout = Number(
+                    order?.paymentBreakdown?.sellerPayoutTotal ?? 0,
+                );
+                const itemCount = Array.isArray(order?.items)
+                    ? order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                    : 0;
+                const itemsSummary = Array.isArray(order?.items)
+                    ? order.items
+                          .map((item) => `${item.name || "Item"} × ${item.quantity || 1}`)
+                          .join(", ")
+                    : "";
+
+                return {
+                    id: (t.reference || t._id).toString(),
+                    type: t.type,
+                    amount: t.amount,
+                    status: t.status,
+                    date: t.createdAt.toISOString().split("T")[0],
+                    time: t.createdAt.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    }),
+                    createdAt: t.createdAt,
+                    customer: customerName,
+                    customerName,
+                    customerPhone,
+                    customerEmail,
+                    orderId: order?.orderId || null,
+                    orderMongoId: order?._id ? String(order._id) : null,
+                    orderStatus: order?.status || null,
+                    orderTotal,
+                    sellerPayout,
+                    paymentMethod: order?.payment?.method || null,
+                    paymentStatus: order?.payment?.status || null,
+                    itemCount,
+                    itemsSummary,
+                    ref: order?.orderId
+                        ? `#${order.orderId}`
+                        : t.reference || String(t._id),
+                };
+            }),
         });
     } catch (error) {
         return handleResponse(res, 500, error.message);

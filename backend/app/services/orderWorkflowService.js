@@ -36,6 +36,7 @@ import {
   resolveStoreDeliveryPolicy,
 } from "./deliveryOptionResolver.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
+import { assertTransition } from "./orderStateMachine.js";
 import {
   scheduleOrderActivationJob,
 } from "./orderSchedulingService.js";
@@ -522,6 +523,172 @@ export async function sellerRejectAtomic(sellerId, orderId) {
     sellerMessage: `Order #${order.orderId} was cancelled.`,
   });
   return order;
+}
+
+/**
+ * Seller advances order after accept (self-delivery / external / customer pickup).
+ * Platform logistics (rider flow) is rejected — rider updates those statuses.
+ */
+export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStatus) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const legacy = String(nextLegacyStatus || "").toLowerCase();
+
+  const order = await Order.findOne({ orderId, seller: sellerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (Number(order.workflowVersion) < 2) {
+    return null; // caller falls back to legacy path
+  }
+
+  const ws = String(order.workflowStatus || "").toUpperCase();
+  const method = String(
+    order.fulfillmentMethod ||
+      (order.logisticsMode === "external"
+        ? FULFILLMENT_METHOD.SELLER_DELIVERY
+        : order.logisticsMode === "pickup"
+          ? FULFILLMENT_METHOD.CUSTOMER_PICKUP
+          : FULFILLMENT_METHOD.PLATFORM_LOGISTICS),
+  ).toLowerCase();
+
+  const alreadyAccepted =
+    ws &&
+    ws !== WORKFLOW_STATUS.SELLER_PENDING &&
+    ws !== WORKFLOW_STATUS.CREATED &&
+    ws !== WORKFLOW_STATUS.PREORDER_HOLD;
+
+  if (legacy === "confirmed") {
+    if (alreadyAccepted) {
+      return order; // idempotent
+    }
+    return sellerAcceptAtomic(sellerId, orderId);
+  }
+
+  if (legacy === "cancelled") {
+    if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
+      return sellerRejectAtomic(sellerId, orderId);
+    }
+    const err = new Error(
+      "This order can no longer be cancelled from here. Use cancellation approval flow if needed.",
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const platformManaged =
+    method === FULFILLMENT_METHOD.PLATFORM_LOGISTICS ||
+    order.logisticsMode === "zinto" ||
+    [
+      WORKFLOW_STATUS.DELIVERY_SEARCH,
+      WORKFLOW_STATUS.DELIVERY_ASSIGNED,
+      WORKFLOW_STATUS.PICKUP_READY,
+      WORKFLOW_STATUS.OUT_FOR_DELIVERY,
+    ].includes(ws);
+
+  if (
+    platformManaged &&
+    method !== FULFILLMENT_METHOD.SELLER_DELIVERY &&
+    method !== FULFILLMENT_METHOD.CUSTOMER_PICKUP &&
+    ["packed", "out_for_delivery", "delivered", "ready_for_pickup"].includes(legacy)
+  ) {
+    const err = new Error(
+      "Platform delivery statuses are updated by the delivery partner after you accept the order.",
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
+  let nextWorkflow = null;
+  if (legacy === "packed" || legacy === "ready_for_pickup") {
+    nextWorkflow =
+      method === FULFILLMENT_METHOD.CUSTOMER_PICKUP
+        ? WORKFLOW_STATUS.CUSTOMER_PICKUP_READY
+        : WORKFLOW_STATUS.PICKUP_READY;
+  } else if (legacy === "out_for_delivery") {
+    nextWorkflow = WORKFLOW_STATUS.OUT_FOR_DELIVERY;
+  } else if (legacy === "delivered") {
+    nextWorkflow = WORKFLOW_STATUS.DELIVERED;
+  } else {
+    const err = new Error(`Unsupported status update: ${legacy}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  assertTransition(ws, nextWorkflow);
+
+  const now = new Date();
+  const $set = {
+    workflowStatus: nextWorkflow,
+    status: legacyStatusFromWorkflow(nextWorkflow),
+    orderStatus: legacyStatusFromWorkflow(nextWorkflow),
+  };
+  if (nextWorkflow === WORKFLOW_STATUS.PICKUP_READY) {
+    $set.pickupReadyAt = now;
+  }
+  if (nextWorkflow === WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
+    $set.pickupReadyAt = now;
+  }
+  if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
+    $set.outForDeliveryAt = now;
+  }
+  if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
+    $set.deliveredAt = now;
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { orderId, seller: sellerId, workflowStatus: ws },
+    { $set },
+    { new: true },
+  )
+    .populate("customer", "name phone")
+    .populate("seller", "shopName address name location serviceRadius");
+
+  if (!updated) {
+    const err = new Error("Could not update order status — state may have changed");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
+    await applyDeliveredSettlement(updated, orderId);
+  }
+
+  emitOrderStatusUpdate(
+    orderId,
+    { workflowStatus: nextWorkflow, status: updated.status },
+    updated.customer?._id || updated.customer,
+  );
+
+  if (nextWorkflow === WORKFLOW_STATUS.PICKUP_READY || nextWorkflow === WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PACKED, {
+      orderId,
+      customerId: updated.customer?._id || updated.customer,
+      userId: updated.customer?._id || updated.customer,
+      sellerId: updated.seller?._id || updated.seller,
+    });
+  }
+  if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.OUT_FOR_DELIVERY, {
+      orderId,
+      customerId: updated.customer?._id || updated.customer,
+      userId: updated.customer?._id || updated.customer,
+      sellerId: updated.seller?._id || updated.seller,
+      deliveryId: updated.deliveryBoy,
+    });
+  }
+  if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
+      orderId,
+      customerId: updated.customer?._id || updated.customer,
+      userId: updated.customer?._id || updated.customer,
+      sellerId: updated.seller?._id || updated.seller,
+      deliveryId: updated.deliveryBoy,
+    });
+  }
+
+  return updated;
 }
 
 function toDeliveryObjectId(deliveryId) {

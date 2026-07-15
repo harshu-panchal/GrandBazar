@@ -143,8 +143,21 @@ export const createSellerCampaign = async (req, res) => {
     if (req.body.budgetLimit > SELLER_CAMPAIGN_LIMITS.maxBudget) {
       return handleResponse(res, 400, `Budget limit cannot exceed ₹${SELLER_CAMPAIGN_LIMITS.maxBudget}`);
     }
+
+    const rules = {
+      ...(req.body.rules || {}),
+      // Seller campaigns are always scoped to their own store
+      shopIds: [sellerId],
+    };
+
     const campaign = await RewardCampaign.create({
       ...req.body,
+      rules,
+      rewardConfig: {
+        creditTiming: "on_delivery",
+        validityDays: 30,
+        ...(req.body.rewardConfig || {}),
+      },
       createdBy: { role: "seller", sellerId },
       fundingSource: "seller",
     });

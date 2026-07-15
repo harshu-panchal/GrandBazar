@@ -40,8 +40,44 @@ import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 
 function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
-    const readOnly = !canSellerManuallyUpdateStatus(order);
+    const method = resolveFulfillmentMethod(order);
     const normalizedStatus = String(order?.status || '').toLowerCase();
+    const isPlatform = method === 'platform_logistics';
+    const isPending = normalizedStatus === 'pending';
+
+    // Platform delivery: seller only accepts/rejects while pending; rider drives later statuses.
+    const platformLocked = isPlatform && !isPending;
+    const readOnly = !canSellerManuallyUpdateStatus(order) || platformLocked;
+
+    const sellerDeliveryOptions = [
+        { value: 'pending', label: 'Pending' },
+        { value: 'confirmed', label: 'Confirmed' },
+        { value: 'packed', label: 'Packed' },
+        { value: 'out_for_delivery', label: compact ? 'Out' : 'Out for Delivery' },
+        { value: 'delivered', label: 'Delivered' },
+        { value: 'cancelled', label: 'Cancelled' },
+    ];
+    const pendingOnlyOptions = [
+        { value: 'pending', label: 'Pending' },
+        { value: 'confirmed', label: 'Confirmed' },
+        { value: 'cancelled', label: 'Cancelled' },
+    ];
+    const statusOptions = isPlatform && isPending
+        ? pendingOnlyOptions
+        : sellerDeliveryOptions.filter((o) => {
+            if (isPending) return ['pending', 'confirmed', 'cancelled'].includes(o.value);
+            if (normalizedStatus === 'confirmed') {
+                return ['confirmed', 'packed', 'out_for_delivery', 'delivered', 'cancelled'].includes(o.value);
+            }
+            if (normalizedStatus === 'packed') {
+                return ['packed', 'out_for_delivery', 'delivered', 'cancelled'].includes(o.value);
+            }
+            if (normalizedStatus === 'out_for_delivery') {
+                return ['out_for_delivery', 'delivered', 'cancelled'].includes(o.value);
+            }
+            return o.value === normalizedStatus;
+        });
+
     const editableStatuses = new Set([
         'pending',
         'confirmed',
@@ -62,9 +98,11 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                         compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
                         isScheduled
                             ? 'bg-blue-100 text-blue-700'
-                            : requiresDisplayOnly
-                                ? 'bg-violet-100 text-violet-700'
-                                : 'bg-amber-100 text-amber-700',
+                            : platformLocked
+                                ? 'bg-brand-100 text-brand-700'
+                                : requiresDisplayOnly
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'bg-amber-100 text-amber-700',
                     )}
                 >
                     {order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold'))}
@@ -74,7 +112,12 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                         Awaiting delivery slot
                     </p>
                 )}
-                {requiresDisplayOnly && !isScheduled && (
+                {platformLocked && (
+                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                        Updated by delivery partner
+                    </p>
+                )}
+                {requiresDisplayOnly && !isScheduled && !platformLocked && (
                     <p className="text-[10px] font-semibold text-slate-500 mt-1">
                         Customer-approved partial update
                     </p>
@@ -104,12 +147,9 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                                             'bg-slate-100 text-slate-700',
                 )}
             >
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="packed">Packed</option>
-                <option value="out_for_delivery">{compact ? 'Out' : 'Out for Delivery'}</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
+                {statusOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
             </select>
             {!compact && (
                 <HiOutlineChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
@@ -392,7 +432,10 @@ const Orders = () => {
             }
         } catch (error) {
             console.error("Failed to update status:", error);
-            showToast("Failed to update status", "error");
+            showToast(
+                error?.response?.data?.message || "Failed to update status",
+                "error",
+            );
         }
     };
 

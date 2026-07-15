@@ -21,6 +21,13 @@ import {
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
+import {
+    getCouponStatus,
+    getCouponStatusBadgeVariant,
+    getCouponStatusLabel,
+    isCouponExpired,
+    COUPON_STATUSES,
+} from '@shared/utils/couponStatus';
 
 const CouponManagement = () => {
     const { showToast } = useToast();
@@ -78,12 +85,9 @@ const CouponManagement = () => {
 
     const stats = useMemo(() => {
         const now = new Date();
-        const active = coupons.filter(c => {
-            const from = c.validFrom ? new Date(c.validFrom) : null;
-            const till = c.validTill ? new Date(c.validTill) : null;
-            return c.isActive && (!from || from <= now) && (!till || till >= now);
-        });
+        const active = coupons.filter(c => getCouponStatus(c) === COUPON_STATUSES.ACTIVE);
         const expiringSoon = coupons.filter(c => {
+            if (getCouponStatus(c) === COUPON_STATUSES.EXPIRED) return false;
             if (!c.validTill) return false;
             const till = new Date(c.validTill);
             const diffDays = (till - now) / (1000 * 60 * 60 * 24);
@@ -300,7 +304,11 @@ const CouponManagement = () => {
                                     </td>
                                 </tr>
                             )}
-                            {!isLoading && filteredCoupons.map((c) => (
+                            {!isLoading && filteredCoupons.map((c) => {
+                                const status = getCouponStatus(c);
+                                const isExpired = status === COUPON_STATUSES.EXPIRED;
+
+                                return (
                                 <tr key={c._id} className="group hover:bg-slate-50/30 transition-colors">
                                     <td className="px-4 py-6">
                                         <div className="flex items-center gap-4">
@@ -349,27 +357,29 @@ const CouponManagement = () => {
                                     </td>
                                     <td className="px-4 py-6 text-center">
                                         <div className="inline-flex flex-col items-center gap-2">
-                                            <Badge variant={c.isActive ? 'success' : 'secondary'} className="text-[9px] font-black uppercase">
-                                                {c.isActive ? 'active' : 'inactive'}
+                                            <Badge variant={getCouponStatusBadgeVariant(status)} className="text-[9px] font-black uppercase">
+                                                {getCouponStatusLabel(status)}
                                             </Badge>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleToggleStatus(c)}
-                                                disabled={togglingStatusId === c._id}
-                                                className={cn(
-                                                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-60",
-                                                    c.isActive ? "bg-emerald-500" : "bg-slate-300",
-                                                )}
-                                                title={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
-                                                aria-label={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
-                                            >
-                                                <span
+                                            {!isExpired && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleStatus(c)}
+                                                    disabled={togglingStatusId === c._id}
                                                     className={cn(
-                                                        "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                                                        c.isActive ? "translate-x-6" : "translate-x-1",
+                                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-60",
+                                                        c.isActive ? "bg-emerald-500" : "bg-slate-300",
                                                     )}
-                                                />
-                                            </button>
+                                                    title={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
+                                                    aria-label={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
+                                                >
+                                                    <span
+                                                        className={cn(
+                                                            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                                                            c.isActive ? "translate-x-6" : "translate-x-1",
+                                                        )}
+                                                    />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-4 py-6">
@@ -389,7 +399,8 @@ const CouponManagement = () => {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                            );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -598,25 +609,31 @@ const CouponManagement = () => {
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coupon Status</p>
                             <p className="text-xs font-bold text-slate-700 mt-1">
-                                {formData.isActive ? 'Active — customers can use this code' : 'Inactive — code is disabled'}
+                                {isCouponExpired({ validTill: formData.validTill })
+                                    ? 'Expired — extend end date to reactivate'
+                                    : formData.isActive
+                                      ? 'Active — customers can use this code'
+                                      : 'Inactive — code is disabled'}
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-                            className={cn(
-                                "relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
-                                formData.isActive ? "bg-emerald-500" : "bg-slate-300",
-                            )}
-                            aria-label="Toggle coupon status"
-                        >
-                            <span
+                        {!isCouponExpired({ validTill: formData.validTill }) && (
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
                                 className={cn(
-                                    "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
-                                    formData.isActive ? "translate-x-6" : "translate-x-1",
+                                    "relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
+                                    formData.isActive ? "bg-emerald-500" : "bg-slate-300",
                                 )}
-                            />
-                        </button>
+                                aria-label="Toggle coupon status"
+                            >
+                                <span
+                                    className={cn(
+                                        "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+                                        formData.isActive ? "translate-x-6" : "translate-x-1",
+                                    )}
+                                />
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex gap-4 pt-4">

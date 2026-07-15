@@ -64,6 +64,12 @@ import CheckoutCartSummary from "./checkout/components/CheckoutCartSummary";
 import CheckoutPricingBreakdown from "./checkout/components/CheckoutPricingBreakdown";
 import CheckoutPaymentSelector from "./checkout/components/CheckoutPaymentSelector";
 import CheckoutCouponSection from "./checkout/components/CheckoutCouponSection";
+import {
+  filterCouponsForCart,
+  getCartSellerIds,
+  isSellerCoupon,
+  isSellerCouponEligibleForCart,
+} from "@shared/utils/couponEligibility";
 import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommendedProducts";
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
@@ -248,6 +254,10 @@ const CheckoutPage = () => {
   const [savedRecipient, setSavedRecipient] = useState(null);
   const [recommendedProducts, setRecommendedProducts] = useState([]);
   const [coupons, setCoupons] = useState([]);
+  const availableCoupons = useMemo(
+    () => filterCouponsForCart(coupons, cart),
+    [coupons, cart],
+  );
   const [manualCode, setManualCode] = useState("");
   const [emptyBoxData, setEmptyBoxData] = useState(null);
 
@@ -668,6 +678,10 @@ const CheckoutPage = () => {
   };
 
   const handleApplyCoupon = async (coupon) => {
+    // Only one coupon can be active at a time — applying replaces the previous one
+    if (selectedCoupon && selectedCoupon.code === coupon.code) {
+      return;
+    }
     try {
       const payload = {
         code: coupon.code,
@@ -678,12 +692,20 @@ const CheckoutPage = () => {
       const res = await customerApi.validateCoupon(payload);
       if (res.data.success) {
         const data = res.data.result;
+        const replaced = Boolean(selectedCoupon && selectedCoupon.code !== coupon.code);
         setSelectedCoupon({
           ...coupon,
           ...data,
         });
         setIsCouponModalOpen(false);
-        showToast(`Coupon ${coupon.code} applied!`, "success");
+        if (replaced) {
+          showToast(
+            `Only one coupon can be applied. ${coupon.code} replaced ${selectedCoupon.code}`,
+            "success",
+          );
+        } else {
+          showToast(`Coupon ${coupon.code} applied!`, "success");
+        }
       } else {
         showToast(res.data.message || "Unable to apply coupon", "error");
       }
@@ -700,21 +722,36 @@ const CheckoutPage = () => {
       showToast("Please enter a coupon code", "error");
       return;
     }
+    const code = manualCode.trim().toUpperCase();
+    if (selectedCoupon?.code === code) {
+      showToast("This coupon is already applied", "info");
+      return;
+    }
     try {
       const res = await customerApi.validateCoupon({
-        code: manualCode.trim(),
+        code,
         cartTotal,
         items: cart,
         customerId: user?._id,
       });
       if (res.data.success) {
         const data = res.data.result;
+        const replaced = Boolean(selectedCoupon && selectedCoupon.code !== code);
         setSelectedCoupon({
-          code: manualCode.trim(),
+          code,
           description: "Applied manually",
           ...data,
         });
-        showToast(`Coupon ${manualCode.trim()} applied!`, "success");
+        setManualCode("");
+        setIsCouponModalOpen(false);
+        if (replaced) {
+          showToast(
+            `Only one coupon can be applied. ${code} replaced ${selectedCoupon.code}`,
+            "success",
+          );
+        } else {
+          showToast(`Coupon ${code} applied!`, "success");
+        }
       } else {
         showToast(res.data.message || "Invalid coupon", "error");
       }
@@ -759,20 +796,47 @@ const CheckoutPage = () => {
     } catch {
       // ignore parse errors
     }
+  }, []);
 
-    const fetchCoupons = async () => {
+  // Fetch coupons when cart store composition changes so matching store coupons appear
+  const cartSellerKey = useMemo(() => getCartSellerIds(cart).sort().join(","), [cart]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCouponsForCart = async () => {
       try {
-        const res = await customerApi.getActiveCoupons();
-        if (res.data.success) {
+        const params = { status: "active" };
+        if (cartSellerKey) params.sellerIds = cartSellerKey;
+        const res = await customerApi.getActiveCoupons(params);
+        if (!cancelled && res.data.success) {
           const list = res.data.result || res.data.results || [];
-          setCoupons(list);
+          setCoupons(Array.isArray(list) ? list : []);
         }
-      } catch {
-        // silently ignore
+      } catch (error) {
+        console.error("Failed to load checkout coupons", error);
+        if (!cancelled) setCoupons([]);
       }
     };
-    fetchCoupons();
-  }, []);
+    fetchCouponsForCart();
+    return () => {
+      cancelled = true;
+    };
+  }, [cartSellerKey]);
+
+  useEffect(() => {
+    if (!selectedCoupon) return;
+
+    const matchedCoupon =
+      coupons.find((coupon) => coupon.code === selectedCoupon.code) || selectedCoupon;
+
+    if (
+      isSellerCoupon(matchedCoupon) &&
+      !isSellerCouponEligibleForCart(matchedCoupon, cart)
+    ) {
+      setSelectedCoupon(null);
+      showToast("Store coupon removed because your cart has items from multiple stores", "warning");
+    }
+  }, [cart, coupons, selectedCoupon, showToast]);
 
   // Debounced checkoutPreview — fires 400 ms after last dependency change
   useEffect(() => {
@@ -1197,7 +1261,7 @@ const CheckoutPage = () => {
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:sticky lg:top-8 pb-32 lg:pb-8">
             {/* Coupon Section */}
             <CheckoutCouponSection
-              coupons={coupons}
+              coupons={availableCoupons}
               selectedCoupon={selectedCoupon}
               manualCode={manualCode}
               onApplyCoupon={handleApplyCoupon}
