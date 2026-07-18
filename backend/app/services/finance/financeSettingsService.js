@@ -16,6 +16,9 @@ const DEFAULT_FINANCE_SETTINGS = {
   handlingFeeStrategy: HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE,
   codEnabled: true,
   onlineEnabled: true,
+  customerSurchargeEnabled: false,
+  customerSurchargeAmount: 0,
+  customerSurchargeReason: "",
 };
 
 export function normalizeFinanceSettings(raw = {}) {
@@ -53,6 +56,16 @@ export function normalizeFinanceSettings(raw = {}) {
   const handlingFeeStrategy =
     raw.handlingFeeStrategy || DEFAULT_FINANCE_SETTINGS.handlingFeeStrategy;
 
+  const customerSurchargeEnabled = Boolean(
+    raw.customerSurchargeEnabled ?? DEFAULT_FINANCE_SETTINGS.customerSurchargeEnabled,
+  );
+  const customerSurchargeAmount = roundCurrency(
+    Math.max(0, Number(raw.customerSurchargeAmount ?? DEFAULT_FINANCE_SETTINGS.customerSurchargeAmount) || 0),
+  );
+  const customerSurchargeReason = String(
+    raw.customerSurchargeReason ?? DEFAULT_FINANCE_SETTINGS.customerSurchargeReason,
+  ).trim();
+
   return {
     deliveryPricingMode,
     pricingMode: deliveryPricingMode,
@@ -69,6 +82,9 @@ export function normalizeFinanceSettings(raw = {}) {
     handlingFeeStrategy,
     codEnabled: raw.codEnabled ?? DEFAULT_FINANCE_SETTINGS.codEnabled,
     onlineEnabled: raw.onlineEnabled ?? DEFAULT_FINANCE_SETTINGS.onlineEnabled,
+    customerSurchargeEnabled,
+    customerSurchargeAmount: customerSurchargeEnabled ? customerSurchargeAmount : 0,
+    customerSurchargeReason: customerSurchargeEnabled ? customerSurchargeReason : "",
   };
 }
 

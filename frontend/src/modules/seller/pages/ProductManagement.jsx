@@ -117,7 +117,7 @@ const ProductManagement = () => {
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterApproval, setFilterApproval] = useState("all"); // all | approved | pending | rejected
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState("display-asc");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -215,6 +215,7 @@ const ProductManagement = () => {
       { id: Date.now(), name: "", price: "", salePrice: "", stock: "", sku: "" },
     ],
     isSignatureProduct: false,
+    displayOrder: 0,
     addons: [],
   });
 
@@ -371,6 +372,7 @@ const ProductManagement = () => {
       data.append("weight", formData.weight);
       data.append("tags", formData.tags);
       data.append("isSignatureProduct", formData.isSignatureProduct);
+      data.append("displayOrder", Number(formData.displayOrder) || 0);
       
       if (formData.addons && formData.addons.length > 0) {
         data.append("addons", JSON.stringify(formData.addons));
@@ -483,6 +485,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: item.isSignatureProduct || false,
+        displayOrder: item.displayOrder ?? 0,
         addons: item.addons || [],
       });
       setEditingItem(item);
@@ -515,6 +518,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: false,
+        displayOrder: 0,
         addons: [],
       });
       setEditingItem(null);
@@ -687,6 +691,7 @@ const ProductManagement = () => {
               onChange={(e) => setSortBy(e.target.value)}
               className="flex-1 lg:flex-none px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer"
             >
+              <option value="display-asc">Display order</option>
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
               <option value="name-asc">Name A-Z</option>
@@ -710,6 +715,9 @@ const ProductManagement = () => {
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="px-6 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
                   Product
+                </th>
+                <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+                  Order
                 </th>
                 <th className="px-6 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
                   Product Code
@@ -768,6 +776,11 @@ const ProductManagement = () => {
                         ) : null}
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="inline-flex min-w-[2rem] items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                      {p.displayOrder ?? 0}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-sm font-medium text-slate-900">
@@ -1162,6 +1175,28 @@ const ProductManagement = () => {
                             className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-mono font-bold outline-none ring-primary/5 focus:ring-2"
                             placeholder="AUTO-GENERATED"
                           />
+                        </div>
+                        <div className="space-y-1.5 flex flex-col">
+                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+                            Display Order
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={formData.displayOrder}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                displayOrder: e.target.value === "" ? "" : Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
+                            placeholder="0"
+                          />
+                          <span className="text-[10px] text-slate-500 font-medium ml-1">
+                            Lower numbers appear first in your store.
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">

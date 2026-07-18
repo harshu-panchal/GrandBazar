@@ -19,6 +19,8 @@ import {
     updateSubscriptionPaymentSettings,
     getSubscriptionOverview,
     listSubscriptionPayments,
+    getComplimentarySubscriptions,
+    assignComplimentarySubscriptionAdmin,
 } from "../controller/admin/subscriptionController.js";
 import {
     bootstrapAdmin,
@@ -233,6 +235,8 @@ router.get("/subscription/payment-settings", verifyToken, allowRoles("admin"), g
 router.put("/subscription/payment-settings", verifyToken, allowRoles("admin"), updateSubscriptionPaymentSettings);
 router.get("/subscription/overview", verifyToken, allowRoles("admin"), getSubscriptionOverview);
 router.get("/subscription/payments", verifyToken, allowRoles("admin"), listSubscriptionPayments);
+router.get("/subscription/complimentary", verifyToken, allowRoles("admin"), getComplimentarySubscriptions);
+router.post("/subscription/complimentary", verifyToken, allowRoles("admin"), assignComplimentarySubscriptionAdmin);
 
 router.get(
     "/delivery-partners",

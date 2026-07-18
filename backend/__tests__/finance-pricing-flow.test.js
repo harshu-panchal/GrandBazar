@@ -106,7 +106,7 @@ describe("finance pricing flow", () => {
     expect(fixedPerItem.sellerPayout).toBe(138);
   });
 
-  it("resolves category commission hierarchy top-down", () => {
+  it("resolves category commission hierarchy bottom-up (deepest wins)", () => {
     const header = {
       _id: "h1",
       name: "Header",
@@ -132,23 +132,36 @@ describe("finance pricing flow", () => {
         level2Category: level2,
         subcategory: sub,
       }).level,
-    ).toBe("header");
+    ).toBe("subcategory");
 
     expect(
       resolveCategoryHierarchyCommission({
-        headerCategory: { ...header, applyCommission: false },
+        headerCategory: header,
         level2Category: level2,
-        subcategory: sub,
+        subcategory: { ...sub, applyCommission: false },
       }).level,
     ).toBe("category");
 
     expect(
       resolveCategoryHierarchyCommission({
-        headerCategory: { ...header, applyCommission: false },
+        headerCategory: header,
         level2Category: { ...level2, applyCommission: false },
-        subcategory: sub,
+        subcategory: { ...sub, applyCommission: false },
       }).category.adminCommissionValue,
-    ).toBe(5);
+    ).toBe(15);
+
+    expect(
+      resolveCategoryHierarchyCommission({
+        productCategory: {
+          _id: "p1",
+          applyCommission: true,
+          adminCommissionValue: 8,
+        },
+        headerCategory: header,
+        level2Category: level2,
+        subcategory: sub,
+      }).level,
+    ).toBe("product");
 
     expect(categoryAppliesCommission({ adminCommissionValue: 8 })).toBe(true);
     expect(

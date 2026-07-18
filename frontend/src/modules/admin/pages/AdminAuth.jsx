@@ -512,12 +512,12 @@ const AdminAuth = () => {
 
                 <div className="hidden md:flex w-[55%] relative bg-[#f8f9ff] overflow-hidden items-center justify-center">
                     <div className="absolute top-8 right-8 z-30">
-                        <div className="w-20 h-20 rounded-2xl bg-white/85 backdrop-blur-sm border border-brand-100 shadow-[0_12px_30px_rgba(79,70,229,0.18)] flex items-center justify-center overflow-hidden">
+                        <div className="w-36 h-20 rounded-2xl bg-white/85 backdrop-blur-sm border border-brand-100 shadow-[0_12px_30px_rgba(79,70,229,0.18)] flex items-center justify-center overflow-hidden p-2">
                             {logoUrl ? (
                                 <img
                                     src={logoUrl}
                                     alt={`${appName} logo`}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-contain"
                                 />
                             ) : (
                                 <ShieldCheck size={30} className="text-brand-600" />

@@ -147,6 +147,24 @@ const settingSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+        /**
+         * Optional customer-only surcharge (e.g. weather).
+         * Charged to the customer and credited to platform — not seller/rider.
+         */
+        customerSurchargeEnabled: {
+            type: Boolean,
+            default: false,
+        },
+        customerSurchargeAmount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        customerSurchargeReason: {
+            type: String,
+            trim: true,
+            default: "",
+        },
         lowStockAlertsEnabled: {
             type: Boolean,
             default: true,

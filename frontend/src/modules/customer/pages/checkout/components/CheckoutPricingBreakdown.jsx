@@ -87,6 +87,33 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             </span>
             <span className="font-black text-slate-800">₹{handlingFee}</span>
           </div>
+          {Number(pricingPreview?.packagingChargeAmount || 0) > 0 && (
+            <div className="flex justify-between items-center px-2">
+              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+                Packaging Charge
+              </span>
+              <span className="font-black text-slate-800">
+                ₹{pricingPreview.packagingChargeAmount}
+              </span>
+            </div>
+          )}
+          {Number(pricingPreview?.customerSurchargeAmount || 0) > 0 && (
+            <div className="flex justify-between items-start px-3 py-2 bg-sky-50 rounded-xl border border-sky-100">
+              <div className="flex flex-col pr-3">
+                <span className="text-sky-700 font-black text-xs uppercase tracking-wider">
+                  Extra Charge
+                </span>
+                <span className="text-[11px] font-semibold text-sky-600/80 mt-0.5">
+                  {pricingPreview?.customerSurchargeReason ||
+                    pricingPreview?.snapshots?.customerSurcharge?.reason ||
+                    "Additional charge"}
+                </span>
+              </div>
+              <span className="font-black text-sky-700">
+                ₹{pricingPreview.customerSurchargeAmount}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
               Tax

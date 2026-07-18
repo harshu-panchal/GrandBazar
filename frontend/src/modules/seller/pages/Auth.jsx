@@ -589,12 +589,12 @@ const Auth = () => {
           style={{ WebkitOverflowScrolling: "touch" }}>
           {/* Desktop logo */}
           <div className="hidden md:flex absolute top-8 right-8 z-20">
-            <div className="w-20 h-20 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
+            <div className="w-36 h-20 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden p-2">
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={`${appName} logo`}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <Store size={30} className="text-slate-700" />
@@ -604,12 +604,12 @@ const Auth = () => {
 
           {/* Mobile logo + brand */}
           <div className="md:hidden flex flex-col items-center text-center pt-2 pb-6">
-            <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden mb-3">
+            <div className="w-32 h-16 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden mb-3 p-2">
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={`${appName} logo`}
-                  className="w-full h-full object-contain p-1.5"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <Store size={28} className="text-slate-700" />

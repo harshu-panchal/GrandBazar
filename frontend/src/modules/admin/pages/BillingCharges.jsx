@@ -1,5 +1,5 @@
 // Premium Billing & Financial Configuration System
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Card from '@shared/components/ui/Card';
 import {
     RotateCcw,
@@ -9,17 +9,29 @@ import {
     Settings,
     Zap,
     MapPin,
-    History
+    History,
+    CloudRain,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { adminApi } from '../services/adminApi';
+
+const SURCHARGE_REASON_PRESETS = [
+    'Weather conditions',
+    'Peak demand',
+    'Festival surge',
+    'Fuel price adjustment',
+];
+const OTHER_REASON_PRESET = 'Other';
+const ALL_REASON_CHIPS = [...SURCHARGE_REASON_PRESETS, OTHER_REASON_PRESET];
 
 const BillingCharges = () => {
     const { showToast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
     const [deliveryMode, setDeliveryMode] = useState('distance'); // 'fixed' or 'distance'
     const [returnDeliveryCommission, setReturnDeliveryCommission] = useState(0);
+    const [reasonPreset, setReasonPreset] = useState(OTHER_REASON_PRESET);
+    const reasonInputRef = useRef(null);
 
     const [config, setConfig] = useState({
         platformFee: 0,
@@ -33,7 +45,17 @@ const BillingCharges = () => {
         handlingFeeStrategy: "highest_category_fee",
         codEnabled: true,
         onlineEnabled: true,
+        customerSurchargeEnabled: false,
+        customerSurchargeAmount: 0,
+        customerSurchargeReason: '',
     });
+
+    const activeReasonChip = useMemo(() => {
+        if (SURCHARGE_REASON_PRESETS.includes(config.customerSurchargeReason)) {
+            return config.customerSurchargeReason;
+        }
+        return OTHER_REASON_PRESET;
+    }, [config.customerSurchargeReason]);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -50,6 +72,12 @@ const BillingCharges = () => {
                 if (deliveryRes.data?.success && deliveryRes.data.result) {
                     const s = deliveryRes.data.result;
                     setDeliveryMode(s.deliveryPricingMode === 'fixed_price' ? 'fixed' : 'distance');
+                    const loadedReason = s.customerSurchargeReason || '';
+                    setReasonPreset(
+                        SURCHARGE_REASON_PRESETS.includes(loadedReason)
+                            ? loadedReason
+                            : OTHER_REASON_PRESET,
+                    );
                     setConfig((prev) => ({
                         ...prev,
                         baseCharge: s.customerBaseDeliveryFee ?? s.baseDeliveryCharge ?? prev.baseCharge,
@@ -61,6 +89,9 @@ const BillingCharges = () => {
                         handlingFeeStrategy: s.handlingFeeStrategy ?? prev.handlingFeeStrategy,
                         codEnabled: s.codEnabled ?? prev.codEnabled,
                         onlineEnabled: s.onlineEnabled ?? prev.onlineEnabled,
+                        customerSurchargeEnabled: Boolean(s.customerSurchargeEnabled),
+                        customerSurchargeAmount: s.customerSurchargeAmount ?? 0,
+                        customerSurchargeReason: loadedReason,
                     }));
                 }
             } catch (error) {
@@ -70,8 +101,42 @@ const BillingCharges = () => {
         fetchSettings();
     }, []);
 
+    const handleReasonPresetClick = (preset) => {
+        if (preset === OTHER_REASON_PRESET) {
+            setReasonPreset(OTHER_REASON_PRESET);
+            // Keep existing custom text if it isn't one of the fixed presets
+            setConfig((prev) => ({
+                ...prev,
+                customerSurchargeReason: SURCHARGE_REASON_PRESETS.includes(prev.customerSurchargeReason)
+                    ? ''
+                    : prev.customerSurchargeReason,
+            }));
+            requestAnimationFrame(() => {
+                reasonInputRef.current?.focus();
+            });
+            return;
+        }
+
+        setReasonPreset(preset);
+        setConfig((prev) => ({
+            ...prev,
+            customerSurchargeReason: preset,
+        }));
+    };
+
     const handleSave = async () => {
         try {
+            if (config.customerSurchargeEnabled) {
+                if (!config.customerSurchargeAmount || Number(config.customerSurchargeAmount) <= 0) {
+                    showToast('Enter a surcharge amount greater than 0', 'error');
+                    return;
+                }
+                if (!String(config.customerSurchargeReason || '').trim()) {
+                    showToast('Please enter a reason for the customer surcharge', 'error');
+                    return;
+                }
+            }
+
             setIsSaving(true);
             await Promise.all([
                 adminApi.updatePlatformSettings({
@@ -90,6 +155,9 @@ const BillingCharges = () => {
                     handlingFeeStrategy: config.handlingFeeStrategy,
                     codEnabled: config.codEnabled,
                     onlineEnabled: config.onlineEnabled,
+                    customerSurchargeEnabled: Boolean(config.customerSurchargeEnabled),
+                    customerSurchargeAmount: Number(config.customerSurchargeAmount) || 0,
+                    customerSurchargeReason: String(config.customerSurchargeReason || '').trim(),
                 }),
             ]);
 
@@ -187,6 +255,127 @@ const BillingCharges = () => {
                                 </div>
                                 <p className="text-[10px] font-bold text-slate-400 italic">Orders above this amount will have free delivery.</p>
                             </div>
+                        </div>
+                    </Card>
+
+                    {/* Customer-only surcharge */}
+                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    <CloudRain className="h-4 w-4 text-sky-500" />
+                                    Apply Extra Charge (Customers Only)
+                                </h3>
+                                <p className="text-[11px] font-medium text-slate-500 mt-1">
+                                    Temporary surcharge shown on checkout with a reason (e.g. weather). Not paid to sellers or riders.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        customerSurchargeEnabled: !prev.customerSurchargeEnabled,
+                                    }))
+                                }
+                                className={cn(
+                                    "relative h-8 w-14 rounded-full transition-colors shrink-0",
+                                    config.customerSurchargeEnabled ? "bg-sky-500" : "bg-slate-200",
+                                )}
+                                aria-label="Toggle customer surcharge"
+                            >
+                                <span
+                                    className={cn(
+                                        "absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform",
+                                        config.customerSurchargeEnabled && "translate-x-6",
+                                    )}
+                                />
+                            </button>
+                        </div>
+                        <div className={cn("p-8 grid grid-cols-1 md:grid-cols-2 gap-8", !config.customerSurchargeEnabled && "opacity-50 pointer-events-none")}>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Charge Amount (₹)
+                                </label>
+                                <div className="relative group">
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300">₹</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={config.customerSurchargeAmount}
+                                        onChange={(e) => handleInputChange('customerSurchargeAmount', e.target.value)}
+                                        className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-sky-500/10 transition-all"
+                                    />
+                                </div>
+                                <p className="text-[10px] font-bold text-slate-400 italic">
+                                    Added to every customer order total while enabled.
+                                </p>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Reason (shown to customer)
+                                </label>
+                                <input
+                                    ref={reasonInputRef}
+                                    type="text"
+                                    maxLength={120}
+                                    value={config.customerSurchargeReason}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setReasonPreset(
+                                            SURCHARGE_REASON_PRESETS.includes(value)
+                                                ? value
+                                                : OTHER_REASON_PRESET,
+                                        );
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            customerSurchargeReason: value,
+                                        }));
+                                    }}
+                                    placeholder={
+                                        activeReasonChip === OTHER_REASON_PRESET
+                                            ? "Type a custom reason..."
+                                            : "e.g. Weather conditions"
+                                    }
+                                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-sky-500/10 transition-all"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                    {ALL_REASON_CHIPS.map((preset) => (
+                                        <button
+                                            key={preset}
+                                            type="button"
+                                            onClick={() => handleReasonPresetClick(preset)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ring-1 transition-all",
+                                                activeReasonChip === preset
+                                                    ? "bg-sky-50 text-sky-700 ring-sky-200"
+                                                    : "bg-white text-slate-500 ring-slate-200 hover:bg-slate-50",
+                                            )}
+                                        >
+                                            {preset}
+                                        </button>
+                                    ))}
+                                </div>
+                                {activeReasonChip === OTHER_REASON_PRESET && (
+                                    <p className="text-[10px] font-bold text-sky-600 italic">
+                                        Other selected — type your custom reason above.
+                                    </p>
+                                )}
+                            </div>
+                            {config.customerSurchargeEnabled && Number(config.customerSurchargeAmount) > 0 && (
+                                <div className="md:col-span-2 bg-sky-50 border border-sky-100 rounded-2xl p-4">
+                                    <p className="text-xs font-bold text-sky-900">
+                                        Preview: customers will see{" "}
+                                        <span className="font-black">
+                                            ₹{Number(config.customerSurchargeAmount).toLocaleString("en-IN")}
+                                        </span>
+                                        {config.customerSurchargeReason
+                                            ? ` — ${config.customerSurchargeReason}`
+                                            : ""}{" "}
+                                        on checkout. Sellers and delivery partners are not paid this amount.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </Card>
 

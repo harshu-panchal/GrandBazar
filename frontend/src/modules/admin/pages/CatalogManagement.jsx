@@ -25,6 +25,45 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from '@core/api/axios'; // Direct import for uploading images to media upload
 
+const WEIGHT_UNITS = ["kg", "gm", "pack", "lit", "ml", "box"];
+
+const parseWeightField = (raw = "") => {
+  const text = String(raw || "").trim();
+  if (!text) return { weightValue: "", weightUnit: "kg" };
+
+  const match = text.match(/^([\d.]+)\s*([a-zA-Z]+)?$/);
+  if (!match) return { weightValue: text, weightUnit: "kg" };
+
+  const value = match[1] || "";
+  const unitRaw = String(match[2] || "kg").toLowerCase();
+  const aliases = {
+    kg: "kg",
+    g: "gm",
+    gm: "gm",
+    gram: "gm",
+    grams: "gm",
+    pack: "pack",
+    pkt: "pack",
+    lit: "lit",
+    l: "lit",
+    litre: "lit",
+    liter: "lit",
+    ml: "ml",
+    box: "box",
+  };
+  return {
+    weightValue: value,
+    weightUnit: aliases[unitRaw] || (WEIGHT_UNITS.includes(unitRaw) ? unitRaw : "kg"),
+  };
+};
+
+const formatWeightField = (value, unit) => {
+  const amount = String(value || "").trim();
+  if (!amount) return "";
+  const safeUnit = WEIGHT_UNITS.includes(unit) ? unit : "kg";
+  return `${amount} ${safeUnit}`;
+};
+
 const CatalogManagement = () => {
   const [catalogItems, setCatalogItems] = useState([]);
   const [categories, setCategories] = useState([]); // Tree format
@@ -51,7 +90,8 @@ const CatalogManagement = () => {
     name: "",
     description: "",
     brand: "",
-    weight: "",
+    weightValue: "",
+    weightUnit: "kg",
     tags: "",
     alternativeNames: "",
     headerId: "",
@@ -59,6 +99,8 @@ const CatalogManagement = () => {
     subcategoryId: "",
     mainImage: "",
     galleryImages: [],
+    applyCommission: false,
+    adminCommission: "",
     syncToSellers: false,
   });
 
@@ -69,13 +111,16 @@ const CatalogManagement = () => {
       name: "",
       description: "",
       brand: "",
-      weight: "",
+      weightValue: "",
+      weightUnit: "kg",
       tags: "",
       headerId: "",
       categoryId: "",
       subcategoryId: "",
       mainImage: "",
       galleryImages: [],
+      applyCommission: false,
+      adminCommission: "",
       isUploadingMain: false,
       isUploadingGallery: false,
     }
@@ -180,11 +225,22 @@ const CatalogManagement = () => {
 
     setIsSaving(true);
     try {
+      const applyCommission = !!formData.applyCommission;
+      const commissionValue = applyCommission
+        ? Math.max(0, Number(formData.adminCommission) || 0)
+        : 0;
       const payload = {
         ...formData,
+        weight: formatWeightField(formData.weightValue, formData.weightUnit),
         tags: formData.tags.split(",").map(t => t.trim()).filter(Boolean),
-        alternativeNames: formData.alternativeNames.split(",").map(n => n.trim()).filter(Boolean)
+        alternativeNames: formData.alternativeNames.split(",").map(n => n.trim()).filter(Boolean),
+        applyCommission,
+        adminCommission: commissionValue,
+        adminCommissionValue: commissionValue,
+        adminCommissionType: "percentage",
       };
+      delete payload.weightValue;
+      delete payload.weightUnit;
 
       if (editingItem) {
         await adminApi.updateCatalogProduct(editingItem._id || editingItem.id, payload);
@@ -211,13 +267,16 @@ const CatalogManagement = () => {
         name: "",
         description: "",
         brand: "",
-        weight: "",
+        weightValue: "",
+        weightUnit: "kg",
         tags: "",
         headerId: "",
         categoryId: "",
         subcategoryId: "",
         mainImage: "",
         galleryImages: [],
+        applyCommission: false,
+        adminCommission: "",
         isUploadingMain: false,
         isUploadingGallery: false,
       }
@@ -272,19 +331,29 @@ const CatalogManagement = () => {
 
     setIsSaving(true);
     try {
-      const products = bulkRows.map(r => ({
-        name: r.name.trim(),
-        description: r.description.trim(),
-        brand: r.brand.trim(),
-        weight: r.weight.trim(),
-        tags: r.tags.split(",").map(t => t.trim()).filter(Boolean),
-        mainImage: r.mainImage,
-        galleryImages: r.galleryImages,
-        headerId: r.headerId,
-        categoryId: r.categoryId,
-        subcategoryId: r.subcategoryId,
-        status: "active"
-      }));
+      const products = bulkRows.map(r => {
+        const applyCommission = !!r.applyCommission;
+        const commissionValue = applyCommission
+          ? Math.max(0, Number(r.adminCommission) || 0)
+          : 0;
+        return {
+          name: r.name.trim(),
+          description: r.description.trim(),
+          brand: r.brand.trim(),
+          weight: formatWeightField(r.weightValue, r.weightUnit),
+          tags: r.tags.split(",").map(t => t.trim()).filter(Boolean),
+          mainImage: r.mainImage,
+          galleryImages: r.galleryImages,
+          headerId: r.headerId,
+          categoryId: r.categoryId,
+          subcategoryId: r.subcategoryId,
+          applyCommission,
+          adminCommission: commissionValue,
+          adminCommissionValue: commissionValue,
+          adminCommissionType: "percentage",
+          status: "active"
+        };
+      });
 
       await adminApi.createCatalogProductsBulk({ products });
       toast.success(`${products.length} products added to catalog successfully!`);
@@ -300,11 +369,16 @@ const CatalogManagement = () => {
   // Open creation/edit modal
   const openModal = (item = null) => {
     if (item) {
+      const applyCommission =
+        item.applyCommission === true ||
+        (item.applyCommission !== false && Number(item.adminCommission || item.adminCommissionValue || 0) > 0);
+      const parsedWeight = parseWeightField(item.weight);
       setFormData({
         name: item.name || "",
         description: item.description || "",
         brand: item.brand || "",
-        weight: item.weight || "",
+        weightValue: parsedWeight.weightValue,
+        weightUnit: parsedWeight.weightUnit,
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
         alternativeNames: Array.isArray(item.alternativeNames) ? item.alternativeNames.join(", ") : "",
         headerId: item.headerId?._id || item.headerId || "",
@@ -312,6 +386,8 @@ const CatalogManagement = () => {
         subcategoryId: item.subcategoryId?._id || item.subcategoryId || "",
         mainImage: item.mainImage || "",
         galleryImages: item.galleryImages || [],
+        applyCommission,
+        adminCommission: item.adminCommissionValue ?? item.adminCommission ?? "",
         syncToSellers: false,
       });
       setEditingItem(item);
@@ -321,7 +397,8 @@ const CatalogManagement = () => {
         name: "",
         description: "",
         brand: "",
-        weight: "",
+        weightValue: "",
+        weightUnit: "kg",
         tags: "",
         alternativeNames: "",
         headerId: "",
@@ -329,6 +406,8 @@ const CatalogManagement = () => {
         subcategoryId: "",
         mainImage: "",
         galleryImages: [],
+        applyCommission: false,
+        adminCommission: "",
         syncToSellers: false,
       });
       setBulkRows([
@@ -337,13 +416,16 @@ const CatalogManagement = () => {
           name: "",
           description: "",
           brand: "",
-          weight: "",
+          weightValue: "",
+          weightUnit: "kg",
           tags: "",
           headerId: "",
           categoryId: "",
           subcategoryId: "",
           mainImage: "",
           galleryImages: [],
+          applyCommission: false,
+          adminCommission: "",
           isUploadingMain: false,
           isUploadingGallery: false,
         }
@@ -446,6 +528,7 @@ const CatalogManagement = () => {
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-[40%]">Product Details</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Brand</th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commission</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Header</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Subcategory</th>
@@ -455,7 +538,7 @@ const CatalogManagement = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-20 text-center">
+                  <td colSpan="7" className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <HiOutlineArrowPath className="h-8 w-8 text-black animate-spin" />
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Catalog...</p>
@@ -464,7 +547,7 @@ const CatalogManagement = () => {
                 </tr>
               ) : catalogItems.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
+                  <td colSpan="7" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
                     No catalog items found. Create one to get started.
                   </td>
                 </tr>
@@ -490,6 +573,17 @@ const CatalogManagement = () => {
                       <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
                         {item.brand || "N/A"}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {item.applyCommission === true ||
+                      (item.applyCommission !== false &&
+                        Number(item.adminCommission || item.adminCommissionValue || 0) > 0) ? (
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                          {item.adminCommissionValue ?? item.adminCommission ?? 0}%
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-slate-400">Category</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs font-medium text-slate-900 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full">
@@ -698,13 +792,27 @@ const CatalogManagement = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-2 flex flex-col">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Weight (e.g. 500g, 1kg)</label>
-                        <input
-                          value={formData.weight}
-                          onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5"
-                          placeholder="e.g. 1kg"
-                        />
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Weight</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={formData.weightValue}
+                            onChange={(e) => setFormData({ ...formData, weightValue: e.target.value })}
+                            className="w-full min-w-0 px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5"
+                            placeholder="e.g. 1"
+                          />
+                          <select
+                            value={formData.weightUnit}
+                            onChange={(e) => setFormData({ ...formData, weightUnit: e.target.value })}
+                            className="w-28 shrink-0 px-3 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none cursor-pointer"
+                          >
+                            {WEIGHT_UNITS.map((unit) => (
+                              <option key={unit} value={unit}>{unit}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       <div className="space-y-2 flex flex-col">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tags (comma-separated)</label>
@@ -722,6 +830,45 @@ const CatalogManagement = () => {
                           onChange={(e) => setFormData({ ...formData, alternativeNames: e.target.value })}
                           className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5"
                           placeholder="e.g. सेब, Fresh Apple, Washington Apple"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Commission */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!formData.applyCommission}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              applyCommission: e.target.checked,
+                              adminCommission: e.target.checked ? formData.adminCommission : "",
+                            })
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
+                        />
+                        Apply product commission
+                      </label>
+                      <p className="text-xs text-slate-500">
+                        When enabled, this product commission overrides category commission at checkout.
+                      </p>
+                      <div className="max-w-xs space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          Admin Commission (%)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.adminCommission}
+                          disabled={!formData.applyCommission}
+                          onChange={(e) =>
+                            setFormData({ ...formData, adminCommission: e.target.value })
+                          }
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50"
+                          placeholder="e.g. 10"
                         />
                       </div>
                     </div>
@@ -919,12 +1066,26 @@ const CatalogManagement = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="flex flex-col space-y-1.5">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weight</label>
-                                <input
-                                  value={row.weight}
-                                  onChange={(e) => updateBulkRowField(row.id, "weight", e.target.value)}
-                                  className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none"
-                                  placeholder="e.g. 500g"
-                                />
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={row.weightValue}
+                                    onChange={(e) => updateBulkRowField(row.id, "weightValue", e.target.value)}
+                                    className="w-full min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none"
+                                    placeholder="e.g. 500"
+                                  />
+                                  <select
+                                    value={row.weightUnit || "kg"}
+                                    onChange={(e) => updateBulkRowField(row.id, "weightUnit", e.target.value)}
+                                    className="w-24 shrink-0 px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none cursor-pointer"
+                                  >
+                                    {WEIGHT_UNITS.map((unit) => (
+                                      <option key={unit} value={unit}>{unit}</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
 
                               <div className="flex flex-col space-y-1.5">
@@ -934,6 +1095,49 @@ const CatalogManagement = () => {
                                   onChange={(e) => updateBulkRowField(row.id, "tags", e.target.value)}
                                   className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none"
                                   placeholder="e.g. organic, nuts"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!row.applyCommission}
+                                  onChange={(e) => {
+                                    setBulkRows((prev) =>
+                                      prev.map((item) =>
+                                        item.id === row.id
+                                          ? {
+                                              ...item,
+                                              applyCommission: e.target.checked,
+                                              adminCommission: e.target.checked
+                                                ? item.adminCommission
+                                                : "",
+                                            }
+                                          : item,
+                                      ),
+                                    );
+                                  }}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-black focus:ring-black"
+                                />
+                                Apply product commission
+                              </label>
+                              <div className="max-w-xs">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                  Admin Commission (%)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.adminCommission}
+                                  disabled={!row.applyCommission}
+                                  onChange={(e) =>
+                                    updateBulkRowField(row.id, "adminCommission", e.target.value)
+                                  }
+                                  className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none disabled:opacity-50"
+                                  placeholder="e.g. 10"
                                 />
                               </div>
                             </div>

@@ -675,7 +675,7 @@ const SubCategories = () => {
                     Apply commission at this level
                   </label>
                   <p className="text-xs text-gray-500">
-                    Used only when Header and Level 2 do not apply commission. Topmost applied level always wins.
+                    Deepest level wins. If this is applied, it overrides Header and Level 2 commission.
                   </p>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">

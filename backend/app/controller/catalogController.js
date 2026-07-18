@@ -17,6 +17,27 @@ function makeProductSku(name, index = 1) {
   return `${prefix}-${String(index).padStart(3, "0")}`;
 }
 
+function normalizeCatalogCommissionFields(data = {}) {
+  const apply =
+    data.applyCommission === true || data.applyCommission === "true";
+  const rawValue = Number(
+    data.adminCommissionValue ?? data.adminCommission ?? 0,
+  );
+  const value = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+  const type =
+    data.adminCommissionType === "fixed" ? "fixed" : "percentage";
+  const fixedRule =
+    data.adminCommissionFixedRule === "per_item" ? "per_item" : "per_qty";
+
+  return {
+    applyCommission: apply,
+    adminCommission: apply ? value : 0,
+    adminCommissionType: type,
+    adminCommissionValue: apply ? value : 0,
+    adminCommissionFixedRule: fixedRule,
+  };
+}
+
 /* ===============================
    ADMIN: CREATE CATALOG PRODUCT
    =============================== */
@@ -95,6 +116,7 @@ export const createCatalogProduct = async (req, res) => {
     }
 
     productData.createdBy = req.user.id;
+    Object.assign(productData, normalizeCatalogCommissionFields(productData));
 
     const catalogProduct = await CatalogProduct.create(productData);
     return handleResponse(res, 201, "Catalog product created successfully", catalogProduct);
@@ -148,6 +170,7 @@ export const createCatalogProductsBulk = async (req, res) => {
         categoryId: item.categoryId,
         subcategoryId: item.subcategoryId,
         status: item.status || "active",
+        ...normalizeCatalogCommissionFields(item),
         createdBy
       });
     }
@@ -341,6 +364,40 @@ export const updateCatalogProduct = async (req, res) => {
       }
     }
 
+    if (
+      updateData.applyCommission !== undefined ||
+      updateData.adminCommission !== undefined ||
+      updateData.adminCommissionValue !== undefined ||
+      updateData.adminCommissionType !== undefined ||
+      updateData.adminCommissionFixedRule !== undefined
+    ) {
+      Object.assign(
+        updateData,
+        normalizeCatalogCommissionFields({
+          applyCommission:
+            updateData.applyCommission !== undefined
+              ? updateData.applyCommission
+              : catalogProduct.applyCommission,
+          adminCommission:
+            updateData.adminCommission !== undefined
+              ? updateData.adminCommission
+              : catalogProduct.adminCommission,
+          adminCommissionValue:
+            updateData.adminCommissionValue !== undefined
+              ? updateData.adminCommissionValue
+              : catalogProduct.adminCommissionValue,
+          adminCommissionType:
+            updateData.adminCommissionType !== undefined
+              ? updateData.adminCommissionType
+              : catalogProduct.adminCommissionType,
+          adminCommissionFixedRule:
+            updateData.adminCommissionFixedRule !== undefined
+              ? updateData.adminCommissionFixedRule
+              : catalogProduct.adminCommissionFixedRule,
+        }),
+      );
+    }
+
     const updated = await CatalogProduct.findByIdAndUpdate(id, updateData, { new: true });
 
     // Sync changes to all claimed seller products if requested
@@ -356,6 +413,11 @@ export const updateCatalogProduct = async (req, res) => {
         headerId: updated.headerId,
         categoryId: updated.categoryId,
         subcategoryId: updated.subcategoryId,
+        applyCommission: updated.applyCommission === true,
+        adminCommission: updated.adminCommission || 0,
+        adminCommissionType: updated.adminCommissionType || "percentage",
+        adminCommissionValue: updated.adminCommissionValue || 0,
+        adminCommissionFixedRule: updated.adminCommissionFixedRule || "per_qty",
       };
 
       const affectedProducts = await Product.find({ catalogProductId: id });
@@ -532,6 +594,13 @@ export const claimCatalogProduct = async (req, res) => {
       headerId: catalogProduct.headerId,
       categoryId: catalogProduct.categoryId,
       subcategoryId: catalogProduct.subcategoryId,
+      applyCommission: catalogProduct.applyCommission === true,
+      adminCommission: Number(catalogProduct.adminCommission ?? 0) || 0,
+      adminCommissionType: catalogProduct.adminCommissionType || "percentage",
+      adminCommissionValue: Number(
+        catalogProduct.adminCommissionValue ?? catalogProduct.adminCommission ?? 0,
+      ) || 0,
+      adminCommissionFixedRule: catalogProduct.adminCommissionFixedRule || "per_qty",
       status: "active",
       approvalStatus: "approved", // Pre-approved catalog items
       importSource: "catalog_claim",
@@ -635,6 +704,13 @@ export const bulkClaimCatalogProducts = async (req, res) => {
         headerId: catalogProduct.headerId,
         categoryId: catalogProduct.categoryId,
         subcategoryId: catalogProduct.subcategoryId,
+        applyCommission: catalogProduct.applyCommission === true,
+        adminCommission: Number(catalogProduct.adminCommission ?? 0) || 0,
+        adminCommissionType: catalogProduct.adminCommissionType || "percentage",
+        adminCommissionValue: Number(
+          catalogProduct.adminCommissionValue ?? catalogProduct.adminCommission ?? 0,
+        ) || 0,
+        adminCommissionFixedRule: catalogProduct.adminCommissionFixedRule || "per_qty",
         status: "active",
         approvalStatus: "approved",
         importSource: "catalog_claim",

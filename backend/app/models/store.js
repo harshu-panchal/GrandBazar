@@ -154,6 +154,17 @@ const storeSchema = new mongoose.Schema(
       default: 5,
     },
 
+    /** Flat packaging fee charged to customer and paid to this store */
+    packagingCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    packagingChargeEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
     timezone: {
       type: String,
       default: "Asia/Kolkata",

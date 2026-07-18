@@ -34,6 +34,8 @@ export default function DeliveryPolicyPage() {
     deliveryWindows: DEFAULT_WINDOWS,
   });
   const [serviceRadius, setServiceRadius] = useState(5);
+  const [packagingChargeEnabled, setPackagingChargeEnabled] = useState(false);
+  const [packagingCharge, setPackagingCharge] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -53,6 +55,8 @@ export default function DeliveryPolicyPage() {
         }));
       }
       if (data.serviceRadius != null) setServiceRadius(data.serviceRadius);
+      setPackagingChargeEnabled(Boolean(data.packagingChargeEnabled));
+      setPackagingCharge(Number(data.packagingCharge || 0));
     }).catch(() => {});
   }, []);
 
@@ -60,6 +64,11 @@ export default function DeliveryPolicyPage() {
     setSaving(true);
     setMessage("");
     try {
+      if (packagingChargeEnabled && Number(packagingCharge) <= 0) {
+        setMessage("Enter a packaging charge greater than 0, or turn it off.");
+        setSaving(false);
+        return;
+      }
       await sellerApi.updateDeliveryPolicy({
         deliveryPolicy: {
           ...deliveryPolicy,
@@ -82,6 +91,8 @@ export default function DeliveryPolicyPage() {
           selfLogistics: deliveryPolicy.sellerDelivery,
         },
         serviceRadius,
+        packagingChargeEnabled,
+        packagingCharge: Number(packagingCharge) || 0,
       });
       setMessage("Delivery policy saved.");
     } catch (e) {
@@ -146,6 +157,50 @@ export default function DeliveryPolicyPage() {
             onChange={(e) => setServiceRadius(Number(e.target.value))}
           />
         </label>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">
+              Packaging Charge
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Flat fee added on customer checkout for this store. Paid to you (not platform or rider).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPackagingChargeEnabled((v) => !v)}
+            className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
+              packagingChargeEnabled ? "bg-emerald-500" : "bg-slate-200"
+            }`}
+            aria-label="Toggle packaging charge"
+          >
+            <span
+              className={`absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                packagingChargeEnabled ? "translate-x-6" : ""
+              }`}
+            />
+          </button>
+        </div>
+        <label className={`block text-sm ${!packagingChargeEnabled ? "opacity-50" : ""}`}>
+          Amount (₹)
+          <input
+            type="number"
+            min="0"
+            step="1"
+            disabled={!packagingChargeEnabled}
+            className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-slate-50"
+            value={packagingCharge}
+            onChange={(e) => setPackagingCharge(Number(e.target.value) || 0)}
+          />
+        </label>
+        {packagingChargeEnabled && Number(packagingCharge) > 0 && (
+          <p className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+            Customers will pay ₹{Number(packagingCharge).toLocaleString("en-IN")} packaging on orders from this store.
+          </p>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">

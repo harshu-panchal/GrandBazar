@@ -117,6 +117,9 @@ export const updateDeliverySettingsSchema = Joi.object({
     .optional(),
   codEnabled: Joi.boolean().optional(),
   onlineEnabled: Joi.boolean().optional(),
+  customerSurchargeEnabled: Joi.boolean().optional(),
+  customerSurchargeAmount: Joi.number().min(0).optional(),
+  customerSurchargeReason: Joi.string().allow("", null).max(120).optional(),
 }).or(
   "deliveryPricingMode",
   "pricingMode",
@@ -131,4 +134,7 @@ export const updateDeliverySettingsSchema = Joi.object({
   "handlingFeeStrategy",
   "codEnabled",
   "onlineEnabled",
+  "customerSurchargeEnabled",
+  "customerSurchargeAmount",
+  "customerSurchargeReason",
 );

@@ -751,7 +751,7 @@ const HeaderCategories = () => {
                     Apply commission at this level
                   </label>
                   <p className="text-xs text-gray-500">
-                    If unchecked, commission falls through to Level 2, then Subcategory.
+                    Used when no deeper level applies commission. Deepest applied level always wins (Subcategory → Level 2 → Header).
                   </p>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">

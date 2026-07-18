@@ -416,6 +416,14 @@ export async function placeOrderAtomic({
       }),
     });
 
+    if (Number(pricingSnapshot.sellerCount || 0) > 1) {
+      const error = new Error(
+        "Please order from only one store at a time. Remove items from other stores to continue.",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
     const checkoutGroupId = await generateUniqueCheckoutGroupId({ session });
     const checkoutReservation = computeStockReservationWindow(paymentMode);
     const checkoutGroup = new CheckoutGroup({

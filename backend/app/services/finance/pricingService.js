@@ -1,5 +1,6 @@
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
+import Store from "../../models/store.js";
 import {
   PRODUCT_APPROVAL_STATUS,
   resolveProductApprovalStatus,
@@ -92,18 +93,20 @@ export function categoryAppliesCommission(category) {
 }
 
 /**
- * Resolve commission from category hierarchy: header → level2 → subcategory.
- * First level with applyCommission wins (so if all three are set, top wins).
+ * Resolve commission from hierarchy: product → subcategory → level2 → header.
+ * Last (deepest) level with applyCommission wins (product overrides category levels).
  */
 export function resolveCategoryHierarchyCommission({
+  productCategory = null,
   headerCategory = null,
   level2Category = null,
   subcategory = null,
 } = {}) {
   const chain = [
-    { level: "header", category: headerCategory },
-    { level: "category", category: level2Category },
+    { level: "product", category: productCategory },
     { level: "subcategory", category: subcategory },
+    { level: "category", category: level2Category },
+    { level: "header", category: headerCategory },
   ];
 
   for (const entry of chain) {
@@ -116,7 +119,8 @@ export function resolveCategoryHierarchyCommission({
     }
   }
 
-  const fallback = headerCategory || level2Category || subcategory || null;
+  const fallback =
+    productCategory || subcategory || level2Category || headerCategory || null;
   return {
     category: fallback,
     level: null,
@@ -373,7 +377,9 @@ export async function hydrateOrderItems(
     .filter(Boolean);
 
   const productQuery = Product.find({ _id: { $in: productIds } })
-    .select("_id name salePrice price mainImage headerId sellerId status approvalStatus variants")
+    .select(
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
+    )
     .lean();
   if (session) productQuery.session(session);
   const products = await productQuery;
@@ -430,6 +436,13 @@ export async function hydrateOrderItems(
       sellerId: String(product.sellerId),
       variantSku: rawVariantSku || "",
       variantName: resolvedVariant ? String(resolvedVariant?.name || "").trim() : "",
+      applyCommission: product.applyCommission === true,
+      adminCommissionType: product.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue: Number(
+        product.adminCommissionValue ?? product.adminCommission ?? 0,
+      ),
+      adminCommissionFixedRule:
+        product.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
     };
   });
 }
@@ -445,6 +458,7 @@ export async function generateOrderPaymentBreakdown({
   handlingFeeStrategy,
   session = null,
   skipDeliveryFee = false,
+  includeCustomerSurcharge = true,
 }) {
   const normalizedItems = Array.isArray(preHydratedItems) && preHydratedItems.length > 0
     ? preHydratedItems
@@ -460,6 +474,15 @@ export async function generateOrderPaymentBreakdown({
 
   const storeId = sellerIds[0];
   const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
+  const storePackagingQuery = Store.findById(storeId)
+    .select("packagingCharge packagingChargeEnabled shopName")
+    .lean();
+  if (session) storePackagingQuery.session(session);
+  const storeDoc = await storePackagingQuery;
+  const packagingChargeAmount =
+    storeDoc?.packagingChargeEnabled && Number(storeDoc.packagingCharge || 0) > 0
+      ? roundCurrency(storeDoc.packagingCharge)
+      : 0;
   if (owner && !owner.businessModel) {
     const err = new Error("Seller has not activated a business model yet");
     err.statusCode = 403;
@@ -517,7 +540,22 @@ export async function generateOrderPaymentBreakdown({
     const subcategory = item.subcategoryId
       ? categoryById.get(String(item.subcategoryId))
       : null;
+    const productCategory =
+      item.applyCommission === true
+        ? {
+            _id: item.productId,
+            name: item.productName || "Product",
+            applyCommission: true,
+            adminCommissionType:
+              item.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+            adminCommissionValue: Number(item.adminCommissionValue || 0),
+            adminCommission: Number(item.adminCommissionValue || 0),
+            adminCommissionFixedRule:
+              item.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+          }
+        : null;
     const hierarchy = resolveCategoryHierarchyCommission({
+      productCategory,
       headerCategory,
       level2Category,
       subcategory,
@@ -596,13 +634,26 @@ export async function generateOrderPaymentBreakdown({
   const normalizedTax = roundCurrency(taxTotal || 0);
   const normalizedTip = roundCurrency(tipTotal || 0);
 
+  const customerSurchargeAmount =
+    includeCustomerSurcharge &&
+    effectiveSettings.customerSurchargeEnabled &&
+    Number(effectiveSettings.customerSurchargeAmount || 0) > 0
+      ? roundCurrency(effectiveSettings.customerSurchargeAmount)
+      : 0;
+  const customerSurchargeReason =
+    customerSurchargeAmount > 0
+      ? String(effectiveSettings.customerSurchargeReason || "Additional charge").trim()
+      : "";
+
   const grandTotal = roundCurrency(
     productSubtotal +
       delivery.deliveryFeeCharged +
       handling.handlingFeeCharged -
       normalizedDiscount +
       normalizedTax +
-      normalizedTip,
+      normalizedTip +
+      customerSurchargeAmount +
+      packagingChargeAmount,
   );
 
   const riderTipAmount = normalizedTip;
@@ -613,13 +664,17 @@ export async function generateOrderPaymentBreakdown({
       riderTipAmount,
   );
 
+  // Packaging charge is paid to the seller
+  sellerPayoutTotal = addMoney(sellerPayoutTotal, packagingChargeAmount);
+
   const platformLogisticsMargin = roundCurrency(
     delivery.deliveryFeeCharged +
       handling.handlingFeeCharged -
       (rider.riderPayoutBase + rider.riderPayoutDistance + rider.riderPayoutBonus),
   );
+  // Customer surcharge goes to platform only — not seller or rider
   const platformTotalEarning = roundCurrency(
-    adminProductCommissionTotal + platformLogisticsMargin,
+    adminProductCommissionTotal + platformLogisticsMargin + customerSurchargeAmount,
   );
 
   const snapshots = {
@@ -647,6 +702,12 @@ export async function generateOrderPaymentBreakdown({
     handlingCategoryUsed: handling.handlingCategoryUsed,
     sellerBusinessModel: effectiveOwner.businessModel,
     sellerOwnerId: owner?._id ? String(owner._id) : null,
+    customerSurcharge: customerSurchargeAmount > 0
+      ? { amount: customerSurchargeAmount, reason: customerSurchargeReason }
+      : null,
+    packagingCharge: packagingChargeAmount > 0
+      ? { amount: packagingChargeAmount, storeId: String(storeId) }
+      : null,
   };
 
   return {
@@ -659,6 +720,9 @@ export async function generateOrderPaymentBreakdown({
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,
+    customerSurchargeAmount,
+    customerSurchargeReason,
+    packagingChargeAmount,
     grandTotal,
     sellerPayoutTotal,
     adminProductCommissionTotal,

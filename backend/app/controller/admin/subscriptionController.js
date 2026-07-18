@@ -8,6 +8,9 @@ import {
   approvePaymentRequest,
   rejectPaymentRequest,
   getSubscriptionPaymentSettings,
+  assignComplimentarySubscription,
+  listComplimentarySubscriptions,
+  listSellersForComplimentaryAssign,
 } from "../../services/subscriptionService.js";
 import { SUBSCRIPTION_STATUS } from "../../constants/subscription.js";
 import Setting from "../../models/setting.js";
@@ -197,6 +200,48 @@ export async function listSubscriptionPayments(req, res) {
     }));
 
     return handleResponse(res, 200, "Subscription payments fetched", enriched);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+}
+
+export async function getComplimentarySubscriptions(req, res) {
+  try {
+    const [items, sellers] = await Promise.all([
+      listComplimentarySubscriptions(),
+      listSellersForComplimentaryAssign(),
+    ]);
+    return handleResponse(res, 200, "Complimentary subscriptions fetched", {
+      items,
+      sellers,
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+}
+
+export async function assignComplimentarySubscriptionAdmin(req, res) {
+  try {
+    const {
+      sellerId,
+      planId,
+      durationDays,
+      shopCount,
+      productCountPerShop,
+      note,
+    } = req.body || {};
+
+    const result = await assignComplimentarySubscription({
+      sellerId,
+      planId,
+      durationDays,
+      shopCount,
+      productCountPerShop,
+      adminId: req.user?.id,
+      note,
+    });
+
+    return handleResponse(res, 201, "Free subscription assigned successfully", result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

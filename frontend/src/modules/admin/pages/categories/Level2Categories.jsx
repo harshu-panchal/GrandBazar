@@ -687,7 +687,7 @@ const Level2Categories = () => {
                       Apply commission at this level
                     </label>
                     <p className="text-xs text-gray-500">
-                      Used when Header commission is not applied. If Header also has commission, Header wins.
+                      Used when Subcategory has no commission. If Subcategory also applies commission, Subcategory wins.
                     </p>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-700">

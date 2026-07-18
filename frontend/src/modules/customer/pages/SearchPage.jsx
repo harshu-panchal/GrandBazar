@@ -152,7 +152,9 @@ const SearchPage = () => {
                         price: p.salePrice || p.price,
                         originalPrice: p.price,
                         weight: p.weight || '1 unit',
-                        deliveryTime: '8-15 mins'
+                        deliveryTime: '8-15 mins',
+                        distance: p.distance ?? p.distanceKm,
+                        distanceKm: p.distanceKm ?? p.distance,
                     }));
                     setAllProducts(formattedProds);
                 }
@@ -248,7 +250,9 @@ const SearchPage = () => {
                         price: p.salePrice || p.price,
                         originalPrice: p.price,
                         weight: p.weight || '1 unit',
-                        deliveryTime: '8-15 mins'
+                        deliveryTime: '8-15 mins',
+                        distance: p.distance ?? p.distanceKm,
+                        distanceKm: p.distanceKm ?? p.distance,
                     }));
                     
                     // Merge local and backend matches to avoid duplicates (by ID)

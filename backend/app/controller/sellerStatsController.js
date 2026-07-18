@@ -5,6 +5,54 @@ import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import Wallet from "../models/wallet.js";
 
+const PERIOD_COMPARE_LABEL = {
+    daily: "vs prev 7d",
+    weekly: "vs prev 4w",
+    monthly: "vs prev 6mo",
+};
+
+const resolveStatsPeriod = (rangeRaw = "daily") => {
+    const range = String(rangeRaw || "daily").toLowerCase();
+    const now = new Date();
+    const periodEnd = now;
+    const periodStart = new Date(now);
+    let aggregationFormat = "%Y-%m-%d";
+    let compareLabel = PERIOD_COMPARE_LABEL.daily;
+
+    if (range === "monthly") {
+        periodStart.setMonth(periodStart.getMonth() - 6);
+        aggregationFormat = "%Y-%m";
+        compareLabel = PERIOD_COMPARE_LABEL.monthly;
+    } else if (range === "weekly") {
+        periodStart.setDate(periodStart.getDate() - 28);
+        aggregationFormat = "%Y-%U";
+        compareLabel = PERIOD_COMPARE_LABEL.weekly;
+    } else {
+        periodStart.setDate(periodStart.getDate() - 7);
+        aggregationFormat = "%Y-%m-%d";
+        compareLabel = PERIOD_COMPARE_LABEL.daily;
+    }
+
+    const periodMs = Math.max(periodEnd.getTime() - periodStart.getTime(), 1);
+    const prevPeriodEnd = new Date(periodStart);
+    const prevPeriodStart = new Date(periodStart.getTime() - periodMs);
+
+    return {
+        range: range === "monthly" || range === "weekly" ? range : "daily",
+        periodStart,
+        periodEnd,
+        prevPeriodStart,
+        prevPeriodEnd,
+        aggregationFormat,
+        compareLabel,
+    };
+};
+
+const pctChange = (current, previous) => {
+    if (!previous) return current > 0 ? 100 : 0;
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+};
+
 /* ===============================
    GET SELLER DASHBOARD STATS
 ================================ */
@@ -12,187 +60,238 @@ export const getSellerStats = async (req, res) => {
     try {
         const sellerId = req.user.id;
         const sellerOid = new mongoose.Types.ObjectId(sellerId);
+        const {
+            range,
+            periodStart,
+            prevPeriodStart,
+            prevPeriodEnd,
+            aggregationFormat,
+            compareLabel,
+        } = resolveStatsPeriod(req.query.range);
 
-        // Date boundaries
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const fourteenDaysAgo = new Date();
-        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-
-        // Sales Trend date range
-        const { range = 'daily' } = req.query;
-        let trendStartDate = new Date();
-        let aggregationFormat = "%Y-%m-%d";
-
-        if (range === 'monthly') {
-            trendStartDate.setMonth(trendStartDate.getMonth() - 6);
-            aggregationFormat = "%Y-%m";
-        } else if (range === 'weekly') {
-            trendStartDate.setDate(trendStartDate.getDate() - 28);
-            aggregationFormat = "%Y-%U";
-        } else {
-            trendStartDate.setDate(trendStartDate.getDate() - 7);
-        }
-
-        // Single aggregation pipeline with $facet — replaces 5 separate DB queries
+        // Single aggregation pipeline with $facet
         const [statsResult] = await Order.aggregate([
             {
                 $match: {
                     seller: sellerOid,
-                    status: { $ne: 'cancelled' },
-                }
+                    status: { $ne: "cancelled" },
+                },
             },
             {
                 $facet: {
-                    // Overview totals (replaces Order.find + in-memory reduce)
+                    // Period overview (sales + orders + unique customers)
                     overview: [
+                        { $match: { createdAt: { $gte: periodStart } } },
                         {
                             $group: {
                                 _id: null,
                                 totalSales: { $sum: { $ifNull: ["$pricing.total", 0] } },
                                 totalOrders: { $sum: 1 },
-                            }
-                        }
-                    ],
-                    // Current week stats (replaces Order.find with date filter)
-                    currentWeek: [
-                        { $match: { createdAt: { $gte: sevenDaysAgo } } },
-                        {
-                            $group: {
-                                _id: null,
-                                sales: { $sum: { $ifNull: ["$pricing.total", 0] } },
-                                count: { $sum: 1 },
-                            }
-                        }
-                    ],
-                    // Previous week stats (replaces second Order.find)
-                    prevWeek: [
-                        { $match: { createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } } },
-                        {
-                            $group: {
-                                _id: null,
-                                sales: { $sum: { $ifNull: ["$pricing.total", 0] } },
-                                count: { $sum: 1 },
-                            }
-                        }
-                    ],
-                    // Sales trend chart data
-                    salesTrend: [
-                        { $match: { createdAt: { $gte: trendStartDate } } },
-                        {
-                            $group: {
-                                _id: { $dateToString: { format: aggregationFormat, date: "$createdAt" } },
-                                sales: { $sum: { $ifNull: ["$pricing.total", 0] } },
-                                orders: { $sum: 1 }
-                            }
+                                customers: { $addToSet: "$customer" },
+                            },
                         },
-                        { $sort: { _id: 1 } }
+                        {
+                            $project: {
+                                totalSales: 1,
+                                totalOrders: 1,
+                                uniqueCustomers: { $size: "$customers" },
+                            },
+                        },
                     ],
-                    // Insights: top cities + peak hours
+                    prevPeriod: [
+                        {
+                            $match: {
+                                createdAt: { $gte: prevPeriodStart, $lt: prevPeriodEnd },
+                            },
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                sales: { $sum: { $ifNull: ["$pricing.total", 0] } },
+                                count: { $sum: 1 },
+                                customers: { $addToSet: "$customer" },
+                            },
+                        },
+                        {
+                            $project: {
+                                sales: 1,
+                                count: 1,
+                                uniqueCustomers: { $size: "$customers" },
+                            },
+                        },
+                    ],
+                    // Customers who ordered before this period (to split new vs returning)
+                    priorCustomers: [
+                        { $match: { createdAt: { $lt: periodStart } } },
+                        { $group: { _id: "$customer" } },
+                    ],
+                    periodCustomers: [
+                        { $match: { createdAt: { $gte: periodStart } } },
+                        { $group: { _id: "$customer", orders: { $sum: 1 } } },
+                    ],
+                    // Sales + customer trend chart data
+                    salesTrend: [
+                        { $match: { createdAt: { $gte: periodStart } } },
+                        {
+                            $group: {
+                                _id: {
+                                    $dateToString: {
+                                        format: aggregationFormat,
+                                        date: "$createdAt",
+                                    },
+                                },
+                                sales: { $sum: { $ifNull: ["$pricing.total", 0] } },
+                                orders: { $sum: 1 },
+                                customers: { $addToSet: "$customer" },
+                            },
+                        },
+                        {
+                            $project: {
+                                sales: 1,
+                                orders: 1,
+                                customers: { $size: "$customers" },
+                            },
+                        },
+                        { $sort: { _id: 1 } },
+                    ],
+                    // Insights scoped to selected period
                     topCities: [
+                        { $match: { createdAt: { $gte: periodStart } } },
                         { $group: { _id: "$address.city", count: { $sum: 1 } } },
                         { $sort: { count: -1 } },
-                        { $limit: 1 }
+                        { $limit: 1 },
                     ],
                     peakHours: [
+                        { $match: { createdAt: { $gte: periodStart } } },
                         { $project: { hour: { $hour: "$createdAt" } } },
                         { $group: { _id: "$hour", count: { $sum: 1 } } },
                         { $sort: { count: -1 } },
-                        { $limit: 1 }
+                        { $limit: 1 },
                     ],
-                    // Top products with trends (current + prev week via sub-facet)
                     topProductsCurrent: [
-                        { $match: { createdAt: { $gte: sevenDaysAgo } } },
+                        { $match: { createdAt: { $gte: periodStart } } },
                         { $unwind: "$items" },
                         {
                             $group: {
                                 _id: "$items.product",
                                 name: { $first: "$items.name" },
                                 sales: { $sum: "$items.quantity" },
-                                revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } }
-                            }
+                                revenue: {
+                                    $sum: { $multiply: ["$items.price", "$items.quantity"] },
+                                },
+                            },
                         },
                         { $sort: { sales: -1 } },
-                        { $limit: 10 }
+                        { $limit: 10 },
                     ],
                     topProductsPrev: [
-                        { $match: { createdAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } } },
+                        {
+                            $match: {
+                                createdAt: { $gte: prevPeriodStart, $lt: prevPeriodEnd },
+                            },
+                        },
                         { $unwind: "$items" },
                         {
                             $group: {
                                 _id: "$items.product",
-                                sales: { $sum: "$items.quantity" }
-                            }
-                        }
+                                sales: { $sum: "$items.quantity" },
+                            },
+                        },
                     ],
-                    // Traffic sources & devices
                     trafficSources: [
+                        { $match: { createdAt: { $gte: periodStart } } },
                         { $group: { _id: "$trafficSource", value: { $sum: 1 } } },
-                        { $project: { name: "$_id", value: 1, _id: 0 } }
+                        { $project: { name: "$_id", value: 1, _id: 0 } },
                     ],
                     devices: [
+                        { $match: { createdAt: { $gte: periodStart } } },
                         { $group: { _id: "$deviceType", count: { $sum: 1 } } },
-                        { $sort: { count: -1 } }
+                        { $sort: { count: -1 } },
                     ],
-                }
-            }
+                },
+            },
         ]);
 
-        // Extract facet results
-        const overviewRaw = statsResult.overview[0] || { totalSales: 0, totalOrders: 0 };
-        const totalSales = overviewRaw.totalSales;
-        const totalOrders = overviewRaw.totalOrders;
-        const avgOrderValue = totalOrders > 0 ? (totalSales / totalOrders) : 0;
+        const overviewRaw = statsResult.overview[0] || {
+            totalSales: 0,
+            totalOrders: 0,
+            uniqueCustomers: 0,
+        };
+        const totalSales = overviewRaw.totalSales || 0;
+        const totalOrders = overviewRaw.totalOrders || 0;
+        const uniqueCustomers = overviewRaw.uniqueCustomers || 0;
+        const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
-        const currentSales = statsResult.currentWeek[0]?.sales || 0;
-        const prevSalesVal = statsResult.prevWeek[0]?.sales || 0;
-        const salesTrendPerc = prevSalesVal === 0 ? (currentSales > 0 ? 100 : 0) : (((currentSales - prevSalesVal) / prevSalesVal) * 100).toFixed(1);
+        const prev = statsResult.prevPeriod[0] || {
+            sales: 0,
+            count: 0,
+            uniqueCustomers: 0,
+        };
+        const salesTrendPerc = pctChange(totalSales, prev.sales || 0);
+        const ordersTrendPerc = pctChange(totalOrders, prev.count || 0);
+        const customersTrendPerc = pctChange(uniqueCustomers, prev.uniqueCustomers || 0);
 
-        const currentOrdersCount = statsResult.currentWeek[0]?.count || 0;
-        const prevOrdersCount = statsResult.prevWeek[0]?.count || 0;
-        const ordersTrendPerc = prevOrdersCount === 0 ? (currentOrdersCount > 0 ? 100 : 0) : (((currentOrdersCount - prevOrdersCount) / prevOrdersCount) * 100).toFixed(1);
+        const priorCustomerIds = new Set(
+            (statsResult.priorCustomers || []).map((c) => String(c._id)),
+        );
+        let newCustomers = 0;
+        let returningCustomers = 0;
+        for (const row of statsResult.periodCustomers || []) {
+            if (priorCustomerIds.has(String(row._id))) returningCustomers += 1;
+            else newCustomers += 1;
+        }
 
         // Format chart data
-        const salesTrend = statsResult.salesTrend;
+        const salesTrend = statsResult.salesTrend || [];
         let chartData = [];
-        if (range === 'monthly') {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        if (range === "monthly") {
+            const monthNames = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
             for (let i = 5; i >= 0; i--) {
                 const d = new Date();
                 d.setMonth(d.getMonth() - i);
                 const dateStr = d.toISOString().slice(0, 7);
-                const data = salesTrend.find(item => item._id === dateStr);
+                const data = salesTrend.find((item) => item._id === dateStr);
                 chartData.push({
                     name: monthNames[d.getMonth()],
                     sales: data ? data.sales : 0,
                     orders: data ? data.orders : 0,
-                    traffic: 0
+                    customers: data ? data.customers : 0,
+                    traffic: data ? data.customers : 0,
                 });
             }
-        } else if (range === 'weekly') {
-            chartData = salesTrend.map((item, idx) => ({
-                name: `Week ${idx + 1}`,
-                sales: item.sales,
-                orders: item.orders,
-                traffic: 0
-            })).slice(-4);
+        } else if (range === "weekly") {
+            const weeks = salesTrend.slice(-4);
+            chartData = Array.from({ length: 4 }, (_, i) => {
+                const item = weeks[i];
+                return {
+                    name: `Week ${i + 1}`,
+                    sales: item?.sales || 0,
+                    orders: item?.orders || 0,
+                    customers: item?.customers || 0,
+                    traffic: item?.customers || 0,
+                };
+            });
         } else {
             const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
             for (let i = 6; i >= 0; i--) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                const dateStr = d.toISOString().split('T')[0];
-                const data = salesTrend.find(item => item._id === dateStr);
+                const dateStr = d.toISOString().split("T")[0];
+                const data = salesTrend.find((item) => item._id === dateStr);
                 chartData.push({
                     name: dayNames[d.getDay()],
                     sales: data ? data.sales : 0,
                     orders: data ? data.orders : 0,
-                    traffic: 0
+                    customers: data ? data.customers : 0,
+                    traffic: data ? data.customers : 0,
                 });
             }
         }
 
-        // Category distribution (separate pipeline — different collection)
+        // Category distribution (inventory mix — not period-bound)
         const categoryData = await Product.aggregate([
             { $match: { sellerId: sellerOid } },
             {
@@ -200,93 +299,108 @@ export const getSellerStats = async (req, res) => {
                     from: "categories",
                     localField: "categoryId",
                     foreignField: "_id",
-                    as: "category"
-                }
+                    as: "category",
+                },
             },
             { $unwind: "$category" },
             {
                 $group: {
                     _id: "$category.name",
-                    count: { $sum: 1 }
-                }
+                    count: { $sum: 1 },
+                },
             },
             {
                 $project: {
                     subject: "$_id",
                     A: "$count",
-                    fullMark: 100
-                }
-            }
+                    fullMark: 100,
+                },
+            },
         ]);
 
-        // Format insights
         const topCity = statsResult.topCities[0]?._id || "N/A";
         const peakHour = statsResult.peakHours[0]?._id;
-        const peakTime = peakHour !== undefined ? `${peakHour}:00 - ${peakHour + 2}:00` : "N/A";
+        const peakTime =
+            peakHour !== undefined ? `${peakHour}:00 - ${peakHour + 2}:00` : "N/A";
 
-        // Format top products with trends
-        const currentItems = statsResult.topProductsCurrent;
-        const prevItems = statsResult.topProductsPrev;
+        const currentItems = statsResult.topProductsCurrent || [];
+        const prevItems = statsResult.topProductsPrev || [];
 
-        const formattedTopProducts = currentItems.map(item => {
-            const prevItem = prevItems.find(p => p._id.toString() === item._id.toString());
-            const currSales = item.sales;
-            const pSales = prevItem ? prevItem.sales : 0;
+        const formattedTopProducts = currentItems
+            .map((item) => {
+                const prevItem = prevItems.find(
+                    (p) => String(p._id) === String(item._id),
+                );
+                const currSales = item.sales;
+                const pSales = prevItem ? prevItem.sales : 0;
+                let trend = 0;
+                if (pSales === 0) trend = currSales > 0 ? 100 : 0;
+                else trend = Math.round(((currSales - pSales) / pSales) * 100);
 
-            let trend = 0;
-            if (pSales === 0) {
-                trend = currSales > 0 ? 100 : 0;
-            } else {
-                trend = Math.round(((currSales - pSales) / pSales) * 100);
-            }
+                return {
+                    name: item.name,
+                    sales: currSales,
+                    revenue: `₹${item.revenue.toLocaleString()}`,
+                    trend,
+                };
+            })
+            .slice(0, 5);
 
-            return {
-                name: item.name,
-                sales: currSales,
-                revenue: `₹${item.revenue.toLocaleString()}`,
-                trend: trend
-            };
-        }).slice(0, 5);
-
-        // Format traffic sources
         const sourceColors = {
-            "Direct": "#3b82f6",
-            "Search": "#10b981",
-            "Social": "#f59e0b",
-            "Referral": "#8b5cf6"
+            Direct: "#3b82f6",
+            Search: "#10b981",
+            Social: "#f59e0b",
+            Referral: "#8b5cf6",
         };
 
-        const finalTrafficSources = (statsResult.trafficSources || []).map(s => ({
+        const finalTrafficSources = (statsResult.trafficSources || []).map((s) => ({
             ...s,
-            color: sourceColors[s.name] || "#CBD5E1"
+            name: s.name || "Direct",
+            color: sourceColors[s.name] || "#CBD5E1",
         }));
 
         if (finalTrafficSources.length === 0 && totalOrders > 0) {
-            finalTrafficSources.push({ name: "Direct", value: totalOrders, color: "#3b82f6" });
+            finalTrafficSources.push({
+                name: "Direct",
+                value: totalOrders,
+                color: "#3b82f6",
+            });
         }
 
         const topDeviceType = statsResult.devices[0]?._id || "Mobile";
         const topDeviceCount = statsResult.devices[0]?.count || 0;
-        const devicePerc = totalOrders > 0 ? Math.round((topDeviceCount / totalOrders) * 100) : 0;
+        const devicePerc =
+            totalOrders > 0 ? Math.round((topDeviceCount / totalOrders) * 100) : 0;
 
         return handleResponse(res, 200, "Stats fetched successfully", {
+            range,
+            compareLabel,
             overview: {
                 totalSales: `₹${totalSales.toLocaleString()}`,
                 totalOrders: totalOrders.toLocaleString(),
                 avgOrderValue: `₹${Math.round(avgOrderValue).toLocaleString()}`,
                 conversionRate: totalOrders > 0 ? "4.2%" : "0%",
-                salesTrend: `${salesTrendPerc > 0 ? '+' : ''}${salesTrendPerc}%`,
-                ordersTrend: `${ordersTrendPerc > 0 ? '+' : ''}${ordersTrendPerc}%`
+                salesTrend: `${salesTrendPerc > 0 ? "+" : ""}${salesTrendPerc}%`,
+                ordersTrend: `${ordersTrendPerc > 0 ? "+" : ""}${ordersTrendPerc}%`,
+                uniqueCustomers: uniqueCustomers.toLocaleString(),
+                customersTrend: `${customersTrendPerc > 0 ? "+" : ""}${customersTrendPerc}%`,
+                newCustomers: newCustomers.toLocaleString(),
+                returningCustomers: returningCustomers.toLocaleString(),
             },
             salesTrend: chartData,
+            customerTrend: chartData.map((d) => ({
+                name: d.name,
+                customers: d.customers || 0,
+                orders: d.orders || 0,
+            })),
             categoryMix: categoryData,
             topProducts: formattedTopProducts,
             trafficSources: finalTrafficSources,
             insights: {
-                topCity: topCity,
-                peakTime: peakTime,
-                topDevice: totalOrders > 0 ? `${devicePerc}% ${topDeviceType}` : "N/A"
-            }
+                topCity,
+                peakTime,
+                topDevice: totalOrders > 0 ? `${devicePerc}% ${topDeviceType}` : "N/A",
+            },
         });
     } catch (error) {
         return handleResponse(res, 500, error.message);
