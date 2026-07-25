@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
@@ -84,6 +84,11 @@ const StoreDetailPage = () => {
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [liveFavoriteCount, setLiveFavoriteCount] = useState(0);
+  const [storeReviews, setStoreReviews] = useState([]);
+  const [reviewStats, setReviewStats] = useState({ avgRating: 0, reviewCount: 0 });
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: "" });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
 
@@ -157,6 +162,24 @@ const StoreDetailPage = () => {
 
         setProducts(formattedProds);
       }
+
+      try {
+        setReviewLoading(true);
+        const reviewsRes = await customerApi.getStoreReviews(sellerId);
+        if (reviewsRes.data?.success) {
+          const payload = reviewsRes.data.result || {};
+          const list = Array.isArray(payload.reviews) ? payload.reviews : [];
+          setStoreReviews(list);
+          setReviewStats({
+            avgRating: Number(payload.avgRating || 0),
+            reviewCount: Number(payload.reviewCount || list.length || 0),
+          });
+        }
+      } catch (reviewError) {
+        console.error("Failed to load store reviews", reviewError);
+      } finally {
+        setReviewLoading(false);
+      }
     } catch (e) {
       console.error("Failed to load storefront detail data", e);
     } finally {
@@ -209,6 +232,75 @@ const StoreDetailPage = () => {
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
   const favorited = isFavoriteStore(sellerId);
   const favoriteCount = Number(liveFavoriteCount || seller?.favoriteCount || 0);
+  const displayAvg = Number(
+    reviewStats.avgRating || seller?.avgRating || 0,
+  ).toFixed(1);
+  const displayReviewCount = Number(
+    reviewStats.reviewCount || seller?.reviewCount || storeReviews.length || 0,
+  );
+
+  const handleStoreReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      showToast("Please login to review this store", "info");
+      navigate("/login");
+      return;
+    }
+    if (!newReview.comment.trim()) {
+      showToast("Please write a short review", "error");
+      return;
+    }
+    try {
+      setIsSubmittingReview(true);
+      const res = await customerApi.submitReview({
+        targetType: "store",
+        storeId: sellerId,
+        rating: newReview.rating,
+        comment: newReview.comment.trim(),
+      });
+      if (res.data?.success) {
+        showToast("Thanks! Your store review is live", "success");
+        setNewReview({ rating: 5, comment: "" });
+        const stats = res.data?.result?.stats;
+        if (stats) {
+          setReviewStats({
+            avgRating: Number(stats.avgRating || 0),
+            reviewCount: Number(stats.reviewCount || 0),
+          });
+          setSeller((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  avgRating: Number(stats.avgRating || 0),
+                  reviewCount: Number(stats.reviewCount || 0),
+                }
+              : prev,
+          );
+        }
+        try {
+          const reviewsRes = await customerApi.getStoreReviews(sellerId);
+          if (reviewsRes.data?.success) {
+            const payload = reviewsRes.data.result || {};
+            const list = Array.isArray(payload.reviews) ? payload.reviews : [];
+            setStoreReviews(list);
+            setReviewStats({
+              avgRating: Number(payload.avgRating || 0),
+              reviewCount: Number(payload.reviewCount || list.length || 0),
+            });
+          }
+        } catch {
+          /* keep optimistic stats */
+        }
+      }
+    } catch (error) {
+      showToast(
+        error?.response?.data?.message || "Failed to submit store review",
+        "error",
+      );
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   const handleToggleFavorite = async () => {
     if (!seller) return;
@@ -427,6 +519,13 @@ const StoreDetailPage = () => {
                       {seller.shopName || seller.name}
                     </h1>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                        <Star size={12} className="fill-current" />
+                        {displayAvg}/5
+                        {displayReviewCount > 0
+                          ? ` · ${displayReviewCount} reviews`
+                          : ""}
+                      </span>
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full">
                         <Heart size={12} className="fill-current" />
                         {favoriteCount}{" "}
@@ -614,6 +713,116 @@ const StoreDetailPage = () => {
               </main>
 
             </div>
+
+            {/* Store ratings & reviews */}
+            <section className="bg-white rounded-[2rem] border border-slate-100 p-6 md:p-8 shadow-sm space-y-6">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <MessageSquare size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                    Store Reviews
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {`${displayAvg}/5 average · ${displayReviewCount} reviews`}
+                  </p>
+                </div>
+              </div>
+
+              <form
+                onSubmit={handleStoreReviewSubmit}
+                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-3"
+              >
+                <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                  Rate this shop
+                </p>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewReview({ ...newReview, rating: star })}
+                      className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center transition-colors",
+                        newReview.rating >= star
+                          ? "bg-orange-50 text-orange-500"
+                          : "bg-white text-slate-300",
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "h-5 w-5",
+                          newReview.rating >= star && "fill-current",
+                        )}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={newReview.comment}
+                  onChange={(e) =>
+                    setNewReview({ ...newReview, comment: e.target.value })
+                  }
+                  rows={3}
+                  placeholder="Share your experience with this store..."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-400"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmittingReview}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                </button>
+              </form>
+
+              {reviewLoading ? (
+                <div className="py-8 flex justify-center">
+                  <div className="h-8 w-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                </div>
+              ) : storeReviews.length > 0 ? (
+                <div className="space-y-3">
+                  {storeReviews.map((review) => (
+                    <div
+                      key={review._id}
+                      className="rounded-2xl border border-slate-100 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <h4 className="font-bold text-slate-800">
+                            {review.userId?.name || "Customer"}
+                          </h4>
+                          <div className="flex items-center gap-0.5 mt-1">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <Star
+                                key={i}
+                                size={12}
+                                className={cn(
+                                  i <= review.rating
+                                    ? "text-orange-400 fill-orange-400"
+                                    : "text-slate-200",
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                        {review.comment}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-slate-400 text-center py-4">
+                  No store reviews yet.
+                </p>
+              )}
+            </section>
 
           </div>
         )}

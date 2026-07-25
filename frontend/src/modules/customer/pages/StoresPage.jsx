@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Store, MapPin, Clock, ArrowRight, Search, 
-  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter, ChevronDown, Heart
+  Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter, ChevronDown, Heart, Star
 } from "lucide-react";
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 import { customerApi } from "../services/customerApi";
@@ -529,28 +529,49 @@ const StoresPage = () => {
                       <h3 className={`text-lg font-black text-slate-800 tracking-tight leading-tight transition-colors duration-300 ${theme.titleHover}`}>
                         {s.shopName || s.name}
                       </h3>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span
-                          className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                            s.isOpen === false
-                              ? "bg-rose-50 text-rose-700 border-rose-100"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                          }`}
-                        >
-                          {s.isOpen === false ? "Off" : "Open"}
-                        </span>
-                        {Number(s.favoriteCount || 0) > 0 && (
-                          <span className="text-[9px] font-black uppercase tracking-widest text-rose-500 inline-flex items-center gap-1">
-                            <Heart size={10} className="fill-current" />
-                            {s.favoriteCount}
-                          </span>
-                        )}
-                      </div>
+                      <span
+                        className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                          s.isOpen === false
+                            ? "bg-rose-50 text-rose-700 border-rose-100"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        }`}
+                      >
+                        {s.isOpen === false ? "Off" : "Open"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                        <Star size={11} className="fill-current" />
+                        {Number(s.avgRating || 0) > 0
+                          ? `${Number(s.avgRating).toFixed(1)}/5`
+                          : "0/5"}
+                        {Number(s.reviewCount || 0) > 0
+                          ? ` · ${s.reviewCount}`
+                          : ""}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                        <Heart size={11} className="fill-current" />
+                        {Number(s.favoriteCount || 0)}{" "}
+                        {Number(s.favoriteCount || 0) === 1
+                          ? "favorite"
+                          : "favorites"}
+                      </span>
                     </div>
 
                     <p className="text-slate-500 text-xs font-semibold line-clamp-2 leading-relaxed">
                       {s.description || `Fresh collections and quality products directly delivered from ${s.shopName || s.name}.`}
                     </p>
+
+                    {(s.address || s.locality || s.city) && (
+                      <div className="mt-2 flex items-start gap-1.5 text-slate-500">
+                        <MapPin size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                        <span className="text-[11px] font-semibold leading-snug line-clamp-2">
+                          {s.address ||
+                            [s.locality, s.city].filter(Boolean).join(", ")}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Quick Stats Grid */}
                     <div className="mt-3 grid grid-cols-2 gap-2.5 pt-3 border-t border-slate-100/60">
@@ -589,15 +610,6 @@ const StoresPage = () => {
                           className="mt-3 space-y-2 text-xs text-slate-600 bg-slate-100/30 border border-slate-100/50 p-3 rounded-2xl animate-in slide-in-from-top-4 duration-300"
                           onClick={(e) => e.stopPropagation()} // block navigation
                         >
-                          <div className="flex items-start gap-2">
-                            <MapPin size={13} className="text-slate-400 mt-0.5 shrink-0" />
-                            <span className="font-semibold leading-tight">{s.address || "Address details not available"}</span>
-                          </div>
-                          {s.locality && (
-                            <div className="flex items-center gap-2 pl-5 text-[11px] text-slate-500 font-medium">
-                              <span>Locality: {s.locality}</span>
-                            </div>
-                          )}
                           <div className="flex items-center gap-2">
                             <Phone size={13} className="text-slate-400 shrink-0" />
                             <span className="font-bold">{s.phone || "No contact phone"}</span>

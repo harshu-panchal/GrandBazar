@@ -177,6 +177,17 @@ const productSchema = new mongoose.Schema(
             enum: ["per_qty", "per_item"],
             default: "per_qty",
         },
+        avgRating: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 5,
+        },
+        reviewCount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
     },
     { timestamps: true }
 );

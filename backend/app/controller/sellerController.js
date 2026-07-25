@@ -418,7 +418,7 @@ export const getPublicSellerProfile = async (req, res) => {
     }
 
     const store = await Store.findById(id)
-      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount")
+      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount avgRating reviewCount")
       .lean();
 
     if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {

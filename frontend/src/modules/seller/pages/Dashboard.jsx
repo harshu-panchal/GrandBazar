@@ -299,6 +299,12 @@ const Dashboard = () => {
                 <h3 className="text-base font-bold text-slate-900 truncate">
                   {activeStore.shopName || "Your store"}
                 </h3>
+                <p className="text-sm font-semibold text-amber-600 mt-0.5">
+                  ★ {Number(activeStore.avgRating || 0).toFixed(1)}/5
+                  {Number(activeStore.reviewCount || 0) > 0
+                    ? ` · ${activeStore.reviewCount} review${Number(activeStore.reviewCount) === 1 ? "" : "s"}`
+                    : " · No reviews yet"}
+                </p>
                 <p className="text-sm text-slate-500 mt-0.5">
                   {storeIsOpen
                     ? "Store is ON — visible to customers and accepting orders."

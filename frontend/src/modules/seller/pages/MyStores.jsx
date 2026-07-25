@@ -442,6 +442,12 @@ const MyStores = () => {
                         {getStoreCategoriesLabel(store)}
                       </p>
                     )}
+                    <p className="text-xs font-semibold text-amber-600 mt-1">
+                      ★ {Number(store.avgRating || 0).toFixed(1)}/5
+                      {Number(store.reviewCount || 0) > 0
+                        ? ` · ${store.reviewCount} review${Number(store.reviewCount) === 1 ? '' : 's'}`
+                        : ' · No reviews yet'}
+                    </p>
                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
                       <MapPin className="h-3 w-3" />
                       {store.address || store.city || 'Location not set'}

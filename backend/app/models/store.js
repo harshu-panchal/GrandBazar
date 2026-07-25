@@ -237,6 +237,19 @@ const storeSchema = new mongoose.Schema(
       min: 0,
       index: true,
     },
+
+    /** Average of approved store reviews (1–5). */
+    avgRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true },
 );

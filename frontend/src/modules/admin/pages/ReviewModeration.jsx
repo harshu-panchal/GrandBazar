@@ -45,10 +45,17 @@ const ReviewModeration = () => {
                     ...r,
                     id: r._id,
                     user: r.userId?.name || "Anonymous",
-                    item: r.productId?.name || "Deleted Product",
-                    itemImage: r.productId?.images?.[0],
+                    item:
+                      r.targetType === "store"
+                        ? r.storeId?.shopName || "Store"
+                        : r.productId?.name || "Deleted Product",
+                    itemImage:
+                      r.targetType === "store"
+                        ? r.storeId?.banners?.[0]
+                        : (r.productId?.mainImage || r.productId?.images?.[0]),
+                    targetType: r.targetType || "product",
                     date: new Date(r.createdAt).toLocaleString(),
-                    tags: [] // Tags can be empty or logic-based
+                    tags: r.targetType === "store" ? ["Store"] : ["Product"],
                 })));
                 setTotal(typeof payload.total === 'number' ? payload.total : data.length);
                 setPage(typeof payload.page === 'number' ? payload.page : requestedPage);

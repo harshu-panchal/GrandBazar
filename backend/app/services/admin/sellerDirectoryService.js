@@ -444,6 +444,9 @@ export async function getActiveSellersData({
       productCount,
       activeProductCount,
       serviceRadius: Number(store.serviceRadius || 5),
+      avgRating: Number(store.avgRating || 0),
+      reviewCount: Number(store.reviewCount || 0),
+      favoriteCount: Number(store.favoriteCount || 0),
       location: getSellerDisplayLocation(store),
       city: store.address || "Location not set",
       latitude: Array.isArray(store.location?.coordinates)
@@ -625,6 +628,9 @@ export async function getActiveSellerByIdData(id) {
     productCount: Number(productStats.productCount || 0),
     activeProductCount: Number(productStats.activeProductCount || 0),
     serviceRadius: Number(store.serviceRadius || 5),
+    avgRating: Number(store.avgRating || 0),
+    reviewCount: Number(store.reviewCount || 0),
+    favoriteCount: Number(store.favoriteCount || 0),
     gstNumber: store.gstNumber || "",
     bankInfo: {
       bankName: store.bankName || "",
