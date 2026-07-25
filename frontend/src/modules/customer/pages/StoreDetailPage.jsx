@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
+import { useFavoriteStores } from "../context/FavoriteStoresContext";
+import { useAuth } from "@core/context/AuthContext";
+import { useToast } from "@shared/components/ui/Toast";
 import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
@@ -69,6 +72,9 @@ const StoreDetailPage = () => {
   const { sellerId } = useParams();
   const navigate = useNavigate();
   const { currentLocation } = useAppLocation();
+  const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
+  const { isFavoriteStore, toggleFavoriteStore } = useFavoriteStores();
   
   const [seller, setSeller] = useState(null);
   const [products, setProducts] = useState([]);
@@ -76,6 +82,8 @@ const StoreDetailPage = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [liveFavoriteCount, setLiveFavoriteCount] = useState(0);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
 
@@ -119,7 +127,12 @@ const StoreDetailPage = () => {
       ]);
 
       if (profileRes.data?.success) {
-        setSeller(profileRes.data.results || profileRes.data.result || profileRes.data.data);
+        const profile =
+          profileRes.data.results ||
+          profileRes.data.result ||
+          profileRes.data.data;
+        setSeller(profile);
+        setLiveFavoriteCount(Number(profile?.favoriteCount || 0));
       }
 
       if (productsRes.data?.success) {
@@ -194,6 +207,46 @@ const StoreDetailPage = () => {
   }, [products, selectedCategory, searchQuery]);
 
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
+  const favorited = isFavoriteStore(sellerId);
+  const favoriteCount = Number(liveFavoriteCount || seller?.favoriteCount || 0);
+
+  const handleToggleFavorite = async () => {
+    if (!seller) return;
+    if (!isAuthenticated) {
+      showToast("Please login to favorite sellers", "info");
+      navigate("/login");
+      return;
+    }
+    try {
+      setFavoriteBusy(true);
+      const result = await toggleFavoriteStore({
+        ...seller,
+        id: sellerId,
+        _id: sellerId,
+      });
+      const nowFavorite = result?.isFavorite === true;
+      if (typeof result?.favoriteCount === "number") {
+        setLiveFavoriteCount(result.favoriteCount);
+      } else {
+        setLiveFavoriteCount((prev) =>
+          Math.max(0, prev + (nowFavorite ? 1 : -1)),
+        );
+      }
+      showToast(
+        nowFavorite
+          ? "Added to favorite sellers"
+          : "Removed from favorite sellers",
+        nowFavorite ? "success" : "info",
+      );
+    } catch (error) {
+      showToast(
+        error?.response?.data?.message || "Could not update favorites",
+        "error",
+      );
+    } finally {
+      setFavoriteBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 pt-[24px] md:pt-[40px]">
@@ -209,15 +262,33 @@ const StoreDetailPage = () => {
             <span>Back to Stores</span>
           </button>
           
-          {seller?.phone && (
-            <a
-              href={`tel:${seller.phone}`}
-              className="h-10 px-4 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm gap-2"
-            >
-              <Phone size={14} className="text-emerald-500 fill-current" />
-              <span>Call Shop</span>
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            {seller && (
+              <button
+                type="button"
+                disabled={favoriteBusy}
+                onClick={handleToggleFavorite}
+                className={cn(
+                  "h-10 px-4 rounded-xl border flex items-center justify-center text-xs font-bold transition-colors shadow-sm gap-2",
+                  favorited
+                    ? "bg-rose-50 border-rose-100 text-rose-600"
+                    : "bg-white border-slate-100 text-slate-700 hover:bg-slate-50",
+                )}
+              >
+                <Heart size={14} className={cn(favorited && "fill-current")} />
+                <span>{favorited ? "Unlike" : "Favorite"}</span>
+              </button>
+            )}
+            {seller?.phone && (
+              <a
+                href={`tel:${seller.phone}`}
+                className="h-10 px-4 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm gap-2"
+              >
+                <Phone size={14} className="text-emerald-500 fill-current" />
+                <span>Call Shop</span>
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Loading Spinner */}
@@ -282,9 +353,15 @@ const StoreDetailPage = () => {
               </div>
             )}
             
-            {/* Store Branding Banner */}
+              {/* Store Branding Banner */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">
               
+              {seller.isOpen === false && (
+                <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  This store is currently Off. You can browse products, but orders cannot be placed right now.
+                </div>
+              )}
+
               {/* Ultra-Premium Floating Welcome Banner */}
               <div className="mb-6 -mx-6 md:-mx-8 -mt-6 md:-mt-8 px-6 md:px-8 py-4 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border-b border-slate-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none relative overflow-hidden group hover:from-amber-500/15 hover:via-rose-500/15 hover:to-violet-500/15 transition-all duration-500">
                 {/* Glowing shimmer stroke line */}
@@ -312,9 +389,15 @@ const StoreDetailPage = () => {
                 </div>
 
                 <div className="flex items-center gap-2.5 z-10 sm:self-center bg-white/60 border border-white/80 px-3.5 py-1.5 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.01)] hover:scale-105 transition-transform duration-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      seller.isOpen === false
+                        ? "bg-rose-500"
+                        : "bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]"
+                    }`}
+                  />
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
-                    Open & Ready to Serve
+                    {seller.isOpen === false ? "Currently Closed" : "Open & Ready to Serve"}
                   </span>
                 </div>
               </div>
@@ -343,6 +426,19 @@ const StoreDetailPage = () => {
                     <h1 className="text-2xl md:text-3xl font-[1000] tracking-tight text-slate-900 mt-1">
                       {seller.shopName || seller.name}
                     </h1>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full">
+                        <Heart size={12} className="fill-current" />
+                        {favoriteCount}{" "}
+                        {favoriteCount === 1 ? "favorite" : "favorites"}
+                      </span>
+                      {favoriteCount >= 5 && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+                          <Sparkles size={12} />
+                          Popular
+                        </span>
+                      )}
+                    </div>
                     <p className="text-slate-500 text-[11px] md:text-xs font-semibold max-w-xl leading-relaxed mt-1.5">
                       {seller.description || `Browse clean and premium inventory directly stocked and delivered from ${seller.shopName || seller.name}.`}
                     </p>

@@ -44,6 +44,10 @@ import { emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
+import {
+  getOrderReassignCandidates,
+  adminReassignOrderToStore,
+} from "../services/orderReassignService.js";
 
 export const getSellerSchedulingSettings = async (req, res) => {
   try {
@@ -88,6 +92,17 @@ export const getAvailableDeliverySlots = async (req, res) => {
     const store = await Store.findById(sellerId).lean();
     if (!store) return handleResponse(res, 404, "Store not found");
     const settings = resolveStoreSchedulingSettings(store);
+    if (!settings.enabled) {
+      return handleResponse(res, 200, "Scheduling is disabled for this store", {
+        deliveryDate,
+        schedulingEnabled: false,
+        windows: (settings.deliveryWindows || []).map((window) => ({
+          ...window,
+          available: false,
+          reason: "Scheduling is not enabled for this store",
+        })),
+      });
+    }
     const windows = [];
     for (const window of settings.deliveryWindows) {
       try {
@@ -95,13 +110,22 @@ export const getAvailableDeliverySlots = async (req, res) => {
           sellerId,
           deliveryDate,
           windowLabel: window.label,
+          checkRescheduleCutoff: false,
         });
-        windows.push({ ...window, available: true });
-      } catch {
-        windows.push({ ...window, available: false });
+        windows.push({ ...window, available: true, reason: null });
+      } catch (error) {
+        windows.push({
+          ...window,
+          available: false,
+          reason: error.message || "Unavailable",
+        });
       }
     }
-    return handleResponse(res, 200, "Delivery slots", { deliveryDate, windows });
+    return handleResponse(res, 200, "Delivery slots", {
+      deliveryDate,
+      schedulingEnabled: true,
+      windows,
+    });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -449,5 +473,40 @@ export const adminLogisticsOverride = async (req, res) => {
     return handleResponse(res, 200, "Logistics override applied", updated);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const getReassignCandidates = async (req, res) => {
+  try {
+    const result = await getOrderReassignCandidates(req.params.orderId);
+    return handleResponse(res, 200, "Reassign candidates", result);
+  } catch (error) {
+    return handleResponse(
+      res,
+      error.statusCode || 500,
+      error.message,
+      error.details || {},
+    );
+  }
+};
+
+export const adminReassignOrder = async (req, res) => {
+  try {
+    const { targetStoreId, note, reason } = req.body || {};
+    const order = await adminReassignOrderToStore({
+      orderId: req.params.orderId,
+      targetStoreId,
+      adminId: req.user?.id,
+      note,
+      reason: reason || "seller_unavailable",
+    });
+    return handleResponse(res, 200, "Order reassigned to another store", order);
+  } catch (error) {
+    return handleResponse(
+      res,
+      error.statusCode || 500,
+      error.message,
+      error.details || {},
+    );
   }
 };

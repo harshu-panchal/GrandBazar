@@ -11,7 +11,9 @@ import {
   INVALID_FCM_TOKEN_CODES,
   NOTIFICATION_QUEUE_CONCURRENCY,
   NOTIFICATION_QUEUE_JOB_TIMEOUT_MS,
+  NOTIFICATION_ROLES,
 } from "./notification.constants.js";
+import { resolveSellerPushUserIds } from "./sellerPushRecipients.js";
 import { isRedisEnabled } from "../../config/redis.js";
 import logger from "../../services/logger.js";
 import {
@@ -93,13 +95,27 @@ export async function deliverNotificationById(notificationId) {
     return;
   }
 
-  const tokens = await PushToken.find({
-    userId: notification.userId,
+  let pushUserIds = [notification.userId].filter(Boolean);
+  if (notification.role === NOTIFICATION_ROLES.SELLER) {
+    pushUserIds = await resolveSellerPushUserIds(notification.userId);
+  }
+
+  const tokensRaw = await PushToken.find({
+    userId: { $in: pushUserIds },
     role: notification.role,
     isActive: true,
   })
     .sort({ lastUsedAt: -1 })
     .lean();
+
+  // One FCM token should only be sent once even if multiple identity ids matched.
+  const seenTokens = new Set();
+  const tokens = tokensRaw.filter((doc) => {
+    const key = String(doc.token || "");
+    if (!key || seenTokens.has(key)) return false;
+    seenTokens.add(key);
+    return true;
+  });
 
   if (!tokens.length) {
     await Notification.updateOne(

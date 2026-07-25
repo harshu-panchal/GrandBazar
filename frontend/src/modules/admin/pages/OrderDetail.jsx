@@ -32,10 +32,21 @@ import {
     Camera,
     CheckCircle2,
     XCircle,
+    ArrowRightLeft,
+    RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
+import { getOrderStoreReassignment } from '@/shared/utils/orderStatus';
+
+const REASSIGNABLE_WORKFLOW = new Set([
+    'SELLER_PENDING',
+    'SELLER_ACCEPTED',
+    'SCHEDULED_HOLD',
+    'DELIVERY_SEARCH',
+    'EXTERNAL_LOGISTICS_PENDING',
+]);
 
 const OrderDetail = () => {
     const { orderId } = useParams();
@@ -48,6 +59,12 @@ const OrderDetail = () => {
     const [externalTracking, setExternalTracking] = useState("");
     const [isAssigningExternal, setIsAssigningExternal] = useState(false);
     const [isReviewingCancel, setIsReviewingCancel] = useState(false);
+    const [reassignOpen, setReassignOpen] = useState(false);
+    const [reassignCandidates, setReassignCandidates] = useState([]);
+    const [reassignLoading, setReassignLoading] = useState(false);
+    const [selectedStoreId, setSelectedStoreId] = useState("");
+    const [reassignNote, setReassignNote] = useState("");
+    const [isReassigning, setIsReassigning] = useState(false);
     const invoiceRef = useRef(null);
 
     const fetchDetail = async () => {
@@ -125,6 +142,69 @@ const OrderDetail = () => {
             showToast(error?.response?.data?.message || 'Failed to reject cancellation request', 'error');
         } finally {
             setIsReviewingCancel(false);
+        }
+    };
+
+    const canReassignStore = REASSIGNABLE_WORKFLOW.has(
+        String(order?.workflowStatus || '').toUpperCase(),
+    );
+
+    const loadReassignCandidates = async () => {
+        if (!order?.orderId) return;
+        setReassignLoading(true);
+        setSelectedStoreId("");
+        try {
+            const res = await adminApi.getOrderReassignCandidates(order.orderId);
+            const payload = res.data?.result || {};
+            setReassignCandidates(Array.isArray(payload.candidates) ? payload.candidates : []);
+            setReassignOpen(true);
+            if (!payload.candidates?.length) {
+                showToast(payload.message || 'No eligible stores found for this order', 'warning');
+            }
+        } catch (error) {
+            showToast(
+                error?.response?.data?.message || 'Failed to load store candidates',
+                'error',
+            );
+        } finally {
+            setReassignLoading(false);
+        }
+    };
+
+    const handleReassignStore = async () => {
+        if (!selectedStoreId) {
+            showToast('Select a target store first', 'error');
+            return;
+        }
+        const target = reassignCandidates.find((c) => c.storeId === selectedStoreId);
+        if (!window.confirm(
+            `Move this order to "${target?.shopName || 'selected store'}"? Original store will lose the order and the new store must accept it.`,
+        )) {
+            return;
+        }
+        setIsReassigning(true);
+        try {
+            await adminApi.reassignOrderStore(order.orderId, {
+                targetStoreId: selectedStoreId,
+                note: reassignNote.trim(),
+                reason: 'seller_unavailable',
+            });
+            showToast('Order moved to the new store successfully', 'success');
+            setReassignOpen(false);
+            setReassignNote('');
+            fetchDetail();
+        } catch (error) {
+            const missing = error?.response?.data?.result?.missing;
+            const detail =
+                Array.isArray(missing) && missing.length
+                    ? missing.map((m) => m.name || m.reason).join(', ')
+                    : '';
+            showToast(
+                `${error?.response?.data?.message || 'Failed to reassign order'}${detail ? `: ${detail}` : ''}`,
+                'error',
+            );
+        } finally {
+            setIsReassigning(false);
         }
     };
 
@@ -228,6 +308,9 @@ const OrderDetail = () => {
         );
     }
 
+    const fulfillment = getFulfillmentDisplay(order);
+    const storeReassignment = getOrderStoreReassignment(order);
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
             {/* Control Bar */}
@@ -240,7 +323,7 @@ const OrderDetail = () => {
                         <ChevronLeft className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
                     </button>
                     <div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Order #{order.orderId}</h1>
                             <div className="relative inline-block w-44">
                                 <select
@@ -260,27 +343,36 @@ const OrderDetail = () => {
                                 </select>
                                 <Info className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none opacity-60" />
                             </div>
+                            {storeReassignment && (
+                                <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                    <ArrowRightLeft className="h-3 w-3" />
+                                    Reassigned
+                                </Badge>
+                            )}
                         </div>
                         <p className="text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-2">
                             <Calendar className="h-3.5 w-3.5" />
                             {new Date(order.createdAt).toLocaleDateString()} • <Clock className="h-3.5 w-3.5 ml-1" /> {new Date(order.createdAt).toLocaleTimeString()}
                         </p>
-                        {(() => {
-                            const fulfillment = getFulfillmentDisplay(order);
-                            return (
-                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                    <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.typeBadgeClassName)}>
-                                        {fulfillment.typeLabel}
-                                    </Badge>
-                                    <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.methodBadgeClassName)}>
-                                        {fulfillment.methodLabel}
-                                    </Badge>
-                                    <span className="text-[10px] font-bold text-slate-500 normal-case tracking-normal">
-                                        {fulfillment.detail}
-                                    </span>
-                                </div>
-                            );
-                        })()}
+                        {storeReassignment && (
+                            <p className="mt-1.5 text-[11px] font-bold text-violet-700">
+                                Moved from {storeReassignment.fromShopName} → {storeReassignment.toShopName}
+                                {storeReassignment.reassignedAt
+                                    ? ` · ${new Date(storeReassignment.reassignedAt).toLocaleString('en-IN')}`
+                                    : ''}
+                            </p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.typeBadgeClassName)}>
+                                {fulfillment.typeLabel}
+                            </Badge>
+                            <Badge className={cn('text-[9px] font-black uppercase border', fulfillment.methodBadgeClassName)}>
+                                {fulfillment.methodLabel}
+                            </Badge>
+                            <span className="text-[10px] font-bold text-slate-500 normal-case tracking-normal">
+                                {fulfillment.detail}
+                            </span>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -372,12 +464,114 @@ const OrderDetail = () => {
                             <div className="h-16 w-16 bg-orange-50 rounded-2xl flex items-center justify-center ds-h2 font-black text-orange-600 uppercase">
                                 {order.seller?.shopName?.[0] || 'S'}
                             </div>
-                            <div className="text-left">
+                            <div className="text-left flex-1 min-w-0">
                                 <h3 className="text-lg font-black text-slate-900 leading-tight">{order.seller?.shopName || 'Unknown Shop'}</h3>
                                 <p className="text-xs font-bold text-brand-600 uppercase tracking-tighter">Verified Anchor Partner</p>
                                 <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">OWNER: {order.seller?.name}</p>
                             </div>
                         </div>
+
+                        {canReassignStore && (
+                            <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                            Shift to another store
+                                        </p>
+                                        <p className="text-[11px] text-slate-500 mt-1">
+                                            Use when the current seller/store is off or cannot fulfill. Target store must have matching products + stock and fall within the customer's delivery range.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={loadReassignCandidates}
+                                        disabled={reassignLoading}
+                                        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 disabled:opacity-50"
+                                    >
+                                        {reassignLoading ? (
+                                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                                        )}
+                                        Reassign
+                                    </button>
+                                </div>
+
+                                {reassignOpen && (
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-3">
+                                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                            Target store
+                                        </label>
+                                        <select
+                                            value={selectedStoreId}
+                                            onChange={(e) => setSelectedStoreId(e.target.value)}
+                                            className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold outline-none"
+                                        >
+                                            <option value="">Select store…</option>
+                                            {reassignCandidates.map((c) => {
+                                                const blockers = [];
+                                                if (!c.productsAvailable && !c.stockOk) {
+                                                    blockers.push('low stock / missing products');
+                                                } else if (!c.productsAvailable) {
+                                                    blockers.push('incomplete catalog match');
+                                                }
+                                                if (c.inCustomerRange === false) {
+                                                    blockers.push(
+                                                        c.rangeReason || 'out of customer range',
+                                                    );
+                                                }
+                                                const distanceLabel =
+                                                    c.distanceKm != null
+                                                        ? ` · ${c.distanceKm} km`
+                                                        : '';
+                                                return (
+                                                <option
+                                                    key={c.storeId}
+                                                    value={c.storeId}
+                                                    disabled={!c.canReassign}
+                                                >
+                                                    {c.shopName}
+                                                    {c.locality ? ` · ${c.locality}` : ''}
+                                                    {distanceLabel}
+                                                    {` · ${c.coveragePct}% match`}
+                                                    {c.canReassign
+                                                        ? ''
+                                                        : blockers.length
+                                                          ? ` (${blockers.join('; ')})`
+                                                          : ' (not eligible)'}
+                                                    {c.isOpenNow ? '' : ' · closed now'}
+                                                </option>
+                                                );
+                                            })}
+                                        </select>
+                                        <textarea
+                                            value={reassignNote}
+                                            onChange={(e) => setReassignNote(e.target.value)}
+                                            rows={2}
+                                            placeholder="Optional note (e.g. seller off / holiday)"
+                                            className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold outline-none resize-none"
+                                        />
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setReassignOpen(false)}
+                                                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleReassignStore}
+                                                disabled={isReassigning || !selectedStoreId}
+                                                className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-black disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
+                                            >
+                                                {isReassigning ? 'Moving…' : 'Confirm shift'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </Card>
 
                     {/* Logistical Nodes */}
@@ -388,6 +582,35 @@ const OrderDetail = () => {
                         </h3>
                         <div className="space-y-6 relative ml-4">
                             <div className="absolute top-0 bottom-0 left-[7.5px] w-0.5 bg-slate-100" />
+                            {storeReassignment && (
+                                <div className="flex gap-6 relative">
+                                    <div className="h-4 w-4 rounded-full ring-4 ring-white z-10 mt-1 bg-violet-500 shadow-lg shadow-violet-200" />
+                                    <div className="flex-1 pb-4">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <h4 className="text-xs font-black uppercase tracking-tight text-slate-900 flex items-center gap-2">
+                                                <ArrowRightLeft className="h-3.5 w-3.5 text-violet-600" />
+                                                Store Reassigned
+                                            </h4>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                {storeReassignment.reassignedAt
+                                                    ? new Date(storeReassignment.reassignedAt).toLocaleString('en-IN')
+                                                    : ''}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                                            Moved from <span className="text-slate-800">{storeReassignment.fromShopName}</span>
+                                            {' '}→{' '}
+                                            <span className="text-slate-800">{storeReassignment.toShopName}</span>.
+                                            Order reset to seller pending for acceptance.
+                                        </p>
+                                        {storeReassignment.note ? (
+                                            <p className="text-[10px] font-semibold text-slate-400 mt-1 italic">
+                                                {storeReassignment.note}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex gap-6 relative">
                                 <div className="h-4 w-4 rounded-full ring-4 ring-white z-10 mt-1 bg-brand-500 shadow-lg shadow-brand-200" />
                                 <div className="flex-1 pb-4">

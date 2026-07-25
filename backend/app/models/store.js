@@ -137,6 +137,12 @@ const storeSchema = new mongoose.Schema(
       default: false,
     },
 
+    /** Seller open/close for orders. Closed stores stay listed but show as Off to customers. */
+    isOpen: {
+      type: Boolean,
+      default: true,
+    },
+
     location: {
       type: {
         type: String,
@@ -223,11 +229,20 @@ const storeSchema = new mongoose.Schema(
         previousPolicy: { type: mongoose.Schema.Types.Mixed, default: null },
       },
     },
+
+    /** How many customers favorited this store — drives popularity ranking. */
+    favoriteCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
   },
   { timestamps: true },
 );
 
 storeSchema.index({ location: "2dsphere" });
 storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1 });
+storeSchema.index({ favoriteCount: -1 });
 
 export default mongoose.model("Store", storeSchema);

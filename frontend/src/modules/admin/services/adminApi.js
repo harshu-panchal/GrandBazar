@@ -95,6 +95,10 @@ export const adminApi = {
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
+    getOrderReassignCandidates: (orderId) =>
+        axiosInstance.get(`/orders/${orderId}/reassign-candidates`),
+    reassignOrderStore: (orderId, data) =>
+        axiosInstance.put(`/orders/${orderId}/reassign-store`, data),
     approveOrderCancellationRequest: (orderId, data = {}) =>
         axiosInstance.put(`/orders/cancel/${orderId}/approve`, data),
     rejectOrderCancellationRequest: (orderId, data = {}) =>

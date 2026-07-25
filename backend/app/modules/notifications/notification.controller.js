@@ -36,8 +36,19 @@ const BROADCAST_AUDIENCES = Object.freeze({
 
 function resolveNotificationFilter(req) {
   const userId = req?.user?.id;
+  const ids = new Set(
+    [userId, req?.user?.accountId, req?.user?.activeStoreId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+  const list = [...ids];
+  if (list.length <= 1) {
+    return {
+      $or: [{ userId }, { recipient: userId }],
+    };
+  }
   return {
-    $or: [{ userId }, { recipient: userId }],
+    $or: [{ userId: { $in: list } }, { recipient: { $in: list } }],
   };
 }
 

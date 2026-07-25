@@ -41,6 +41,35 @@ function isCustomerVisibilityRequest(req) {
   return !role || (role !== "admin" && role !== "seller" && role !== "delivery");
 }
 
+function normalizeProductCommissionFields(data = {}) {
+  const apply =
+    data.applyCommission === true || data.applyCommission === "true";
+  const rawValue = Number(
+    data.adminCommissionValue ?? data.adminCommission ?? 0,
+  );
+  const value = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+  const type =
+    data.adminCommissionType === "fixed" ? "fixed" : "percentage";
+  const fixedRule =
+    data.adminCommissionFixedRule === "per_item" ? "per_item" : "per_qty";
+
+  return {
+    applyCommission: apply,
+    adminCommission: apply ? value : 0,
+    adminCommissionType: type,
+    adminCommissionValue: apply ? value : 0,
+    adminCommissionFixedRule: fixedRule,
+  };
+}
+
+function stripCommissionFields(data = {}) {
+  delete data.applyCommission;
+  delete data.adminCommission;
+  delete data.adminCommissionType;
+  delete data.adminCommissionValue;
+  delete data.adminCommissionFixedRule;
+}
+
 function parseSellerIdFilters({ sellerId, sellerIds }) {
   if (typeof sellerIds === "string" && sellerIds.trim()) {
     return sellerIds
@@ -709,6 +738,12 @@ export const createProduct = async (req, res) => {
       productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
     }
 
+    if (role === "admin" || role === "superadmin") {
+      Object.assign(productData, normalizeProductCommissionFields(productData));
+    } else {
+      stripCommissionFields(productData);
+    }
+
     // Handle variants if string (multipart/form-data sends as string)
     if (typeof productData.variants === "string") {
       try {
@@ -882,6 +917,12 @@ export const updateProduct = async (req, res) => {
       productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
     }
 
+    if (role === "admin" || role === "superadmin") {
+      Object.assign(productData, normalizeProductCommissionFields(productData));
+    } else {
+      stripCommissionFields(productData);
+    }
+
     if (typeof productData.variants === "string") {
       try {
         productData.variants = JSON.parse(productData.variants);
@@ -1024,7 +1065,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -1136,7 +1177,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

@@ -19,7 +19,8 @@ import {
     ShoppingBag,
     Clock,
     CheckCircle2,
-    XCircle
+    XCircle,
+    ArrowRightLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -27,6 +28,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     getLegacyStatusFromOrder,
     adminRouteMatchesOrder,
+    getOrderStoreReassignment,
 } from '@/shared/utils/orderStatus';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 
@@ -118,6 +120,7 @@ const OrdersList = () => {
                     logisticsMode: o.logisticsMode || null,
                     fulfillmentMethod: resolveFulfillmentMethod(o),
                     schedule: o.schedule || null,
+                    storeReassignment: getOrderStoreReassignment(o),
                     date: new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
                     payment: o.payment?.method === 'cod' ? 'COD' : 'Digital',
                 }));
@@ -486,6 +489,12 @@ const OrdersList = () => {
                                             </select>
                                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none opacity-60" />
                                             </div>
+                                            {order.storeReassignment && (
+                                                <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase tracking-widest w-fit flex items-center gap-1">
+                                                    <ArrowRightLeft className="h-3 w-3" />
+                                                    Reassigned
+                                                </Badge>
+                                            )}
                                             {order.cancellationRequestStatus === 'pending' && (
                                                 <Badge className="w-fit bg-amber-100 text-amber-700 border-none text-[8px] font-black uppercase tracking-widest">
                                                     Cancel Request Pending

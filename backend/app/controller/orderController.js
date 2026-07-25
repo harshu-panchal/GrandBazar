@@ -174,6 +174,7 @@ function buildFallbackBreakdownFromPricing(pricing = {}) {
     productSubtotal: Number.isFinite(subtotal) ? subtotal : 0,
     deliveryFeeCharged: Number.isFinite(deliveryFee) ? deliveryFee : 0,
     handlingFeeCharged: Number.isFinite(handlingFee) ? handlingFee : 0,
+    packingFeeCharged: 0,
     discountTotal: Number.isFinite(discountTotal) ? discountTotal : 0,
     taxTotal: Number.isFinite(taxTotal) ? taxTotal : 0,
     grandTotal: Number.isFinite(grandTotal) ? grandTotal : 0,
@@ -182,6 +183,8 @@ function buildFallbackBreakdownFromPricing(pricing = {}) {
       categoryCommissionSettings: [],
       handlingFeeStrategy: null,
       handlingCategoryUsed: {},
+      packingFeeStrategy: null,
+      packingCategoryUsed: {},
     },
     lineItems: [],
   };

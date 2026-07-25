@@ -54,6 +54,8 @@ const Level2Categories = () => {
     priorityEndTime: "",
     applyCommission: false,
     adminCommission: "",
+    handlingFees: "",
+    packingFees: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -178,7 +180,7 @@ const Level2Categories = () => {
           data.append(key, formData.applyCommission ? "true" : "false");
           return;
         }
-        if (key === "adminCommission") {
+        if (key === "adminCommission" || key === "handlingFees" || key === "packingFees") {
           data.append(key, formData[key] === "" ? "0" : String(formData[key]));
           return;
         }
@@ -239,6 +241,8 @@ const Level2Categories = () => {
       priorityEndTime: "",
       applyCommission: false,
       adminCommission: "",
+      handlingFees: "",
+      packingFees: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -260,6 +264,8 @@ const Level2Categories = () => {
         item.applyCommission === true ||
         (item.applyCommission !== false && Number(item.adminCommission || 0) > 0),
       adminCommission: item.adminCommission ?? "",
+      handlingFees: item.handlingFees ?? "",
+      packingFees: item.packingFees ?? "",
     });
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
@@ -412,6 +418,12 @@ const Level2Categories = () => {
                   Comm (%)
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Handle (₹)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Pack (₹)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -422,13 +434,13 @@ const Level2Categories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="10" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="10" className="text-center py-8 text-gray-500">
                     No categories found
                   </td>
                 </tr>
@@ -474,6 +486,12 @@ const Level2Categories = () => {
                       (cat.applyCommission !== false && Number(cat.adminCommission || 0) > 0)
                         ? `${cat.adminCommission ?? 0}%`
                         : "—"}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 font-medium">
+                      ₹{cat.handlingFees ?? 0}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 font-medium">
+                      ₹{cat.packingFees ?? 0}
                     </td>
                     <td className="py-3 px-4">
                       <Badge
@@ -706,6 +724,41 @@ const Level2Categories = () => {
                         max="100"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Handling Fees (₹)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.handlingFees}
+                          onChange={(e) =>
+                            setFormData({ ...formData, handlingFees: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Packing Charge (₹)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.packingFees}
+                          onChange={(e) =>
+                            setFormData({ ...formData, packingFees: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Deepest category wins for packing/handling (Subcategory → Level 2 → Header).
+                    </p>
                   </div>
                 </div>
 

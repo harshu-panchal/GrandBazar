@@ -469,7 +469,19 @@ export const deleteCatalogProduct = async (req, res) => {
    =================================== */
 export const claimCatalogProduct = async (req, res) => {
   try {
-    const { catalogProductId, price, salePrice, stock, sku, variants, name, mainImage, galleryImages } = req.body;
+    const {
+      catalogProductId,
+      price,
+      salePrice,
+      stock,
+      sku,
+      variants,
+      name,
+      mainImage,
+      galleryImages,
+      addons,
+      isSignatureProduct,
+    } = req.body;
     const sellerId = req.user.id;
 
     if (!catalogProductId) {

@@ -1,7 +1,9 @@
 import Cart from "../models/cart.js";
 import Product from "../models/product.js";
+import Store from "../models/store.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
+import { isStoreOperationallyOpen } from "../services/deliveryOptionResolver.js";
 
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
@@ -107,6 +109,18 @@ export const addToCart = async (req, res) => {
     const incomingSellerId = toSellerIdString(customerVisibleProduct.sellerId);
     if (!incomingSellerId) {
       return handleResponse(res, 400, "Product store is missing");
+    }
+
+    const store = await Store.findById(incomingSellerId)
+      .select("isActive isVerified isOpen availability timezone applicationStatus")
+      .lean();
+    const operational = isStoreOperationallyOpen(store);
+    if (!operational.open) {
+      return handleResponse(
+        res,
+        400,
+        operational.message || "This shop is currently closed and not accepting orders",
+      );
     }
 
     let cart = await Cart.findOne({ customerId });

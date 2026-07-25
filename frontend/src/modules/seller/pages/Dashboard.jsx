@@ -13,6 +13,8 @@ import {
   ArrowUpRight,
   Plus,
   Eye,
+  Store,
+  Power,
 } from "lucide-react";
 import {
   HiOutlineTruck,
@@ -39,15 +41,18 @@ import { getSellerOrderPayout, formatInr } from "@/shared/utils/sellerOrderMoney
 import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
 import { useSellerOrders } from "../context/SellerOrdersContext";
+import { useStoreContext } from "../context/StoreContext";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { orders: ordersFromContext, ordersLoading, refreshOrders } =
     useSellerOrders();
+  const { stores, activeStoreId, refreshStores } = useStoreContext();
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isTogglingStore, setIsTogglingStore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +74,39 @@ const Dashboard = () => {
     fetchStats();
     return () => { cancelled = true; };
   }, []);
+
+  const activeStore = React.useMemo(() => {
+    if (!Array.isArray(stores) || !stores.length) return null;
+    return (
+      stores.find((s) => String(s._id) === String(activeStoreId)) ||
+      stores.find((s) => String(s.applicationStatus || "").toLowerCase() === "approved") ||
+      stores[0]
+    );
+  }, [stores, activeStoreId]);
+
+  const storeIsOpen = activeStore ? activeStore.isOpen !== false : false;
+
+  const handleToggleStoreOpen = async () => {
+    if (!activeStore?._id || isTogglingStore) return;
+    if (String(activeStore.applicationStatus || "").toLowerCase() !== "approved") {
+      toast.error("Store must be approved before you can open or close it");
+      return;
+    }
+    setIsTogglingStore(true);
+    try {
+      await sellerApi.toggleStoreActive(activeStore._id);
+      if (typeof refreshStores === "function") await refreshStores();
+      toast.success(
+        storeIsOpen
+          ? "Store is now OFF — customers cannot order"
+          : "Store is now ON — customers can order",
+      );
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update store status");
+    } finally {
+      setIsTogglingStore(false);
+    }
+  };
 
   const safeOrders = Array.isArray(ordersFromContext) ? ordersFromContext : [];
   const loadingOrStats = loading || ordersLoading;
@@ -245,6 +283,56 @@ const Dashboard = () => {
         title="Dashboard"
         description="Welcome back! Here's what's happening with your store today."
       />
+
+      {activeStore && (
+        <Card className="p-4 sm:p-5 border border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={cn(
+                "h-11 w-11 rounded-xl flex items-center justify-center shrink-0",
+                storeIsOpen ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600",
+              )}>
+                <Store className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Store status</p>
+                <h3 className="text-base font-bold text-slate-900 truncate">
+                  {activeStore.shopName || "Your store"}
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {storeIsOpen
+                    ? "Store is ON — visible to customers and accepting orders."
+                    : "Store is OFF — still visible to customers as Closed; they cannot place orders."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={cn(
+                "text-xs font-black uppercase tracking-widest px-2.5 py-1 rounded-full",
+                storeIsOpen
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                  : "bg-rose-50 text-rose-700 border border-rose-100",
+              )}>
+                {storeIsOpen ? "Open" : "Off"}
+              </span>
+              <button
+                type="button"
+                onClick={handleToggleStoreOpen}
+                disabled={isTogglingStore}
+                className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50",
+                  storeIsOpen
+                    ? "bg-rose-600 text-white hover:bg-rose-700"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700",
+                )}
+              >
+                <Power className="h-4 w-4" />
+                {isTogglingStore ? "Updating..." : storeIsOpen ? "Turn store OFF" : "Turn store ON"}
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

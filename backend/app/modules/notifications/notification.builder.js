@@ -170,13 +170,21 @@ function eventDefinition(eventType) {
     case NOTIFICATION_EVENTS.NEW_ORDER:
       return {
         role: NOTIFICATION_ROLES.SELLER,
-        recipientIds: (payload) =>
-          normalizeIdList(payload.sellerId || payload.sellerIds),
-        title: () => "New Order",
-        body: (payload) =>
-          payload.orderId
+        recipientIds: (payload) => {
+          const fromList = normalizeIdList(payload.sellerIds);
+          const fromSingle = normalizeIdList(payload.sellerId);
+          return [...new Set([...fromList, ...fromSingle])];
+        },
+        title: (payload) =>
+          payload.reassigned ? "Order Assigned to Your Store" : "New Order",
+        body: (payload) => {
+          if (payload.reassigned && payload.orderId) {
+            return `Order #${payload.orderId} was reassigned to your store. Please accept and prepare it.`;
+          }
+          return payload.orderId
             ? `New order #${payload.orderId} received.`
-            : "You have received a new order.",
+            : "You have received a new order.";
+        },
       };
     case NOTIFICATION_EVENTS.DELIVERY_ASSIGNED:
       return {
@@ -466,6 +474,16 @@ function eventDefinition(eventType) {
           payload.orderId
             ? `Your scheduled order #${payload.orderId} is now being prepared for delivery.`
             : "Your scheduled order is now being prepared.",
+      };
+    case NOTIFICATION_EVENTS.ORDER_REASSIGNED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Order Store Updated",
+        body: (payload) =>
+          payload.orderId
+            ? `Order #${payload.orderId} was moved to ${payload.shopName || "another store"} so it can be fulfilled.`
+            : "Your order was moved to another store so it can be fulfilled.",
       };
     case NOTIFICATION_EVENTS.DISPUTE_RAISED:
       return {

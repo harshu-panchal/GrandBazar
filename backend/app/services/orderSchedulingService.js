@@ -36,8 +36,13 @@ export function resolveStoreSchedulingSettings(store) {
     Array.isArray(settings.deliveryWindows) && settings.deliveryWindows.length > 0
       ? settings.deliveryWindows.filter((w) => w.enabled !== false)
       : DEFAULT_WINDOWS;
+  // Default ON unless seller explicitly disabled scheduling.
+  const enabled =
+    settings.enabled === false || settings.enabled === "false"
+      ? false
+      : true;
   return {
-    enabled: settings.enabled === true,
+    enabled,
     maxDaysAhead: Math.max(1, Number(settings.maxDaysAhead || 7)),
     rescheduleCutoffDays: Math.max(0, Number(settings.rescheduleCutoffDays ?? 1)),
     selfLogistics: settings.selfLogistics === true,
@@ -75,6 +80,7 @@ export async function validateScheduleSelection({
   fulfillmentType = FULFILLMENT_TYPE.SCHEDULED,
   campaign = null,
   now = new Date(),
+  checkRescheduleCutoff = false,
 }) {
   const store = await Store.findById(sellerId).lean();
   if (!store) {
@@ -135,12 +141,29 @@ export async function validateScheduleSelection({
     throw err;
   }
 
+  const slotStart = combineDateAndWindowStart(delivery, window.start);
+  const slotEnd = combineDateAndWindowEnd(delivery, window.end);
+  // New bookings: allow any window that has not ended yet.
+  if (
+    fulfillmentType !== FULFILLMENT_TYPE.PREORDER &&
+    now.getTime() >= slotEnd.getTime()
+  ) {
+    const err = new Error("Selected slot has already ended");
+    err.statusCode = 400;
+    throw err;
+  }
+
   const cutoffDays =
     campaign?.rescheduleCutoffDays != null
       ? campaign.rescheduleCutoffDays
       : settings.rescheduleCutoffDays;
   const cutoffAt = computeCutoffAt(delivery, window.start, cutoffDays);
-  if (isPastCutoff(now, cutoffAt) && fulfillmentType !== FULFILLMENT_TYPE.PREORDER) {
+  // Reschedule/cancel cutoff applies only when changing an existing order.
+  if (
+    checkRescheduleCutoff &&
+    isPastCutoff(now, cutoffAt) &&
+    fulfillmentType !== FULFILLMENT_TYPE.PREORDER
+  ) {
     const err = new Error("Selected slot is past the reschedule/cancel cutoff");
     err.statusCode = 400;
     throw err;

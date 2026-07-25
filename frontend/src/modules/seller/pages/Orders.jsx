@@ -32,12 +32,13 @@ import { BlurFade } from '@/components/ui/blur-fade';
 import ShimmerButton from '@/components/ui/shimmer-button';
 import { sellerApi } from '../services/sellerApi';
 import { useToast } from '@shared/components/ui/Toast';
-import { getLegacyStatusFromOrder, getOrderStatusLabel, isScheduledHoldOrder, canSellerManuallyUpdateStatus } from '@/shared/utils/orderStatus';
+import { getLegacyStatusFromOrder, getOrderStatusLabel, isScheduledHoldOrder, canSellerManuallyUpdateStatus, canSellerSplitOrReplace, getOrderStoreReassignment } from '@/shared/utils/orderStatus';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 import { getSellerOrderPayout, getCustomerOrderTotal, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
+import { onSellerOrderNew } from "@core/services/orderSocket";
 
 function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
     const method = resolveFulfillmentMethod(order);
@@ -257,6 +258,7 @@ const Orders = () => {
                 statusLabel: getOrderStatusLabel(order),
                 workflowStatus: order.workflowStatus,
                 workflowVersion: order.workflowVersion,
+                storeReassignment: getOrderStoreReassignment(order),
                 fulfillmentType: order.fulfillmentType || 'instant',
                 logisticsMode: order.logisticsMode || null,
                 fulfillmentMethod: resolveFulfillmentMethod(order),
@@ -308,6 +310,46 @@ const Orders = () => {
             }
         }
     };
+
+    useEffect(() => {
+        const getToken = () => localStorage.getItem("auth_seller");
+        const unsubscribe = onSellerOrderNew(getToken, (payload) => {
+            const orderId = payload?.orderId || payload?.payload?.orderId;
+            if (payload?.reassigned || payload?.payload?.reassigned) {
+                showToast(
+                    orderId
+                        ? `Order #${orderId} was reassigned to your store`
+                        : "An order was reassigned to your store",
+                    "success",
+                );
+            } else {
+                showToast(
+                    orderId ? `New order #${orderId} received` : "New order received",
+                    "success",
+                );
+            }
+            fetchOrders(page, false);
+        });
+        return unsubscribe;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page]);
+
+    // Lock page scroll while any order modal is open; keep scrolling inside the modal.
+    useEffect(() => {
+        const modalOpen =
+            isDetailsModalOpen || isQuickViewModalOpen || isPickupModalOpen;
+        if (!modalOpen) return undefined;
+
+        const prevBodyOverflow = document.body.style.overflow;
+        const prevHtmlOverflow = document.documentElement.style.overflow;
+        document.body.style.overflow = "hidden";
+        document.documentElement.style.overflow = "hidden";
+
+        return () => {
+            document.body.style.overflow = prevBodyOverflow;
+            document.documentElement.style.overflow = prevHtmlOverflow;
+        };
+    }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen]);
 
     const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
     const todayStr = new Date().toISOString().split('T')[0];
@@ -400,6 +442,8 @@ const Orders = () => {
                     fulfillmentMethod: resolveFulfillmentMethod(full),
                     schedule: full.schedule || prev?.schedule,
                     reschedule: full.reschedule || prev?.reschedule,
+                    storeReassignment:
+                        getOrderStoreReassignment(full) || prev?.storeReassignment || null,
                 }));
             }
         } catch (error) {
@@ -931,6 +975,11 @@ const Orders = () => {
                                                     <Badge variant={getStatusColor(order.status)} className="text-[10px] font-black uppercase px-2 py-0">
                                                         {order.statusLabel || order.status}
                                                     </Badge>
+                                                    {order.storeReassignment && (
+                                                        <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase px-2 py-0">
+                                                            Reassigned
+                                                        </Badge>
+                                                    )}
                                                     <OrderStatusControl
                                                         order={order}
                                                         onStatusUpdate={handleStatusUpdate}
@@ -1020,10 +1069,17 @@ const Orders = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
-                                                        <OrderStatusControl
-                                                            order={order}
-                                                            onStatusUpdate={handleStatusUpdate}
-                                                        />
+                                                        <div className="flex flex-col items-start gap-1.5">
+                                                            <OrderStatusControl
+                                                                order={order}
+                                                                onStatusUpdate={handleStatusUpdate}
+                                                            />
+                                                            {order.storeReassignment && (
+                                                                <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase px-2 py-0">
+                                                                    Reassigned
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4 text-right">
                                                         <div className="flex items-center justify-end space-x-1.5">
@@ -1250,7 +1306,11 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isDetailsModalOpen && selectedOrder && (
-                            <div className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center p-3 sm:p-6 lg:p-12">
+                            <div
+                                className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center p-3 sm:p-6 lg:p-12 overflow-hidden overscroll-none"
+                                onWheel={(e) => e.stopPropagation()}
+                                onTouchMove={(e) => e.stopPropagation()}
+                            >
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -1262,20 +1322,34 @@ const Orders = () => {
                                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                                    className="w-full max-w-lg sm:max-w-2xl relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                                    className="w-full max-w-lg sm:max-w-2xl relative z-10 bg-white rounded-3xl shadow-2xl flex flex-col min-h-0 max-h-[min(90vh,100%)] overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
                                 >
                                     {/* Modal Header */}
-                                    <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100">
+                                    <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0">
                                         <div className="flex items-center space-x-3">
                                             <div className="h-10 w-10 bg-slate-900 text-white rounded-xl flex items-center justify-center shadow-lg">
                                                 <HiOutlineTruck className="h-5 w-5" />
                                             </div>
                                             <div>
                                                 <h3 className="text-base font-black text-slate-900">Order Details</h3>
-                                                <div className="flex items-center space-x-2 mt-0.5">
-                                                    <Badge variant={getStatusColor(selectedOrder.status)} className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0">{selectedOrder.status}</Badge>
+                                                <div className="flex items-center space-x-2 mt-0.5 flex-wrap">
+                                                    <Badge variant={getStatusColor(selectedOrder.status)} className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0">{selectedOrder.statusLabel || selectedOrder.status}</Badge>
+                                                    {selectedOrder.storeReassignment && (
+                                                        <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[9px] font-black uppercase tracking-widest px-1.5 py-0">
+                                                            Reassigned
+                                                        </Badge>
+                                                    )}
                                                     <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">#{selectedOrder.id}</span>
                                                 </div>
+                                                {selectedOrder.storeReassignment && (
+                                                    <p className="text-[11px] font-bold text-violet-700 mt-1.5">
+                                                        Assigned to your store from {selectedOrder.storeReassignment.fromShopName}
+                                                        {selectedOrder.storeReassignment.reassignedAt
+                                                            ? ` · ${new Date(selectedOrder.storeReassignment.reassignedAt).toLocaleString('en-IN')}`
+                                                            : ''}
+                                                    </p>
+                                                )}
                                                 {(selectedOrder.date || selectedOrder.time) && (
                                                     <p className="text-[11px] font-bold text-slate-500 mt-1.5 flex items-center gap-1.5">
                                                         <HiOutlineCalendarDays className="h-3.5 w-3.5" />
@@ -1296,7 +1370,12 @@ const Orders = () => {
                                         </button>
                                     </div>
 
-                                    <div className="px-4 py-4 sm:px-6 sm:py-5 overflow-y-auto scrollbar-hide flex-1">
+                                    <div
+                                        className="px-4 py-4 sm:px-6 sm:py-5 overflow-y-auto overscroll-contain touch-pan-y flex-1 min-h-0"
+                                        tabIndex={0}
+                                        onWheel={(e) => e.stopPropagation()}
+                                        onTouchMove={(e) => e.stopPropagation()}
+                                    >
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
                                             <div className="space-y-3 sm:space-y-4">
                                                 <div>
@@ -1399,20 +1478,29 @@ const Orders = () => {
                                         )}
                                         {(() => {
                                             const s = (selectedOrder.status || '').toLowerCase();
-                                            const canAdjust = !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
+                                            const canAdjustPrice =
+                                                !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
                                                 && canSellerManuallyUpdateStatus(selectedOrder);
+                                            const canSplitOrReplace = canSellerSplitOrReplace(selectedOrder);
+                                            const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode;
                                             return (
-                                                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                                                <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
                                                     <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest">Items Ordered ({selectedOrder.items.length})</h4>
-                                                    {canAdjust && !adjustMode && (
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
-                                                            <button onClick={handleRequestReplacement} disabled={replacementSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-60">
-                                                                {replacementSaving ? 'Sending...' : 'Replacement'}
-                                                            </button>
-                                                            <button onClick={handleSplitDeliveryPlan} disabled={splitSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60">
-                                                                {splitSaving ? 'Saving...' : 'Split Delivery'}
-                                                            </button>
+                                                    {showItemActions && (
+                                                        <div className="flex flex-wrap justify-end gap-2">
+                                                            {canAdjustPrice && (
+                                                                <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
+                                                            )}
+                                                            {canSplitOrReplace && (
+                                                                <>
+                                                                    <button onClick={handleRequestReplacement} disabled={replacementSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-60">
+                                                                        {replacementSaving ? 'Sending...' : 'Replacement'}
+                                                                    </button>
+                                                                    <button onClick={handleSplitDeliveryPlan} disabled={splitSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60">
+                                                                        {splitSaving ? 'Saving...' : 'Split Delivery'}
+                                                                    </button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     )}
                                                     {adjustMode && (
@@ -1494,7 +1582,7 @@ const Orders = () => {
                                     </div>
 
                                     {/* Modal Footer */}
-                                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end">
+                                    <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end shrink-0">
                                         <div className="flex gap-2 items-center">
                                             <button onClick={() => setIsDetailsModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all">CLOSE</button>
                                             <OrderStatusControl

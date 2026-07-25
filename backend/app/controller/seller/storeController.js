@@ -282,10 +282,21 @@ export const toggleStoreActive = async (req, res) => {
       return handleResponse(res, 403, "Store must be approved before toggling open/closed status");
     }
 
-    store.isActive = !store.isActive;
+    // Keep store listed (isActive) so customers still see it as Off when closed.
+    // Toggle only accepting-orders flag (isOpen).
+    const currentlyOpen = store.isOpen !== false;
+    store.isOpen = !currentlyOpen;
+    if (store.isActive !== true) {
+      store.isActive = true;
+    }
     await store.save();
 
-    return handleResponse(res, 200, `Store ${store.isActive ? "opened" : "closed"} successfully`, store);
+    return handleResponse(
+      res,
+      200,
+      `Store ${store.isOpen ? "opened" : "closed"} successfully`,
+      store,
+    );
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

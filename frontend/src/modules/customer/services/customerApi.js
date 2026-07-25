@@ -59,6 +59,20 @@ export const customerApi = {
     return axiosInstance.delete(`/wishlist/remove/${productId}`);
   },
 
+  // Favorite sellers / stores
+  getFavoriteStores: (params) =>
+    getWithDedupe("/favorite-stores", params, { ttl: 5000 }),
+  toggleFavoriteStore: (data) => {
+    invalidateCache("/favorite-stores");
+    invalidateCache("/seller/nearby");
+    return axiosInstance.post("/favorite-stores/toggle", data);
+  },
+  removeFavoriteStore: (storeId) => {
+    invalidateCache("/favorite-stores");
+    invalidateCache("/seller/nearby");
+    return axiosInstance.delete(`/favorite-stores/remove/${storeId}`);
+  },
+
   // Orders
   // Explicit timeout so checkout never waits forever if the server blocks (e.g. Redis/Bull).
   checkoutPreview: (data) =>

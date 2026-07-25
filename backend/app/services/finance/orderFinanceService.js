@@ -79,7 +79,11 @@ function syncLegacyPricing(order) {
   order.pricing = {
     subtotal: breakdown.productSubtotal || order.pricing?.subtotal || 0,
     deliveryFee: breakdown.deliveryFeeCharged || order.pricing?.deliveryFee || 0,
-    platformFee: breakdown.handlingFeeCharged || order.pricing?.platformFee || 0,
+    platformFee:
+      Number(breakdown.handlingFeeCharged || 0) +
+        Number(breakdown.packingFeeCharged || 0) ||
+      order.pricing?.platformFee ||
+      0,
     gst: breakdown.taxTotal || order.pricing?.gst || 0,
     tip: breakdown.tipTotal || order.pricing?.tip || 0,
     discount: breakdown.discountTotal || order.pricing?.discount || 0,

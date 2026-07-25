@@ -204,7 +204,7 @@ const MyStores = () => {
   const handleToggleActive = async (storeId) => {
     try {
       await sellerApi.toggleStoreActive(storeId);
-      toast.success('Store status updated');
+      toast.success('Store open/close status updated');
       await refreshStores();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update store');
@@ -447,9 +447,22 @@ const MyStores = () => {
                       {store.address || store.city || 'Location not set'}
                     </p>
                   </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full border ${badge.className}`}>
                     {badge.label}
                   </span>
+                  {isApplicationApproved(store) && (
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full border ${
+                        store.isOpen !== false
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                          : 'bg-rose-50 text-rose-700 border-rose-100'
+                      }`}
+                    >
+                      {store.isOpen !== false ? 'Open' : 'Off'}
+                    </span>
+                  )}
+                </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-4">
@@ -474,7 +487,7 @@ const MyStores = () => {
                       variant="ghost"
                       onClick={() => handleToggleActive(store._id)}
                     >
-                      {store.isActive ? 'Close store' : 'Open store'}
+                      {store.isOpen !== false ? 'Close store' : 'Open store'}
                     </Button>
                   )}
                   {!isApplicationApproved(store) && status === 'pending' && (
