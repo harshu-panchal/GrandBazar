@@ -105,7 +105,7 @@ export async function getPendingSellerApplications({
   const [stores, owners, allPendingStores, allPendingOwners] = await Promise.all([
     Store.find(storeQuery)
       .sort({ createdAt: -1 })
-      .populate("ownerId", "name email phone")
+      .populate("ownerId", "name email phone businessModel")
       .lean(),
     Seller.find(ownerQuery)
       .sort({ createdAt: -1 })
@@ -137,6 +137,7 @@ export async function getPendingSellerApplications({
       name: owner.name || "Unnamed Owner",
       email: owner.email || "",
       phone: owner.phone || "",
+      businessModel: owner.businessModel || "",
       ownerId: owner._id ? String(owner._id) : "",
     });
   });

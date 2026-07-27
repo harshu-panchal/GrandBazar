@@ -67,6 +67,21 @@ export const Stars = ({ rating, size = "h-3.5 w-3.5" }) => {
   );
 };
 
+/** Relative time label: "2m ago", "3h ago", "5d ago" */
+export const timeAgo = (value) => {
+  if (!value) return "";
+  const diff = Date.now() - new Date(value).getTime();
+  if (Number.isNaN(diff)) return "";
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+};
+
 /** Range select dropdown used by chart cards */
 export const RangeSelect = ({ value, onChange, options }) => (
   <select

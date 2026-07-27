@@ -78,6 +78,7 @@ import {
     processAdminFinancePayoutsController,
     updateDeliverySettingsController,
 } from "../controller/adminFinanceController.js";
+import { getAdminDashboard } from "../controller/admin/dashboardController.js";
 
 import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
 import {
@@ -279,17 +280,12 @@ router.get("/delivery-withdrawals", verifyToken, allowRoles("admin"), getDeliver
 router.get("/seller-transactions", verifyToken, allowRoles("admin"), getSellerTransactions);
 router.put("/withdrawals/:id", verifyToken, allowRoles("admin"), updateWithdrawalStatus);
 
-// Protected admin route example
+// Platform overview dashboard
 router.get(
     "/dashboard",
     verifyToken,
     allowRoles("admin"),
-    (req, res) => {
-        res.json({
-            success: true,
-            message: "Welcome to Admin Dashboard",
-        });
-    }
+    getAdminDashboard
 );
 
 export default router;

@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { UserPlus, Users, Repeat, ShoppingBasket, Crown } from "lucide-react";
 import Card from "@shared/components/ui/Card";
-import { inr, TrendChip, IconChip, ViewAllLink } from "./common";
+import { inr, TrendChip, IconChip, ViewAllLink } from "@shared/components/dashboard/common";
 
 const Row = ({ icon, chip, label, value, trendPct }) => (
   <div className="flex items-center gap-3">

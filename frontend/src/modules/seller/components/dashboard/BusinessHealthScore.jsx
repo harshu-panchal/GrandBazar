@@ -2,7 +2,7 @@ import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import Card from "@shared/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { Stars } from "./common";
+import { Stars } from "@shared/components/dashboard/common";
 
 const scoreColor = (score) => {
   if (score === null) return "#e2e8f0";

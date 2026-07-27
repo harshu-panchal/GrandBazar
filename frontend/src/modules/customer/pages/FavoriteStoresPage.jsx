@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, Heart, MapPin, Sparkles, Store } from "lucide-react";
 import { useFavoriteStores } from "../context/FavoriteStoresContext";
 import { cn } from "@/lib/utils";
+import { buildStorePath } from "@core/seo/url";
 
 const FavoriteStoresPage = () => {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ const FavoriteStoresPage = () => {
                 >
                   <button
                     type="button"
-                    onClick={() => navigate(`/store/${storeId}`)}
+                    onClick={() => navigate(buildStorePath({ ...store, _id: storeId }))}
                     className="flex flex-1 items-center gap-3 text-left min-w-0"
                   >
                     <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 text-white font-black text-xl flex items-center justify-center shrink-0">

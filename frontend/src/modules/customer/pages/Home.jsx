@@ -29,6 +29,7 @@ import { useLocation } from "../context/LocationContext";
 import { useSettings } from "@core/context/SettingsContext";
 import Lottie from "lottie-react";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import { useSeoMeta } from "@core/seo/useSeoMeta";
 
 import {
   MARQUEE_MESSAGES,
@@ -171,6 +172,26 @@ const getCachedHomePageData = (location) =>
   homePageDataCache.get(getHomePageDataCacheKey(location)) || null;
 
 const Home = () => {
+  const canonicalUrl = `${window.location.origin}/`;
+  useSeoMeta({
+    title: "Grand Bazar - Fresh Grocery Delivery",
+    description:
+      "Discover nearby stores, categories, offers, and fast doorstep delivery with Grand Bazar.",
+    canonicalUrl,
+    keywords: ["quick commerce", "grocery delivery", "nearby stores", "Grand Bazar"],
+    jsonLdId: "home-page",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Grand Bazar",
+      url: canonicalUrl,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${window.location.origin}/search?q={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+  });
   const { scrollY } = useScroll();
   const { isOpen: isProductDetailOpen } = useProductDetail();
   const { currentLocation, needsLocationSetup, openLocationPicker } = useLocation();

@@ -1,371 +1,206 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Card from '@shared/components/ui/Card';
-import PageHeader from '@shared/components/ui/PageHeader';
-import StatCard from '@shared/components/ui/StatCard';
-import Badge from '@shared/components/ui/Badge';
-import { adminApi } from '../services/adminApi';
-import {
-    Users,
-    Store,
-    Truck,
-    BarChart3,
-    Loader2
-} from 'lucide-react';
-import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell
-} from 'recharts';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import React, { useCallback, useEffect, useState } from "react";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
+import PageHeader from "@shared/components/ui/PageHeader";
+import { Skeleton } from "@shared/components/dashboard/common";
+import { exportToCSV } from "@/lib/exportUtils";
+import { adminApi } from "../services/adminApi";
+import KpiStrip from "../components/dashboard/KpiStrip";
+import CityWiseSales from "../components/dashboard/CityWiseSales";
+import BusinessGrowthChart from "../components/dashboard/BusinessGrowthChart";
+import SellerShopOverview from "../components/dashboard/SellerShopOverview";
+import ApprovalCenter from "../components/dashboard/ApprovalCenter";
+import RecentAlerts from "../components/dashboard/RecentAlerts";
+import OrderStatusDonut from "../components/dashboard/OrderStatusDonut";
+import LogisticsOverview from "../components/dashboard/LogisticsOverview";
+import TopShops from "../components/dashboard/TopShops";
+import TopCategories from "../components/dashboard/TopCategories";
+import SystemHealth from "../components/dashboard/SystemHealth";
+import FinancialSummary from "../components/dashboard/FinancialSummary";
+import SettlementOverview from "../components/dashboard/SettlementOverview";
+import CustomerOverview from "../components/dashboard/CustomerOverview";
+import AiInsights from "../components/dashboard/AiInsights";
+import ActivityFeed from "../components/dashboard/ActivityFeed";
+import NewSellerRequests from "../components/dashboard/NewSellerRequests";
+
+const DashboardSkeleton = () => (
+  <div className="ds-section-spacing">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      {Array.from({ length: 10 }, (_, i) => (
+        <Skeleton key={i} className="h-32" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr] gap-6">
+      <Skeleton className="h-96" />
+      <Skeleton className="h-96" />
+      <Skeleton className="h-96" />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {Array.from({ length: 4 }, (_, i) => (
+        <Skeleton key={i} className="h-80" />
+      ))}
+    </div>
+  </div>
+);
+
+const buildReportRows = (data) => {
+  if (!data) return [];
+  const rows = [];
+  const push = (section, metric, value) => rows.push({ Section: section, Metric: metric, Value: value });
+
+  const k = data.kpis || {};
+  push("KPIs", "GMV Today (₹)", k.gmvToday?.value ?? 0);
+  push("KPIs", "Platform Revenue Today (₹)", k.revenueToday?.value ?? 0);
+  push("KPIs", "Orders Today", k.ordersToday?.value ?? 0);
+  push("KPIs", "Active Sellers", k.activeSellers?.value ?? 0);
+  push("KPIs", "Active Shops", k.activeShops?.value ?? 0);
+  push("KPIs", "New Customers Today", k.newCustomersToday?.value ?? 0);
+  push("KPIs", "Delivery Partners", k.deliveryPartners?.value ?? 0);
+  push("KPIs", "Pending Approvals", k.pendingApprovals?.value ?? 0);
+  push("KPIs", "Open Disputes", k.openDisputes?.value ?? 0);
+  push("KPIs", "Business Health", k.businessHealth?.value ?? "—");
+
+  (data.cityWiseSales?.rows || []).forEach((c) => {
+    push("City Sales", `${c.city} - Sales (₹)`, c.sales);
+    push("City Sales", `${c.city} - Orders`, c.orders);
+  });
+
+  const g = data.businessGrowth?.summary || {};
+  push("Growth", "GMV WoW %", g.gmvGrowthPct ?? "—");
+  push("Growth", "Orders WoW %", g.orderGrowthPct ?? "—");
+  push("Growth", "Sellers WoW %", g.sellerGrowthPct ?? "—");
+  push("Growth", "Customers WoW %", g.customerGrowthPct ?? "—");
+
+  (data.orderStatus?.breakdown || []).forEach((b) => push("Order Status", b.label, b.count));
+
+  const f = data.financialSummary || {};
+  push("Finance", "Platform Revenue (₹)", f.platformRevenue ?? 0);
+  push("Finance", "Subscription Revenue (₹)", f.subscriptionRevenue ?? 0);
+  push("Finance", "Commission Revenue (₹)", f.commissionRevenue ?? 0);
+  push("Finance", "Total Revenue (₹)", f.totalRevenue ?? 0);
+
+  const s = data.settlements || {};
+  push("Settlements", "Total (₹)", s.totalAmount ?? 0);
+  push("Settlements", "Completed (₹)", s.completedAmount ?? 0);
+  push("Settlements", "Pending (₹)", s.pendingAmount ?? 0);
+
+  return rows;
+};
 
 const AdminDashboard = () => {
-    const navigate = useNavigate();
-    const [statsData, setStatsData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [city, setCity] = useState("");
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const res = await adminApi.getStats();
-                if (res.data.success) {
-                    setStatsData(res.data.result);
-                    setLastUpdatedAt(new Date());
-                }
-            } catch (error) {
-                console.error("Dashboard Stats Error:", error);
-                toast.error("Failed to fetch dashboard data");
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchStats();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="h-[80vh] flex flex-col items-center justify-center space-y-4">
-                <Loader2 className="h-10 w-10 text-primary animate-spin" />
-                <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Synchronizing Data...</p>
-            </div>
-        );
+  const fetchDashboard = useCallback(async (params = {}, { silent = false } = {}) => {
+    try {
+      if (!silent) setLoading(true);
+      const res = await adminApi.getDashboardOverview(params);
+      if (res.data.success) setData(res.data.result);
+    } catch (error) {
+      console.error("Admin dashboard fetch error:", error);
+      toast.error(error.response?.data?.message || "Failed to load dashboard");
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
-    const overview = statsData?.overview || {};
-    const formatLastUpdated = (value) => {
-        if (!value) return 'Last Update: --';
-        const now = new Date();
-        const updated = new Date(value);
-        const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const updatedDate = new Date(updated.getFullYear(), updated.getMonth(), updated.getDate());
-        const dayDiff = Math.round((nowDate - updatedDate) / (1000 * 60 * 60 * 24));
+  useEffect(() => {
+    fetchDashboard({});
+  }, [fetchDashboard]);
 
-        let dayLabel = updated.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-        if (dayDiff === 0) dayLabel = 'Today';
-        if (dayDiff === 1) dayLabel = 'Yesterday';
+  const handleCityChange = (value) => {
+    setCity(value);
+    fetchDashboard(value ? { city: value } : {}, { silent: true });
+  };
 
-        const timeLabel = updated.toLocaleTimeString('en-IN', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-        });
-        return `Last Update: ${dayLabel}, ${timeLabel}`;
-    };
+  const handleDownloadReport = () => {
+    const rows = buildReportRows(data);
+    if (!rows.length) {
+      toast.error("No data to export yet");
+      return;
+    }
+    exportToCSV(rows, "admin-platform-overview");
+    toast.success("Report downloaded");
+  };
 
-    const stats = [
-        {
-            label: 'Total Users',
-            value: overview.totalUsers?.toLocaleString() || '0',
-            icon: Users,
-            color: 'text-brand-600',
-            bg: 'bg-brand-50',
-            trend: '+12.5%',
-            description: 'Active this month',
-            path: '/admin/customers',
-        },
-        {
-            label: 'Active Sellers',
-            value: overview.activeSellers?.toLocaleString() || '0',
-            icon: Store,
-            color: 'text-purple-600',
-            bg: 'bg-purple-50',
-            trend: '+5.2%',
-            description: 'Verified stores',
-            path: '/admin/sellers/active',
-        },
-        {
-            label: 'Total Orders',
-            value: overview.totalOrders?.toLocaleString() || '0',
-            icon: Truck,
-            color: 'text-orange-600',
-            bg: 'bg-orange-50',
-            trend: '+18.4%',
-            description: 'Last 30 days',
-            path: '/admin/orders/all',
-        },
-        {
-            label: 'Revenue',
-            value: `₹${overview.totalRevenue?.toLocaleString() || '0'}`,
-            icon: BarChart3,
-            color: 'text-brand-600',
-            bg: 'bg-brand-50',
-            trend: '+8.2%',
-            description: 'Net earnings',
-            path: '/admin/billing',
-        },
-    ];
-
-    const chartData = statsData?.revenueHistory || [];
-    const categoryData = statsData?.categoryData || [];
-    const recentOrders = statsData?.recentOrders || [];
-    const topProducts = statsData?.topProducts || [];
-
+  if (loading && !data) {
     return (
-        <div className="ds-section-spacing">
-            <PageHeader
-                title="Dashboard"
-                description="Overview of your platform's performance."
-                actions={
-                    <>
-                        <Badge variant="outline" className="ds-badge ds-badge-gray">
-                            {formatLastUpdated(lastUpdatedAt)}
-                        </Badge>
-                    </>
-                }
-            />
-
-            {/* Main Stats Grid */}
-            <div className="ds-grid-stats">
-                {stats.map((stat) => (
-                    <StatCard
-                        key={stat.label}
-                        label={stat.label}
-                        value={stat.value}
-                        icon={stat.icon}
-                        trend={stat.trend}
-                        description={stat.description}
-                        color={stat.color}
-                        bg={stat.bg}
-                        className={cn("ring-1 ring-gray-100", stat.bg + "/30")}
-                        onClick={() => navigate(stat.path)}
-                    />
-                ))}
-            </div>
-
-            <div className="ds-grid-cards-3">
-                {/* Revenue Analytics */}
-                <div className="lg:col-span-2">
-                    <Card
-                        title="Earnings"
-                        subtitle="Monthly revenue trends"
-                        className="h-full"
-                    >
-                        <div className="ds-chart-container min-h-[250px]">
-                            <ResponsiveContainer width="100%" height={250}>
-                                <AreaChart data={chartData}>
-                                    <defs>
-                                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1} />
-                                            <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis
-                                        dataKey="name"
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#94a3b8', fontSize: 11 }}
-                                        dy={8}
-                                    />
-                                    <YAxis
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#94a3b8', fontSize: 11 }}
-                                        tickFormatter={(value) => `₹${value}`}
-                                    />
-                                    <Tooltip
-                                        formatter={(value) => [`₹${value}`, "Revenue"]}
-                                        contentStyle={{
-                                            borderRadius: '12px',
-                                            border: 'none',
-                                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                                            padding: '8px',
-                                            fontSize: '11px'
-                                        }}
-                                    />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="revenue"
-                                        stroke="#4f46e5"
-                                        strokeWidth={3}
-                                        fillOpacity={1}
-                                        fill="url(#colorRevenue)"
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Categories Distribution */}
-                <div className="lg:col-span-1">
-                    <Card
-                        title="Top Categories"
-                        subtitle="Sales breakdown by category"
-                        className="h-full border-none shadow-sm ring-1 ring-gray-100"
-                    >
-                        <div className="h-[250px] min-h-[250px] relative">
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie
-                                        data={categoryData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={8}
-                                        dataKey="value"
-                                    >
-                                        {categoryData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-2xl font-bold text-gray-900">72%</span>
-                                <span className="text-[10px] text-gray-400 font-semibold uppercase">Growth</span>
-                            </div>
-                        </div>
-                        <div className="space-y-3 mt-4">
-                            {categoryData.map((cat) => (
-                                <div key={cat.name} className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                                        <span className="text-sm font-semibold text-gray-600">{cat.name}</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-gray-900">{cat.value}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Recent Orders */}
-                <div className="lg:col-span-2">
-                    <Card
-                        title="Recent Orders"
-                        subtitle="Track the latest customer orders"
-                        className="border-none shadow-sm ring-1 ring-gray-100 h-full"
-                    >
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="text-left border-b border-gray-100">
-                                        <th className="admin-table-header">Order ID</th>
-                                        <th className="admin-table-header">Customer</th>
-                                        <th className="admin-table-header">Status</th>
-                                        <th className="admin-table-header">Amount</th>
-                                        <th className="admin-table-header">Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {recentOrders.map((order) => (
-                                        <tr
-                                            key={order.id}
-                                            className="group hover:bg-gray-50/50 transition-all cursor-pointer"
-                                            onClick={() => navigate('/admin/orders/all')}
-                                        >
-                                            <td className="py-4 text-sm font-semibold text-primary">{order.id}</td>
-                                            <td className="py-4">
-                                                <div className="flex items-center space-x-2">
-                                                    <div className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-semibold text-gray-500 ring-2 ring-white shadow-sm uppercase">
-                                                        {order.customer?.[0] || "?"}
-                                                    </div>
-                                                    <span className="text-sm font-semibold text-gray-700">{order.customer}</span>
-                                                </div>
-                                            </td>
-                                            <td className="py-4">
-                                                <Badge variant={order.status} className="rounded-full px-3 py-0.5 text-[10px] font-bold tracking-tight uppercase">
-                                                    {order.statusText}
-                                                </Badge>
-                                            </td>
-                                            <td className="py-4 text-sm font-bold text-gray-900">{order.amount}</td>
-                                            <td className="py-4 text-xs font-semibold text-gray-400">{order.time}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/admin/orders/all')}
-                            className="w-full mt-6 py-3 rounded-xl bg-gray-50 text-xs font-bold text-gray-500 hover:bg-primary hover:text-white transition-all"
-                        >
-                            VIEW ALL ORDERS
-                        </button>
-                    </Card>
-                </div>
-
-                {/* Top Products */}
-                <div className="lg:col-span-1">
-                    <Card
-                        title="Top Products"
-                        subtitle="Best selling items this week"
-                        className="border-none shadow-sm ring-1 ring-gray-100 h-full"
-                    >
-                        <div className="space-y-4">
-                            {topProducts.length > 0 ? topProducts.map((product, i) => (
-                                <div
-                                    key={i}
-                                    className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100 group cursor-pointer"
-                                    onClick={() => navigate('/admin/products')}
-                                >
-                                    <div className="flex items-center space-x-3">
-                                        <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform overflow-hidden", !product.image ? (product.color + " text-2xl") : "bg-gray-50")}>
-                                            {product.image ? (
-                                                <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
-                                            ) : (
-                                                <span>{product.icon}</span>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-bold text-gray-900 leading-none">{product.name}</p>
-                                            <p className="text-[10px] text-gray-400 font-semibold uppercase mt-1.5">{product.cat}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-bold text-gray-900">{product.rev}</p>
-                                        <p className="text-[10px] text-brand-600 font-bold">{product.trend}</p>
-                                    </div>
-                                </div>
-                            )) : (
-                                <div className="py-12 text-center text-slate-300 italic text-xs">No sales data yet</div>
-                            )}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/admin/products')}
-                            className="w-full mt-6 py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-primary hover:text-primary transition-all"
-                        >
-                            VIEW ALL PRODUCTS
-                        </button>
-                    </Card>
-                </div>
-            </div>
-        </div>
+      <div className="ds-section-spacing">
+        <PageHeader title="Platform Overview" description="Complete business intelligence at a glance" />
+        <DashboardSkeleton />
+      </div>
     );
+  }
+
+  const cities = data?.cities || [];
+
+  return (
+    <div className="ds-section-spacing">
+      <PageHeader
+        title="Platform Overview"
+        description="Complete business intelligence at a glance"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={city}
+              onChange={(e) => handleCityChange(e.target.value)}
+              className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">All Cities</option>
+              {cities.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-primary hover:text-primary transition-colors shadow-sm"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Report
+            </button>
+          </div>
+        }
+      />
+
+      <KpiStrip kpis={data?.kpis} />
+
+      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
+        <CityWiseSales cityWiseSales={data?.cityWiseSales} />
+        <BusinessGrowthChart businessGrowth={data?.businessGrowth} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <SellerShopOverview sellerShopOverview={data?.sellerShopOverview} />
+        <ApprovalCenter approvalCenter={data?.approvalCenter} />
+        <RecentAlerts alerts={data?.alerts} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <OrderStatusDonut orderStatus={data?.orderStatus} />
+        <LogisticsOverview logistics={data?.logistics} />
+        <TopShops topShops={data?.topShops} />
+        <TopCategories topCategories={data?.topCategories} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <FinancialSummary financialSummary={data?.financialSummary} />
+        <SettlementOverview settlements={data?.settlements} />
+        <CustomerOverview customerOverview={data?.customerOverview} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <SystemHealth systemHealth={data?.systemHealth} />
+        <AiInsights aiInsights={data?.aiInsights} />
+        <ActivityFeed activityFeed={data?.activityFeed} />
+      </div>
+
+      <NewSellerRequests />
+    </div>
+  );
 };
 
 export default AdminDashboard;

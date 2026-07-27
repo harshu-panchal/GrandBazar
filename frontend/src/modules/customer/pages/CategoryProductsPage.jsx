@@ -17,6 +17,8 @@ import SectionRenderer from "../components/experience/SectionRenderer";
 import { useLocation as useAppLocation } from '../context/LocationContext';
 import { useSettings } from '@core/context/SettingsContext';
 import Lottie from 'lottie-react';
+import { useSeoMeta } from '@core/seo/useSeoMeta';
+import { buildCategoryPath } from '@core/seo/url';
 
 const CategoryProductsPage = () => {
     const { categoryName: catId } = useParams();
@@ -32,6 +34,24 @@ const CategoryProductsPage = () => {
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [noServiceData, setNoServiceData] = useState(null);
+    const canonicalPath = category ? buildCategoryPath(category) : `/category/${catId || ""}`;
+    const canonicalUrl = `${window.location.origin}${canonicalPath}`;
+
+    useSeoMeta({
+        title: category?.name ? `${category.name} | Grand Bazar` : "Category | Grand Bazar",
+        description: category?.description || `Discover products in ${category?.name || "selected"} category.`,
+        canonicalUrl,
+        keywords: [category?.name, "category", "Grand Bazar"].filter(Boolean),
+        ogImage: category?.image || "",
+        jsonLdId: "category-page",
+        jsonLd: category ? {
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            name: `${category.name} collection`,
+            description: category.description || "",
+            url: canonicalUrl,
+        } : null,
+    });
 
     // Dynamically load no-service Lottie on mount
     useEffect(() => {

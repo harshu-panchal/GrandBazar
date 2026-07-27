@@ -17,6 +17,7 @@ import {
 import { structuredRequestLogger, correlationIdMiddleware } from "./app/middleware/requestLogger.js";
 import { trackInFlightRequests } from "./app/middleware/metricsMiddleware.js";
 import { errorHandler, notFoundHandler } from "./app/middleware/errorMiddleware.js";
+import { maybeServeSeoRender } from "./app/middleware/seoRenderMiddleware.js";
 import { getProcessRole, isComponentEnabled } from "./app/core/processRole.js";
 import { startup } from "./app/core/startup.js";
 import {
@@ -44,6 +45,12 @@ import {
 } from "./app/jobs/rewardMaintenanceJob.js";
 import logger from "./app/services/logger.js";
 import { stopScheduledJobs } from "./app/services/distributedScheduler.js";
+import {
+  getRobotsTxt,
+  getSitemapIndex,
+  getSitemapChunk,
+  getSeoHealth,
+} from "./app/controller/seoInfraController.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,6 +186,13 @@ function createApp() {
       });
     }
   });
+
+  app.get("/robots.txt", getRobotsTxt);
+  app.get("/sitemap.xml", getSitemapIndex);
+  app.get("/sitemaps/:mapType-:page.xml", getSitemapChunk);
+  app.get("/api/seo/health", getSeoHealth);
+
+  app.use(maybeServeSeoRender);
 
   // Setup all routes (includes /health, /metrics, /api/*)
   setupRoutes(app);

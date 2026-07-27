@@ -2,10 +2,26 @@ import React, { useEffect, useState } from "react";
 import { Tag, Sparkles, Clock, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { customerApi } from "../services/customerApi";
+import { useSeoMeta } from "@core/seo/useSeoMeta";
 
 const OffersPage = () => {
   const [legacyOffers, setLegacyOffers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const canonicalUrl = `${window.location.origin}/offers`;
+
+  useSeoMeta({
+    title: "Offers & Deals | Grand Bazar",
+    description: "Explore active coupons, discount codes, and special offers on Grand Bazar.",
+    canonicalUrl,
+    keywords: ["offers", "coupons", "discounts", "Grand Bazar"],
+    jsonLdId: "offers-page",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: "Grand Bazar Offers",
+      url: canonicalUrl,
+    },
+  });
 
   useEffect(() => {
     const load = async () => {

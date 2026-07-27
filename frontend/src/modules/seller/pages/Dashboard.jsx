@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import PageHeader from "@shared/components/ui/PageHeader";
 import { exportToCSV } from "@/lib/exportUtils";
 import { sellerApi } from "../services/sellerApi";
-import { Skeleton } from "../components/dashboard/common";
+import { Skeleton } from "@shared/components/dashboard/common";
 import KpiCards from "../components/dashboard/KpiCards";
 import ShopPerformance from "../components/dashboard/ShopPerformance";
 import SalesOverviewChart from "../components/dashboard/SalesOverviewChart";

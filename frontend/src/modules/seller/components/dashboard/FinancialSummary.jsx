@@ -1,7 +1,7 @@
 import React from "react";
 import Card from "@shared/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { inr } from "./common";
+import { inr } from "@shared/components/dashboard/common";
 
 const Row = ({ label, value, negative }) => (
   <div className="flex items-center justify-between">

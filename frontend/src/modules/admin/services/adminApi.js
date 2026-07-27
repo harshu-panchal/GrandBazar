@@ -7,6 +7,7 @@ export const adminApi = {
     login: (data) => axiosInstance.post('/admin/login', data),
     signup: (data) => axiosInstance.post('/admin/signup', data),
     getStats: () => axiosInstance.get('/admin/stats'),
+    getDashboardOverview: (params) => axiosInstance.get('/admin/dashboard', { params }),
     getUsers: (params) => axiosInstance.get('/admin/users', { params }),
     getUserById: (id) => axiosInstance.get(`/admin/users/${id}`),
     getActiveSellers: (params) => axiosInstance.get('/admin/sellers/active', { params }),

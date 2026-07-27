@@ -4,7 +4,7 @@ import { Trophy, TrendingUp, TrendingDown } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import { cn } from "@/lib/utils";
-import { inr, TrendChip, Stars, ViewAllLink } from "./common";
+import { inr, TrendChip, Stars, ViewAllLink } from "@shared/components/dashboard/common";
 
 const StatCell = ({ label, children }) => (
   <div>

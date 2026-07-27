@@ -23,6 +23,8 @@ import CheckoutPage from '../pages/CheckoutPage';
 import PreOrderBrowsePage from '../pages/PreOrderBrowsePage';
 import PreOrderDetailPage from '../pages/PreOrderDetailPage';
 import PaymentStatusPage from '../pages/PaymentStatusPage';
+import DiscoverCityPage from '../pages/DiscoverCityPage';
+import DiscoverPincodePage from '../pages/DiscoverPincodePage';
 import ScrollToTop from '../components/shared/ScrollToTop';
 import { WishlistProvider } from '../context/WishlistContext';
 import { CartProvider } from '../context/CartContext';
@@ -42,13 +44,15 @@ const CustomerRoutes = () => {
                             <Route path="/" element={<Home />} />
                             <Route path="categories" element={<CategoriesPage />} />
                             <Route path="category/:categoryName" element={<CategoryProductsPage />} />
-                            <Route path="product/:id" element={<ProductDetailPage />} />
+                            <Route path="product/:slugAndId" element={<ProductDetailPage />} />
                             <Route path="terms" element={<TermsPage />} />
                             <Route path="privacy" element={<PrivacyPage />} />
                             <Route path="about" element={<AboutPage />} />
                             <Route path="offers" element={<OffersPage />} />
                             <Route path="preorder" element={<PreOrderBrowsePage />} />
                             <Route path="preorder/:campaignId" element={<PreOrderDetailPage />} />
+                            <Route path="discover/:citySlug" element={<DiscoverCityPage />} />
+                            <Route path="discover/:citySlug/:pincode" element={<DiscoverPincodePage />} />
 
                             {/* Protected Customer Routes */}
                             <Route path="wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />

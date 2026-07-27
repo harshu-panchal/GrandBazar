@@ -16,6 +16,7 @@ import customerPin from "@/assets/customer-pin.png";
 import BecomeSellerButton from "../components/shared/BecomeSellerButton";
 import { getGoogleMapsJsApiLoaderOptions } from "@/core/services/googleMapsLoader";
 import { cn } from "@/lib/utils";
+import { buildStorePath } from "@core/seo/url";
 
 const STORE_THEMES = {
   grocery: {
@@ -409,7 +410,7 @@ const StoresPage = () => {
               return (
                 <div
                   key={s._id}
-                  onClick={() => navigate(`/store/${s._id}`)}
+                  onClick={() => navigate(buildStorePath(s))}
                   className={`relative flex flex-col rounded-[1.5rem] border border-slate-100/80 bg-gradient-to-b ${theme.gradient} ${theme.border} ${glowClass} transition-all duration-500 hover:-translate-y-1 shadow-[0_8px_30px_rgba(0,0,0,0.02)] cursor-pointer group overflow-hidden`}
                 >
                   {/* Shop Banner Graphic Card */}
@@ -670,7 +671,7 @@ const StoresPage = () => {
                       <Marker 
                         key={s._id} 
                         position={{ lat: s.location.coordinates[1], lng: s.location.coordinates[0] }} 
-                        onClick={() => navigate(`/store/${s._id}`)}
+                        onClick={() => navigate(buildStorePath(s))}
                         title={s.shopName || s.name}
                         icon={storeMarkerIcon}
                       />

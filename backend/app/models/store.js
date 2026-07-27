@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { slugify } from "../utils/slugify.js";
 
 const storeSchema = new mongoose.Schema(
   {
@@ -13,6 +14,31 @@ const storeSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+      sparse: true,
+    },
+    slugHistory: {
+      type: [String],
+      default: [],
+    },
+    seoTitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    seoDescription: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    seoKeywords: {
+      type: [String],
+      default: [],
     },
 
     category: {
@@ -257,5 +283,51 @@ const storeSchema = new mongoose.Schema(
 storeSchema.index({ location: "2dsphere" });
 storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1 });
 storeSchema.index({ favoriteCount: -1 });
+storeSchema.index({ slug: 1 }, { unique: true, sparse: true });
+
+async function buildUniqueStoreSlug(doc, baseName) {
+  const base = slugify(baseName || "store");
+  if (!base) return "";
+
+  let candidate = base;
+  let attempt = 0;
+  // Keep lookups cheap while still deterministic enough.
+  while (attempt < 50) {
+    const existing = await doc.constructor.findOne({
+      slug: candidate,
+      _id: { $ne: doc._id },
+    })
+      .select("_id")
+      .lean();
+    if (!existing) return candidate;
+    attempt += 1;
+    candidate = `${base}-${String(doc._id).slice(-6)}-${attempt}`;
+  }
+  return `${base}-${String(doc._id).slice(-6)}`;
+}
+
+storeSchema.pre("save", async function syncStoreSlug(next) {
+  try {
+    const previousSlug = this.isModified("slug") ? this.get("slug") : this.slug;
+    if (this.isNew || this.isModified("shopName") || !this.slug) {
+      const oldSlug = String(this.slug || "").trim().toLowerCase();
+      const nextSlug = await buildUniqueStoreSlug(this, this.shopName);
+      this.slug = nextSlug;
+
+      if (oldSlug && oldSlug !== nextSlug) {
+        const history = new Set([...(this.slugHistory || []), oldSlug]);
+        this.slugHistory = [...history];
+      }
+    }
+
+    if (previousSlug && previousSlug !== this.slug) {
+      const history = new Set([...(this.slugHistory || []), String(previousSlug).toLowerCase()]);
+      this.slugHistory = [...history];
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default mongoose.model("Store", storeSchema);

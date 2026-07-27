@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
   Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare
@@ -14,6 +14,8 @@ import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { buildStorePath, extractObjectIdFromSlugAndId } from "@core/seo/url";
+import { useSeoMeta } from "@core/seo/useSeoMeta";
 
 const STORE_THEMES = {
   grocery: {
@@ -69,8 +71,10 @@ const getEmbedUrl = (url) => {
 };
 
 const StoreDetailPage = () => {
-  const { sellerId } = useParams();
+  const { slugAndId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const sellerId = extractObjectIdFromSlugAndId(slugAndId);
   const { currentLocation } = useAppLocation();
   const { isAuthenticated } = useAuth();
   const { showToast } = useToast();
@@ -91,6 +95,45 @@ const StoreDetailPage = () => {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
+  const canonicalPath = seller ? buildStorePath(seller) : `/store/${slugAndId || ""}`;
+  const canonicalUrl = `${window.location.origin}${canonicalPath}`;
+
+  useSeoMeta({
+    title: seller?.shopName ? `${seller.shopName} | Grand Bazar` : "Store | Grand Bazar",
+    description:
+      seller?.description ||
+      "Browse local store inventory, ratings, and delivery options on Grand Bazar.",
+    keywords: [seller?.shopName, seller?.category, seller?.city, "Grand Bazar"].filter(Boolean),
+    canonicalUrl,
+    ogImage: seller?.banners?.[0] || "",
+    ogType: "store",
+    jsonLdId: "store-page",
+    jsonLd: seller
+      ? {
+          "@context": "https://schema.org",
+          "@type": "Store",
+          name: seller.shopName || seller.name || "",
+          description: seller.description || "",
+          image: (seller.banners || []).filter(Boolean),
+          address: {
+            "@type": "PostalAddress",
+            addressLocality: seller.locality || "",
+            addressRegion: seller.state || "",
+            postalCode: seller.pincode || "",
+            addressCountry: "IN",
+          },
+          aggregateRating:
+            Number(seller.reviewCount || 0) > 0
+              ? {
+                  "@type": "AggregateRating",
+                  ratingValue: Number(seller.avgRating || 0),
+                  reviewCount: Number(seller.reviewCount || 0),
+                }
+              : undefined,
+          url: canonicalUrl,
+        }
+      : null,
+  });
 
   const storeBanners = useMemo(
     () =>
@@ -138,6 +181,10 @@ const StoreDetailPage = () => {
           profileRes.data.data;
         setSeller(profile);
         setLiveFavoriteCount(Number(profile?.favoriteCount || 0));
+        const canonicalPath = buildStorePath(profile || {});
+        if (location.pathname !== canonicalPath) {
+          navigate(canonicalPath, { replace: true });
+        }
       }
 
       if (productsRes.data?.success) {

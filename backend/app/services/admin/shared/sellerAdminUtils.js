@@ -90,6 +90,8 @@ export function formatSellerApplication(seller) {
     documents: docs,
     documentFiles,
     location: seller.address || (applicationType === "seller_admin" ? "Account registration" : "Not provided"),
+    city: seller.city || "",
+    businessModel: seller.businessModel || "",
     description:
       seller.description ||
       (applicationType === "seller_admin"

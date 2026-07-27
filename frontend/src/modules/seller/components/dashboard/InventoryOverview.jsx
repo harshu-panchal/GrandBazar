@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { inr, IconChip, ViewAllLink } from "./common";
+import { inr, IconChip, ViewAllLink } from "@shared/components/dashboard/common";
 
 const Row = ({ icon, chip, label, value, valueClass }) => (
   <div className="flex items-center gap-3">

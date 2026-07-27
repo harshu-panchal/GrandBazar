@@ -25,6 +25,7 @@ import metricsRoute from "./metricsRoutes.js";
 import authOtpRoute from "../modules/otp/otp.routes.js";
 import catalogRoute from "./catalogRoutes.js";
 import rewardRoute from "../modules/rewards/reward.routes.js";
+import seoRoute from "./seoRoutes.js";
 
 import express from "express";
 
@@ -62,6 +63,7 @@ const setupRoutes = (app) => {
     router.use("/reviews", reviewRoute);
     router.use("/admin/faqs", faqRoute);
     router.use("/public/faqs", faqRoute); // For public access without admin prefix
+    router.use("/public", seoRoute);
 
     app.use("/api", router);
 }

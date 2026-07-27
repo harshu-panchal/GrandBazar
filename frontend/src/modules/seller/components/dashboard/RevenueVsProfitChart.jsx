@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import Card from "@shared/components/ui/Card";
 import { formatInr } from "@/shared/utils/sellerOrderMoney";
-import { inr, RangeSelect } from "./common";
+import { inr, RangeSelect } from "@shared/components/dashboard/common";
 
 const RevenueVsProfitChart = ({ revenueVsProfit, range, onRangeChange }) => {
   const data = revenueVsProfit?.data || [];

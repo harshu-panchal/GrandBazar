@@ -9,6 +9,7 @@ import { useSettings } from '@core/context/SettingsContext';
 import { cn } from '@/lib/utils';
 import { useLocation as useAppLocation } from '../context/LocationContext';
 import Lottie from 'lottie-react';
+import { buildStorePath } from '@core/seo/url';
 
 const SearchPage = () => {
     const navigate = useNavigate();
@@ -382,7 +383,7 @@ const SearchPage = () => {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {sellerResults.map(s => (
-                                        <div key={s._id} onClick={() => { saveSearch(query); navigate(`/store/${s._id}`); }} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md cursor-pointer transition-all">
+                                        <div key={s._id} onClick={() => { saveSearch(query); navigate(buildStorePath(s)); }} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md cursor-pointer transition-all">
                                             <div className="h-14 w-14 rounded-xl bg-slate-100 flex items-center justify-center font-black text-xl text-slate-400">
                                                 {String(s.shopName || s.name || "S").charAt(0).toUpperCase()}
                                             </div>

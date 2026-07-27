@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Package } from "lucide-react";
 import Card from "@shared/components/ui/Card";
-import { inr, ViewAllLink } from "./common";
+import { inr, ViewAllLink } from "@shared/components/dashboard/common";
 
 const TopSellingProducts = ({ topProducts }) => {
   const navigate = useNavigate();

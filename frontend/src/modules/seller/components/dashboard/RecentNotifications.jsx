@@ -4,7 +4,7 @@ import { Bell, ShoppingBag, CreditCard, AlertTriangle, Star, Info } from "lucide
 import Card from "@shared/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { sellerApi } from "../../services/sellerApi";
-import { ViewAllLink, Skeleton } from "./common";
+import { ViewAllLink, Skeleton } from "@shared/components/dashboard/common";
 
 const TYPE_STYLES = {
   order: { icon: ShoppingBag, chip: "bg-sky-50 text-sky-600" },

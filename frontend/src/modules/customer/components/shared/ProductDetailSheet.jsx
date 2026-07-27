@@ -25,6 +25,7 @@ import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { customerApi } from '../../services/customerApi';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { buildProductPath } from '@/core/seo/url';
 
 const ProductDetailSheet = () => {
     const { selectedProduct, isOpen, closeProduct } = useProductDetail();
@@ -226,7 +227,7 @@ const ProductDetailSheet = () => {
         if (e) e.stopPropagation();
         if (!selectedProduct) return;
 
-        const shareUrl = `${window.location.origin}/product/${selectedProduct.id || selectedProduct._id}`;
+        const shareUrl = `${window.location.origin}${buildProductPath(selectedProduct)}`;
         const shareTitle = selectedProduct.name;
         const shareText = `Check out ${selectedProduct.name} on Grand Bazar!`;
 

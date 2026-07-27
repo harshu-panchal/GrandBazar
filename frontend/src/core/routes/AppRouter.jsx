@@ -53,6 +53,8 @@ const RewardsPage = lazy(() => import('../../modules/customer/pages/RewardsPage'
 const ReferAndEarnPage = lazy(() => import('../../modules/customer/pages/ReferAndEarnPage'));
 const PreOrderBrowsePage = lazy(() => import('../../modules/customer/pages/PreOrderBrowsePage'));
 const PreOrderDetailPage = lazy(() => import('../../modules/customer/pages/PreOrderDetailPage'));
+const DiscoverCityPage = lazy(() => import('../../modules/customer/pages/DiscoverCityPage'));
+const DiscoverPincodePage = lazy(() => import('../../modules/customer/pages/DiscoverPincodePage'));
 
 // Lazy load heavy modules
 const SellerModule = lazy(() => import('../../modules/seller/routes/index'));
@@ -162,16 +164,18 @@ const router = createBrowserRouter([
                         { index: true, element: <Home /> },
                         { path: 'categories', element: <CategoriesPage /> },
                         { path: 'category/:categoryName', element: <CategoryProductsPage /> },
-                        { path: 'product/:id', element: <ProductDetailPage /> },
+                        { path: 'product/:slugAndId', element: <ProductDetailPage /> },
                         { path: 'terms', element: <TermsPage /> },
                         { path: 'privacy', element: <PrivacyPage /> },
                         { path: 'about', element: <AboutPage /> },
                         { path: 'offers', element: <OffersPage /> },
                         { path: 'preorder', element: <PreOrderBrowsePage /> },
                         { path: 'preorder/:campaignId', element: <PreOrderDetailPage /> },
+                        { path: 'discover/:citySlug', element: <DiscoverCityPage /> },
+                        { path: 'discover/:citySlug/:pincode', element: <DiscoverPincodePage /> },
                         { path: 'shop-by-store', element: <ShopByStorePage /> },
                         { path: 'stores', element: <StoresPage /> },
-                        { path: 'store/:sellerId', element: <StoreDetailPage /> },
+                        { path: 'store/:slugAndId', element: <StoreDetailPage /> },
                         { path: 'wishlist', element: <ProtectedRoute><WishlistPage /></ProtectedRoute> },
                         { path: 'favorite-stores', element: <ProtectedRoute><FavoriteStoresPage /></ProtectedRoute> },
                         { path: 'orders', element: <ProtectedRoute><OrdersPage /></ProtectedRoute> },

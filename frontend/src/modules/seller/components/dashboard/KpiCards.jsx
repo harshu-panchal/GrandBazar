@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import { cn } from "@/lib/utils";
-import { inr, TrendChip, IconChip } from "./common";
+import { inr, TrendChip, IconChip } from "@shared/components/dashboard/common";
 
 const CARDS = [
   {

@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import Card from "@shared/components/ui/Card";
 import { formatInr } from "@/shared/utils/sellerOrderMoney";
-import { RangeSelect } from "./common";
+import { RangeSelect } from "@shared/components/dashboard/common";
 
 const SalesTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;

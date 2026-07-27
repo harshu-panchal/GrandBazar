@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Users } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
-import { Stars, ViewAllLink } from "./common";
+import { Stars, ViewAllLink } from "@shared/components/dashboard/common";
 
 const AssistantPerformance = ({ assistants }) => {
   const navigate = useNavigate();

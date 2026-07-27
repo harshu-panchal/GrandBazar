@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { Heart, Plus, Minus, Star, ShieldCheck, Clock, ArrowLeft, MessageSquare, Share2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -11,10 +11,13 @@ import { useLocation as useAppLocation } from '../context/LocationContext';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { useSettings } from '@core/context/SettingsContext';
 import Lottie from 'lottie-react';
+import { buildProductPath, extractObjectIdFromSlugAndId } from '@core/seo/url';
+import { useSeoMeta } from '@core/seo/useSeoMeta';
 
 const ProductDetailPage = () => {
-    const { id } = useParams();
+    const { slugAndId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { cart, addToCart, updateQuantity } = useCart();
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } = useWishlist();
     const { showToast } = useToast();
@@ -30,6 +33,35 @@ const ProductDetailPage = () => {
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
     const [noServiceData, setNoServiceData] = useState(null);
+    const productId = extractObjectIdFromSlugAndId(slugAndId);
+    const canonicalPath = product ? buildProductPath(product) : `/product/${slugAndId || ""}`;
+    const canonicalUrl = `${window.location.origin}${canonicalPath}`;
+
+    useSeoMeta({
+        title: product?.name ? `${product.name} | Grand Bazar` : "Product | Grand Bazar",
+        description: product?.description || "Browse product details, pricing, and delivery information on Grand Bazar.",
+        keywords: [product?.name, product?.brand, "Grand Bazar", "quick commerce"].filter(Boolean),
+        canonicalUrl,
+        ogImage: activeImage || product?.mainImage || "",
+        ogType: "product",
+        jsonLdId: "product-page",
+        jsonLd: product ? {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            name: product.name,
+            description: product.description || "",
+            image: [activeImage || product.mainImage || ""].filter(Boolean),
+            brand: product.brand || "",
+            sku: product.sku || "",
+            offers: {
+                "@type": "Offer",
+                priceCurrency: "INR",
+                price: Number(product.price || 0),
+                availability: Number(product.stock || 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+                url: canonicalUrl,
+            },
+        } : null,
+    });
 
     // Dynamically load no-service Lottie on mount
     useEffect(() => {
@@ -51,7 +83,7 @@ const ProductDetailPage = () => {
                 lng: currentLocation.longitude
             } : {};
 
-            const res = await customerApi.getProductById(id, params);
+            const res = await customerApi.getProductById(productId, params);
             if (res.data.success) {
                 const p = res.data.result;
                 const formatted = {
@@ -62,6 +94,10 @@ const ProductDetailPage = () => {
                 setProduct(formatted);
                 setActiveImage(formatted.images[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600&auto=format&fit=crop');
                 fetchReviews();
+                const canonicalPath = buildProductPath(formatted);
+                if (location.pathname !== canonicalPath) {
+                    navigate(canonicalPath, { replace: true });
+                }
             }
         } catch (err) {
             console.error("Fetch product error:", err);
@@ -86,14 +122,14 @@ const ProductDetailPage = () => {
     };
 
     useEffect(() => {
-        if (id) {
+        if (productId) {
             fetchData();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id]);
+    }, [productId]);
 
     useEffect(() => {
-        if (id && product) {
+        if (productId && product) {
             fetchData(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,7 +142,7 @@ const ProductDetailPage = () => {
         try {
             setIsSubmittingReview(true);
             const res = await customerApi.submitReview({
-                productId: id,
+                productId,
                 rating: newReview.rating,
                 comment: newReview.comment
             });
@@ -135,7 +171,7 @@ const ProductDetailPage = () => {
         if (e) e.stopPropagation();
         if (!product) return;
 
-        const shareUrl = `${window.location.origin}/product/${product.id || product._id}`;
+        const shareUrl = `${window.location.origin}${buildProductPath(product)}`;
         const shareTitle = product.name;
         const shareText = `Check out ${product.name} on Grand Bazar!`;
 
