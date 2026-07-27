@@ -51,12 +51,11 @@ const Analytics = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
-  const [timeRange, setTimeRange] = useState("Last 7 Days");
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [chartRange, setChartRange] = useState("Daily");
+  const [period, setPeriod] = useState("Daily");
   const hasFetchedOnce = useRef(false);
 
   useEffect(() => {
@@ -66,16 +65,19 @@ const Analytics = () => {
         setLoading(true);
       }
       try {
-        const response = await sellerApi.getStats(chartRange.toLowerCase());
+        const response = await sellerApi.getStats(period.toLowerCase());
         const raw = response?.data?.result ?? response?.data?.data ?? null;
         if (response?.data?.success && raw && typeof raw === "object") {
           setStatsData({
             overview: raw.overview ?? {},
             salesTrend: Array.isArray(raw.salesTrend) ? raw.salesTrend : [],
+            customerTrend: Array.isArray(raw.customerTrend) ? raw.customerTrend : [],
             categoryMix: Array.isArray(raw.categoryMix) ? raw.categoryMix : [],
             topProducts: Array.isArray(raw.topProducts) ? raw.topProducts : [],
             trafficSources: Array.isArray(raw.trafficSources) ? raw.trafficSources : [],
             insights: raw.insights ?? {},
+            compareLabel: raw.compareLabel || "vs prev period",
+            range: raw.range || period.toLowerCase(),
           });
         } else if (response?.data?.success && raw) {
           setStatsData(raw);
@@ -86,10 +88,12 @@ const Analytics = () => {
         setStatsData((prev) => prev ?? {
           overview: {},
           salesTrend: [],
+          customerTrend: [],
           categoryMix: [],
           topProducts: [],
           trafficSources: [],
           insights: {},
+          compareLabel: "vs prev period",
         });
       } finally {
         if (isInitialLoad) {
@@ -99,9 +103,11 @@ const Analytics = () => {
       }
     };
     fetchAnalytics();
-  }, [chartRange]);
+  }, [period]);
 
-  const stats = [
+  const compareLabel = statsData?.compareLabel || "vs prev period";
+
+  const salesStats = [
     {
       label: "Total Sales",
       value: statsData?.overview?.totalSales || "₹0",
@@ -121,23 +127,80 @@ const Analytics = () => {
     {
       label: "Avg Order Value",
       value: statsData?.overview?.avgOrderValue || "₹0",
-      trend: "0%", // Trend for AOV can be added later
-      icon: HiOutlineUsers,
+      trend: statsData?.overview?.salesTrend || "0%",
+      icon: HiOutlineChartBar,
       color: "text-amber-600",
       bg: "bg-amber-50",
     },
     {
-      label: "Conversion Rate",
-      value: statsData?.overview?.conversionRate || "0%",
-      trend: "0%",
-      icon: HiOutlineChartBar,
+      label: "Unique Customers",
+      value: statsData?.overview?.uniqueCustomers || "0",
+      trend: statsData?.overview?.customersTrend || "0%",
+      icon: HiOutlineUsers,
       color: "text-rose-600",
       bg: "bg-rose-50",
     },
   ];
 
+  const customerStats = [
+    {
+      label: "Unique Customers",
+      value: statsData?.overview?.uniqueCustomers || "0",
+      trend: statsData?.overview?.customersTrend || "0%",
+      icon: HiOutlineUsers,
+      color: "text-brand-600",
+      bg: "bg-brand-50",
+    },
+    {
+      label: "New Customers",
+      value: statsData?.overview?.newCustomers || "0",
+      trend: statsData?.overview?.customersTrend || "0%",
+      icon: HiOutlineArrowTrendingUp,
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+    },
+    {
+      label: "Returning Customers",
+      value: statsData?.overview?.returningCustomers || "0",
+      trend: statsData?.overview?.ordersTrend || "0%",
+      icon: HiOutlineUsers,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+    },
+    {
+      label: "Total Orders",
+      value: statsData?.overview?.totalOrders || "0",
+      trend: statsData?.overview?.ordersTrend || "0%",
+      icon: HiOutlineShoppingBag,
+      color: "text-rose-600",
+      bg: "bg-rose-50",
+    },
+  ];
+
+  const stats = activeTab === "Customers" ? customerStats : salesStats;
+
   const salesTrendArr = statsData?.salesTrend ?? [];
-  const hasNoData = !Number(statsData?.overview?.totalOrders) && (!salesTrendArr.length || salesTrendArr.every((d) => !d.sales));
+  const hasNoData = !Number(String(statsData?.overview?.totalOrders || "0").replace(/,/g, "")) && (!salesTrendArr.length || salesTrendArr.every((d) => !d.sales));
+
+  const PeriodFilter = ({ className = "" }) => (
+    <div className={cn("flex bg-slate-100 p-1 rounded-lg border border-slate-200 overflow-x-auto scrollbar-hide", className)}>
+      {["Daily", "Weekly", "Monthly"].map((range) => (
+        <button
+          key={range}
+          type="button"
+          onClick={() => setPeriod(range)}
+          className={cn(
+            "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0",
+            period === range
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+              : "text-slate-600 hover:text-slate-700",
+          )}
+        >
+          {range}
+        </button>
+      ))}
+    </div>
+  );
 
   const handleDownloadReport = () => {
     if (isExporting) return;
@@ -150,13 +213,20 @@ const Analytics = () => {
       const lines = [];
       lines.push("Analytics Report");
       lines.push(`Generated,${new Date().toISOString()}`);
+      lines.push(`Period,${period}`);
       lines.push("");
 
       const ov = statsData?.overview ?? {};
       lines.push("Overview");
       lines.push("Metric,Value");
-      ["Total Sales", "Total Orders", "Avg Order Value", "Conversion Rate"].forEach((label, i) => {
-        const key = ["totalSales", "totalOrders", "avgOrderValue", "conversionRate"][i];
+      [
+        ["Total Sales", "totalSales"],
+        ["Total Orders", "totalOrders"],
+        ["Avg Order Value", "avgOrderValue"],
+        ["Unique Customers", "uniqueCustomers"],
+        ["New Customers", "newCustomers"],
+        ["Returning Customers", "returningCustomers"],
+      ].forEach(([label, key]) => {
         lines.push(`${escapeCsv(label)},${escapeCsv(ov[key] ?? "—")}`);
       });
       lines.push("");
@@ -164,9 +234,9 @@ const Analytics = () => {
       const trend = statsData?.salesTrend ?? [];
       if (trend.length) {
         lines.push("Sales Trend");
-        lines.push("Period,Sales,Traffic");
+        lines.push("Period,Sales,Orders,Customers");
         trend.forEach((d) => {
-          lines.push(`${escapeCsv(d.name)},${escapeCsv(d.sales)},${escapeCsv(d.traffic)}`);
+          lines.push(`${escapeCsv(d.name)},${escapeCsv(d.sales)},${escapeCsv(d.orders)},${escapeCsv(d.customers)}`);
         });
         lines.push("");
       }
@@ -247,7 +317,7 @@ const Analytics = () => {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm sm:text-xs font-bold transition-all whitespace-nowrap shrink-0",
+                    "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap shrink-0",
                     activeTab === tab
                       ? "bg-white text-slate-900 shadow-sm border border-slate-200"
                       : "text-slate-600 hover:text-slate-700",
@@ -256,9 +326,10 @@ const Analytics = () => {
                 </button>
               ))}
             </div>
+            <PeriodFilter className="w-full sm:w-auto" />
             <ShimmerButton
               onClick={handleDownloadReport}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 rounded-lg text-xs sm:text-sm sm:text-xs font-bold text-white shadow-lg disabled:opacity-50 shrink-0"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 rounded-lg text-xs sm:text-sm font-bold text-white shadow-lg disabled:opacity-50 shrink-0"
               disabled={isExporting}>
               <HiOutlineArrowDownTray className="h-4 w-4 shrink-0" />
               <span>{isExporting ? "DOWNLOADING..." : "DOWNLOAD REPORT"}</span>
@@ -269,13 +340,8 @@ const Analytics = () => {
 
       {/* Quick Stats Grid - show for all tabs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats
-          .filter((_, i) => {
-            if (activeTab === "Customers") return i === 0 || i === 1; // Total Sales, Total Orders only
-            return true;
-          })
-          .map((stat, i) => (
-          <BlurFade key={stat.label} delay={0.1 + i * 0.05}>
+        {stats.map((stat, i) => (
+          <BlurFade key={`${activeTab}-${stat.label}`} delay={0.1 + i * 0.05}>
             <MagicCard
               className="border-none shadow-md overflow-hidden group bg-white p-0"
               gradientColor={
@@ -298,18 +364,20 @@ const Analytics = () => {
                   <div
                     className={cn(
                       "flex items-center mt-3 text-xs sm:text-sm font-black px-2 py-0.5 rounded-full w-fit",
-                      stat.trend.startsWith("+")
+                      String(stat.trend).startsWith("+")
                         ? "text-brand-600 bg-brand-50"
-                        : "text-rose-600 bg-rose-50",
+                        : String(stat.trend).startsWith("-")
+                          ? "text-rose-600 bg-rose-50"
+                          : "text-slate-600 bg-slate-50",
                     )}>
-                    {stat.trend.startsWith("+") ? (
+                    {String(stat.trend).startsWith("+") ? (
                       <HiOutlineArrowUpRight className="mr-0.5" />
-                    ) : (
+                    ) : String(stat.trend).startsWith("-") ? (
                       <HiOutlineArrowDownRight className="mr-0.5" />
-                    )}
+                    ) : null}
                     {stat.trend}
                     <span className="text-slate-600 ml-1 font-medium">
-                      vs prev 7d
+                      {compareLabel}
                     </span>
                   </div>
                 </div>
@@ -327,11 +395,11 @@ const Analytics = () => {
         ))}
       </div>
 
-      {hasNoData && (activeTab === "Overview" || activeTab === "Sales") && (
+      {hasNoData && (activeTab === "Overview" || activeTab === "Sales" || activeTab === "Customers") && (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 flex items-center gap-3">
           <HiOutlineChartBar className="h-6 w-6 text-slate-600 shrink-0" />
           <p className="text-sm font-semibold text-slate-600">
-            Sales report is connected. Data will appear here once you have orders.
+            No {period.toLowerCase()} sales or customer data yet. Metrics will appear once you have orders in this period.
           </p>
         </div>
       )}
@@ -341,30 +409,16 @@ const Analytics = () => {
         {/* Sales Performance Chart */}
         <BlurFade delay={0.4} className="lg:col-span-2">
           <Card className="border-none shadow-xl shadow-slate-200/50 rounded-3xl p-6 bg-white overflow-hidden group h-full">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
               <div>
                 <h3 className="text-lg font-black text-slate-900">
                   Revenue & Trends
                 </h3>
                 <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">
-                  Performance Insights
+                  {period} Performance Insights
                 </p>
               </div>
-              <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                {["Daily", "Weekly", "Monthly"].map((range) => (
-                  <button
-                    key={range}
-                    onClick={() => setChartRange(range)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                      chartRange === range
-                        ? "bg-white text-primary shadow-sm"
-                        : "text-slate-600 hover:text-slate-600",
-                    )}>
-                    {range}
-                  </button>
-                ))}
-              </div>
+              <PeriodFilter />
             </div>
             <div className="h-[400px] w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -572,16 +626,70 @@ const Analytics = () => {
 
         {/* Traffic Sources & Customer Insights - Overview & Customers */}
         {(activeTab === "Overview" || activeTab === "Customers") && (
-        <BlurFade delay={0.7}>
+        <BlurFade delay={0.7} className={activeTab === "Customers" ? "lg:col-span-2" : undefined}>
           <Card className="border-none shadow-xl shadow-slate-200/50 rounded-3xl p-6 bg-white overflow-hidden group h-full">
-            <div className="mb-8">
-              <h3 className="text-lg font-black text-slate-900">
-                New Customers
-              </h3>
-              <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">
-                Traffic Origin Analysis
-              </p>
+            <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  Customer Insights
+                </h3>
+                <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">
+                  {period} customer activity
+                </p>
+              </div>
+              {activeTab === "Customers" ? <PeriodFilter /> : null}
             </div>
+
+            {activeTab === "Customers" && (
+              <div className="h-[220px] w-full mb-8">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={statsData?.customerTrend || statsData?.salesTrend || []}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorCustomers" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 700 }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 700 }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        borderRadius: "20px",
+                        border: "none",
+                        boxShadow:
+                          "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+                      }}
+                      itemStyle={{ fontSize: "11px", fontWeight: 900 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="customers"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorCustomers)"
+                      name="Customers"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="h-[250px] w-full md:w-1/2">
@@ -615,22 +723,29 @@ const Analytics = () => {
                 </ResponsiveContainer>
               </div>
               <div className="w-full md:w-1/2 space-y-4">
-                {(statsData?.trafficSources || []).map((source, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: source.color }}
-                      />
-                      <span className="text-xs font-bold text-slate-600">
-                        {source.name}
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  Traffic Sources
+                </p>
+                {(statsData?.trafficSources || []).length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-500">No customer traffic in this period.</p>
+                ) : (
+                  (statsData?.trafficSources || []).map((source, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: source.color }}
+                        />
+                        <span className="text-xs font-bold text-slate-600">
+                          {source.name}
+                        </span>
+                      </div>
+                      <span className="text-xs font-black text-slate-900">
+                        {((source.value / (statsData?.trafficSources?.reduce((a, b) => a + b.value, 0) || 1)) * 100).toFixed(0)}%
                       </span>
                     </div>
-                    <span className="text-xs font-black text-slate-900">
-                      {((source.value / (statsData?.trafficSources?.reduce((a, b) => a + b.value, 0) || 1)) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 

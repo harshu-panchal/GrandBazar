@@ -21,6 +21,13 @@ import {
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
+import {
+    getCouponStatus,
+    getCouponStatusBadgeVariant,
+    getCouponStatusLabel,
+    isCouponExpired,
+    COUPON_STATUSES,
+} from '@shared/utils/couponStatus';
 
 const CouponManagement = () => {
     const { showToast } = useToast();
@@ -47,7 +54,9 @@ const CouponManagement = () => {
         validFrom: '',
         validTill: '',
         description: '',
+        isActive: true,
     });
+    const [togglingStatusId, setTogglingStatusId] = useState(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -76,12 +85,9 @@ const CouponManagement = () => {
 
     const stats = useMemo(() => {
         const now = new Date();
-        const active = coupons.filter(c => {
-            const from = c.validFrom ? new Date(c.validFrom) : null;
-            const till = c.validTill ? new Date(c.validTill) : null;
-            return c.isActive && (!from || from <= now) && (!till || till >= now);
-        });
+        const active = coupons.filter(c => getCouponStatus(c) === COUPON_STATUSES.ACTIVE);
         const expiringSoon = coupons.filter(c => {
+            if (getCouponStatus(c) === COUPON_STATUSES.EXPIRED) return false;
             if (!c.validTill) return false;
             const till = new Date(c.validTill);
             const diffDays = (till - now) / (1000 * 60 * 60 * 24);
@@ -113,6 +119,7 @@ const CouponManagement = () => {
                 validFrom: coupon.validFrom ? coupon.validFrom.substring(0, 10) : '',
                 validTill: coupon.validTill ? coupon.validTill.substring(0, 10) : '',
                 description: coupon.description || '',
+                isActive: coupon.isActive !== false,
             });
         } else {
             setEditingCoupon(null);
@@ -129,6 +136,7 @@ const CouponManagement = () => {
                 validFrom: '',
                 validTill: '',
                 description: '',
+                isActive: true,
             });
         }
         setIsModalOpen(true);
@@ -146,6 +154,7 @@ const CouponManagement = () => {
                 perUserLimit: formData.perUserLimit ? Number(formData.perUserLimit) : 1,
                 validFrom: formData.validFrom,
                 validTill: formData.validTill,
+                isActive: formData.isActive !== false,
             };
 
             if (editingCoupon?._id) {
@@ -175,6 +184,25 @@ const CouponManagement = () => {
             showToast('Coupon removed', 'warning');
         } catch (error) {
             showToast('Failed to delete coupon', 'error');
+        }
+    };
+
+    const handleToggleStatus = async (coupon) => {
+        const nextStatus = !coupon.isActive;
+        setTogglingStatusId(coupon._id);
+        try {
+            await adminApi.updateCoupon(coupon._id, { isActive: nextStatus });
+            setCoupons((prev) =>
+                prev.map((c) => (c._id === coupon._id ? { ...c, isActive: nextStatus } : c)),
+            );
+            showToast(
+                nextStatus ? `${coupon.code} activated` : `${coupon.code} deactivated`,
+                'success',
+            );
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update status', 'error');
+        } finally {
+            setTogglingStatusId(null);
         }
     };
 
@@ -276,7 +304,11 @@ const CouponManagement = () => {
                                     </td>
                                 </tr>
                             )}
-                            {!isLoading && filteredCoupons.map((c) => (
+                            {!isLoading && filteredCoupons.map((c) => {
+                                const status = getCouponStatus(c);
+                                const isExpired = status === COUPON_STATUSES.EXPIRED;
+
+                                return (
                                 <tr key={c._id} className="group hover:bg-slate-50/30 transition-colors">
                                     <td className="px-4 py-6">
                                         <div className="flex items-center gap-4">
@@ -324,9 +356,31 @@ const CouponManagement = () => {
                                         </div>
                                     </td>
                                     <td className="px-4 py-6 text-center">
-                                        <Badge variant={c.isActive ? 'success' : 'secondary'} className="text-[9px] font-black uppercase">
-                                            {c.isActive ? 'active' : 'inactive'}
-                                        </Badge>
+                                        <div className="inline-flex flex-col items-center gap-2">
+                                            <Badge variant={getCouponStatusBadgeVariant(status)} className="text-[9px] font-black uppercase">
+                                                {getCouponStatusLabel(status)}
+                                            </Badge>
+                                            {!isExpired && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleStatus(c)}
+                                                    disabled={togglingStatusId === c._id}
+                                                    className={cn(
+                                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-60",
+                                                        c.isActive ? "bg-emerald-500" : "bg-slate-300",
+                                                    )}
+                                                    title={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
+                                                    aria-label={c.isActive ? 'Deactivate coupon' : 'Activate coupon'}
+                                                >
+                                                    <span
+                                                        className={cn(
+                                                            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                                                            c.isActive ? "translate-x-6" : "translate-x-1",
+                                                        )}
+                                                    />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-4 py-6">
                                         <div className="flex items-center justify-end gap-2">
@@ -345,7 +399,8 @@ const CouponManagement = () => {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                            );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -388,7 +443,7 @@ const CouponManagement = () => {
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(deleteTarget.id)}
+                                        onClick={() => handleDelete(deleteTarget._id)}
                                         className="px-4 py-2.5 bg-rose-600 text-white rounded-xl font-medium hover:bg-rose-700 transition-colors"
                                     >
                                         Delete
@@ -548,6 +603,37 @@ const CouponManagement = () => {
                             placeholder="Briefly describe the campaign..."
                             className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-black outline-none resize-none"
                         />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coupon Status</p>
+                            <p className="text-xs font-bold text-slate-700 mt-1">
+                                {isCouponExpired({ validTill: formData.validTill })
+                                    ? 'Expired — extend end date to reactivate'
+                                    : formData.isActive
+                                      ? 'Active — customers can use this code'
+                                      : 'Inactive — code is disabled'}
+                            </p>
+                        </div>
+                        {!isCouponExpired({ validTill: formData.validTill }) && (
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+                                className={cn(
+                                    "relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
+                                    formData.isActive ? "bg-emerald-500" : "bg-slate-300",
+                                )}
+                                aria-label="Toggle coupon status"
+                            >
+                                <span
+                                    className={cn(
+                                        "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+                                        formData.isActive ? "translate-x-6" : "translate-x-1",
+                                    )}
+                                />
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex gap-4 pt-4">

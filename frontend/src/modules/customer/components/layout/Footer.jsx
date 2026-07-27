@@ -1,12 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Twitter, Instagram, Youtube, Mail, MapPin, Phone } from 'lucide-react';
-import Logo from '@/assets/Logo.png';
 import { useSettings } from '@core/context/SettingsContext';
 
 const Footer = () => {
     const { settings } = useSettings();
-    const logoUrl = settings?.logoUrl || Logo;
+    const logoUrl = String(settings?.logoUrl || "").trim();
+    const appName = settings?.appName || 'App';
     const primaryColor = settings?.primaryColor || 'var(--primary)';
 
     return (
@@ -30,7 +30,11 @@ const Footer = () => {
                     {/* Brand Info */}
                     <div className="space-y-4 md:space-y-8">
                         <div className="flex items-center">
-                            <img src={logoUrl} alt={`${settings?.appName || 'App'} Logo`} loading="lazy" className="h-12 md:h-16 w-auto object-contain" />
+                            {logoUrl ? (
+                                <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-12 md:h-16 w-auto object-contain" />
+                            ) : (
+                                <span className="text-2xl font-black tracking-tight text-white">{appName}</span>
+                            )}
                         </div>
                         <p className="text-sm leading-relaxed md:text-base md:leading-loose text-white/90 md:max-w-xs transition-opacity hover:opacity-100 font-medium">
                             Your daily dose of fresh, organic, and healthy products delivered straight to your door. Freshness guaranteed.

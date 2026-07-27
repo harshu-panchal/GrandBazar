@@ -48,6 +48,8 @@ export const getSellerDeliveryPolicy = async (req, res) => {
       availability: resolveStoreAvailability(store),
       schedulingSettings: resolveStoreSchedulingSettings(store),
       serviceRadius: store.serviceRadius,
+      packagingChargeEnabled: Boolean(store.packagingChargeEnabled),
+      packagingCharge: Number(store.packagingCharge || 0),
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -62,6 +64,8 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
       availability,
       schedulingSettings,
       serviceRadius,
+      packagingChargeEnabled,
+      packagingCharge,
     } = req.body || {};
 
     const update = {};
@@ -164,6 +168,17 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
       update.serviceRadius = Math.max(0.5, Number(serviceRadius) || 5);
     }
 
+    if (packagingChargeEnabled !== undefined) {
+      update.packagingChargeEnabled = Boolean(packagingChargeEnabled);
+    }
+    if (packagingCharge !== undefined) {
+      const amount = Math.max(0, Number(packagingCharge) || 0);
+      update.packagingCharge = amount;
+      if (amount <= 0 && packagingChargeEnabled === undefined) {
+        update.packagingChargeEnabled = false;
+      }
+    }
+
     const updated = await Store.findByIdAndUpdate(
       storeId,
       { $set: update },
@@ -175,6 +190,8 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
       availability: resolveStoreAvailability(updated),
       schedulingSettings: resolveStoreSchedulingSettings(updated),
       serviceRadius: updated.serviceRadius,
+      packagingChargeEnabled: Boolean(updated.packagingChargeEnabled),
+      packagingCharge: Number(updated.packagingCharge || 0),
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);

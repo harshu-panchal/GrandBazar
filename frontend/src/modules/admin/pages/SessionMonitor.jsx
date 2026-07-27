@@ -21,12 +21,19 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All States' },
+  { id: 'online', label: 'Online' },
+  { id: 'idle', label: 'Idle' },
+  { id: 'logged_out', label: 'Logged Out' },
+];
+
 const SessionMonitor = () => {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('all'); // all, seller, user, delivery, admin
-  const [selectedStatus, setSelectedStatus] = useState('all'); // all, active, logged_out
+  const [selectedStatus, setSelectedStatus] = useState('all'); // all, online, idle, logged_out
 
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
@@ -34,7 +41,9 @@ const SessionMonitor = () => {
     try {
       const params = {};
       if (selectedRole !== 'all') params.role = selectedRole;
-      if (selectedStatus !== 'all') params.status = selectedStatus;
+      // online/idle are derived from lastActiveAt; both map to DB status "active"
+      if (selectedStatus === 'logged_out') params.status = 'logged_out';
+      else if (selectedStatus === 'online' || selectedStatus === 'idle') params.status = 'active';
       if (searchQuery.trim() !== '') params.search = searchQuery;
 
       const res = await adminApi.getLoginActivities(params);
@@ -144,6 +153,11 @@ const SessionMonitor = () => {
   };
 
   const stats = getStats();
+
+  const filteredSessions = sessions.filter((session) => {
+    if (selectedStatus === 'all') return true;
+    return getSessionStatus(session) === selectedStatus;
+  });
 
   const getRoleBadgeColor = (model) => {
     switch (model) {
@@ -274,13 +288,9 @@ const SessionMonitor = () => {
             ))}
           </div>
 
-          {/* Status Filters */}
+          {/* Status Filters — Online, Idle, Logged Out */}
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-            {[
-              { id: 'all', label: 'All Sessions' },
-              { id: 'active', label: 'Active Now' },
-              { id: 'logged_out', label: 'Logged Out' },
-            ].map(tab => (
+            {STATUS_FILTERS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedStatus(tab.id)}
@@ -300,9 +310,9 @@ const SessionMonitor = () => {
 
       {/* Main Grid / Table */}
       <Card className="overflow-hidden border border-slate-100 shadow-sm rounded-3xl">
-        {loading && sessions.length === 0 ? (
+        {loading && filteredSessions.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-medium">Loading session monitoring logs...</div>
-        ) : sessions.length === 0 ? (
+        ) : filteredSessions.length === 0 ? (
           <div className="p-16 text-center">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <ShieldAlert className="h-8 w-8 text-slate-400" />
@@ -327,7 +337,7 @@ const SessionMonitor = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sessions.map((session) => {
+                {filteredSessions.map((session) => {
                   const parsedUa = parseUserAgent(session.userAgent);
                   const sessionStatus = getSessionStatus(session);
 

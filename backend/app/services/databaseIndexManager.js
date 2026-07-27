@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Coupon from "../models/coupon.js";
 import * as logger from "./logger.js";
 
 /**
@@ -40,6 +41,31 @@ const INDEX_DEFINITIONS = {
 };
 
 /**
+ * Drop legacy global coupon code index and ensure compound { code, sellerId } uniqueness.
+ * Older deployments had a unique index on `code` alone, which blocked seller coupons
+ * when an admin/global coupon already used the same code.
+ */
+export async function syncCouponIndexes() {
+  const collection = mongoose.connection.collection("coupons");
+  const indexes = await collection.indexes();
+
+  const legacyCodeIndex = indexes.find(
+    (idx) =>
+      idx.name === "code_1" &&
+      idx.key?.code === 1 &&
+      !Object.prototype.hasOwnProperty.call(idx.key, "sellerId"),
+  );
+
+  if (legacyCodeIndex) {
+    await collection.dropIndex("code_1");
+    logger.info("[DatabaseIndexManager] Dropped legacy unique index coupons.code_1");
+  }
+
+  await Coupon.syncIndexes();
+  logger.info("[DatabaseIndexManager] Coupon indexes synced");
+}
+
+/**
  * Create all required indexes across all collections
  * @returns {Promise<void>}
  */
@@ -55,6 +81,18 @@ export async function createAllIndexes() {
   };
   
   try {
+    try {
+      await syncCouponIndexes();
+    } catch (error) {
+      logger.error("[DatabaseIndexManager] Failed to sync coupon indexes:", error);
+      results.failed++;
+      results.errors.push({
+        collection: "coupons",
+        index: "code_sellerId_compound",
+        error: error.message,
+      });
+    }
+
     for (const [collectionName, indexes] of Object.entries(INDEX_DEFINITIONS)) {
       const collection = mongoose.connection.collection(collectionName);
       
@@ -291,6 +329,7 @@ export async function getIndexStats(collectionName) {
 
 export default {
   createAllIndexes,
+  syncCouponIndexes,
   verifyIndexes,
   analyzeSlowQueries,
   getIndexStats,

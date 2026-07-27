@@ -1,5 +1,6 @@
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
+import Store from "../../models/store.js";
 import {
   PRODUCT_APPROVAL_STATUS,
   resolveProductApprovalStatus,
@@ -92,18 +93,20 @@ export function categoryAppliesCommission(category) {
 }
 
 /**
- * Resolve commission from category hierarchy: header → level2 → subcategory.
- * First level with applyCommission wins (so if all three are set, top wins).
+ * Resolve commission from hierarchy: product → subcategory → level2 → header.
+ * Last (deepest) level with applyCommission wins (product overrides category levels).
  */
 export function resolveCategoryHierarchyCommission({
+  productCategory = null,
   headerCategory = null,
   level2Category = null,
   subcategory = null,
 } = {}) {
   const chain = [
-    { level: "header", category: headerCategory },
-    { level: "category", category: level2Category },
+    { level: "product", category: productCategory },
     { level: "subcategory", category: subcategory },
+    { level: "category", category: level2Category },
+    { level: "header", category: headerCategory },
   ];
 
   for (const entry of chain) {
@@ -116,7 +119,8 @@ export function resolveCategoryHierarchyCommission({
     }
   }
 
-  const fallback = headerCategory || level2Category || subcategory || null;
+  const fallback =
+    productCategory || subcategory || level2Category || headerCategory || null;
   return {
     category: fallback,
     level: null,
@@ -152,6 +156,118 @@ function resolveHandlingConfig(category) {
     type,
     value: Number.isFinite(value) ? Math.max(value, 0) : 0,
   };
+}
+
+function resolvePackingConfig(category) {
+  if (!category) {
+    return { type: HANDLING_FEE_TYPE.NONE, value: 0 };
+  }
+
+  const type =
+    category.packingFeeType ||
+    (Number(category.packingFees || 0) > 0
+      ? HANDLING_FEE_TYPE.FIXED
+      : HANDLING_FEE_TYPE.NONE);
+
+  const legacyPackingFees = Number(category.packingFees ?? 0);
+  const primaryPackingValue = Number(category.packingFeeValue);
+  const resolvedRaw =
+    category.packingFeeValue == null ||
+    (!Number.isFinite(primaryPackingValue) ||
+      (primaryPackingValue === 0 && legacyPackingFees > 0))
+      ? legacyPackingFees
+      : primaryPackingValue;
+  const value = Number(resolvedRaw ?? 0);
+
+  return {
+    type,
+    value: Number.isFinite(value) ? Math.max(value, 0) : 0,
+  };
+}
+
+function categoryAppliesHandling(category) {
+  if (!category) return false;
+  const cfg = resolveHandlingConfig(category);
+  return cfg.type !== HANDLING_FEE_TYPE.NONE && cfg.value > 0;
+}
+
+function categoryAppliesPacking(category) {
+  if (!category) return false;
+  const cfg = resolvePackingConfig(category);
+  return cfg.type !== HANDLING_FEE_TYPE.NONE && cfg.value > 0;
+}
+
+/**
+ * Deepest category with handling fee wins: subcategory → L2 → header.
+ */
+export function resolveCategoryHierarchyHandling({
+  headerCategory = null,
+  level2Category = null,
+  subcategory = null,
+} = {}) {
+  const chain = [
+    { level: "subcategory", category: subcategory },
+    { level: "category", category: level2Category },
+    { level: "header", category: headerCategory },
+  ];
+  for (const entry of chain) {
+    if (categoryAppliesHandling(entry.category)) {
+      return {
+        category: entry.category,
+        level: entry.level,
+        categoryId: entry.category?._id ? String(entry.category._id) : null,
+      };
+    }
+  }
+  return { category: null, level: null, categoryId: null };
+}
+
+/**
+ * Deepest category with packing fee wins: subcategory → L2 → header.
+ */
+export function resolveCategoryHierarchyPacking({
+  headerCategory = null,
+  level2Category = null,
+  subcategory = null,
+} = {}) {
+  const chain = [
+    { level: "subcategory", category: subcategory },
+    { level: "category", category: level2Category },
+    { level: "header", category: headerCategory },
+  ];
+  for (const entry of chain) {
+    if (categoryAppliesPacking(entry.category)) {
+      return {
+        category: entry.category,
+        level: entry.level,
+        categoryId: entry.category?._id ? String(entry.category._id) : null,
+      };
+    }
+  }
+  return { category: null, level: null, categoryId: null };
+}
+
+function attachResolvedFeeCategories(cartItems = [], categoryById = new Map()) {
+  return cartItems.map((item) => {
+    const headerCategory = categoryById.get(String(item.headerCategoryId || "")) || null;
+    const level2Category = categoryById.get(String(item.categoryId || "")) || null;
+    const subcategory = categoryById.get(String(item.subcategoryId || "")) || null;
+    const handling = resolveCategoryHierarchyHandling({
+      headerCategory,
+      level2Category,
+      subcategory,
+    });
+    const packing = resolveCategoryHierarchyPacking({
+      headerCategory,
+      level2Category,
+      subcategory,
+    });
+    return {
+      ...item,
+      resolvedHandlingCategoryId: handling.categoryId,
+      resolvedPackingCategoryId: packing.categoryId,
+    };
+  });
 }
 
 export function calculateProductSubtotal(items = []) {
@@ -205,21 +321,31 @@ export function calculateHandlingFee(cartItems, options = {}) {
     categoryById = new Map(),
   } = options;
 
+  const enrichedItems = attachResolvedFeeCategories(cartItems, categoryById);
+
   const categorySubtotalMap = new Map();
-  for (const item of cartItems) {
-    const headerId = toObjectIdString(item.headerCategoryId);
-    const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * normalizeLineQuantity(item.quantity));
-    categorySubtotalMap.set(headerId, addMoney(categorySubtotalMap.get(headerId) || 0, itemSubtotal));
+  for (const item of enrichedItems) {
+    const feeCategoryId = toObjectIdString(item.resolvedHandlingCategoryId);
+    if (!feeCategoryId) continue;
+    const itemSubtotal = roundCurrency(
+      normalizeLinePrice(item.price) * normalizeLineQuantity(item.quantity),
+    );
+    categorySubtotalMap.set(
+      feeCategoryId,
+      addMoney(categorySubtotalMap.get(feeCategoryId) || 0, itemSubtotal),
+    );
   }
 
   const categoryFees = [];
-  for (const [headerId, subtotal] of categorySubtotalMap.entries()) {
-    const category = categoryById.get(headerId);
+  for (const [feeCategoryId, subtotal] of categorySubtotalMap.entries()) {
+    const category = categoryById.get(feeCategoryId);
     const handling = resolveHandlingConfig(category);
     const fee = calculateHandlingForCategory(handling, subtotal);
     categoryFees.push({
-      headerCategoryId: headerId || null,
+      headerCategoryId: feeCategoryId || null,
+      categoryId: feeCategoryId || null,
       categoryName: category?.name || "Unknown",
+      categoryType: category?.type || null,
       subtotal,
       handlingFeeType: handling.type,
       handlingFeeValue: handling.value,
@@ -235,9 +361,10 @@ export function calculateHandlingFee(cartItems, options = {}) {
   } else if (handlingFeeStrategy === HANDLING_FEE_STRATEGY.SUM_OF_CATEGORY_FEES) {
     totalHandlingFee = categoryFees.reduce((sum, row) => addMoney(sum, row.computedFee), 0);
   } else if (handlingFeeStrategy === HANDLING_FEE_STRATEGY.PER_ITEM_FEE) {
-    totalHandlingFee = cartItems.reduce((sum, item) => {
-      const headerId = toObjectIdString(item.headerCategoryId);
-      const category = categoryById.get(headerId);
+    totalHandlingFee = enrichedItems.reduce((sum, item) => {
+      const feeCategoryId = toObjectIdString(item.resolvedHandlingCategoryId);
+      if (!feeCategoryId) return sum;
+      const category = categoryById.get(feeCategoryId);
       const handling = resolveHandlingConfig(category);
       const quantity = normalizeLineQuantity(item.quantity);
       const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * quantity);
@@ -265,6 +392,87 @@ export function calculateHandlingFee(cartItems, options = {}) {
     handlingFeeCharged: roundCurrency(totalHandlingFee),
     handlingFeeStrategy,
     handlingCategoryUsed,
+    categoryFees,
+  };
+}
+
+export function calculatePackingFee(cartItems, options = {}) {
+  const {
+    packingFeeStrategy = HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE,
+    categoryById = new Map(),
+  } = options;
+
+  const enrichedItems = attachResolvedFeeCategories(cartItems, categoryById);
+
+  const categorySubtotalMap = new Map();
+  for (const item of enrichedItems) {
+    const feeCategoryId = toObjectIdString(item.resolvedPackingCategoryId);
+    if (!feeCategoryId) continue;
+    const itemSubtotal = roundCurrency(
+      normalizeLinePrice(item.price) * normalizeLineQuantity(item.quantity),
+    );
+    categorySubtotalMap.set(
+      feeCategoryId,
+      addMoney(categorySubtotalMap.get(feeCategoryId) || 0, itemSubtotal),
+    );
+  }
+
+  const categoryFees = [];
+  for (const [feeCategoryId, subtotal] of categorySubtotalMap.entries()) {
+    const category = categoryById.get(feeCategoryId);
+    const packing = resolvePackingConfig(category);
+    const fee = calculateHandlingForCategory(packing, subtotal);
+    categoryFees.push({
+      headerCategoryId: feeCategoryId || null,
+      categoryId: feeCategoryId || null,
+      categoryName: category?.name || "Unknown",
+      categoryType: category?.type || null,
+      subtotal,
+      packingFeeType: packing.type,
+      packingFeeValue: packing.value,
+      computedFee: roundCurrency(fee),
+    });
+  }
+
+  let totalPackingFee = 0;
+  let packingCategoryUsed = null;
+
+  if (categoryFees.length === 0) {
+    totalPackingFee = 0;
+  } else if (packingFeeStrategy === HANDLING_FEE_STRATEGY.SUM_OF_CATEGORY_FEES) {
+    totalPackingFee = categoryFees.reduce((sum, row) => addMoney(sum, row.computedFee), 0);
+  } else if (packingFeeStrategy === HANDLING_FEE_STRATEGY.PER_ITEM_FEE) {
+    totalPackingFee = enrichedItems.reduce((sum, item) => {
+      const feeCategoryId = toObjectIdString(item.resolvedPackingCategoryId);
+      if (!feeCategoryId) return sum;
+      const category = categoryById.get(feeCategoryId);
+      const packing = resolvePackingConfig(category);
+      const quantity = normalizeLineQuantity(item.quantity);
+      const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * quantity);
+      const perLine =
+        packing.type === HANDLING_FEE_TYPE.FIXED
+          ? roundCurrency(packing.value * quantity)
+          : calculateHandlingForCategory(packing, itemSubtotal);
+      return addMoney(sum, perLine);
+    }, 0);
+  } else {
+    const maxCategory = categoryFees.reduce((best, row) =>
+      row.computedFee > (best?.computedFee || 0) ? row : best,
+    );
+    totalPackingFee = roundCurrency(maxCategory?.computedFee || 0);
+    packingCategoryUsed = maxCategory || null;
+  }
+
+  if (!packingCategoryUsed && categoryFees.length > 0) {
+    packingCategoryUsed = categoryFees
+      .slice()
+      .sort((a, b) => b.computedFee - a.computedFee)[0];
+  }
+
+  return {
+    packingFeeCharged: roundCurrency(totalPackingFee),
+    packingFeeStrategy,
+    packingCategoryUsed,
     categoryFees,
   };
 }
@@ -373,7 +581,9 @@ export async function hydrateOrderItems(
     .filter(Boolean);
 
   const productQuery = Product.find({ _id: { $in: productIds } })
-    .select("_id name salePrice price mainImage headerId sellerId status approvalStatus variants")
+    .select(
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
+    )
     .lean();
   if (session) productQuery.session(session);
   const products = await productQuery;
@@ -430,6 +640,13 @@ export async function hydrateOrderItems(
       sellerId: String(product.sellerId),
       variantSku: rawVariantSku || "",
       variantName: resolvedVariant ? String(resolvedVariant?.name || "").trim() : "",
+      applyCommission: product.applyCommission === true,
+      adminCommissionType: product.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue: Number(
+        product.adminCommissionValue ?? product.adminCommission ?? 0,
+      ),
+      adminCommissionFixedRule:
+        product.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
     };
   });
 }
@@ -445,6 +662,7 @@ export async function generateOrderPaymentBreakdown({
   handlingFeeStrategy,
   session = null,
   skipDeliveryFee = false,
+  includeCustomerSurcharge = true,
 }) {
   const normalizedItems = Array.isArray(preHydratedItems) && preHydratedItems.length > 0
     ? preHydratedItems
@@ -460,6 +678,15 @@ export async function generateOrderPaymentBreakdown({
 
   const storeId = sellerIds[0];
   const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
+  const storePackagingQuery = Store.findById(storeId)
+    .select("packagingCharge packagingChargeEnabled shopName")
+    .lean();
+  if (session) storePackagingQuery.session(session);
+  const storeDoc = await storePackagingQuery;
+  const packagingChargeAmount =
+    storeDoc?.packagingChargeEnabled && Number(storeDoc.packagingCharge || 0) > 0
+      ? roundCurrency(storeDoc.packagingCharge)
+      : 0;
   if (owner && !owner.businessModel) {
     const err = new Error("Seller has not activated a business model yet");
     err.statusCode = 403;
@@ -493,7 +720,7 @@ export async function generateOrderPaymentBreakdown({
 
   const categoryQuery = Category.find({ _id: { $in: categoryIds } })
     .select(
-      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue",
+      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue packingFees packingFeeType packingFeeValue",
     )
     .lean();
   if (session) categoryQuery.session(session);
@@ -504,6 +731,7 @@ export async function generateOrderPaymentBreakdown({
     deliverySettings || (await getOrCreateFinanceSettings());
   const effectiveHandlingStrategy =
     handlingFeeStrategy || effectiveSettings.handlingFeeStrategy;
+  const effectivePackingStrategy = effectiveHandlingStrategy;
 
   let productSubtotal = 0;
   let sellerPayoutTotal = 0;
@@ -517,7 +745,22 @@ export async function generateOrderPaymentBreakdown({
     const subcategory = item.subcategoryId
       ? categoryById.get(String(item.subcategoryId))
       : null;
+    const productCategory =
+      item.applyCommission === true
+        ? {
+            _id: item.productId,
+            name: item.productName || "Product",
+            applyCommission: true,
+            adminCommissionType:
+              item.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+            adminCommissionValue: Number(item.adminCommissionValue || 0),
+            adminCommission: Number(item.adminCommissionValue || 0),
+            adminCommissionFixedRule:
+              item.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+          }
+        : null;
     const hierarchy = resolveCategoryHierarchyCommission({
+      productCategory,
       headerCategory,
       level2Category,
       subcategory,
@@ -562,22 +805,13 @@ export async function generateOrderPaymentBreakdown({
     };
   });
 
-  // Handling fees still use header categories only.
-  const headerCategoryById = new Map(
-    categories
-      .filter((category) => category.type === "header" || !category.type)
-      .map((category) => [String(category._id), category]),
-  );
-  for (const item of normalizedItems) {
-    const headerId = String(item.headerCategoryId || "");
-    if (headerId && !headerCategoryById.has(headerId) && categoryById.has(headerId)) {
-      headerCategoryById.set(headerId, categoryById.get(headerId));
-    }
-  }
-
   const handling = calculateHandlingFee(normalizedItems, {
     handlingFeeStrategy: effectiveHandlingStrategy,
-    categoryById: headerCategoryById,
+    categoryById,
+  });
+  const packing = calculatePackingFee(normalizedItems, {
+    packingFeeStrategy: effectivePackingStrategy,
+    categoryById,
   });
   const delivery = skipDeliveryFee
     ? { deliveryFeeCharged: 0, distanceKmActual: 0, distanceKmRounded: 0 }
@@ -596,13 +830,27 @@ export async function generateOrderPaymentBreakdown({
   const normalizedTax = roundCurrency(taxTotal || 0);
   const normalizedTip = roundCurrency(tipTotal || 0);
 
+  const customerSurchargeAmount =
+    includeCustomerSurcharge &&
+    effectiveSettings.customerSurchargeEnabled &&
+    Number(effectiveSettings.customerSurchargeAmount || 0) > 0
+      ? roundCurrency(effectiveSettings.customerSurchargeAmount)
+      : 0;
+  const customerSurchargeReason =
+    customerSurchargeAmount > 0
+      ? String(effectiveSettings.customerSurchargeReason || "Additional charge").trim()
+      : "";
+
   const grandTotal = roundCurrency(
     productSubtotal +
       delivery.deliveryFeeCharged +
-      handling.handlingFeeCharged -
+      handling.handlingFeeCharged +
+      packing.packingFeeCharged -
       normalizedDiscount +
       normalizedTax +
-      normalizedTip,
+      normalizedTip +
+      customerSurchargeAmount +
+      packagingChargeAmount,
   );
 
   const riderTipAmount = normalizedTip;
@@ -613,13 +861,19 @@ export async function generateOrderPaymentBreakdown({
       riderTipAmount,
   );
 
+  // Packaging charge is paid to the seller
+  sellerPayoutTotal = addMoney(sellerPayoutTotal, packagingChargeAmount);
+
+  // Category packing + handling go to platform (same as logistics margin)
   const platformLogisticsMargin = roundCurrency(
     delivery.deliveryFeeCharged +
-      handling.handlingFeeCharged -
+      handling.handlingFeeCharged +
+      packing.packingFeeCharged -
       (rider.riderPayoutBase + rider.riderPayoutDistance + rider.riderPayoutBonus),
   );
+  // Customer surcharge goes to platform only — not seller or rider
   const platformTotalEarning = roundCurrency(
-    adminProductCommissionTotal + platformLogisticsMargin,
+    adminProductCommissionTotal + platformLogisticsMargin + customerSurchargeAmount,
   );
 
   const snapshots = {
@@ -642,11 +896,22 @@ export async function generateOrderPaymentBreakdown({
       handlingFeeType:
         category.handlingFeeType || HANDLING_FEE_TYPE.FIXED,
       handlingFeeValue: resolveHandlingConfig(category).value,
+      packingFeeType:
+        category.packingFeeType || HANDLING_FEE_TYPE.FIXED,
+      packingFeeValue: resolvePackingConfig(category).value,
     })),
     handlingFeeStrategy: effectiveHandlingStrategy,
     handlingCategoryUsed: handling.handlingCategoryUsed,
+    packingFeeStrategy: effectivePackingStrategy,
+    packingCategoryUsed: packing.packingCategoryUsed,
     sellerBusinessModel: effectiveOwner.businessModel,
     sellerOwnerId: owner?._id ? String(owner._id) : null,
+    customerSurcharge: customerSurchargeAmount > 0
+      ? { amount: customerSurchargeAmount, reason: customerSurchargeReason }
+      : null,
+    packagingCharge: packagingChargeAmount > 0
+      ? { amount: packagingChargeAmount, storeId: String(storeId) }
+      : null,
   };
 
   return {
@@ -656,9 +921,13 @@ export async function generateOrderPaymentBreakdown({
     productSubtotal,
     deliveryFeeCharged: delivery.deliveryFeeCharged,
     handlingFeeCharged: handling.handlingFeeCharged,
+    packingFeeCharged: packing.packingFeeCharged,
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,
+    customerSurchargeAmount,
+    customerSurchargeReason,
+    packagingChargeAmount,
     grandTotal,
     sellerPayoutTotal,
     adminProductCommissionTotal,

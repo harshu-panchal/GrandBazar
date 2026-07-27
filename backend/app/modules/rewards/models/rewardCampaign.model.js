@@ -25,6 +25,8 @@ const eligibilityRulesSchema = new mongoose.Schema(
     maxRewardsPerDay: { type: Number, default: null },
     milestoneOrderCount: { type: Number, default: null },
     milestoneSpendAmount: { type: Number, default: null },
+    /** Max age of store (days) for new-shop promotion / new-shop reward campaigns */
+    newShopMaxAgeDays: { type: Number, default: null },
   },
   { _id: false },
 );

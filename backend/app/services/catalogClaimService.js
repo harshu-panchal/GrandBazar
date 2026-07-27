@@ -84,6 +84,13 @@ export async function createProductFromCatalog({
     headerId: catalogProduct.headerId,
     categoryId: catalogProduct.categoryId,
     subcategoryId: catalogProduct.subcategoryId,
+    applyCommission: catalogProduct.applyCommission === true,
+    adminCommission: Number(catalogProduct.adminCommission ?? 0) || 0,
+    adminCommissionType: catalogProduct.adminCommissionType || "percentage",
+    adminCommissionValue: Number(
+      catalogProduct.adminCommissionValue ?? catalogProduct.adminCommission ?? 0,
+    ) || 0,
+    adminCommissionFixedRule: catalogProduct.adminCommissionFixedRule || "per_qty",
     status,
     approvalStatus: "approved",
     variants: variantsWithSku,

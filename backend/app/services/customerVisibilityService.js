@@ -23,10 +23,14 @@ export function parseCustomerCoordinates(query = {}) {
 function buildNearbySellersKey(lat, lng) {
   const rLat = Number(lat).toFixed(4);
   const rLng = Number(lng).toFixed(4);
-  return buildKey("stores", "nearby", `${rLat}:${rLng}`);
+  return buildKey("stores", "nearbyWithDistance", `${rLat}:${rLng}`);
 }
 
-export async function getNearbySellerIdsForCustomer(lat, lng) {
+/**
+ * Nearby approved stores within service radius, with distanceKm from customer.
+ * @returns {Promise<Array<{ id: string, distanceKm: number }>>}
+ */
+export async function getNearbySellersWithDistanceForCustomer(lat, lng) {
   const fetchFn = async () => {
     const stores = await Store.find({
       isActive: true,
@@ -46,19 +50,42 @@ export async function getNearbySellerIdsForCustomer(lat, lng) {
       .lean();
 
     return stores
-      .filter((store) => {
+      .map((store) => {
         const coords = store?.location?.coordinates;
-        if (!Array.isArray(coords) || coords.length < 2) return false;
+        if (!Array.isArray(coords) || coords.length < 2) return null;
         const [storeLng, storeLat] = coords;
         if (!Number.isFinite(storeLat) || !Number.isFinite(storeLng)) {
-          return false;
+          return null;
         }
         const distanceKm = calculateDistance(lat, lng, storeLat, storeLng);
-        return distanceKm <= (store.serviceRadius || 5);
+        if (distanceKm > (store.serviceRadius || 5)) return null;
+        return {
+          id: String(store._id),
+          distanceKm: Math.round(distanceKm * 10) / 10,
+        };
       })
-      .map((store) => String(store._id));
+      .filter(Boolean);
   };
 
-  const storeIds = await getOrSet(buildNearbySellersKey(lat, lng), fetchFn, getTTL("nearbySellers"));
-  return filterStoreIdsByOwnerBusinessModel(storeIds);
+  const nearby = await getOrSet(
+    buildNearbySellersKey(lat, lng),
+    fetchFn,
+    getTTL("nearbySellers"),
+  );
+
+  const allowedIds = new Set(
+    await filterStoreIdsByOwnerBusinessModel(nearby.map((entry) => entry.id)),
+  );
+
+  return nearby.filter((entry) => allowedIds.has(entry.id));
+}
+
+export async function getNearbySellerIdsForCustomer(lat, lng) {
+  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng);
+  return nearby.map((entry) => entry.id);
+}
+
+export async function getNearbySellerDistanceMapForCustomer(lat, lng) {
+  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng);
+  return new Map(nearby.map((entry) => [entry.id, entry.distanceKm]));
 }

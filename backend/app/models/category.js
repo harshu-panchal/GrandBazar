@@ -82,6 +82,20 @@ const categorySchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    packingFees: {
+      type: Number,
+      default: 0, // Flat amount (category packing)
+    },
+    packingFeeType: {
+      type: String,
+      enum: ALL_HANDLING_FEE_TYPES,
+      default: "fixed",
+    },
+    packingFeeValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     headerColor: {
       type: String,
       trim: true, // Hex color selected in admin panel (e.g. #ff0000)
@@ -132,16 +146,21 @@ categorySchema.pre("save", function syncLegacyFinanceFields(next) {
   try {
     const adminType = this.adminCommissionType || "percentage";
     const handlingType = this.handlingFeeType || "fixed";
+    const packingType = this.packingFeeType || "fixed";
 
     const legacyAdminCommission = normalizeNonNegativeNumber(this.adminCommission);
     const newAdminCommissionValue = normalizeNonNegativeNumber(this.adminCommissionValue);
     const legacyHandlingFees = normalizeNonNegativeNumber(this.handlingFees);
     const newHandlingFeeValue = normalizeNonNegativeNumber(this.handlingFeeValue);
+    const legacyPackingFees = normalizeNonNegativeNumber(this.packingFees);
+    const newPackingFeeValue = normalizeNonNegativeNumber(this.packingFeeValue);
 
     const adminCommissionModified = this.isModified("adminCommission");
     const adminCommissionValueModified = this.isModified("adminCommissionValue");
     const handlingFeesModified = this.isModified("handlingFees");
     const handlingFeeValueModified = this.isModified("handlingFeeValue");
+    const packingFeesModified = this.isModified("packingFees");
+    const packingFeeValueModified = this.isModified("packingFeeValue");
 
     // Keep legacy + new commission fields in sync.
     if (
@@ -171,6 +190,20 @@ categorySchema.pre("save", function syncLegacyFinanceFields(next) {
       this.handlingFees = newHandlingFeeValue;
     }
 
+    // Keep packing fee fields in sync.
+    if (
+      (this.isNew && legacyPackingFees > 0 && newPackingFeeValue === 0) ||
+      (packingFeesModified && !packingFeeValueModified)
+    ) {
+      this.packingFeeValue = legacyPackingFees;
+    }
+    if (
+      (this.isNew && newPackingFeeValue > 0 && legacyPackingFees === 0) ||
+      (packingFeeValueModified && !packingFeesModified)
+    ) {
+      this.packingFees = newPackingFeeValue;
+    }
+
     // Enforce canonical storage semantics.
     if (adminType === "percentage") {
       const value = normalizeNonNegativeNumber(this.adminCommissionValue);
@@ -193,6 +226,18 @@ categorySchema.pre("save", function syncLegacyFinanceFields(next) {
       // Percentage handling fee cannot be represented with legacy flat field.
       this.handlingFeeValue = normalizeNonNegativeNumber(this.handlingFeeValue);
       this.handlingFees = 0;
+    }
+
+    if (packingType === "none") {
+      this.packingFees = 0;
+      this.packingFeeValue = 0;
+    } else if (packingType === "fixed") {
+      const value = normalizeNonNegativeNumber(this.packingFeeValue);
+      this.packingFeeValue = value;
+      this.packingFees = value;
+    } else {
+      this.packingFeeValue = normalizeNonNegativeNumber(this.packingFeeValue);
+      this.packingFees = 0;
     }
 
     next();
@@ -226,10 +271,25 @@ categorySchema.pre("findOneAndUpdate", function syncLegacyFinanceFieldsOnUpdate(
       }
     }
 
+    if (hasOwn(set, "packingFees") && !hasOwn(set, "packingFeeValue")) {
+      set.packingFeeValue = set.packingFees;
+    }
+    if (hasOwn(set, "packingFeeValue") && !hasOwn(set, "packingFees")) {
+      if (set.packingFeeType === "none" || set.packingFeeType === "percentage") {
+        set.packingFees = 0;
+      } else {
+        set.packingFees = set.packingFeeValue;
+      }
+    }
+
     // Normalize "none" semantics even for update queries (save hooks won't run).
     if (hasOwn(set, "handlingFeeType") && set.handlingFeeType === "none") {
       set.handlingFees = 0;
       set.handlingFeeValue = 0;
+    }
+    if (hasOwn(set, "packingFeeType") && set.packingFeeType === "none") {
+      set.packingFees = 0;
+      set.packingFeeValue = 0;
     }
     if (hasOwn(set, "adminCommissionType") && set.adminCommissionType !== "percentage") {
       set.adminCommission = 0;

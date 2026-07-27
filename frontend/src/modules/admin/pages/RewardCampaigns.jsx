@@ -18,16 +18,71 @@ import {
   HiOutlineUsers,
   HiOutlineClock,
   HiOutlineCheckCircle,
+  HiOutlineTicket,
+  HiOutlineArrowLeft,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "../services/adminApi";
 
+const REWARD_TYPE_FAMILIES = [
+  {
+    id: "cashback_rewards",
+    label: "Cashback & Rewards",
+    desc: "First purchase, shop/product cashback, festival, milestone, birthday & more",
+    icon: "gift",
+  },
+  {
+    id: "coupons",
+    label: "Coupons",
+    desc: "Flat, percentage, free delivery, welcome & festival coupons",
+    icon: "ticket",
+  },
+  {
+    id: "referral",
+    label: "Referral Rewards",
+    desc: "Customer & partner referral incentives",
+    icon: "users",
+  },
+];
+
+const REWARD_SUBTYPES = [
+  // Cashback & Rewards (flow section 3)
+  { value: "first_purchase", label: "First Purchase Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "repeat_purchase", label: "Repeat Purchase Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "product_cashback", label: "Product-wise Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "category_cashback", label: "Category-wise Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "brand_cashback", label: "Brand-wise Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "shop_cashback", label: "Shop-wise Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "festival", label: "Festival Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "new_shop_promotion", label: "New Shop Promotion Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "milestone", label: "Milestone Rewards (Orders / Spend)", family: "cashback_rewards", campaignType: "reward" },
+  { value: "birthday", label: "Birthday Rewards", family: "cashback_rewards", campaignType: "reward" },
+  { value: "digital_voucher", label: "Digital Reward Voucher", family: "cashback_rewards", campaignType: "coupon" },
+  { value: "new_shop_reward", label: "New Shop Rewards", family: "cashback_rewards", campaignType: "reward" },
+  { value: "instant_cashback", label: "Instant Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  { value: "future_cashback", label: "Future / Delayed Cashback", family: "cashback_rewards", campaignType: "cashback" },
+  // Coupons (flow section 4)
+  { value: "flat_coupon", label: "Flat Discount Coupon", family: "coupons", campaignType: "coupon" },
+  { value: "percent_coupon", label: "Percentage Discount Coupon", family: "coupons", campaignType: "coupon" },
+  { value: "free_delivery", label: "Free Delivery Coupon", family: "coupons", campaignType: "coupon" },
+  { value: "voucher", label: "Cashback Coupon / Voucher", family: "coupons", campaignType: "coupon" },
+  // Referral (flow section 5)
+  { value: "referral_registration", label: "Referral on Registration", family: "referral", campaignType: "referral" },
+  { value: "referral_first_purchase", label: "Referral on First Order", family: "referral", campaignType: "referral" },
+];
+
+const CREDIT_TIMINGS = [
+  { value: "on_delivery", label: "On delivery" },
+  { value: "on_payment", label: "On payment success" },
+  { value: "delayed_days", label: "Delayed (days)" },
+];
+
 const CAMPAIGN_TYPES = [
-  { value: "cashback", label: "Cashback", desc: "Wallet credit on order completion" },
-  { value: "reward", label: "Reward / Voucher", desc: "Milestone, birthday, loyalty rewards" },
-  { value: "coupon", label: "Coupon Issuance", desc: "Issue coupons to customers" },
-  { value: "referral", label: "Referral", desc: "Referrer & referee incentives" },
+  { value: "cashback", label: "Cashback" },
+  { value: "reward", label: "Reward" },
+  { value: "coupon", label: "Coupon" },
+  { value: "referral", label: "Referral" },
 ];
 
 const STATUSES = ["draft", "active", "paused", "expired"];
@@ -38,38 +93,16 @@ const CUSTOMER_TYPES = [
   { value: "existing", label: "Existing customers only" },
 ];
 
-const REWARD_SUBTYPES = [
-  { value: "instant_cashback", label: "Instant Cashback" },
-  { value: "future_cashback", label: "Future / Delayed Cashback" },
-  { value: "first_purchase", label: "First Purchase" },
-  { value: "repeat_purchase", label: "Repeat Purchase" },
-  { value: "milestone", label: "Milestone Reward" },
-  { value: "birthday", label: "Birthday Reward" },
-  { value: "festival", label: "Festival Reward" },
-  { value: "referral_registration", label: "Referral on Registration" },
-  { value: "referral_first_purchase", label: "Referral on First Order" },
-];
+const resolveFamilyFromSubtype = (subtype) =>
+  REWARD_SUBTYPES.find((s) => s.value === subtype)?.family || "cashback_rewards";
 
-const CREDIT_TIMINGS = [
-  { value: "on_delivery", label: "On delivery" },
-  { value: "on_payment", label: "On payment success" },
-  { value: "delayed_days", label: "Delayed (days)" },
-];
+const parseCsvIds = (value) =>
+  String(value || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-const statusVariant = (s) => {
-  if (s === "active") return "success";
-  if (s === "paused") return "warning";
-  if (s === "expired") return "error";
-  return "gray";
-};
-
-const formatDate = (d) =>
-  d ? new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—";
-
-const formatReward = (cfg = {}) => {
-  if (!cfg.value) return "—";
-  return cfg.valueType === "percent" ? `${cfg.value}%` : `₹${cfg.value}`;
-};
+const joinCsvIds = (arr) => (Array.isArray(arr) ? arr.map(String).join(", ") : "");
 
 const emptyForm = () => ({
   name: "",
@@ -92,9 +125,15 @@ const emptyForm = () => ({
     maxRewardsPerDay: "",
     milestoneOrderCount: "",
     milestoneSpendAmount: "",
+    newShopMaxAgeDays: 30,
+    productIdsText: "",
+    categoryIdsText: "",
+    brandIdsText: "",
+    shopIdsText: "",
+    cityIdsText: "",
   },
   rewardConfig: {
-    rewardSubtype: "instant_cashback",
+    rewardSubtype: "",
     valueType: "percent",
     value: 5,
     maxRewardAmount: 100,
@@ -103,6 +142,21 @@ const emptyForm = () => ({
     delayedDays: 0,
   },
 });
+
+const statusVariant = (s) => {
+  if (s === "active") return "success";
+  if (s === "paused") return "warning";
+  if (s === "expired") return "error";
+  return "gray";
+};
+
+const formatDate = (d) =>
+  d ? new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—";
+
+const formatReward = (cfg = {}) => {
+  if (!cfg.value) return "—";
+  return cfg.valueType === "percent" ? `${cfg.value}%` : `₹${cfg.value}`;
+};
 
 const SectionTitle = ({ children }) => (
   <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-3">
@@ -118,6 +172,8 @@ const RewardCampaigns = () => {
   const [viewCampaign, setViewCampaign] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [wizardStep, setWizardStep] = useState(1); // 1=type family, 2=subtype, 3=config
+  const [selectedFamily, setSelectedFamily] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -166,6 +222,10 @@ const RewardCampaigns = () => {
   const openModal = (campaign = null) => {
     if (campaign) {
       setEditing(campaign);
+      const rules = campaign.rules || {};
+      const subtype = campaign.rewardConfig?.rewardSubtype || "";
+      setSelectedFamily(resolveFamilyFromSubtype(subtype));
+      setWizardStep(3);
       setForm({
         ...emptyForm(),
         ...campaign,
@@ -174,19 +234,97 @@ const RewardCampaigns = () => {
         budgetLimit: campaign.budgetLimit ?? "",
         dailyLimit: campaign.dailyLimit ?? "",
         monthlyLimit: campaign.monthlyLimit ?? "",
-        rules: { ...emptyForm().rules, ...(campaign.rules || {}) },
+        rules: {
+          ...emptyForm().rules,
+          ...rules,
+          maxRewardPerCustomer: rules.maxRewardPerCustomer ?? "",
+          maxRewardsPerDay: rules.maxRewardsPerDay ?? "",
+          milestoneOrderCount: rules.milestoneOrderCount ?? "",
+          milestoneSpendAmount: rules.milestoneSpendAmount ?? "",
+          newShopMaxAgeDays: rules.newShopMaxAgeDays ?? 30,
+          productIdsText: joinCsvIds(rules.productIds),
+          categoryIdsText: joinCsvIds(rules.categoryIds),
+          brandIdsText: joinCsvIds(rules.brandIds),
+          shopIdsText: joinCsvIds(rules.shopIds),
+          cityIdsText: joinCsvIds(rules.cityIds),
+        },
         rewardConfig: { ...emptyForm().rewardConfig, ...(campaign.rewardConfig || {}) },
         sharedFunding: campaign.sharedFunding || emptyForm().sharedFunding,
       });
     } else {
       setEditing(null);
       setForm(emptyForm());
+      setSelectedFamily("");
+      setWizardStep(1);
     }
     setModalOpen(true);
   };
 
+  const selectFamily = (familyId) => {
+    setSelectedFamily(familyId);
+    setForm((prev) => ({
+      ...prev,
+      rewardConfig: { ...prev.rewardConfig, rewardSubtype: "" },
+    }));
+    setWizardStep(2);
+  };
+
+  const selectSubtype = (subtypeMeta) => {
+    const nextRules = { ...form.rules };
+    if (subtypeMeta.value === "first_purchase") nextRules.customerType = "new";
+    else if (subtypeMeta.value === "repeat_purchase") nextRules.customerType = "existing";
+    else nextRules.customerType = "all";
+
+    setForm({
+      ...form,
+      campaignType: subtypeMeta.campaignType,
+      rules: nextRules,
+      rewardConfig: {
+        ...form.rewardConfig,
+        rewardSubtype: subtypeMeta.value,
+        valueType:
+          subtypeMeta.value === "flat_coupon" || subtypeMeta.value === "free_delivery"
+            ? "fixed"
+            : form.rewardConfig.valueType || "percent",
+      },
+    });
+    setWizardStep(3);
+  };
+
+  const familySubtypes = useMemo(
+    () => REWARD_SUBTYPES.filter((s) => s.family === selectedFamily),
+    [selectedFamily],
+  );
+
+  const selectedSubtypeMeta = useMemo(
+    () => REWARD_SUBTYPES.find((s) => s.value === form.rewardConfig.rewardSubtype),
+    [form.rewardConfig.rewardSubtype],
+  );
+
+  const showMilestoneFields = form.rewardConfig.rewardSubtype === "milestone";
+  const showNewShopAge =
+    form.rewardConfig.rewardSubtype === "new_shop_promotion" ||
+    form.rewardConfig.rewardSubtype === "new_shop_reward";
+  const showProductScope = ["product_cashback"].includes(form.rewardConfig.rewardSubtype);
+  const showCategoryScope = ["category_cashback"].includes(form.rewardConfig.rewardSubtype);
+  const showBrandScope = ["brand_cashback"].includes(form.rewardConfig.rewardSubtype);
+  const showShopScope = ["shop_cashback", "new_shop_promotion", "new_shop_reward"].includes(
+    form.rewardConfig.rewardSubtype,
+  );
+  const showAnyScope =
+    showProductScope ||
+    showCategoryScope ||
+    showBrandScope ||
+    showShopScope ||
+    selectedFamily === "coupons";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.rewardConfig.rewardSubtype) {
+      showToast("Please select a reward type first", "error");
+      setWizardStep(1);
+      return;
+    }
     try {
       const payload = {
         ...form,
@@ -195,19 +333,40 @@ const RewardCampaigns = () => {
         monthlyLimit: form.monthlyLimit !== "" ? Number(form.monthlyLimit) : null,
         priority: Number(form.priority) || 100,
         rules: {
-          ...form.rules,
+          customerType: form.rules.customerType,
+          minPurchase: Number(form.rules.minPurchase) || 0,
           maxRewardPerCustomer: form.rules.maxRewardPerCustomer
             ? Number(form.rules.maxRewardPerCustomer)
             : null,
-          maxRewardsPerDay: form.rules.maxRewardsPerDay ? Number(form.rules.maxRewardsPerDay) : null,
+          maxRewardsPerDay: form.rules.maxRewardsPerDay
+            ? Number(form.rules.maxRewardsPerDay)
+            : null,
           milestoneOrderCount: form.rules.milestoneOrderCount
             ? Number(form.rules.milestoneOrderCount)
             : null,
           milestoneSpendAmount: form.rules.milestoneSpendAmount
             ? Number(form.rules.milestoneSpendAmount)
             : null,
+          newShopMaxAgeDays: form.rules.newShopMaxAgeDays
+            ? Number(form.rules.newShopMaxAgeDays)
+            : null,
+          productIds: parseCsvIds(form.rules.productIdsText),
+          categoryIds: parseCsvIds(form.rules.categoryIdsText),
+          brandIds: parseCsvIds(form.rules.brandIdsText),
+          shopIds: parseCsvIds(form.rules.shopIdsText),
+          cityIds: parseCsvIds(form.rules.cityIdsText),
+        },
+        rewardConfig: {
+          ...form.rewardConfig,
+          value: Number(form.rewardConfig.value) || 0,
+          maxRewardAmount: form.rewardConfig.maxRewardAmount
+            ? Number(form.rewardConfig.maxRewardAmount)
+            : null,
+          validityDays: Number(form.rewardConfig.validityDays) || 30,
+          delayedDays: Number(form.rewardConfig.delayedDays) || 0,
         },
       };
+
       if (editing) {
         await adminApi.updateRewardCampaign(editing._id, payload);
         showToast("Campaign updated successfully", "success");
@@ -219,16 +378,6 @@ const RewardCampaigns = () => {
       fetchCampaigns();
     } catch (err) {
       showToast(err.response?.data?.message || "Save failed", "error");
-    }
-  };
-
-  const toggleStatus = async (id, status) => {
-    try {
-      await adminApi.updateRewardCampaignStatus(id, status);
-      showToast(`Campaign ${status}`, "success");
-      fetchCampaigns();
-    } catch {
-      showToast("Status update failed", "error");
     }
   };
 
@@ -266,7 +415,14 @@ const RewardCampaigns = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Campaigns" value={stats.total} icon={HiOutlineGift} color="text-primary-600" bg="bg-primary-50" />
-        <StatCard label="Active Now" value={stats.active} icon={HiOutlineCheckCircle} color="text-green-600" bg="bg-green-50" description={`${stats.paused} paused`} />
+        <StatCard
+          label="Active Now"
+          value={stats.active}
+          icon={HiOutlineCheckCircle}
+          color="text-green-600"
+          bg="bg-green-50"
+          description={stats.paused > 0 ? `${stats.paused} paused` : undefined}
+        />
         <StatCard label="Rewards Issued" value={stats.totalIssued} icon={HiOutlineUsers} color="text-violet-600" bg="bg-violet-50" description={`₹${stats.totalAmount.toLocaleString("en-IN")} total`} />
         <StatCard label="Budget Consumed" value={`₹${stats.budgetUsed.toLocaleString("en-IN")}`} icon={HiOutlineBanknotes} color="text-amber-600" bg="bg-amber-50" description={stats.expiringSoon ? `${stats.expiringSoon} expiring soon` : undefined} />
       </div>
@@ -370,16 +526,10 @@ const RewardCampaigns = () => {
                           <button type="button" onClick={() => setViewCampaign(c)} className="p-2 text-slate-400 hover:text-primary-600 rounded-lg" title="View">
                             <HiOutlineEye className="w-4 h-4" />
                           </button>
-                          {c.status !== "active" && (
-                            <button type="button" onClick={() => toggleStatus(c._id, "active")} className="text-[10px] font-bold text-green-600 px-2 py-1 bg-green-50 rounded-lg">Activate</button>
-                          )}
-                          {c.status === "active" && (
-                            <button type="button" onClick={() => toggleStatus(c._id, "paused")} className="text-[10px] font-bold text-amber-600 px-2 py-1 bg-amber-50 rounded-lg">Pause</button>
-                          )}
-                          <button type="button" onClick={() => openModal(c)} className="p-2 text-slate-400 hover:text-primary-600 rounded-lg">
+                          <button type="button" onClick={() => openModal(c)} className="p-2 text-slate-400 hover:text-primary-600 rounded-lg" title="Edit">
                             <HiOutlinePencilSquare className="w-4 h-4" />
                           </button>
-                          <button type="button" onClick={() => handleDelete(c._id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg">
+                          <button type="button" onClick={() => handleDelete(c._id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg" title="Delete">
                             <HiOutlineTrash className="w-4 h-4" />
                           </button>
                         </div>
@@ -394,175 +544,619 @@ const RewardCampaigns = () => {
       </Card>
 
       {/* Create / Edit Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Campaign" : "Create Reward Campaign"} size="lg">
-        <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-1">
-          <SectionTitle>Basic Information</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign Name *</label>
-              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="e.g. Summer 5% Cashback" />
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? "Edit Campaign" : "Create Reward Campaign"}
+        size="lg"
+      >
+        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+          {!editing && (
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+              {[
+                { n: 1, label: "Reward Type" },
+                { n: 2, label: "Specific Offer" },
+                { n: 3, label: "Configure" },
+              ].map((s, idx) => (
+                <div key={s.n} className="flex items-center gap-2">
+                  {idx > 0 && <div className="h-px w-6 bg-slate-200" />}
+                  <span
+                    className={cn(
+                      "px-2.5 py-1 rounded-full",
+                      wizardStep === s.n
+                        ? "bg-slate-900 text-white"
+                        : wizardStep > s.n
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-100 text-slate-400",
+                    )}
+                  >
+                    {s.n}. {s.label}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="md:col-span-2">
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Description</label>
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={cn(inputCls, "min-h-[72px]")} placeholder="Internal notes and customer-facing description" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign Type</label>
-              <select value={form.campaignType} onChange={(e) => setForm({ ...form, campaignType: e.target.value })} className={inputCls}>
-                {CAMPAIGN_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputCls}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Priority (lower = higher)</label>
-              <input type="number" min="1" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Funding Source</label>
-              <select value={form.fundingSource} onChange={(e) => setForm({ ...form, fundingSource: e.target.value })} className={inputCls}>
-                {FUNDING_SOURCES.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
 
-          <SectionTitle>Schedule</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Start Date & Time *</label>
-              <input type="datetime-local" required value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">End Date & Time *</label>
-              <input type="datetime-local" required value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} className={inputCls} />
-            </div>
-          </div>
-
-          <SectionTitle>Reward Configuration</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Reward Subtype</label>
-              <select
-                value={form.rewardConfig.rewardSubtype}
-                onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, rewardSubtype: e.target.value } })}
-                className={inputCls}
-              >
-                {REWARD_SUBTYPES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Value Type</label>
-              <select
-                value={form.rewardConfig.valueType}
-                onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, valueType: e.target.value } })}
-                className={inputCls}
-              >
-                <option value="percent">Percentage (%)</option>
-                <option value="fixed">Fixed Amount (₹)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Reward Value</label>
-              <input type="number" min="0" value={form.rewardConfig.value} onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, value: Number(e.target.value) } })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Max Reward Cap (₹)</label>
-              <input type="number" min="0" value={form.rewardConfig.maxRewardAmount} onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, maxRewardAmount: Number(e.target.value) } })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Credit Timing</label>
-              <select
-                value={form.rewardConfig.creditTiming}
-                onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, creditTiming: e.target.value } })}
-                className={inputCls}
-              >
-                {CREDIT_TIMINGS.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Validity (days)</label>
-              <input type="number" min="1" value={form.rewardConfig.validityDays} onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, validityDays: Number(e.target.value) } })} className={inputCls} />
-            </div>
-            {form.rewardConfig.creditTiming === "delayed_days" && (
+          {wizardStep === 1 && (
+            <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Delay (days)</label>
-                <input type="number" min="1" value={form.rewardConfig.delayedDays} onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, delayedDays: Number(e.target.value) } })} className={inputCls} />
+                <h3 className="text-base font-bold text-slate-900">Select Reward Type</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Choose Cashback & Rewards, Coupons, or Referral first.
+                </p>
               </div>
-            )}
-          </div>
+              <div className="grid grid-cols-1 gap-3">
+                {REWARD_TYPE_FAMILIES.map((family) => {
+                  const Icon =
+                    family.icon === "ticket"
+                      ? HiOutlineTicket
+                      : family.icon === "users"
+                        ? HiOutlineUsers
+                        : HiOutlineGift;
+                  return (
+                    <button
+                      key={family.id}
+                      type="button"
+                      onClick={() => selectFamily(family.id)}
+                      className="text-left p-4 rounded-2xl border-2 border-slate-100 hover:border-slate-900 hover:bg-slate-50 transition-all"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="h-11 w-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{family.label}</p>
+                          <p className="text-xs text-slate-500 mt-1">{family.desc}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
-          <SectionTitle>Eligibility Rules</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Customer Type</label>
-              <select
-                value={form.rules.customerType}
-                onChange={(e) => setForm({ ...form, rules: { ...form.rules, customerType: e.target.value } })}
-                className={inputCls}
+          {wizardStep === 2 && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-900"
               >
-                {CUSTOMER_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                <HiOutlineArrowLeft className="w-4 h-4" /> Change reward type
+              </button>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {REWARD_TYPE_FAMILIES.find((f) => f.id === selectedFamily)?.label || "Choose offer"}
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Pick the specific offer. Configuration options appear next.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {familySubtypes.map((sub) => (
+                  <button
+                    key={sub.value}
+                    type="button"
+                    onClick={() => selectSubtype(sub)}
+                    className="text-left p-4 rounded-2xl border-2 border-slate-100 hover:border-emerald-500 hover:bg-emerald-50/40 transition-all"
+                  >
+                    <p className="font-bold text-sm text-slate-900">{sub.label}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-400 mt-1">
+                      {sub.campaignType}
+                    </p>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Min Purchase (₹)</label>
-              <input type="number" min="0" value={form.rules.minPurchase} onChange={(e) => setForm({ ...form, rules: { ...form.rules, minPurchase: Number(e.target.value) } })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Max Rewards per Customer</label>
-              <input type="number" min="0" value={form.rules.maxRewardPerCustomer} onChange={(e) => setForm({ ...form, rules: { ...form.rules, maxRewardPerCustomer: e.target.value } })} className={inputCls} placeholder="Unlimited" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Max Rewards per Day (per customer)</label>
-              <input type="number" min="0" value={form.rules.maxRewardsPerDay} onChange={(e) => setForm({ ...form, rules: { ...form.rules, maxRewardsPerDay: e.target.value } })} className={inputCls} placeholder="Unlimited" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Milestone Order Count</label>
-              <input type="number" min="0" value={form.rules.milestoneOrderCount} onChange={(e) => setForm({ ...form, rules: { ...form.rules, milestoneOrderCount: e.target.value } })} className={inputCls} placeholder="e.g. 5th order" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Milestone Spend (₹)</label>
-              <input type="number" min="0" value={form.rules.milestoneSpendAmount} onChange={(e) => setForm({ ...form, rules: { ...form.rules, milestoneSpendAmount: e.target.value } })} className={inputCls} placeholder="Lifetime spend threshold" />
-            </div>
-          </div>
+          )}
 
-          <SectionTitle>Budget & Limits</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Total Budget (₹)</label>
-              <input type="number" min="0" value={form.budgetLimit} onChange={(e) => setForm({ ...form, budgetLimit: e.target.value })} className={inputCls} placeholder="No limit" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Daily Limit (₹)</label>
-              <input type="number" min="0" value={form.dailyLimit} onChange={(e) => setForm({ ...form, dailyLimit: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Monthly Limit (₹)</label>
-              <input type="number" min="0" value={form.monthlyLimit} onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value })} className={inputCls} />
-            </div>
-          </div>
+          {wizardStep === 3 && (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {!editing && (
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-900"
+                >
+                  <HiOutlineArrowLeft className="w-4 h-4" /> Change offer type
+                </button>
+              )}
 
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit">{editing ? "Save Changes" : "Create Campaign"}</Button>
-          </div>
-        </form>
+              <div className="rounded-2xl bg-slate-900 text-white p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                  Selected type
+                </p>
+                <p className="text-lg font-bold mt-1">
+                  {selectedSubtypeMeta?.label || form.rewardConfig.rewardSubtype}
+                </p>
+              </div>
+
+              <SectionTitle>Basic Information</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign Name *</label>
+                  <input
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className={inputCls}
+                    placeholder="e.g. Summer 5% Cashback"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    className={cn(inputCls, "min-h-[72px]")}
+                    placeholder="Internal notes and customer-facing description"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    className={inputCls}
+                  >
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Funding Source</label>
+                  <select
+                    value={form.fundingSource}
+                    onChange={(e) => setForm({ ...form, fundingSource: e.target.value })}
+                    className={inputCls}
+                  >
+                    {FUNDING_SOURCES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Priority (lower = higher)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.priority}
+                    onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <SectionTitle>Schedule</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Start Date & Time *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={form.startAt}
+                    onChange={(e) => setForm({ ...form, startAt: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    End Date & Time *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={form.endAt}
+                    onChange={(e) => setForm({ ...form, endAt: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <SectionTitle>Reward Configuration</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Value Type</label>
+                  <select
+                    value={form.rewardConfig.valueType}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: { ...form.rewardConfig, valueType: e.target.value },
+                      })
+                    }
+                    className={inputCls}
+                  >
+                    <option value="percent">Percentage (%)</option>
+                    <option value="fixed">Fixed Amount (₹)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Reward Value</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rewardConfig.value}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: { ...form.rewardConfig, value: Number(e.target.value) },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max Reward Cap (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rewardConfig.maxRewardAmount}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: {
+                          ...form.rewardConfig,
+                          maxRewardAmount: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Credit Timing</label>
+                  <select
+                    value={form.rewardConfig.creditTiming}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: { ...form.rewardConfig, creditTiming: e.target.value },
+                      })
+                    }
+                    className={inputCls}
+                  >
+                    {CREDIT_TIMINGS.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Validity (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.rewardConfig.validityDays}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: {
+                          ...form.rewardConfig,
+                          validityDays: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                {form.rewardConfig.creditTiming === "delayed_days" && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">Delay (days)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.rewardConfig.delayedDays}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          rewardConfig: {
+                            ...form.rewardConfig,
+                            delayedDays: Number(e.target.value),
+                          },
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <SectionTitle>Eligibility Rules</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Customer Type</label>
+                  <select
+                    value={form.rules.customerType}
+                    onChange={(e) =>
+                      setForm({ ...form, rules: { ...form.rules, customerType: e.target.value } })
+                    }
+                    className={inputCls}
+                  >
+                    {CUSTOMER_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Min Purchase (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rules.minPurchase}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rules: { ...form.rules, minPurchase: Number(e.target.value) },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max Rewards per Customer
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rules.maxRewardPerCustomer}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rules: { ...form.rules, maxRewardPerCustomer: e.target.value },
+                      })
+                    }
+                    className={inputCls}
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max Rewards per Day (per customer)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rules.maxRewardsPerDay}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rules: { ...form.rules, maxRewardsPerDay: e.target.value },
+                      })
+                    }
+                    className={inputCls}
+                    placeholder="Unlimited"
+                  />
+                </div>
+                {showMilestoneFields && (
+                  <>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">
+                        Milestone Order Count
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.rules.milestoneOrderCount}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            rules: { ...form.rules, milestoneOrderCount: e.target.value },
+                          })
+                        }
+                        className={inputCls}
+                        placeholder="e.g. 5th order"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">
+                        Milestone Spend (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.rules.milestoneSpendAmount}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            rules: { ...form.rules, milestoneSpendAmount: e.target.value },
+                          })
+                        }
+                        className={inputCls}
+                        placeholder="Lifetime spend threshold"
+                      />
+                    </div>
+                  </>
+                )}
+                {showNewShopAge && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">
+                      New Shop Max Age (days)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.rules.newShopMaxAgeDays}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          rules: { ...form.rules, newShopMaxAgeDays: e.target.value },
+                        })
+                      }
+                      className={inputCls}
+                      placeholder="e.g. 30"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {showAnyScope && (
+                <>
+                  <SectionTitle>Scope Filters</SectionTitle>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(showProductScope || selectedFamily === "coupons") && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">
+                          Product IDs (comma-separated)
+                        </label>
+                        <input
+                          value={form.rules.productIdsText}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              rules: { ...form.rules, productIdsText: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                          placeholder="Product IDs"
+                        />
+                      </div>
+                    )}
+                    {(showCategoryScope || selectedFamily === "coupons") && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">
+                          Category IDs (comma-separated)
+                        </label>
+                        <input
+                          value={form.rules.categoryIdsText}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              rules: { ...form.rules, categoryIdsText: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                          placeholder="Category IDs"
+                        />
+                      </div>
+                    )}
+                    {(showBrandScope || selectedFamily === "coupons") && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">
+                          Brand names (comma-separated)
+                        </label>
+                        <input
+                          value={form.rules.brandIdsText}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              rules: { ...form.rules, brandIdsText: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                          placeholder="Brand names"
+                        />
+                      </div>
+                    )}
+                    {(showShopScope || selectedFamily === "coupons") && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">
+                          Shop / Store IDs
+                        </label>
+                        <input
+                          value={form.rules.shopIdsText}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              rules: { ...form.rules, shopIdsText: e.target.value },
+                            })
+                          }
+                          className={inputCls}
+                          placeholder="Store IDs"
+                        />
+                      </div>
+                    )}
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">
+                        City filters (optional)
+                      </label>
+                      <input
+                        value={form.rules.cityIdsText}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            rules: { ...form.rules, cityIdsText: e.target.value },
+                          })
+                        }
+                        className={inputCls}
+                        placeholder="e.g. Indore, Bhopal"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <SectionTitle>Budget & Limits</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Total Budget (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.budgetLimit}
+                    onChange={(e) => setForm({ ...form, budgetLimit: e.target.value })}
+                    className={inputCls}
+                    placeholder="No limit"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Daily Limit (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.dailyLimit}
+                    onChange={(e) => setForm({ ...form, dailyLimit: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Monthly Limit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.monthlyLimit}
+                    onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">{editing ? "Save Changes" : "Create Campaign"}</Button>
+              </div>
+            </form>
+          )}
+        </div>
       </Modal>
+
 
       {/* View Detail Modal */}
       <Modal isOpen={!!viewCampaign} onClose={() => setViewCampaign(null)} title="Campaign Details" size="lg">

@@ -176,6 +176,7 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
       $set: {
         isVerified: true,
         isActive: true,
+        isOpen: true,
         applicationStatus: "approved",
         reviewedAt: new Date(),
         reviewedBy,

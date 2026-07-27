@@ -318,6 +318,12 @@ const SellerProfile = () => {
             <p className="text-white/60 font-black tracking-[1px] text-lg">
               {profile?.shopName}
             </p>
+            <p className="text-amber-300 font-bold tracking-wide text-sm mt-2">
+              ★ {Number(profile?.avgRating || 0).toFixed(1)}/5
+              {Number(profile?.reviewCount || 0) > 0
+                ? ` · ${profile.reviewCount} review${Number(profile.reviewCount) === 1 ? "" : "s"}`
+                : " · No reviews yet"}
+            </p>
           </div>
 
           {/* Action Button */}

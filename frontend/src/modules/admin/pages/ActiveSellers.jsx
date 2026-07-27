@@ -427,6 +427,13 @@ const ActiveSellers = () => {
                             <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
                               {seller.category || "General"}
                             </span>
+                            <span className="h-1 w-1 rounded-full bg-slate-300" />
+                            <span className="text-[10px] font-bold text-amber-600">
+                              ★ {Number(seller.avgRating || 0).toFixed(1)}/5
+                              {Number(seller.reviewCount || 0) > 0
+                                ? ` · ${seller.reviewCount}`
+                                : ""}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -675,6 +682,19 @@ const ActiveSellers = () => {
                           <span>{selectedSeller.serviceRadius || 5} km</span>
                         </div>
                         <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
+                          <span>Store rating</span>
+                          <span className="text-amber-600">
+                            {Number(selectedSeller.avgRating || 0).toFixed(1)}/5
+                            {Number(selectedSeller.reviewCount || 0) > 0
+                              ? ` · ${selectedSeller.reviewCount} reviews`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
+                          <span>Favorites</span>
+                          <span>{Number(selectedSeller.favoriteCount || 0)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 mt-3">
                           <span>Last order</span>
                           <span>{selectedSeller.lastOrderLabel || "No orders yet"}</span>
                         </div>
@@ -694,6 +714,10 @@ const ActiveSellers = () => {
                       {
                         label: "Products",
                         value: (selectedSeller.productCount || 0).toLocaleString("en-IN"),
+                      },
+                      {
+                        label: "Rating",
+                        value: `${Number(selectedSeller.avgRating || 0).toFixed(1)}/5`,
                       },
                       {
                         label: "Delivered",

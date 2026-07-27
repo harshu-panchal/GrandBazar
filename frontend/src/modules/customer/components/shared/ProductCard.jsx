@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Heart, Plus, Minus, Star } from "lucide-react";
+import { Heart, Plus, Minus, Star, Clock, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWishlist } from "../../context/WishlistContext";
@@ -8,10 +8,7 @@ import { useCart } from "../../context/CartContext";
 import { useToast } from "@shared/components/ui/Toast";
 import { useCartAnimation } from "../../context/CartAnimationContext";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
-
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock } from "lucide-react";
-
 import { useProductDetail } from "../../context/ProductDetailContext";
 
 const ProductCard = React.memo(
@@ -285,16 +282,47 @@ const ProductCard = React.memo(
             </h4>
           </div>
 
-          {/* Delivery Time & Unit info */}
+          {/* Delivery Time / Distance from seller */}
           <div className={cn("flex items-center gap-1 text-gray-500", compact ? "mt-0 mb-1" : "mt-0.5 mb-1 sm:gap-1.5 sm:mt-1 sm:mb-2")}>
-            <Clock size={compact ? 8 : 10} className="text-primary/80" />
-            <span
-              className={cn(
-                "font-semibold",
-                compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
-              )}>
-              {product.deliveryTime || "8-12 mins"}
-            </span>
+            {(() => {
+              const rawDistance = product.distance ?? product.distanceKm;
+              const distanceKm = Number(rawDistance);
+              const hasDistance =
+                rawDistance !== null &&
+                rawDistance !== undefined &&
+                rawDistance !== "" &&
+                Number.isFinite(distanceKm);
+
+              if (hasDistance) {
+                return (
+                  <>
+                    <MapPin size={compact ? 8 : 10} className="text-primary/80 shrink-0" />
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                      )}>
+                      {distanceKm < 0.1
+                        ? "Very close"
+                        : `${distanceKm.toFixed(1)} km away`}
+                    </span>
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <Clock size={compact ? 8 : 10} className="text-primary/80" />
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                    )}>
+                    {product.deliveryTime || "8-12 mins"}
+                  </span>
+                </>
+              );
+            })()}
           </div>
 
           {/* Price Row / ADD Button Combination for compact */}

@@ -18,6 +18,8 @@ import { MagicCard } from "@/components/ui/magic-card";
 
 import { sellerApi } from "../services/sellerApi";
 import { useToast } from "@shared/components/ui/Toast";
+import { resolveDeliveryPartnerDisplay, getTrackingUiStatus, getTrackingStatusVariant } from "@/shared/utils/deliveryPartner";
+import { resolveFulfillmentMethod } from "@/shared/utils/orderFulfillment";
 import { Loader2 } from "lucide-react";
 import Pagination from "@shared/components/ui/Pagination";
 
@@ -66,28 +68,20 @@ const DeliveryTracking = () => {
       const formattedDeliveries = collectedOrders
         .filter(order => order.status !== 'pending' && order.status !== 'cancelled')
         .map(order => {
-          let uiStatus = "Active";
-          if (order.status === 'delivered') uiStatus = "Delivered";
-          else if (order.status === 'out_for_delivery') uiStatus = "On the Way";
-          else uiStatus = "Picked Up";
+          const normalizedOrder = {
+            ...order,
+            fulfillmentMethod: resolveFulfillmentMethod(order),
+            logisticsMode: order.logisticsMode || null,
+            workflowStatus: order.workflowStatus || null,
+          };
+          const uiStatus = getTrackingUiStatus(normalizedOrder);
 
           return {
             id: order._id,
             orderId: order.orderId,
             status: uiStatus,
-            deliveryBoy: order.deliveryBoy ? {
-              name: order.deliveryBoy.name,
-              phone: order.deliveryBoy.phone,
-              avatar: order.deliveryBoy.name?.charAt(0) || "?",
-              image: order.deliveryBoy.image || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
-              rating: order.deliveryBoy.rating || 4.5,
-            } : {
-              name: "Not Assigned",
-              phone: "N/A",
-              avatar: "?",
-              image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
-              rating: 0,
-            },
+            deliveryBoy: resolveDeliveryPartnerDisplay(normalizedOrder),
+            fulfillmentMethod: normalizedOrder.fulfillmentMethod,
             location: order.status === 'delivered' && order.updatedAt
               ? `Delivered at ${new Date(order.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
               : "In Progress",
@@ -153,7 +147,7 @@ const DeliveryTracking = () => {
       },
       {
         label: "At Store",
-        value: deliveries.filter((d) => d.status === "Picked Up").length,
+        value: deliveries.filter((d) => ["Picked Up", "Packed", "Confirmed", "Seller Delivery", "Assigned"].includes(d.status)).length,
         icon: HiOutlineMapPin,
         color: "text-amber-600",
         bg: "bg-amber-50",
@@ -169,18 +163,7 @@ const DeliveryTracking = () => {
     [deliveries],
   );
 
-  const getStatusVariant = (status) => {
-    switch (status) {
-      case "On the Way":
-        return "info";
-      case "Picked Up":
-        return "warning";
-      case "Delivered":
-        return "success";
-      default:
-        return "primary";
-    }
-  };
+  const getStatusVariant = (status) => getTrackingStatusVariant(status);
 
   return (
     <div className="space-y-6 pb-16">
@@ -310,19 +293,22 @@ const DeliveryTracking = () => {
                                 />
                               </div>
                               <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 bg-brand-500 rounded-sm border-[1px] border-white flex items-center justify-center text-white text-[7px] font-black shadow-sm">
-                                {dlv.deliveryBoy.rating}
+                                {dlv.deliveryBoy.rating > 0 ? dlv.deliveryBoy.rating : "—"}
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-[8px] font-black text-primary uppercase tracking-[0.1em] mb-0.5">
-                                Partner
+                                {dlv.deliveryBoy.role || "Partner"}
                               </p>
                               <h3 className="text-xs font-black text-slate-900 leading-none truncate">
                                 {dlv.deliveryBoy.name}
                               </h3>
                               <a
-                                href={`tel:${dlv.deliveryBoy.phone}`}
-                                className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 hover:text-primary transition-colors"
+                                href={dlv.deliveryBoy.phone && dlv.deliveryBoy.phone !== "N/A" ? `tel:${dlv.deliveryBoy.phone}` : undefined}
+                                className={cn(
+                                  "inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 transition-colors",
+                                  dlv.deliveryBoy.phone && dlv.deliveryBoy.phone !== "N/A" && "hover:text-primary",
+                                )}
                               >
                                 <HiOutlinePhone className="h-2.5 w-2.5 shrink-0" />
                                 <span className="truncate">{dlv.deliveryBoy.phone}</span>

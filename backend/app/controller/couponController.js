@@ -1,244 +1,156 @@
-import Coupon from "../models/coupon.js";
+import mongoose from "mongoose";
 import handleResponse from "../utils/helper.js";
-import Order from "../models/order.js";
-import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
+import Coupon from "../models/coupon.js";
+import { applySingleCoupon } from "../services/couponApplicationService.js";
+import {
+  normalizeCouponDateInput,
+  startOfUtcDay,
+} from "../services/couponEligibilityService.js";
+
+const toObjectIds = (ids = []) =>
+  ids
+    .map((id) => String(id || "").trim())
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
 
 export const listCoupons = async (req, res) => {
-    try {
-        const { status, search } = req.query;
-        const query = {};
+  try {
+    const { status, search, sellerIds } = req.query;
+    const query = {};
 
-        if (status === "active") {
-            const now = new Date();
-            query.isActive = true;
-            query.validFrom = { $lte: now };
-            query.validTill = { $gte: now };
-        } else if (status === "expired") {
-            query.$or = [{ isActive: false }, { validTill: { $lt: new Date() } }];
-        }
-
-        if (search) {
-            const term = search.trim();
-            query.$or = [
-                { code: { $regex: term, $options: "i" } },
-                { title: { $regex: term, $options: "i" } },
-                { description: { $regex: term, $options: "i" } },
-            ];
-        }
-
-        const coupons = await Coupon.find(query)
-            .populate('sellerId', 'shopName')
-            .sort({ createdAt: -1 })
-            .lean();
-        return handleResponse(res, 200, "Coupons fetched successfully", coupons);
-    } catch (error) {
-        return handleResponse(res, 500, error.message);
+    if (status === "active") {
+      const now = new Date();
+      // Include coupons whose validTill is the same calendar day (stored as midnight).
+      const activeDayStart = startOfUtcDay(now);
+      query.isActive = true;
+      query.validFrom = { $lte: now };
+      query.validTill = { $gte: activeDayStart };
+    } else if (status === "expired") {
+      query.$or = [{ isActive: false }, { validTill: { $lt: startOfUtcDay(new Date()) } }];
     }
+
+    // Must cast to ObjectId — string $in does not match ObjectId fields in Mongo.
+    const requestedSellerIds = toObjectIds(
+      String(sellerIds || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+
+    // Customer checkout: platform coupons always + seller coupons for stores in cart
+    if (requestedSellerIds.length > 0) {
+      query.$and = [
+        ...(query.$and || []),
+        {
+          $or: [
+            { sellerId: null },
+            { sellerId: { $exists: false } },
+            { sponsor: "admin" },
+            { sellerId: { $in: requestedSellerIds } },
+          ],
+        },
+      ];
+    }
+
+    if (search) {
+      const term = search.trim();
+      query.$or = [
+        { code: { $regex: term, $options: "i" } },
+        { title: { $regex: term, $options: "i" } },
+        { description: { $regex: term, $options: "i" } },
+      ];
+    }
+
+    const coupons = await Coupon.find(query)
+      .populate("sellerId", "shopName")
+      .sort({ createdAt: -1 })
+      .lean();
+    return handleResponse(res, 200, "Coupons fetched successfully", coupons);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
 };
 
 export const createCoupon = async (req, res) => {
-    try {
-        const data = { ...req.body };
-        const coupon = await Coupon.create(data);
-        return handleResponse(res, 201, "Coupon created successfully", coupon);
-    } catch (error) {
-        if (error.code === 11000) {
-            return handleResponse(res, 400, "Coupon code already exists");
-        }
-        return handleResponse(res, 500, error.message);
+  try {
+    const data = { ...req.body };
+    if (!data.perUserLimit || Number(data.perUserLimit) < 1) {
+      data.perUserLimit = 1;
     }
+    if (data.validFrom) data.validFrom = normalizeCouponDateInput(data.validFrom, "start");
+    if (data.validTill) data.validTill = normalizeCouponDateInput(data.validTill, "end");
+    // Admin-created coupons are always platform coupons unless explicitly marked otherwise
+    if (!data.sponsor) data.sponsor = "admin";
+    if (data.sponsor === "admin") data.sellerId = null;
+
+    const coupon = await Coupon.create(data);
+    return handleResponse(res, 201, "Coupon created successfully", coupon);
+  } catch (error) {
+    if (error.code === 11000) {
+      return handleResponse(res, 400, "Coupon code already exists");
+    }
+    return handleResponse(res, 500, error.message);
+  }
 };
 
 export const updateCoupon = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const data = { ...req.body };
-        const coupon = await Coupon.findByIdAndUpdate(id, data, {
-            new: true,
-            runValidators: true,
-        });
-        if (!coupon) {
-            return handleResponse(res, 404, "Coupon not found");
-        }
-        return handleResponse(res, 200, "Coupon updated successfully", coupon);
-    } catch (error) {
-        return handleResponse(res, 500, error.message);
+  try {
+    const { id } = req.params;
+    const data = { ...req.body };
+    if (data.perUserLimit !== undefined) {
+      const limit = Number(data.perUserLimit);
+      data.perUserLimit = Number.isFinite(limit) && limit >= 1 ? limit : 1;
     }
+    if (data.validFrom) data.validFrom = normalizeCouponDateInput(data.validFrom, "start");
+    if (data.validTill) data.validTill = normalizeCouponDateInput(data.validTill, "end");
+
+    const coupon = await Coupon.findByIdAndUpdate(id, data, {
+      new: true,
+      runValidators: true,
+    });
+    if (!coupon) {
+      return handleResponse(res, 404, "Coupon not found");
+    }
+    return handleResponse(res, 200, "Coupon updated successfully", coupon);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
 };
 
 export const deleteCoupon = async (req, res) => {
-    try {
-        const { id } = req.params;
-        await Coupon.findByIdAndDelete(id);
-        return handleResponse(res, 200, "Coupon deleted successfully");
-    } catch (error) {
-        return handleResponse(res, 500, error.message);
-    }
+  try {
+    const { id } = req.params;
+    await Coupon.findByIdAndDelete(id);
+    return handleResponse(res, 200, "Coupon deleted successfully");
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
 };
 
-// Simple validation engine for checkout
+// Simple validation engine for checkout — only one coupon per apply
 export const validateCoupon = async (req, res) => {
-    try {
-        const { code, cartTotal, items, customerId } = req.body;
+  try {
+    const { code, cartTotal, items } = req.body;
+    const customerId = req.user?.id || req.body.customerId || null;
 
-        if (!code) {
-            return handleResponse(res, 400, "Coupon code is required");
-        }
-
-        const now = new Date();
-        const coupon = await Coupon.findOne({ code: code.toUpperCase() });
-        if (!coupon) {
-            return handleResponse(res, 404, "Invalid coupon code");
-        }
-
-        if (!coupon.isActive || coupon.validFrom > now || coupon.validTill < now) {
-            return handleResponse(res, 400, "This coupon is not active");
-        }
-
-        // Usage limits (overall)
-        if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-            return handleResponse(res, 400, "This coupon has reached its usage limit");
-        }
-
-        // Per-user limit & monthly volume – basic implementation
-        let userUsageCount = 0;
-        let monthlyVolume = 0;
-        if (customerId) {
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const userOrders = await Order.find({
-                customer: customerId,
-                createdAt: { $gte: monthStart, $lte: now },
-            }).lean();
-
-            monthlyVolume = userOrders.reduce(
-                (sum, o) => sum + (o.pricing?.total || 0),
-                0
-            );
-
-            userUsageCount = await CouponRedemption.countDocuments({
-                couponId: coupon._id,
-                customerId,
-            });
-        }
-
-        if (coupon.perUserLimit && userUsageCount >= coupon.perUserLimit) {
-            return handleResponse(res, 400, "You have already used this coupon");
-        }
-
-        if (
-            coupon.couponType === "monthly_volume" &&
-            coupon.monthlyVolumeThreshold &&
-            monthlyVolume < coupon.monthlyVolumeThreshold
-        ) {
-            return handleResponse(
-                res,
-                400,
-                "This coupon is for high‑volume buyers only"
-            );
-        }
-
-        // Base conditions
-        if (coupon.minOrderValue && cartTotal < coupon.minOrderValue) {
-            return handleResponse(
-                res,
-                400,
-                `Minimum order value should be ₹${coupon.minOrderValue}`
-            );
-        }
-
-        if (coupon.minItems && Array.isArray(items) && items.length < coupon.minItems) {
-            return handleResponse(
-                res,
-                400,
-                `Add at least ${coupon.minItems} items to use this coupon`
-            );
-        }
-
-        // Category based condition
-        if (
-            coupon.couponType === "category_based" &&
-            Array.isArray(coupon.applicableCategories) &&
-            coupon.applicableCategories.length > 0
-        ) {
-            const hasEligibleItem =
-                Array.isArray(items) &&
-                items.some((i) =>
-                    coupon.applicableCategories.some(
-                        (cId) =>
-                            String(i.categoryId) === String(cId) ||
-                            String(i.category?._id) === String(cId)
-                    )
-                );
-            if (!hasEligibleItem) {
-                return handleResponse(
-                    res,
-                    400,
-                    "This coupon is valid only on selected categories"
-                );
-            }
-        }
-
-        // Determine eligible total for discount
-        let eligibleTotal = cartTotal;
-        if (coupon.sponsor === "seller" && coupon.sellerId) {
-            eligibleTotal = 0;
-            if (Array.isArray(items)) {
-                items.forEach((item) => {
-                    const itemSellerId = item.product?.branch || item.product?.sellerId || item.sellerId;
-                    if (String(itemSellerId) === String(coupon.sellerId)) {
-                        const price = item.product?.salePrice || item.product?.price || item.price || 0;
-                        eligibleTotal += price * (item.quantity || 1);
-                    }
-                });
-            }
-            if (eligibleTotal === 0) {
-                return handleResponse(
-                    res,
-                    400,
-                    "This coupon is only valid for products from a specific seller"
-                );
-            }
-            if (coupon.minOrderValue && eligibleTotal < coupon.minOrderValue) {
-                return handleResponse(
-                    res,
-                    400,
-                    `Minimum order value for this seller's products should be ₹${coupon.minOrderValue}`
-                );
-            }
-        }
-
-        // Calculate discount
-        let discountAmount = 0;
-        let freeDelivery = false;
-
-        if (coupon.discountType === "free_delivery") {
-            freeDelivery = true;
-        } else if (coupon.discountType === "percentage") {
-            discountAmount = Math.round((eligibleTotal * coupon.discountValue) / 100);
-        } else if (coupon.discountType === "fixed") {
-            discountAmount = coupon.discountValue;
-        }
-
-        if (coupon.maxDiscount && discountAmount > coupon.maxDiscount) {
-            discountAmount = coupon.maxDiscount;
-        }
-
-        if (discountAmount <= 0 && !freeDelivery) {
-            return handleResponse(
-                res,
-                400,
-                "This coupon does not provide any discount on current cart"
-            );
-        }
-
-        return handleResponse(res, 200, "Coupon applied", {
-            couponId: coupon._id,
-            code: coupon.code,
-            discountAmount,
-            freeDelivery,
-        });
-    } catch (error) {
-        return handleResponse(res, 500, error.message);
+    if (!code) {
+      return handleResponse(res, 400, "Coupon code is required");
     }
-};
 
+    const result = await applySingleCoupon({
+      code,
+      cartTotal,
+      items,
+      customerId,
+    });
+
+    return handleResponse(res, 200, "Coupon applied", {
+      couponId: result.couponId,
+      code: result.code,
+      discountAmount: result.discountAmount,
+      freeDelivery: result.freeDelivery,
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};

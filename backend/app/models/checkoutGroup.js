@@ -86,6 +86,10 @@ const checkoutGroupSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      packingFeeCharged: {
+        type: Number,
+        default: 0,
+      },
       tipTotal: {
         type: Number,
         default: 0,
@@ -95,6 +99,18 @@ const checkoutGroupSchema = new mongoose.Schema(
         default: 0,
       },
       taxTotal: {
+        type: Number,
+        default: 0,
+      },
+      customerSurchargeAmount: {
+        type: Number,
+        default: 0,
+      },
+      customerSurchargeReason: {
+        type: String,
+        default: "",
+      },
+      packagingChargeAmount: {
         type: Number,
         default: 0,
       },

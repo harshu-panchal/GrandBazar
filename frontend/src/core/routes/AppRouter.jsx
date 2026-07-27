@@ -7,6 +7,7 @@ import RootErrorBoundary from '../../shared/components/RootErrorBoundary';
 
 // Providers for Customer Module
 import { WishlistProvider } from '../../modules/customer/context/WishlistContext';
+import { FavoriteStoresProvider } from '../../modules/customer/context/FavoriteStoresContext';
 import { CartProvider } from '../../modules/customer/context/CartContext';
 import { CartAnimationProvider } from '../../modules/customer/context/CartAnimationContext';
 import { ProductDetailProvider } from '../../modules/customer/context/ProductDetailContext';
@@ -26,6 +27,7 @@ const Home = lazy(() => import('../../modules/customer/pages/Home'));
 const CategoriesPage = lazy(() => import('../../modules/customer/pages/CategoriesPage'));
 const CategoryProductsPage = lazy(() => import('../../modules/customer/pages/CategoryProductsPage'));
 const WishlistPage = lazy(() => import('../../modules/customer/pages/WishlistPage'));
+const FavoriteStoresPage = lazy(() => import('../../modules/customer/pages/FavoriteStoresPage'));
 const OffersPage = lazy(() => import('../../modules/customer/pages/OffersPage'));
 const ShopByStorePage = lazy(() => import('../../modules/customer/pages/ShopByStorePage'));
 const StoresPage = lazy(() => import('../../modules/customer/pages/StoresPage'));
@@ -60,6 +62,7 @@ import CustomerLayout from '../../modules/customer/components/layout/CustomerLay
 const CustomerLayoutWrapper = () => (
     <LocationProvider>
         <WishlistProvider>
+            <FavoriteStoresProvider>
             <CartProvider>
                 <CartAnimationProvider>
                     <ProductDetailProvider>
@@ -72,6 +75,7 @@ const CustomerLayoutWrapper = () => (
                     </ProductDetailProvider>
                 </CartAnimationProvider>
             </CartProvider>
+            </FavoriteStoresProvider>
         </WishlistProvider>
     </LocationProvider>
 );
@@ -166,6 +170,7 @@ const AppRouter = () => {
                         { path: 'stores', element: <StoresPage /> },
                         { path: 'store/:sellerId', element: <StoreDetailPage /> },
                         { path: 'wishlist', element: <ProtectedRoute><WishlistPage /></ProtectedRoute> },
+                        { path: 'favorite-stores', element: <ProtectedRoute><FavoriteStoresPage /></ProtectedRoute> },
                         { path: 'orders', element: <ProtectedRoute><OrdersPage /></ProtectedRoute> },
                         { path: 'orders/:orderId', element: <ProtectedRoute><OrderDetailPage /></ProtectedRoute> },
                         { path: 'transactions', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },

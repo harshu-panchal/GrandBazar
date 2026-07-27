@@ -34,6 +34,8 @@ export const adminApi = {
     updateSubscriptionPaymentSettings: (data) => axiosInstance.put('/admin/subscription/payment-settings', data),
     getSubscriptionOverview: () => axiosInstance.get('/admin/subscription/overview'),
     getSubscriptionPayments: (params) => axiosInstance.get('/admin/subscription/payments', { params }),
+    getComplimentarySubscriptions: () => axiosInstance.get('/admin/subscription/complimentary'),
+    assignComplimentarySubscription: (data) => axiosInstance.post('/admin/subscription/complimentary', data),
     getAdminWalletData: (params) => axiosInstance.get('/admin/wallet-data', { params }),
     getReports: () => axiosInstance.get('/admin/reports'),
     getProfile: () => axiosInstance.get('/admin/profile'),
@@ -93,6 +95,10 @@ export const adminApi = {
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
+    getOrderReassignCandidates: (orderId) =>
+        axiosInstance.get(`/orders/${orderId}/reassign-candidates`),
+    reassignOrderStore: (orderId, data) =>
+        axiosInstance.put(`/orders/${orderId}/reassign-store`, data),
     approveOrderCancellationRequest: (orderId, data = {}) =>
         axiosInstance.put(`/orders/cancel/${orderId}/approve`, data),
     rejectOrderCancellationRequest: (orderId, data = {}) =>

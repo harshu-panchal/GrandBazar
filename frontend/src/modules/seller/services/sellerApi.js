@@ -44,6 +44,7 @@ export const sellerApi = {
     toggleStoreActive: (storeId) => axiosInstance.patch(`/seller/stores/${storeId}/toggle-active`),
 
     // Others
+    getDashboard: (params) => axiosInstance.get('/seller/dashboard', { params }),
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),

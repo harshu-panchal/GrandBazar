@@ -64,6 +64,30 @@ const catalogProductSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    applyCommission: {
+      type: Boolean,
+      default: false,
+    },
+    adminCommission: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    adminCommissionType: {
+      type: String,
+      enum: ["percentage", "fixed"],
+      default: "percentage",
+    },
+    adminCommissionValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    adminCommissionFixedRule: {
+      type: String,
+      enum: ["per_qty", "per_item"],
+      default: "per_qty",
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",

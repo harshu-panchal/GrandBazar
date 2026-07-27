@@ -16,8 +16,7 @@ import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS } from "../constants/orderWo
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import {
   afterPlaceOrderV2,
-  sellerAcceptAtomic,
-  sellerRejectAtomic,
+  sellerUpdateStatusAtomic,
   deliveryAcceptAtomic,
   customerCancelV2,
   requestCustomerCancellationApproval,
@@ -38,6 +37,7 @@ import { distanceMeters } from "../utils/geoUtils.js";
 import {
   fetchAvailableOrdersForDelivery,
   fetchSellerOrdersPage,
+  attachDeliveryPartners,
 } from "../services/orderQueryService.js";
 import {
   orderMatchQueryFromRouteParam,
@@ -174,6 +174,7 @@ function buildFallbackBreakdownFromPricing(pricing = {}) {
     productSubtotal: Number.isFinite(subtotal) ? subtotal : 0,
     deliveryFeeCharged: Number.isFinite(deliveryFee) ? deliveryFee : 0,
     handlingFeeCharged: Number.isFinite(handlingFee) ? handlingFee : 0,
+    packingFeeCharged: 0,
     discountTotal: Number.isFinite(discountTotal) ? discountTotal : 0,
     taxTotal: Number.isFinite(taxTotal) ? taxTotal : 0,
     grandTotal: Number.isFinite(grandTotal) ? grandTotal : 0,
@@ -182,6 +183,8 @@ function buildFallbackBreakdownFromPricing(pricing = {}) {
       categoryCommissionSettings: [],
       handlingFeeStrategy: null,
       handlingCategoryUsed: {},
+      packingFeeStrategy: null,
+      packingCategoryUsed: {},
     },
     lineItems: [],
   };
@@ -379,10 +382,15 @@ export const getOrderDetails = async (req, res) => {
     let order = await Order.findOne(orderKey)
       .populate("customer", "name email phone")
       .populate("items.product", "name mainImage price salePrice")
-      .populate("deliveryBoy", "name phone")
+      .populate("deliveryBoy", "name phone profileImage")
+      .populate("deliveryPartner", "name phone profileImage")
       .populate("returnDeliveryBoy", "name phone")
       .populate("seller", "shopName name address phone location")
       .lean();
+
+    if (order) {
+      [order] = await attachDeliveryPartners([order]);
+    }
 
     if (!order) {
       if (orderId && orderId.startsWith("CHK-")) {
@@ -907,22 +915,19 @@ export const updateOrderStatus = async (req, res) => {
 
     const canonicalOrderId = order.orderId;
 
-    if (order.workflowVersion >= 2 && role === "seller") {
-      if (status === "confirmed") {
-        try {
-          const updated = await sellerAcceptAtomic(userId, canonicalOrderId);
-          return handleResponse(res, 200, "Order accepted", updated);
-        } catch (e) {
-          return handleResponse(res, e.statusCode || 500, e.message);
+    if (order.workflowVersion >= 2 && role === "seller" && status) {
+      try {
+        const updated = await sellerUpdateStatusAtomic(
+          userId,
+          canonicalOrderId,
+          String(status).toLowerCase(),
+        );
+        if (updated) {
+          return handleResponse(res, 200, "Order status updated", updated);
         }
-      }
-      if (status === "cancelled") {
-        try {
-          const updated = await sellerRejectAtomic(userId, canonicalOrderId);
-          return handleResponse(res, 200, "Order rejected", updated);
-        } catch (e) {
-          return handleResponse(res, e.statusCode || 500, e.message);
-        }
+        // null => legacy order path below (workflowVersion check already done, so shouldn't happen)
+      } catch (e) {
+        return handleResponse(res, e.statusCode || 500, e.message || "Failed to update status");
       }
     }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     User, MapPin, Package, CreditCard, Wallet, ChevronRight,
-    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell
+    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store
 } from 'lucide-react';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
@@ -189,6 +189,14 @@ const ProfilePage = () => {
                                 path="/wishlist"
                                 color="#fb7185"
                                 bg="rgba(248,113,113,0.08)"
+                            />
+                            <MenuItem
+                                icon={Store}
+                                label="Favorite Sellers"
+                                sub="Shops you follow"
+                                path="/favorite-stores"
+                                color="#f59e0b"
+                                bg="rgba(245,158,11,0.10)"
                             />
                             <MenuItem
                                 icon={MapPin}

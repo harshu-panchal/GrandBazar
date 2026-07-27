@@ -235,6 +235,87 @@ export function canSellerManuallyUpdateStatus(order) {
   return true;
 }
 
+/**
+ * Replacement + split delivery are allowed while the order is still with the seller,
+ * including scheduled holds (before logistics starts).
+ */
+export function canSellerSplitOrReplace(order) {
+  if (!order) return false;
+
+  const ws = String(order?.workflowStatus || "").toUpperCase();
+  if (
+    [
+      WORKFLOW_STATUS.CANCELLED,
+      WORKFLOW_STATUS.DELIVERED,
+      WORKFLOW_STATUS.OUT_FOR_DELIVERY,
+      WORKFLOW_STATUS.DISPUTED,
+      WORKFLOW_STATUS.PREORDER_HOLD,
+    ].includes(ws)
+  ) {
+    return false;
+  }
+
+  const legacy = String(getLegacyStatusFromOrder(order) || "").toLowerCase();
+  if (
+    ["delivered", "cancelled", "out_for_delivery", "returned", "refunded"].includes(
+      legacy,
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Latest admin store reassignment, if any.
+ * Prefers denormalized `storeReassignment`, falls back to modificationTimeline.
+ */
+export function getOrderStoreReassignment(order) {
+  if (!order) return null;
+
+  const snapshot = order.storeReassignment;
+  if (snapshot?.toStoreId || snapshot?.reassignedAt) {
+    return {
+      fromStoreId: snapshot.fromStoreId || "",
+      toStoreId: snapshot.toStoreId || "",
+      fromShopName: snapshot.fromShopName || "Previous store",
+      toShopName: snapshot.toShopName || "New store",
+      reason: snapshot.reason || "",
+      note: snapshot.note || "",
+      reassignedAt: snapshot.reassignedAt || null,
+      reassignedBy: snapshot.reassignedBy || "",
+      previousWorkflowStatus: snapshot.previousWorkflowStatus || "",
+    };
+  }
+
+  const timeline = Array.isArray(order.modificationTimeline)
+    ? order.modificationTimeline
+    : [];
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const entry = timeline[i];
+    if (String(entry?.type || "") !== "seller_reassigned") continue;
+    const meta = entry.meta || {};
+    return {
+      fromStoreId: meta.fromStoreId || "",
+      toStoreId: meta.toStoreId || "",
+      fromShopName: meta.fromShopName || "Previous store",
+      toShopName: meta.toShopName || "New store",
+      reason: meta.reason || "",
+      note: entry.note || "",
+      reassignedAt: entry.createdAt || null,
+      reassignedBy: entry.actorId || "",
+      previousWorkflowStatus: meta.previousWorkflowStatus || "",
+    };
+  }
+
+  return null;
+}
+
+export function isOrderStoreReassigned(order) {
+  return Boolean(getOrderStoreReassignment(order));
+}
+
 export function getOrderStatusLabel(order) {
   const rs = order?.returnStatus;
   if (rs && rs !== "none") {

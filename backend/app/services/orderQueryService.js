@@ -3,6 +3,61 @@ import Delivery from "../models/delivery.js";
 import Store from "../models/store.js";
 import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { distanceMeters } from "../utils/geoUtils.js";
+import mongoose from "mongoose";
+
+function getPartnerRefId(partner) {
+  if (!partner) return null;
+  if (typeof partner === "string" && partner.length >= 12) return partner;
+  if (partner instanceof mongoose.Types.ObjectId) return String(partner);
+  if (typeof partner === "object" && partner._id && !(partner.name || partner.phone)) {
+    return String(partner._id);
+  }
+  return null;
+}
+
+function isPartnerDocument(partner) {
+  return (
+    partner &&
+    typeof partner === "object" &&
+    Boolean(partner.name || partner.phone)
+  );
+}
+
+/** Ensure deliveryBoy/deliveryPartner refs include name/phone even when populate misses */
+export async function attachDeliveryPartners(orders = []) {
+  if (!Array.isArray(orders) || orders.length === 0) return orders;
+
+  const missingIds = new Set();
+  for (const order of orders) {
+    for (const field of ["deliveryBoy", "deliveryPartner"]) {
+      const id = getPartnerRefId(order[field]);
+      if (id) missingIds.add(id);
+    }
+  }
+
+  if (missingIds.size === 0) return orders;
+
+  const partners = await Delivery.find({ _id: { $in: [...missingIds] } })
+    .select("name phone profileImage")
+    .lean();
+  const map = new Map(partners.map((p) => [String(p._id), p]));
+
+  for (const order of orders) {
+    for (const field of ["deliveryBoy", "deliveryPartner"]) {
+      const id = getPartnerRefId(order[field]);
+      if (id && map.has(id)) {
+        order[field] = map.get(id);
+      }
+    }
+    if (isPartnerDocument(order.deliveryPartner) && !isPartnerDocument(order.deliveryBoy)) {
+      order.deliveryBoy = order.deliveryPartner;
+    } else if (isPartnerDocument(order.deliveryBoy) && !isPartnerDocument(order.deliveryPartner)) {
+      order.deliveryPartner = order.deliveryBoy;
+    }
+  }
+
+  return orders;
+}
 
 function normalizeSellerStatusFilter(statusParam) {
   if (!statusParam || statusParam === "all") {
@@ -84,15 +139,16 @@ export async function fetchSellerOrdersPage({
     endDate,
   });
 
-  const [orders, total, summaryRows] = await Promise.all([
+  const [ordersRaw, total, summaryRows] = await Promise.all([
     Order.find(query)
       .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
       .populate("customer", "name phone")
       .populate("items.product", "name mainImage price salePrice")
-      .populate("deliveryBoy", "name phone")
-      .populate("seller", "shopName name")
+      .populate("deliveryBoy", "name phone profileImage")
+      .populate("deliveryPartner", "name phone profileImage")
+      .populate("seller", "shopName name phone")
       .lean(),
     Order.countDocuments(query),
     Order.aggregate([
@@ -139,6 +195,8 @@ export async function fetchSellerOrdersPage({
       },
     ]),
   ]);
+
+  const orders = await attachDeliveryPartners(ordersRaw);
 
   const rawSummary = summaryRows?.[0] || {};
   const summary = {
@@ -363,4 +421,5 @@ export default {
   buildSellerOrdersQuery,
   fetchSellerOrdersPage,
   fetchAvailableOrdersForDelivery,
+  attachDeliveryPartners,
 };

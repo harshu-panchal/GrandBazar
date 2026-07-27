@@ -82,6 +82,8 @@ import {
   cancelCampaign,
   updateSelfLogisticsStatus,
   adminLogisticsOverride,
+  getReassignCandidates,
+  adminReassignOrder,
 } from "../controller/orderLifecycleController.js";
 import {
   getDeliveryOptionsForStore,
@@ -489,6 +491,20 @@ router.put(
   allowRoles("admin"),
   checkAdminPermission("logistics:override"),
   adminLogisticsOverride,
+);
+
+router.get(
+  "/:orderId/reassign-candidates",
+  verifyToken,
+  allowRoles("admin"),
+  getReassignCandidates,
+);
+
+router.put(
+  "/:orderId/reassign-store",
+  verifyToken,
+  allowRoles("admin"),
+  adminReassignOrder,
 );
 
 // Customer pickup verification

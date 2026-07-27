@@ -2,11 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   HiOutlineGift,
   HiOutlinePlus,
-  HiOutlinePencilSquare,
   HiOutlineInformationCircle,
   HiOutlineBanknotes,
   HiOutlineCheckCircle,
   HiOutlineClock,
+  HiOutlineArrowLeft,
+  HiOutlineUsers,
+  HiOutlineSparkles,
+  HiOutlineCalendarDays,
+  HiOutlineBolt,
 } from "react-icons/hi2";
 import { Loader2 } from "lucide-react";
 import Modal from "@shared/components/ui/Modal";
@@ -18,6 +22,39 @@ import Card from "@shared/components/ui/Card";
 import { useToast } from "@shared/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { sellerApi } from "../services/sellerApi";
+
+const SELLER_CASHBACK_TYPES = [
+  {
+    value: "shop_cashback",
+    label: "Shop-wise Cashback",
+    desc: "Cashback on orders from your store",
+    icon: "gift",
+  },
+  {
+    value: "first_purchase",
+    label: "First Purchase Cashback",
+    desc: "Reward new customers on their first order",
+    icon: "sparkles",
+  },
+  {
+    value: "repeat_purchase",
+    label: "Repeat Purchase Cashback",
+    desc: "Encourage returning customers",
+    icon: "users",
+  },
+  {
+    value: "festival",
+    label: "Festival Cashback",
+    desc: "Special cashback for festival periods",
+    icon: "calendar",
+  },
+  {
+    value: "instant_cashback",
+    label: "Instant Cashback",
+    desc: "Credit quickly after payment success",
+    icon: "bolt",
+  },
+];
 
 const PLATFORM_LIMITS = {
   maxBudget: 50000,
@@ -44,9 +81,14 @@ const emptyForm = () => ({
   startAt: "",
   endAt: "",
   budgetLimit: 5000,
-  rules: { minPurchase: 200, customerType: "all" },
+  rules: {
+    minPurchase: 200,
+    customerType: "all",
+    maxRewardPerCustomer: "",
+    maxRewardsPerDay: "",
+  },
   rewardConfig: {
-    rewardSubtype: "instant_cashback",
+    rewardSubtype: "",
     valueType: "percent",
     value: 5,
     maxRewardAmount: 50,
@@ -55,12 +97,21 @@ const emptyForm = () => ({
   },
 });
 
+const subtypeIcon = (key) => {
+  if (key === "sparkles") return HiOutlineSparkles;
+  if (key === "users") return HiOutlineUsers;
+  if (key === "calendar") return HiOutlineCalendarDays;
+  if (key === "bolt") return HiOutlineBolt;
+  return HiOutlineGift;
+};
+
 const SellerRewardCampaigns = () => {
   const { showToast } = useToast();
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   const [form, setForm] = useState(emptyForm());
 
   const fetchCampaigns = async () => {
@@ -86,8 +137,42 @@ const SellerRewardCampaigns = () => {
     return { total: campaigns.length, active: active.length, totalIssued, budgetUsed };
   }, [campaigns]);
 
+  const selectedTypeMeta = useMemo(
+    () => SELLER_CASHBACK_TYPES.find((t) => t.value === form.rewardConfig.rewardSubtype),
+    [form.rewardConfig.rewardSubtype],
+  );
+
+  const openCreateModal = () => {
+    setForm(emptyForm());
+    setWizardStep(1);
+    setModalOpen(true);
+  };
+
+  const selectSubtype = (subtype) => {
+    const rules = { ...form.rules };
+    if (subtype === "first_purchase") rules.customerType = "new";
+    else if (subtype === "repeat_purchase") rules.customerType = "existing";
+    else rules.customerType = "all";
+
+    setForm({
+      ...form,
+      rules,
+      rewardConfig: {
+        ...form.rewardConfig,
+        rewardSubtype: subtype,
+        creditTiming: subtype === "instant_cashback" ? "on_payment" : "on_delivery",
+      },
+    });
+    setWizardStep(2);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.rewardConfig.rewardSubtype) {
+      showToast("Please select a cashback type first", "error");
+      setWizardStep(1);
+      return;
+    }
     if (form.rewardConfig.valueType === "percent" && form.rewardConfig.value > PLATFORM_LIMITS.maxPercent) {
       showToast(`Max cashback is ${PLATFORM_LIMITS.maxPercent}%`, "error");
       return;
@@ -102,10 +187,20 @@ const SellerRewardCampaigns = () => {
         ...form,
         status: "draft",
         fundingSource: "seller",
+        rules: {
+          ...form.rules,
+          maxRewardPerCustomer: form.rules.maxRewardPerCustomer
+            ? Number(form.rules.maxRewardPerCustomer)
+            : null,
+          maxRewardsPerDay: form.rules.maxRewardsPerDay
+            ? Number(form.rules.maxRewardsPerDay)
+            : null,
+        },
       });
       showToast("Campaign created — activate from admin or set status to active", "success");
       setModalOpen(false);
       setForm(emptyForm());
+      setWizardStep(1);
       fetchCampaigns();
     } catch (err) {
       showToast(err.response?.data?.message || "Failed to create campaign", "error");
@@ -123,7 +218,7 @@ const SellerRewardCampaigns = () => {
         title="Reward Campaigns"
         description="Create store-sponsored cashback campaigns to boost repeat purchases. All campaigns are funded by your store within platform limits."
         actions={
-          <Button onClick={() => setModalOpen(true)} className="flex items-center gap-2">
+          <Button onClick={openCreateModal} className="flex items-center gap-2">
             <HiOutlinePlus className="w-5 h-5" /> New Campaign
           </Button>
         }
@@ -163,7 +258,7 @@ const SellerRewardCampaigns = () => {
           <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm">
             Reward your customers with cashback on delivered orders. Campaigns help increase repeat purchases and customer loyalty for your store.
           </p>
-          <Button onClick={() => setModalOpen(true)} className="mt-6">
+          <Button onClick={openCreateModal} className="mt-6">
             <HiOutlinePlus className="w-4 h-4 mr-1" /> Create Your First Campaign
           </Button>
         </Card>
@@ -214,74 +309,271 @@ const SellerRewardCampaigns = () => {
         </div>
       )}
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Create Reward Campaign" size="lg">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-200">
-            Campaign starts as <strong>draft</strong>. Set to active after review. Seller-funded rewards are deducted from your earnings.
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Create Reward Campaign"
+        size="lg"
+      >
+        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+            {[
+              { n: 1, label: "Reward Type" },
+              { n: 2, label: "Configure" },
+            ].map((s, idx) => (
+              <div key={s.n} className="flex items-center gap-2">
+                {idx > 0 && <div className="h-px w-6 bg-slate-200" />}
+                <span
+                  className={cn(
+                    "px-2.5 py-1 rounded-full",
+                    wizardStep === s.n
+                      ? "bg-slate-900 text-white"
+                      : wizardStep > s.n
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-100 text-slate-400",
+                  )}
+                >
+                  {s.n}. {s.label}
+                </span>
+              </div>
+            ))}
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign Name *</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="e.g. Weekend 5% Cashback" />
-          </div>
+          {wizardStep === 1 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Select Cashback Type
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Choose a type first. Configuration options appear next.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {SELLER_CASHBACK_TYPES.map((type) => {
+                  const Icon = subtypeIcon(type.icon);
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => selectSubtype(type.value)}
+                      className="text-left p-4 rounded-2xl border-2 border-slate-100 hover:border-slate-900 hover:bg-slate-50 dark:border-gray-700 dark:hover:border-white dark:hover:bg-gray-800 transition-all"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="h-11 w-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white">{type.label}</p>
+                          <p className="text-xs text-slate-500 mt-1">{type.desc}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
-          <div>
-            <label className="text-xs font-bold text-slate-500 mb-1 block">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={cn(inputCls, "min-h-[60px]")} placeholder="What customers earn and when" />
-          </div>
+          {wizardStep === 2 && (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <button
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-900"
+              >
+                <HiOutlineArrowLeft className="w-4 h-4" /> Change cashback type
+              </button>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Start *</label>
-              <input type="datetime-local" required value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">End *</label>
-              <input type="datetime-local" required value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} className={inputCls} />
-            </div>
-          </div>
+              <div className="rounded-2xl bg-slate-900 text-white p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                  Selected type
+                </p>
+                <p className="text-lg font-bold mt-1">
+                  {selectedTypeMeta?.label || form.rewardConfig.rewardSubtype}
+                </p>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Cashback % (max {PLATFORM_LIMITS.maxPercent}%)</label>
-              <input
-                type="number"
-                min="0"
-                max={PLATFORM_LIMITS.maxPercent}
-                value={form.rewardConfig.value}
-                onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, valueType: "percent", value: Number(e.target.value) } })}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Max reward per order (₹)</label>
-              <input
-                type="number"
-                min="0"
-                max={PLATFORM_LIMITS.maxFixedReward}
-                value={form.rewardConfig.maxRewardAmount}
-                onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, maxRewardAmount: Number(e.target.value) } })}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Min order value (₹)</label>
-              <input type="number" min="0" value={form.rules.minPurchase} onChange={(e) => setForm({ ...form, rules: { ...form.rules, minPurchase: Number(e.target.value) } })} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign budget (₹)</label>
-              <input type="number" min="100" max={PLATFORM_LIMITS.maxBudget} value={form.budgetLimit} onChange={(e) => setForm({ ...form, budgetLimit: Number(e.target.value) })} className={inputCls} />
-            </div>
-          </div>
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-200">
+                Campaign starts as <strong>draft</strong>. Set to active after review. Seller-funded
+                rewards are deducted from your earnings.
+              </div>
 
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              Create Campaign
-            </Button>
-          </div>
-        </form>
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Campaign Name *</label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. Weekend 5% Cashback"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className={cn(inputCls, "min-h-[60px]")}
+                  placeholder="What customers earn and when"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">Start *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={form.startAt}
+                    onChange={(e) => setForm({ ...form, startAt: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">End *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={form.endAt}
+                    onChange={(e) => setForm({ ...form, endAt: e.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Cashback % (max {PLATFORM_LIMITS.maxPercent}%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={PLATFORM_LIMITS.maxPercent}
+                    value={form.rewardConfig.value}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: {
+                          ...form.rewardConfig,
+                          valueType: "percent",
+                          value: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max reward per order (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={PLATFORM_LIMITS.maxFixedReward}
+                    value={form.rewardConfig.maxRewardAmount}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: {
+                          ...form.rewardConfig,
+                          maxRewardAmount: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Min order value (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rules.minPurchase}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rules: { ...form.rules, minPurchase: Number(e.target.value) },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Campaign budget (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="100"
+                    max={PLATFORM_LIMITS.maxBudget}
+                    value={form.budgetLimit}
+                    onChange={(e) => setForm({ ...form, budgetLimit: Number(e.target.value) })}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max rewards per customer
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.rules.maxRewardPerCustomer}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rules: { ...form.rules, maxRewardPerCustomer: e.target.value },
+                      })
+                    }
+                    className={inputCls}
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Validity (days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.rewardConfig.validityDays}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        rewardConfig: {
+                          ...form.rewardConfig,
+                          validityDays: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                  Create Campaign
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       </Modal>
     </div>
   );

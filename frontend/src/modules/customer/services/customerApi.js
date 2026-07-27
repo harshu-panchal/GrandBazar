@@ -59,6 +59,20 @@ export const customerApi = {
     return axiosInstance.delete(`/wishlist/remove/${productId}`);
   },
 
+  // Favorite sellers / stores
+  getFavoriteStores: (params) =>
+    getWithDedupe("/favorite-stores", params, { ttl: 5000 }),
+  toggleFavoriteStore: (data) => {
+    invalidateCache("/favorite-stores");
+    invalidateCache("/seller/nearby");
+    return axiosInstance.post("/favorite-stores/toggle", data);
+  },
+  removeFavoriteStore: (storeId) => {
+    invalidateCache("/favorite-stores");
+    invalidateCache("/seller/nearby");
+    return axiosInstance.delete(`/favorite-stores/remove/${storeId}`);
+  },
+
   // Orders
   // Explicit timeout so checkout never waits forever if the server blocks (e.g. Redis/Bull).
   checkoutPreview: (data) =>
@@ -124,6 +138,7 @@ export const customerApi = {
   // Support & Reviews
   getProductReviews: (productId) =>
     getWithDedupe(`/reviews/product/${productId}`),
+  getStoreReviews: (storeId) => getWithDedupe(`/reviews/store/${storeId}`),
   submitReview: (data) => axiosInstance.post("/reviews/submit", data),
   createTicket: (data) => axiosInstance.post("/tickets/create", data),
   getMyTickets: () => getWithDedupe("/tickets/my-tickets"),
@@ -157,7 +172,8 @@ export const customerApi = {
 
   // Coupons
   validateCoupon: (data) => axiosInstance.post("/coupons/validate", data),
-  getActiveCoupons: () => getWithDedupe("/coupons", { status: "active" }),
+  getActiveCoupons: (params = {}, options = {}) =>
+    getWithDedupe("/coupons", { status: "active", ...params }, { ttl: 5000, ...options }),
 
   // Rewards
   getRewardSummary: () => getWithDedupe("/rewards/customer/summary", {}, { ttl: 5000 }),

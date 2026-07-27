@@ -12,10 +12,9 @@ import {
   Users,
   CreditCard,
   Clock,
-  IndianRupee,
   Smartphone,
   Building2,
-  Info,
+  Gift,
 } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
@@ -46,8 +45,8 @@ const BILLING_CYCLE_PRESETS = {
 
 const TABS = [
   { key: "plans", label: "Plans" },
+  { key: "free", label: "Free Assign" },
   { key: "requests", label: "Requests" },
-  { key: "settings", label: "Settings" },
 ];
 
 const REQUEST_STATUS_OPTIONS = [
@@ -301,7 +300,6 @@ const SubscriptionManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
-  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [deactivatingId, setDeactivatingId] = useState(null);
   const [actioningRequestId, setActioningRequestId] = useState(null);
 
@@ -310,7 +308,17 @@ const SubscriptionManagement = () => {
   const [requests, setRequests] = useState([]);
   const [phonePePayments, setPhonePePayments] = useState([]);
   const [modelSwitchRequests, setModelSwitchRequests] = useState([]);
-  const [paymentSettings, setPaymentSettings] = useState({});
+  const [complimentaryItems, setComplimentaryItems] = useState([]);
+  const [assignSellers, setAssignSellers] = useState([]);
+  const [freeAssignForm, setFreeAssignForm] = useState({
+    sellerId: "",
+    planId: "",
+    durationDays: 30,
+    shopCount: 1,
+    productCountPerShop: 50,
+    note: "",
+  });
+  const [isAssigningFree, setIsAssigningFree] = useState(false);
 
   const [planForm, setPlanForm] = useState(emptyPlan);
   const [editingPlan, setEditingPlan] = useState(null);
@@ -335,14 +343,14 @@ const SubscriptionManagement = () => {
         requestsRes,
         phonePeRes,
         modelSwitchRes,
-        settingsRes,
+        complimentaryRes,
       ] = await Promise.all([
         adminApi.getSubscriptionOverview(),
         adminApi.getSubscriptionPlans(),
         adminApi.getSubscriptionPaymentRequests({ status: requestStatusFilter }),
         adminApi.getSubscriptionPayments({ status: phonePeStatusFilter }),
         adminApi.getModelSwitchRequests({ status: "pending" }),
-        adminApi.getSubscriptionPaymentSettings(),
+        adminApi.getComplimentarySubscriptions(),
       ]);
 
       setOverview(overviewRes.data.result || {});
@@ -350,7 +358,17 @@ const SubscriptionManagement = () => {
       setRequests(unwrapList(requestsRes));
       setPhonePePayments(unwrapList(phonePeRes));
       setModelSwitchRequests(unwrapList(modelSwitchRes));
-      setPaymentSettings(settingsRes.data.result || {});
+      const complimentaryPayload = complimentaryRes.data?.result || {};
+      setComplimentaryItems(
+        Array.isArray(complimentaryPayload.items)
+          ? complimentaryPayload.items
+          : unwrapList(complimentaryRes),
+      );
+      setAssignSellers(
+        Array.isArray(complimentaryPayload.sellers)
+          ? complimentaryPayload.sellers
+          : [],
+      );
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load subscription data");
     } finally {
@@ -465,18 +483,45 @@ const SubscriptionManagement = () => {
     }
   };
 
-  const savePaymentSettings = async (e) => {
+  const handleAssignFreeSubscription = async (e) => {
     e.preventDefault();
-    setIsSavingSettings(true);
+    if (!freeAssignForm.sellerId) {
+      toast.error("Please select a seller");
+      return;
+    }
+    if (!Number(freeAssignForm.durationDays) || Number(freeAssignForm.durationDays) < 1) {
+      toast.error("Duration must be at least 1 day");
+      return;
+    }
+
+    setIsAssigningFree(true);
     try {
-      await adminApi.updateSubscriptionPaymentSettings(paymentSettings);
-      toast.success("Payment settings saved");
+      await adminApi.assignComplimentarySubscription({
+        sellerId: freeAssignForm.sellerId,
+        planId: freeAssignForm.planId || undefined,
+        durationDays: Number(freeAssignForm.durationDays),
+        shopCount: Number(freeAssignForm.shopCount) || 1,
+        productCountPerShop: Number(freeAssignForm.productCountPerShop) || 50,
+        note: freeAssignForm.note || "",
+      });
+      toast.success("Free subscription assigned");
+      setFreeAssignForm((prev) => ({
+        ...prev,
+        sellerId: "",
+        note: "",
+      }));
+      loadAll(true);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to save settings");
+      toast.error(error.response?.data?.message || "Failed to assign free subscription");
     } finally {
-      setIsSavingSettings(false);
+      setIsAssigningFree(false);
     }
   };
+
+  const freePlans = useMemo(
+    () => activePlans.filter((p) => Number(p.price) === 0),
+    [activePlans],
+  );
 
   if (isLoading) {
     return (
@@ -492,7 +537,7 @@ const SubscriptionManagement = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Seller subscriptions</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage plans, review payments, and configure subscription settings.
+            Manage plans, free assignments, and payment requests.
           </p>
         </div>
         <Button
@@ -602,6 +647,215 @@ const SubscriptionManagement = () => {
               submitLabel="Create plan"
               isSubmitting={isSavingPlan}
             />
+          </Card>
+        </div>
+      )}
+
+      {tab === "free" && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
+              <Gift className="h-4 w-4 text-emerald-600" />
+              Assign free subscription
+            </h2>
+            <p className="text-xs text-slate-500 mb-5">
+              Select a seller and grant a complimentary plan. If no free plan exists, one is created automatically.
+            </p>
+
+            <form onSubmit={handleAssignFreeSubscription} className="space-y-4">
+              <div>
+                <FieldLabel required>Seller</FieldLabel>
+                <select
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm"
+                  value={freeAssignForm.sellerId}
+                  onChange={(e) =>
+                    setFreeAssignForm((prev) => ({ ...prev, sellerId: e.target.value }))
+                  }
+                  required
+                >
+                  <option value="">Select seller</option>
+                  {assignSellers.map((seller) => (
+                    <option key={seller._id} value={seller._id}>
+                      {seller.name || "Seller"}
+                      {seller.email ? ` · ${seller.email}` : ""}
+                      {seller.phone ? ` · ${seller.phone}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <FieldLabel hint="Leave as Auto to create/use a Free (₹0) plan">
+                  Free plan
+                </FieldLabel>
+                <select
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm"
+                  value={freeAssignForm.planId}
+                  onChange={(e) =>
+                    setFreeAssignForm((prev) => ({ ...prev, planId: e.target.value }))
+                  }
+                >
+                  <option value="">Auto — Free plan</option>
+                  {freePlans.map((plan) => (
+                    <option key={plan._id} value={plan._id}>
+                      {plan.name} · {plan.durationDays}d · {plan.shopCount} shops
+                    </option>
+                  ))}
+                  {activePlans
+                    .filter((p) => Number(p.price) !== 0)
+                    .map((plan) => (
+                      <option key={plan._id} value={plan._id}>
+                        {plan.name} (paid plan as complimentary) · {formatCurrency(plan.price)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <FieldLabel required>Days</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min={1}
+                    value={freeAssignForm.durationDays}
+                    onChange={(e) =>
+                      setFreeAssignForm((prev) => ({
+                        ...prev,
+                        durationDays: Number(e.target.value),
+                      }))
+                    }
+                    required
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Shops</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min={1}
+                    value={freeAssignForm.shopCount}
+                    onChange={(e) =>
+                      setFreeAssignForm((prev) => ({
+                        ...prev,
+                        shopCount: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Products/shop</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min={1}
+                    value={freeAssignForm.productCountPerShop}
+                    onChange={(e) =>
+                      setFreeAssignForm((prev) => ({
+                        ...prev,
+                        productCountPerShop: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel hint="Optional internal note">Note</FieldLabel>
+                <TextInput
+                  placeholder="e.g. Promo partner, onboarding gift"
+                  value={freeAssignForm.note}
+                  onChange={(e) =>
+                    setFreeAssignForm((prev) => ({ ...prev, note: e.target.value }))
+                  }
+                />
+              </div>
+
+              <Button type="submit" disabled={isAssigningFree} className="w-full">
+                {isAssigningFree ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  <>
+                    <Gift className="h-4 w-4 mr-2" />
+                    Assign free subscription
+                  </>
+                )}
+              </Button>
+            </form>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold text-slate-900">Free subscriptions</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  All complimentary assignments granted by admin
+                </p>
+              </div>
+              <Badge variant="gray">{complimentaryItems.length}</Badge>
+            </div>
+
+            {complimentaryItems.length === 0 ? (
+              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
+                <Gift className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                <p className="font-semibold text-slate-700">No free assignments yet</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Assign a free plan to a seller using the form on the left.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                {complimentaryItems.map((item) => (
+                  <div
+                    key={item._id}
+                    className="rounded-xl border border-slate-200 p-4 bg-white"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">
+                          {item.seller?.name || "Unknown seller"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">
+                          {[item.seller?.email, item.seller?.phone].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                      </div>
+                      <Badge variant={item.isActiveNow ? "success" : "gray"}>
+                        {item.isActiveNow ? "Active" : item.status || "Expired"}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-emerald-50 p-2">
+                        <p className="text-emerald-600">Plan</p>
+                        <p className="font-bold text-emerald-800">
+                          {item.planSnapshot?.name || item.plan?.name || "Free"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-400">Valid until</p>
+                        <p className="font-bold text-slate-800">
+                          {formatDate(item.currentPeriodEnd)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-400">Shops / Products</p>
+                        <p className="font-bold text-slate-800">
+                          {item.planSnapshot?.shopCount ?? "—"} / {item.planSnapshot?.productCountPerShop ?? "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-400">Assigned</p>
+                        <p className="font-bold text-slate-800">{formatDate(item.createdAt)}</p>
+                      </div>
+                    </div>
+
+                    {item.grantNote ? (
+                      <p className="mt-2 text-xs text-slate-500 italic">Note: {item.grantNote}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -865,88 +1119,6 @@ const SubscriptionManagement = () => {
               )}
             </Card>
           )}
-        </div>
-      )}
-
-      {tab === "settings" && (
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Card className="p-5 border-primary-100 bg-primary-50/30">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-xl bg-primary-100 flex items-center justify-center shrink-0">
-                <Smartphone className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <h2 className="font-bold text-slate-900">PhonePe (primary)</h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Sellers pay subscription fees via PhonePe checkout. Subscriptions activate automatically
-                  when payment is captured — no admin approval needed.
-                </p>
-                <ul className="mt-3 text-sm text-slate-600 space-y-1.5">
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    Instant activation after successful payment
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    Webhook + redirect verification handled automatically
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-                    Configure PhonePe credentials in backend <code className="text-xs bg-white px-1 rounded">.env</code>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <IndianRupee className="h-4 w-4" />
-              Bank / UPI details (optional)
-            </h2>
-            <p className="text-xs text-slate-500 mb-5">
-              Legacy reference for manual payments. Not shown to sellers on the PhonePe flow.
-            </p>
-            <form onSubmit={savePaymentSettings} className="space-y-4">
-              {[
-                { key: "bankName", label: "Bank name", placeholder: "e.g. HDFC Bank" },
-                { key: "accountHolder", label: "Account holder name", placeholder: "Registered account name" },
-                { key: "accountNumber", label: "Account number", placeholder: "Bank account number" },
-                { key: "ifsc", label: "IFSC code", placeholder: "e.g. HDFC0001234" },
-                { key: "upiId", label: "UPI ID", placeholder: "e.g. business@upi" },
-              ].map(({ key, label, placeholder }) => (
-                <div key={key}>
-                  <FieldLabel>{label}</FieldLabel>
-                  <TextInput
-                    placeholder={placeholder}
-                    value={paymentSettings[key] || ""}
-                    onChange={(e) => setPaymentSettings((s) => ({ ...s, [key]: e.target.value }))}
-                  />
-                </div>
-              ))}
-              <div>
-                <FieldLabel hint="Shown to sellers if manual payment is used">Payment instructions</FieldLabel>
-                <textarea
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm min-h-[90px] focus:outline-none focus:ring-2 focus:ring-primary-200"
-                  placeholder="e.g. Include your store name in the payment note"
-                  value={paymentSettings.paymentInstructions || ""}
-                  onChange={(e) =>
-                    setPaymentSettings((s) => ({ ...s, paymentInstructions: e.target.value }))
-                  }
-                />
-              </div>
-              <Button type="submit" disabled={isSavingSettings}>
-                {isSavingSettings ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save settings"
-                )}
-              </Button>
-            </form>
-          </Card>
         </div>
       )}
 

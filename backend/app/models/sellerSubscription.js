@@ -35,6 +35,21 @@ const sellerSubscriptionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionPaymentRequest",
     },
+    isComplimentary: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    grantedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    grantNote: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   { timestamps: true },
 );

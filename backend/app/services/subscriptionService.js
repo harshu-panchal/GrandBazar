@@ -518,3 +518,184 @@ export async function listActivePlans() {
     .sort({ sortOrder: 1, price: 1 })
     .lean();
 }
+
+async function ensureFreePlan({
+  shopCount = 1,
+  productCountPerShop = 50,
+  durationDays = 30,
+} = {}) {
+  let plan = await SubscriptionPlan.findOne({
+    isActive: true,
+    price: 0,
+    name: { $regex: /^free$/i },
+  }).lean();
+
+  if (!plan) {
+    plan = await SubscriptionPlan.findOne({ isActive: true, price: 0 })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .lean();
+  }
+
+  if (!plan) {
+    plan = await SubscriptionPlan.create({
+      name: "Free",
+      description: "Complimentary plan assigned by admin",
+      shopCount: Math.max(1, Number(shopCount) || 1),
+      productCountPerShop: Math.max(1, Number(productCountPerShop) || 50),
+      durationDays: Math.max(1, Number(durationDays) || 30),
+      price: 0,
+      isActive: true,
+      sortOrder: 0,
+      billingCycle: "monthly",
+    });
+    plan = plan.toObject ? plan.toObject() : plan;
+  }
+
+  return plan;
+}
+
+/**
+ * Admin grants a free/complimentary subscription to a seller.
+ * Creates a Free plan (price 0) if none exists, unless planId is provided.
+ */
+export async function assignComplimentarySubscription({
+  sellerId,
+  planId,
+  durationDays,
+  shopCount,
+  productCountPerShop,
+  adminId,
+  note = "",
+} = {}) {
+  if (!sellerId) {
+    const err = new Error("Seller is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const seller = await Seller.findById(sellerId).select("_id name email").lean();
+  if (!seller) {
+    const err = new Error("Seller not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  let plan;
+  if (planId) {
+    plan = await SubscriptionPlan.findById(planId).lean();
+    if (!plan || plan.isActive === false) {
+      const err = new Error("Selected plan not found or inactive");
+      err.statusCode = 404;
+      throw err;
+    }
+  } else {
+    plan = await ensureFreePlan({ shopCount, productCountPerShop, durationDays });
+  }
+
+  const days = Math.max(
+    1,
+    Number(durationDays) || Number(plan.durationDays) || 30,
+  );
+  const now = new Date();
+  const periodEnd = addDays(now, days);
+  const snapshot = {
+    ...buildPlanSnapshot(plan),
+    price: 0,
+    durationDays: days,
+  };
+
+  const existingActive = await getActiveSubscriptionForSeller(sellerId);
+  let subscription;
+
+  if (existingActive) {
+    subscription = await SellerSubscription.findByIdAndUpdate(
+      existingActive._id,
+      {
+        planId: plan._id,
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        planSnapshot: snapshot,
+        activatedAt: existingActive.activatedAt || now,
+        expiredAt: null,
+        isComplimentary: true,
+        grantedBy: adminId || null,
+        grantNote: String(note || "").trim(),
+        lastPaymentRequestId: null,
+      },
+      { new: true },
+    );
+  } else {
+    subscription = await SellerSubscription.create({
+      sellerId,
+      planId: plan._id,
+      status: SUBSCRIPTION_STATUS.ACTIVE,
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      planSnapshot: snapshot,
+      activatedAt: now,
+      isComplimentary: true,
+      grantedBy: adminId || null,
+      grantNote: String(note || "").trim(),
+    });
+  }
+
+  await Seller.findByIdAndUpdate(sellerId, {
+    businessModel: BUSINESS_MODEL.SUBSCRIPTION,
+    businessModelChosenAt: new Date(),
+    "businessModelSwitch.status": "none",
+  });
+
+  await restoreSellerVisibility(sellerId);
+  await enforceSubscriptionLimits(sellerId, snapshot);
+
+  return {
+    subscription,
+    plan,
+    seller,
+  };
+}
+
+export async function listComplimentarySubscriptions({ limit = 200 } = {}) {
+  const subs = await SellerSubscription.find({ isComplimentary: true })
+    .sort({ createdAt: -1 })
+    .limit(Math.min(Number(limit) || 200, 500))
+    .lean();
+
+  const sellerIds = [...new Set(subs.map((s) => String(s.sellerId)))];
+  const planIds = [...new Set(subs.map((s) => String(s.planId)))];
+
+  const [sellers, plans] = await Promise.all([
+    Seller.find({ _id: { $in: sellerIds } })
+      .select("name email phone businessModel")
+      .lean(),
+    SubscriptionPlan.find({ _id: { $in: planIds } })
+      .select("name price durationDays shopCount productCountPerShop")
+      .lean(),
+  ]);
+
+  const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
+  const planMap = new Map(plans.map((p) => [String(p._id), p]));
+  const now = new Date();
+
+  return subs.map((sub) => ({
+    ...sub,
+    seller: sellerMap.get(String(sub.sellerId)) || null,
+    plan: planMap.get(String(sub.planId)) || null,
+    isActiveNow:
+      sub.status === SUBSCRIPTION_STATUS.ACTIVE
+      && sub.currentPeriodEnd
+      && new Date(sub.currentPeriodEnd) > now,
+  }));
+}
+
+export async function listSellersForComplimentaryAssign() {
+  return Seller.find({
+    applicationStatus: "approved",
+    isActive: { $ne: false },
+  })
+    .select("name email phone businessModel")
+    .sort({ name: 1 })
+    .limit(500)
+    .lean();
+}

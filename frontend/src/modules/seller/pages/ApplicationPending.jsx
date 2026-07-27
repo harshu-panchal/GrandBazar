@@ -87,7 +87,7 @@ const ApplicationPending = () => {
           <div className="mb-8 flex items-center justify-between gap-4">
             <div className="inline-flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 px-4 py-2">
               {logoUrl ? (
-                <img src={logoUrl} alt={`${appName} logo`} className="h-8 w-8 object-contain" />
+                <img src={logoUrl} alt={`${appName} logo`} className="h-8 w-28 object-contain" />
               ) : (
                 <Store className="h-5 w-5 text-white/80" />
               )}

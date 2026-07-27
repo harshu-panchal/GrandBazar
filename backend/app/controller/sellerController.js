@@ -110,6 +110,14 @@ export const getNearbySellers = async (req, res) => {
       });
     }
 
+    // More favorites → more popular. Then closer stores first.
+    visibleStores.sort((a, b) => {
+      const favDiff =
+        Number(b.favoriteCount || 0) - Number(a.favoriteCount || 0);
+      if (favDiff !== 0) return favDiff;
+      return Number(a.distance || 0) - Number(b.distance || 0);
+    });
+
     return handleResponse(
       res,
       200,
@@ -410,7 +418,7 @@ export const getPublicSellerProfile = async (req, res) => {
     }
 
     const store = await Store.findById(id)
-      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isVerified applicationStatus ownerId")
+      .select("shopName category description banners storeVideo address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount avgRating reviewCount")
       .lean();
 
     if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {

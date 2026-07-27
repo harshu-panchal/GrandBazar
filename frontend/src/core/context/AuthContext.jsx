@@ -144,10 +144,9 @@ export const AuthProvider = ({ children }) => {
                 }) => {
                     if (cancelled) return;
                     await startForegroundPushListener();
-                    if (hasRegisteredFcmToken(currentRole)) return;
-
+                    // Always upsert on JWT change so seller store-switch updates PushToken.userId.
                     const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
-                    if (permission === 'granted') {
+                    if (permission === 'granted' || hasRegisteredFcmToken(currentRole)) {
                         await ensureFcmTokenRegistered({
                             role: currentRole,
                             platform: 'web'

@@ -6,6 +6,7 @@ import categoryRoute from "./categoryRoutes.js";
 import productRoute from "./productRoutes.js";
 import cartRoute from "./cartRoutes.js";
 import wishlistRoute from "./wishlistRoutes.js";
+import favoriteStoreRoute from "./favoriteStoreRoutes.js";
 import orderRoute from "./orderRoutes.js";
 import paymentRoute from "./paymentRoutes.js";
 import notificationRoute from "./notificationRoutes.js";
@@ -45,6 +46,7 @@ const setupRoutes = (app) => {
     router.use("/catalog", catalogRoute);
     router.use("/cart", cartRoute);
     router.use("/wishlist", wishlistRoute);
+    router.use("/favorite-stores", favoriteStoreRoute);
     router.use("/orders", orderRoute);
     router.use("/payments", paymentRoute);
     router.use("/maps", mapsRoute);

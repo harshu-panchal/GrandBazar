@@ -1,19 +1,17 @@
 {
-    "compilerOptions": {
-        "baseUrl": ".",
-        "paths": {
-            "@/*": [
-                "./src/*"
-            ],
-            "@core/*": [
-                "./src/core/*"
-            ],
-            "@shared/*": [
-                "./src/shared/*"
-            ],
-            "@modules/*": [
-                "./src/modules/*"
-            ]
-        }
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "checkJs": false,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/core/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@modules/*": ["./src/modules/*"]
     }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

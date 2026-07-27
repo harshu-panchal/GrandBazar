@@ -147,6 +147,7 @@ export async function customerRescheduleInstant(customerId, orderId, { deliveryD
     deliveryDate,
     windowLabel,
     fulfillmentType: order.fulfillmentType,
+    checkRescheduleCutoff: true,
   });
 
   return applyReschedule(order, buildSchedulePayload(scheduleMeta), "customer", reason || "");
@@ -182,6 +183,7 @@ export async function requestRescheduleApproval(customerId, orderId, { deliveryD
     deliveryDate,
     windowLabel,
     fulfillmentType: order.fulfillmentType,
+    checkRescheduleCutoff: true,
   });
 
   const updated = await Order.findOneAndUpdate(
@@ -241,6 +243,7 @@ export async function approveRescheduleRequest(reviewerId, reviewerModel, orderI
     deliveryDate: order.reschedule.requestedDeliveryDate,
     windowLabel: order.reschedule.requestedWindowLabel,
     fulfillmentType: order.fulfillmentType,
+    checkRescheduleCutoff: true,
   });
 
   const updated = await applyReschedule(
@@ -316,6 +319,7 @@ export async function adminRescheduleOnBehalf(adminId, orderId, { deliveryDate, 
     deliveryDate,
     windowLabel,
     fulfillmentType: order.fulfillmentType,
+    checkRescheduleCutoff: true,
   });
   if (order.schedule?.activationJobId) {
     await removeOrderActivationJob(orderId);

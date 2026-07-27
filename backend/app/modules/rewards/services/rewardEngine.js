@@ -10,7 +10,7 @@ import logger from "../../../services/logger.js";
 
 export async function processOrderRewards(orderId) {
   const order = await Order.findById(orderId)
-    .populate("items.product", "category brand")
+    .populate("items.product", "name category categoryId subcategoryId brand sellerId")
     .lean(false);
 
   if (!order) return { skipped: true, reason: "order_not_found" };

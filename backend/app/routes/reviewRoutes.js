@@ -1,9 +1,10 @@
 import express from "express";
 import {
-    submitReview,
-    getProductReviews,
-    getPendingReviews,
-    updateReviewStatus
+  submitReview,
+  getProductReviews,
+  getStoreReviews,
+  getPendingReviews,
+  updateReviewStatus,
 } from "../controller/reviewController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
@@ -11,8 +12,9 @@ const router = express.Router();
 
 // Public routes
 router.get("/product/:productId", getProductReviews);
+router.get("/store/:storeId", getStoreReviews);
 
-// Authenticated User routes
+// Authenticated customer routes
 router.post("/submit", verifyToken, submitReview);
 
 // Admin only routes

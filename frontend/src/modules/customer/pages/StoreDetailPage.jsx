@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
+import { useFavoriteStores } from "../context/FavoriteStoresContext";
+import { useAuth } from "@core/context/AuthContext";
+import { useToast } from "@shared/components/ui/Toast";
 import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
 import MiniCart from "../components/shared/MiniCart";
@@ -69,6 +72,9 @@ const StoreDetailPage = () => {
   const { sellerId } = useParams();
   const navigate = useNavigate();
   const { currentLocation } = useAppLocation();
+  const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
+  const { isFavoriteStore, toggleFavoriteStore } = useFavoriteStores();
   
   const [seller, setSeller] = useState(null);
   const [products, setProducts] = useState([]);
@@ -76,6 +82,13 @@ const StoreDetailPage = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [liveFavoriteCount, setLiveFavoriteCount] = useState(0);
+  const [storeReviews, setStoreReviews] = useState([]);
+  const [reviewStats, setReviewStats] = useState({ avgRating: 0, reviewCount: 0 });
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: "" });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const theme = useMemo(() => getStoreTheme(seller?.category), [seller?.category]);
 
@@ -119,7 +132,12 @@ const StoreDetailPage = () => {
       ]);
 
       if (profileRes.data?.success) {
-        setSeller(profileRes.data.results || profileRes.data.result || profileRes.data.data);
+        const profile =
+          profileRes.data.results ||
+          profileRes.data.result ||
+          profileRes.data.data;
+        setSeller(profile);
+        setLiveFavoriteCount(Number(profile?.favoriteCount || 0));
       }
 
       if (productsRes.data?.success) {
@@ -143,6 +161,24 @@ const StoreDetailPage = () => {
         }));
 
         setProducts(formattedProds);
+      }
+
+      try {
+        setReviewLoading(true);
+        const reviewsRes = await customerApi.getStoreReviews(sellerId);
+        if (reviewsRes.data?.success) {
+          const payload = reviewsRes.data.result || {};
+          const list = Array.isArray(payload.reviews) ? payload.reviews : [];
+          setStoreReviews(list);
+          setReviewStats({
+            avgRating: Number(payload.avgRating || 0),
+            reviewCount: Number(payload.reviewCount || list.length || 0),
+          });
+        }
+      } catch (reviewError) {
+        console.error("Failed to load store reviews", reviewError);
+      } finally {
+        setReviewLoading(false);
       }
     } catch (e) {
       console.error("Failed to load storefront detail data", e);
@@ -194,6 +230,115 @@ const StoreDetailPage = () => {
   }, [products, selectedCategory, searchQuery]);
 
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
+  const favorited = isFavoriteStore(sellerId);
+  const favoriteCount = Number(liveFavoriteCount || seller?.favoriteCount || 0);
+  const displayAvg = Number(
+    reviewStats.avgRating || seller?.avgRating || 0,
+  ).toFixed(1);
+  const displayReviewCount = Number(
+    reviewStats.reviewCount || seller?.reviewCount || storeReviews.length || 0,
+  );
+
+  const handleStoreReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      showToast("Please login to review this store", "info");
+      navigate("/login");
+      return;
+    }
+    if (!newReview.comment.trim()) {
+      showToast("Please write a short review", "error");
+      return;
+    }
+    try {
+      setIsSubmittingReview(true);
+      const res = await customerApi.submitReview({
+        targetType: "store",
+        storeId: sellerId,
+        rating: newReview.rating,
+        comment: newReview.comment.trim(),
+      });
+      if (res.data?.success) {
+        showToast("Thanks! Your store review is live", "success");
+        setNewReview({ rating: 5, comment: "" });
+        const stats = res.data?.result?.stats;
+        if (stats) {
+          setReviewStats({
+            avgRating: Number(stats.avgRating || 0),
+            reviewCount: Number(stats.reviewCount || 0),
+          });
+          setSeller((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  avgRating: Number(stats.avgRating || 0),
+                  reviewCount: Number(stats.reviewCount || 0),
+                }
+              : prev,
+          );
+        }
+        try {
+          const reviewsRes = await customerApi.getStoreReviews(sellerId);
+          if (reviewsRes.data?.success) {
+            const payload = reviewsRes.data.result || {};
+            const list = Array.isArray(payload.reviews) ? payload.reviews : [];
+            setStoreReviews(list);
+            setReviewStats({
+              avgRating: Number(payload.avgRating || 0),
+              reviewCount: Number(payload.reviewCount || list.length || 0),
+            });
+          }
+        } catch {
+          /* keep optimistic stats */
+        }
+      }
+    } catch (error) {
+      showToast(
+        error?.response?.data?.message || "Failed to submit store review",
+        "error",
+      );
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!seller) return;
+    if (!isAuthenticated) {
+      showToast("Please login to favorite sellers", "info");
+      navigate("/login");
+      return;
+    }
+    try {
+      setFavoriteBusy(true);
+      const result = await toggleFavoriteStore({
+        ...seller,
+        id: sellerId,
+        _id: sellerId,
+      });
+      const nowFavorite = result?.isFavorite === true;
+      if (typeof result?.favoriteCount === "number") {
+        setLiveFavoriteCount(result.favoriteCount);
+      } else {
+        setLiveFavoriteCount((prev) =>
+          Math.max(0, prev + (nowFavorite ? 1 : -1)),
+        );
+      }
+      showToast(
+        nowFavorite
+          ? "Added to favorite sellers"
+          : "Removed from favorite sellers",
+        nowFavorite ? "success" : "info",
+      );
+    } catch (error) {
+      showToast(
+        error?.response?.data?.message || "Could not update favorites",
+        "error",
+      );
+    } finally {
+      setFavoriteBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 pt-[24px] md:pt-[40px]">
@@ -209,15 +354,33 @@ const StoreDetailPage = () => {
             <span>Back to Stores</span>
           </button>
           
-          {seller?.phone && (
-            <a
-              href={`tel:${seller.phone}`}
-              className="h-10 px-4 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm gap-2"
-            >
-              <Phone size={14} className="text-emerald-500 fill-current" />
-              <span>Call Shop</span>
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            {seller && (
+              <button
+                type="button"
+                disabled={favoriteBusy}
+                onClick={handleToggleFavorite}
+                className={cn(
+                  "h-10 px-4 rounded-xl border flex items-center justify-center text-xs font-bold transition-colors shadow-sm gap-2",
+                  favorited
+                    ? "bg-rose-50 border-rose-100 text-rose-600"
+                    : "bg-white border-slate-100 text-slate-700 hover:bg-slate-50",
+                )}
+              >
+                <Heart size={14} className={cn(favorited && "fill-current")} />
+                <span>{favorited ? "Unlike" : "Favorite"}</span>
+              </button>
+            )}
+            {seller?.phone && (
+              <a
+                href={`tel:${seller.phone}`}
+                className="h-10 px-4 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm gap-2"
+              >
+                <Phone size={14} className="text-emerald-500 fill-current" />
+                <span>Call Shop</span>
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Loading Spinner */}
@@ -282,9 +445,15 @@ const StoreDetailPage = () => {
               </div>
             )}
             
-            {/* Store Branding Banner */}
+              {/* Store Branding Banner */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-white/70 border border-white/90 backdrop-blur-md p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.03)] text-slate-800">
               
+              {seller.isOpen === false && (
+                <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  This store is currently Off. You can browse products, but orders cannot be placed right now.
+                </div>
+              )}
+
               {/* Ultra-Premium Floating Welcome Banner */}
               <div className="mb-6 -mx-6 md:-mx-8 -mt-6 md:-mt-8 px-6 md:px-8 py-4 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border-b border-slate-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none relative overflow-hidden group hover:from-amber-500/15 hover:via-rose-500/15 hover:to-violet-500/15 transition-all duration-500">
                 {/* Glowing shimmer stroke line */}
@@ -312,9 +481,15 @@ const StoreDetailPage = () => {
                 </div>
 
                 <div className="flex items-center gap-2.5 z-10 sm:self-center bg-white/60 border border-white/80 px-3.5 py-1.5 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.01)] hover:scale-105 transition-transform duration-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      seller.isOpen === false
+                        ? "bg-rose-500"
+                        : "bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]"
+                    }`}
+                  />
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
-                    Open & Ready to Serve
+                    {seller.isOpen === false ? "Currently Closed" : "Open & Ready to Serve"}
                   </span>
                 </div>
               </div>
@@ -343,6 +518,26 @@ const StoreDetailPage = () => {
                     <h1 className="text-2xl md:text-3xl font-[1000] tracking-tight text-slate-900 mt-1">
                       {seller.shopName || seller.name}
                     </h1>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                        <Star size={12} className="fill-current" />
+                        {displayAvg}/5
+                        {displayReviewCount > 0
+                          ? ` · ${displayReviewCount} reviews`
+                          : ""}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full">
+                        <Heart size={12} className="fill-current" />
+                        {favoriteCount}{" "}
+                        {favoriteCount === 1 ? "favorite" : "favorites"}
+                      </span>
+                      {favoriteCount >= 5 && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+                          <Sparkles size={12} />
+                          Popular
+                        </span>
+                      )}
+                    </div>
                     <p className="text-slate-500 text-[11px] md:text-xs font-semibold max-w-xl leading-relaxed mt-1.5">
                       {seller.description || `Browse clean and premium inventory directly stocked and delivered from ${seller.shopName || seller.name}.`}
                     </p>
@@ -518,6 +713,116 @@ const StoreDetailPage = () => {
               </main>
 
             </div>
+
+            {/* Store ratings & reviews */}
+            <section className="bg-white rounded-[2rem] border border-slate-100 p-6 md:p-8 shadow-sm space-y-6">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <MessageSquare size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                    Store Reviews
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {`${displayAvg}/5 average · ${displayReviewCount} reviews`}
+                  </p>
+                </div>
+              </div>
+
+              <form
+                onSubmit={handleStoreReviewSubmit}
+                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-3"
+              >
+                <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                  Rate this shop
+                </p>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewReview({ ...newReview, rating: star })}
+                      className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center transition-colors",
+                        newReview.rating >= star
+                          ? "bg-orange-50 text-orange-500"
+                          : "bg-white text-slate-300",
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "h-5 w-5",
+                          newReview.rating >= star && "fill-current",
+                        )}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={newReview.comment}
+                  onChange={(e) =>
+                    setNewReview({ ...newReview, comment: e.target.value })
+                  }
+                  rows={3}
+                  placeholder="Share your experience with this store..."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-slate-400"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmittingReview}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                </button>
+              </form>
+
+              {reviewLoading ? (
+                <div className="py-8 flex justify-center">
+                  <div className="h-8 w-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+                </div>
+              ) : storeReviews.length > 0 ? (
+                <div className="space-y-3">
+                  {storeReviews.map((review) => (
+                    <div
+                      key={review._id}
+                      className="rounded-2xl border border-slate-100 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <h4 className="font-bold text-slate-800">
+                            {review.userId?.name || "Customer"}
+                          </h4>
+                          <div className="flex items-center gap-0.5 mt-1">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <Star
+                                key={i}
+                                size={12}
+                                className={cn(
+                                  i <= review.rating
+                                    ? "text-orange-400 fill-orange-400"
+                                    : "text-slate-200",
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                        {review.comment}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-slate-400 text-center py-4">
+                  No store reviews yet.
+                </p>
+              )}
+            </section>
 
           </div>
         )}

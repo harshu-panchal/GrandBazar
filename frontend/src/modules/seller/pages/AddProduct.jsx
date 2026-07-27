@@ -69,6 +69,7 @@ const AddProduct = () => {
       },
     ],
     isSignatureProduct: false,
+    displayOrder: 0,
     addons: [],
   });
 
@@ -177,6 +178,7 @@ const AddProduct = () => {
       }
 
       data.append("isSignatureProduct", formData.isSignatureProduct);
+      data.append("displayOrder", Number(formData.displayOrder) || 0);
 
       // Images
       if (formData.mainImageFile) {
@@ -379,6 +381,28 @@ const AddProduct = () => {
                     className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-mono font-bold outline-none ring-primary/5 focus:ring-2 transition-all"
                     placeholder="AUTO-GENERATED"
                   />
+                </div>
+                <div className="space-y-1.5 flex flex-col">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={formData.displayOrder}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        displayOrder: e.target.value === "" ? "" : Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-semibold outline-none ring-primary/5 focus:ring-2 transition-all"
+                    placeholder="0"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium ml-1">
+                    Lower numbers appear first in your store.
+                  </span>
                 </div>
               </div>
               <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">

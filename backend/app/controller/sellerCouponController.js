@@ -1,10 +1,21 @@
 import Coupon from "../models/coupon.js";
 import mongoose from "mongoose";
+import { normalizeCouponDateInput } from "../services/couponEligibilityService.js";
+
+const normalizeCouponCode = (code = "") =>
+  String(code).trim().toUpperCase().replace(/\s+/g, " ");
+
+const resolveSellerId = (sellerId) => {
+  const id = sellerId?.toString?.() || sellerId;
+  return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : sellerId;
+};
+
+const duplicateCodeMessage = "A coupon with this code already exists for your store";
 
 // Create a new seller coupon
 export const createSellerCoupon = async (req, res) => {
     try {
-        const sellerId = req.user.id || req.user._id;
+        const sellerId = resolveSellerId(req.user.id || req.user._id);
         const {
             code,
             title,
@@ -18,21 +29,28 @@ export const createSellerCoupon = async (req, res) => {
             isActive
         } = req.body;
 
-        // Check if code exists for this seller
+        const normalizedCode = normalizeCouponCode(code);
+        if (!normalizedCode) {
+            return res.status(400).json({
+                success: false,
+                message: "Coupon code is required",
+            });
+        }
+
         const existing = await Coupon.findOne({
-            code: code.toUpperCase(),
-            sellerId
+            code: normalizedCode,
+            sellerId,
         });
 
         if (existing) {
             return res.status(400).json({
                 success: false,
-                message: "A coupon with this code already exists for your store",
+                message: duplicateCodeMessage,
             });
         }
 
         const coupon = await Coupon.create({
-            code: code.toUpperCase(),
+            code: normalizedCode,
             sellerId,
             sponsor: "seller",
             title,
@@ -41,8 +59,8 @@ export const createSellerCoupon = async (req, res) => {
             discountValue,
             maxDiscount,
             minOrderValue,
-            validFrom,
-            validTill,
+            validFrom: normalizeCouponDateInput(validFrom, "start"),
+            validTill: normalizeCouponDateInput(validTill, "end"),
             isActive: isActive !== undefined ? isActive : true,
             couponType: "generic"
         });
@@ -53,6 +71,12 @@ export const createSellerCoupon = async (req, res) => {
             result: coupon,
         });
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: duplicateCodeMessage,
+            });
+        }
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -60,7 +84,7 @@ export const createSellerCoupon = async (req, res) => {
 // Get all coupons for a seller
 export const getSellerCoupons = async (req, res) => {
     try {
-        const sellerId = req.user.id || req.user._id;
+        const sellerId = resolveSellerId(req.user.id || req.user._id);
         const coupons = await Coupon.find({ sellerId }).sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -75,12 +99,45 @@ export const getSellerCoupons = async (req, res) => {
 // Update a seller coupon
 export const updateSellerCoupon = async (req, res) => {
     try {
-        const sellerId = req.user.id || req.user._id;
+        const sellerId = resolveSellerId(req.user.id || req.user._id);
         const couponId = req.params.id;
+        const updates = { ...req.body };
+
+        if (updates.code !== undefined) {
+            const normalizedCode = normalizeCouponCode(updates.code);
+            if (!normalizedCode) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Coupon code is required",
+                });
+            }
+
+            const duplicate = await Coupon.findOne({
+                _id: { $ne: couponId },
+                code: normalizedCode,
+                sellerId,
+            });
+
+            if (duplicate) {
+                return res.status(400).json({
+                    success: false,
+                    message: duplicateCodeMessage,
+                });
+            }
+
+            updates.code = normalizedCode;
+        }
+
+        if (updates.validFrom) {
+            updates.validFrom = normalizeCouponDateInput(updates.validFrom, "start");
+        }
+        if (updates.validTill) {
+            updates.validTill = normalizeCouponDateInput(updates.validTill, "end");
+        }
 
         const coupon = await Coupon.findOneAndUpdate(
             { _id: couponId, sellerId },
-            req.body,
+            updates,
             { new: true, runValidators: true }
         );
 
@@ -97,6 +154,12 @@ export const updateSellerCoupon = async (req, res) => {
             result: coupon,
         });
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: duplicateCodeMessage,
+            });
+        }
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -104,7 +167,7 @@ export const updateSellerCoupon = async (req, res) => {
 // Delete a seller coupon
 export const deleteSellerCoupon = async (req, res) => {
     try {
-        const sellerId = req.user.id || req.user._id;
+        const sellerId = resolveSellerId(req.user.id || req.user._id);
         const couponId = req.params.id;
 
         const coupon = await Coupon.findOneAndDelete({ _id: couponId, sellerId });

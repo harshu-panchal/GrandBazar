@@ -78,6 +78,7 @@ const HeaderCategories = () => {
     applyCommission: false,
     adminCommission: "",
     handlingFees: "",
+    packingFees: "",
     headerColor: "#FF1E1E",
     headerFontColor: "#111111",
     headerIconColor: "#111111",
@@ -205,7 +206,7 @@ const HeaderCategories = () => {
           data.append(key, formData.applyCommission ? "true" : "false");
           return;
         }
-        if (key === "adminCommission" || key === "handlingFees") {
+        if (key === "adminCommission" || key === "handlingFees" || key === "packingFees") {
           data.append(key, formData[key] === "" ? "0" : String(formData[key]));
           return;
         }
@@ -263,6 +264,7 @@ const HeaderCategories = () => {
       applyCommission: false,
       adminCommission: "",
       handlingFees: "",
+      packingFees: "",
       headerColor: "#FF1E1E",
       headerFontColor: "#111111",
       headerIconColor: "#111111",
@@ -287,6 +289,7 @@ const HeaderCategories = () => {
         (item.applyCommission !== false && Number(item.adminCommission || 0) > 0),
       adminCommission: item.adminCommission ?? "",
       handlingFees: item.handlingFees ?? "",
+      packingFees: item.packingFees ?? "",
       headerColor: item.headerColor || "#FF1E1E",
       headerFontColor: item.headerFontColor || "#FFFFFF",
       headerIconColor: item.headerIconColor || "#111111",
@@ -363,7 +366,10 @@ const HeaderCategories = () => {
                   Comm (%)
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Fees (₹)
+                  Handle (₹)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Pack (₹)
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
@@ -376,13 +382,13 @@ const HeaderCategories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="9" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : categories.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="9" className="text-center py-8 text-gray-500">
                     No header categories found
                   </td>
                 </tr>
@@ -438,6 +444,9 @@ const HeaderCategories = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
                       ₹{cat.handlingFees ?? 0}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 font-medium">
+                      ₹{cat.packingFees ?? 0}
                     </td>
                     <td className="py-3 px-4">
                       <Badge
@@ -751,7 +760,7 @@ const HeaderCategories = () => {
                     Apply commission at this level
                   </label>
                   <p className="text-xs text-gray-500">
-                    If unchecked, commission falls through to Level 2, then Subcategory.
+                    Used when no deeper level applies commission. Deepest applied level always wins (Subcategory → Level 2 → Header).
                   </p>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -785,6 +794,24 @@ const HeaderCategories = () => {
                         placeholder="0"
                         min="0"
                       />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-sm font-medium text-gray-700">
+                        Packing Charge (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.packingFees}
+                        onChange={(e) =>
+                          setFormData({ ...formData, packingFees: e.target.value })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                        placeholder="0"
+                        min="0"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Deepest category wins (Subcategory → Level 2 → Header). Separate from seller store packaging.
+                      </p>
                     </div>
                   </div>
                 </div>

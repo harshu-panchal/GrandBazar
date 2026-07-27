@@ -137,6 +137,12 @@ const storeSchema = new mongoose.Schema(
       default: false,
     },
 
+    /** Seller open/close for orders. Closed stores stay listed but show as Off to customers. */
+    isOpen: {
+      type: Boolean,
+      default: true,
+    },
+
     location: {
       type: {
         type: String,
@@ -152,6 +158,17 @@ const storeSchema = new mongoose.Schema(
     serviceRadius: {
       type: Number,
       default: 5,
+    },
+
+    /** Flat packaging fee charged to customer and paid to this store */
+    packagingCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    packagingChargeEnabled: {
+      type: Boolean,
+      default: false,
     },
 
     timezone: {
@@ -212,11 +229,33 @@ const storeSchema = new mongoose.Schema(
         previousPolicy: { type: mongoose.Schema.Types.Mixed, default: null },
       },
     },
+
+    /** How many customers favorited this store — drives popularity ranking. */
+    favoriteCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
+    /** Average of approved store reviews (1–5). */
+    avgRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true },
 );
 
 storeSchema.index({ location: "2dsphere" });
 storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1 });
+storeSchema.index({ favoriteCount: -1 });
 
 export default mongoose.model("Store", storeSchema);

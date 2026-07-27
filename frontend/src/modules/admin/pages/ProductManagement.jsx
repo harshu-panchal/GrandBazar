@@ -78,6 +78,8 @@ const ProductManagement = () => {
         brand: '',
         mainImage: null,
         galleryImages: [],
+        applyCommission: false,
+        adminCommission: '',
         variants: [
             { id: Date.now(), name: 'Default', price: '', salePrice: '', stock: '', sku: '' }
         ]
@@ -169,6 +171,14 @@ const ProductManagement = () => {
             data.append('weight', formData.weight);
             data.append('tags', formData.tags);
             data.append('variants', JSON.stringify(formData.variants));
+            const applyCommission = !!formData.applyCommission;
+            const commissionValue = applyCommission
+                ? Math.max(0, Number(formData.adminCommission) || 0)
+                : 0;
+            data.append('applyCommission', applyCommission);
+            data.append('adminCommission', commissionValue);
+            data.append('adminCommissionValue', commissionValue);
+            data.append('adminCommissionType', 'percentage');
 
             if (formData.mainImageFile) {
                 data.append('mainImage', formData.mainImageFile);
@@ -286,6 +296,10 @@ const ProductManagement = () => {
 
     const openModal = (item = null) => {
         if (item) {
+            const applyCommission =
+                item.applyCommission === true ||
+                (item.applyCommission !== false &&
+                    Number(item.adminCommission || item.adminCommissionValue || 0) > 0);
             setFormData({
                 name: item.name || '',
                 slug: item.slug || '',
@@ -306,6 +320,8 @@ const ProductManagement = () => {
                 brand: item.brand || '',
                 mainImage: item.mainImage || null,
                 galleryImages: item.galleryImages || item.images || [],
+                applyCommission,
+                adminCommission: item.adminCommissionValue ?? item.adminCommission ?? '',
                 variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => ({ ...v, id: v._id || Date.now() })) : [
                     {
                         id: Date.now(),
@@ -325,6 +341,8 @@ const ProductManagement = () => {
                 header: '', categoryId: '', subcategoryId: '', status: 'active',
                 isFeatured: false, tags: '', weight: '', brand: '',
                 mainImage: null, galleryImages: [],
+                applyCommission: false,
+                adminCommission: '',
                 variants: [
                     { id: Date.now(), name: 'Default', price: '', salePrice: '', stock: '', sku: '' }
                 ]
@@ -810,6 +828,44 @@ const ProductManagement = () => {
                                                         onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                                                         className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-mono font-bold outline-none ring-primary/5 focus:ring-2"
                                                         placeholder="AUTO-GENERATED"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!formData.applyCommission}
+                                                        onChange={(e) =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                applyCommission: e.target.checked,
+                                                                adminCommission: e.target.checked ? formData.adminCommission : '',
+                                                            })
+                                                        }
+                                                        className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
+                                                    />
+                                                    Apply product commission
+                                                </label>
+                                                <p className="text-xs text-slate-500">
+                                                    Works for main products and add-on products. When enabled, this overrides category commission at checkout.
+                                                </p>
+                                                <div className="max-w-xs space-y-2">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        Admin Commission (%)
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        value={formData.adminCommission}
+                                                        disabled={!formData.applyCommission}
+                                                        onChange={(e) =>
+                                                            setFormData({ ...formData, adminCommission: e.target.value })
+                                                        }
+                                                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50 disabled:bg-slate-100"
+                                                        placeholder="e.g. 10"
                                                     />
                                                 </div>
                                             </div>

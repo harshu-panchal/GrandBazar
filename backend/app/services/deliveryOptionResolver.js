@@ -81,6 +81,14 @@ export function isStoreOperationallyOpen(store, now = new Date()) {
     return { open: false, reason: "store_inactive" };
   }
 
+  if (store.isOpen === false) {
+    return {
+      open: false,
+      reason: "store_closed",
+      message: "Shop is currently closed",
+    };
+  }
+
   const availability = resolveStoreAvailability(store);
   const tz = store.timezone || DEFAULT_STORE_TIMEZONE();
   const zoned = getZonedParts(now, tz);

@@ -210,9 +210,13 @@ const orderSchema = new mongoose.Schema(
       productSubtotal: { type: Number, default: 0 },
       deliveryFeeCharged: { type: Number, default: 0 },
       handlingFeeCharged: { type: Number, default: 0 },
+      packingFeeCharged: { type: Number, default: 0 },
       tipTotal: { type: Number, default: 0 },
       discountTotal: { type: Number, default: 0 },
       taxTotal: { type: Number, default: 0 },
+      customerSurchargeAmount: { type: Number, default: 0 },
+      customerSurchargeReason: { type: String, default: "" },
+      packagingChargeAmount: { type: Number, default: 0 },
       grandTotal: { type: Number, default: 0 },
       sellerPayoutTotal: { type: Number, default: 0 },
       adminProductCommissionTotal: { type: Number, default: 0 },
@@ -234,6 +238,8 @@ const orderSchema = new mongoose.Schema(
         categoryCommissionSettings: { type: Array, default: [] },
         handlingFeeStrategy: { type: String, default: null },
         handlingCategoryUsed: { type: Object, default: {} },
+        packingFeeStrategy: { type: String, default: null },
+        packingCategoryUsed: { type: Object, default: {} },
       },
       lineItems: {
         type: Array,
@@ -442,6 +448,18 @@ const orderSchema = new mongoose.Schema(
         },
       ],
       default: [],
+    },
+    /** Latest admin store reassignment (also mirrored in modificationTimeline). */
+    storeReassignment: {
+      fromStoreId: { type: String, default: "" },
+      toStoreId: { type: String, default: "" },
+      fromShopName: { type: String, default: "" },
+      toShopName: { type: String, default: "" },
+      reason: { type: String, default: "" },
+      note: { type: String, default: "" },
+      reassignedAt: { type: Date, default: null },
+      reassignedBy: { type: String, default: "" },
+      previousWorkflowStatus: { type: String, default: "" },
     },
     replacementRequests: {
       type: [

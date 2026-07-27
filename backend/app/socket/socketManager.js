@@ -43,6 +43,14 @@ export const initSocket = (io) => {
     }
     if (role === "seller") {
       socket.join(`seller:${userId}`);
+      const activeStoreId = socket.user?.activeStoreId;
+      const accountId = socket.user?.accountId;
+      if (activeStoreId && String(activeStoreId) !== String(userId)) {
+        socket.join(`seller:${activeStoreId}`);
+      }
+      if (accountId && String(accountId) !== String(userId)) {
+        socket.join(`seller:${accountId}`);
+      }
     }
     if (role === "customer" || role === "user") {
       socket.join(`customer:${userId}`);

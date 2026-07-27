@@ -147,7 +147,7 @@ const Topbar = ({ onMenuClick }) => {
                 <div className="flex items-center gap-2 mr-2 md:mr-4 min-w-0 flex-1 md:flex-none md:min-w-0">
                     <div className="flex items-center space-x-2 md:hidden shrink-0">
                         {logoUrl ? (
-                            <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100">
+                            <div className="h-9 w-[6.5rem] rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100 bg-white flex items-center justify-center p-1">
                                 <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
                             </div>
                         ) : (

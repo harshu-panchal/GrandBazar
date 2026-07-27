@@ -50,14 +50,22 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
             See All
           </button>
         </div>
+        {selectedCoupon && (
+          <p className="text-[11px] text-slate-500 font-medium mb-3">
+            Only one coupon can be applied per order. Applying another will replace{" "}
+            <span className="font-bold text-primary">{selectedCoupon.code}</span>.
+          </p>
+        )}
         {coupons.length === 0 ? (
           <p className="text-xs text-slate-400 font-medium py-2">
-            No coupons available right now.
+            No coupons available for the store(s) in your cart right now. You can still enter a code below via See All.
           </p>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 snap-x">
             {coupons.map((coupon) => {
               const isApplied = selectedCoupon?.code === coupon.code;
+              const hasOtherApplied =
+                selectedCoupon && selectedCoupon.code !== coupon.code;
               return (
                 <div
                   key={coupon.code}
@@ -104,7 +112,7 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
                     <button
                       onClick={() => onApplyCoupon(coupon)}
                       className="mt-auto w-full py-1.5 rounded-xl text-xs font-black bg-primary text-primary-foreground hover:bg-[var(--brand-400)] active:scale-95 transition-all">
-                      Apply
+                      {hasOtherApplied ? "Switch to this" : "Apply"}
                     </button>
                   )}
                 </div>
@@ -122,21 +130,25 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
             <DialogDescription>Browse available offers and save more.</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-            {coupons.map((coupon) => (
+            {coupons.map((coupon) => {
+              const isApplied = selectedCoupon?.code === coupon.code;
+              const hasOtherApplied =
+                selectedCoupon && selectedCoupon.code !== coupon.code;
+              return (
               <div
                 key={coupon.code}
-                className={`p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${selectedCoupon?.code === coupon.code
+                className={`p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${isApplied
                     ? "border-primary bg-brand-50 shadow-sm"
                     : "border-slate-100 bg-white hover:border-slate-200"
                   }`}>
-                {selectedCoupon?.code === coupon.code && (
+                {isApplied && (
                   <div className="absolute top-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-bl-xl">
                     <Check size={12} strokeWidth={4} />
                   </div>
                 )}
                 <div className="flex items-start gap-3">
                   <div
-                    className={`p-3 rounded-2xl ${selectedCoupon?.code === coupon.code
+                    className={`p-3 rounded-2xl ${isApplied
                         ? "bg-primary/10 text-primary"
                         : "bg-orange-50 text-orange-500"
                       }`}>
@@ -151,17 +163,22 @@ const CheckoutCouponSection = React.memo(function CheckoutCouponSection({
                     </p>
                     <button
                       onClick={() => onApplyCoupon(coupon)}
-                      disabled={selectedCoupon?.code === coupon.code}
-                      className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${selectedCoupon?.code === coupon.code
+                      disabled={isApplied}
+                      className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${isApplied
                           ? "bg-white text-primary border-2 border-primary cursor-default"
                           : "bg-primary text-primary-foreground hover:bg-[#0b721b]"
                         }`}>
-                      {selectedCoupon?.code === coupon.code ? "Applied" : "Apply Now"}
+                      {isApplied
+                        ? "Applied"
+                        : hasOtherApplied
+                          ? "Switch to this"
+                          : "Apply Now"}
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
           <div className="pt-2">
             <div className="relative">

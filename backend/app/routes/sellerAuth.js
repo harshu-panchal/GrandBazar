@@ -10,6 +10,7 @@ import {
 } from "../controller/sellerAuthController.js";
 import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
+import { getSellerDashboard } from "../controller/seller/dashboardController.js";
 import {
     getSellerStaff,
     getSellerStaffOverview,
@@ -161,6 +162,7 @@ router.put(
 );
 
 // Analytics & Financials
+router.get("/dashboard", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerDashboard);
 router.get("/stats", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerStats);
 router.get("/earnings", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerEarnings);
 router.get("/wallet/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerWalletSummaryController);

@@ -6,6 +6,7 @@ import getPagination from "../utils/pagination.js";
 import {
   parseCustomerCoordinates,
   getNearbySellerIdsForCustomer,
+  getNearbySellersWithDistanceForCustomer,
 } from "../services/customerVisibilityService.js";
 import {
   enqueueProductIndex,
@@ -38,6 +39,35 @@ function isCustomerVisibilityRequest(req) {
   const role = String(req.user?.role || "").toLowerCase();
   // Admin and seller should not be subject to location filtering
   return !role || (role !== "admin" && role !== "seller" && role !== "delivery");
+}
+
+function normalizeProductCommissionFields(data = {}) {
+  const apply =
+    data.applyCommission === true || data.applyCommission === "true";
+  const rawValue = Number(
+    data.adminCommissionValue ?? data.adminCommission ?? 0,
+  );
+  const value = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+  const type =
+    data.adminCommissionType === "fixed" ? "fixed" : "percentage";
+  const fixedRule =
+    data.adminCommissionFixedRule === "per_item" ? "per_item" : "per_qty";
+
+  return {
+    applyCommission: apply,
+    adminCommission: apply ? value : 0,
+    adminCommissionType: type,
+    adminCommissionValue: apply ? value : 0,
+    adminCommissionFixedRule: fixedRule,
+  };
+}
+
+function stripCommissionFields(data = {}) {
+  delete data.applyCommission;
+  delete data.adminCommission;
+  delete data.adminCommissionType;
+  delete data.adminCommissionValue;
+  delete data.adminCommissionFixedRule;
 }
 
 function parseSellerIdFilters({ sellerId, sellerIds }) {
@@ -257,6 +287,7 @@ export const getProducts = async (req, res) => {
     const requestedSellerIds = parseSellerIdFilters({ sellerId, sellerIds });
     const coords = parseCustomerCoordinates({ lat, lng });
     const shouldApplyLocationFilter = enforceRadius || coords.valid;
+    let sellerDistanceMap = new Map();
     if (enforceRadius && !coords.valid) {
       return handleResponse(
         res,
@@ -265,9 +296,13 @@ export const getProducts = async (req, res) => {
       );
     }
     if (shouldApplyLocationFilter) {
-      const nearbySellerIds = await getNearbySellerIdsForCustomer(
+      const nearbySellers = await getNearbySellersWithDistanceForCustomer(
         coords.lat,
         coords.lng,
+      );
+      const nearbySellerIds = nearbySellers.map((entry) => entry.id);
+      sellerDistanceMap = new Map(
+        nearbySellers.map((entry) => [entry.id, entry.distanceKm]),
       );
 
       if (!nearbySellerIds.length) {
@@ -351,14 +386,17 @@ export const getProducts = async (req, res) => {
       "price-desc": { price: -1, createdAt: -1 },
       "stock-asc": { stock: 1, createdAt: -1 },
       "stock-desc": { stock: -1, createdAt: -1 },
+      "display-asc": { displayOrder: 1, createdAt: -1 },
+      "display-desc": { displayOrder: -1, createdAt: -1 },
     };
-    const sortQuery = sortMap[String(sort || "newest").toLowerCase()] || sortMap.newest;
+    const defaultSort = sellerId ? "display-asc" : "newest";
+    const sortQuery = sortMap[String(sort || defaultSort).toLowerCase()] || sortMap[defaultSort];
 
     const fetchFn = async () => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct displayOrder variants addons createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -391,21 +429,26 @@ export const getProducts = async (req, res) => {
       const nameMap = Object.fromEntries([...categoryEntries, ...sellerEntries]);
 
       // Enrich products to match the shape previously returned by .populate()
-      const products = rawProducts.map((p) => ({
-        ...p,
-        headerId: p.headerId
-          ? { _id: p.headerId, name: nameMap[String(p.headerId)] ?? null }
-          : null,
-        categoryId: p.categoryId
-          ? { _id: p.categoryId, name: nameMap[String(p.categoryId)] ?? null }
-          : null,
-        subcategoryId: p.subcategoryId
-          ? { _id: p.subcategoryId, name: nameMap[String(p.subcategoryId)] ?? null }
-          : null,
-        sellerId: p.sellerId
-          ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
-          : null,
-      }));
+      const products = rawProducts.map((p) => {
+        const sellerKey = p.sellerId ? String(p.sellerId) : "";
+        const distanceKm = sellerKey ? sellerDistanceMap.get(sellerKey) : undefined;
+        return {
+          ...p,
+          headerId: p.headerId
+            ? { _id: p.headerId, name: nameMap[String(p.headerId)] ?? null }
+            : null,
+          categoryId: p.categoryId
+            ? { _id: p.categoryId, name: nameMap[String(p.categoryId)] ?? null }
+            : null,
+          subcategoryId: p.subcategoryId
+            ? { _id: p.subcategoryId, name: nameMap[String(p.subcategoryId)] ?? null }
+            : null,
+          sellerId: p.sellerId
+            ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
+            : null,
+          ...(Number.isFinite(distanceKm) ? { distance: distanceKm, distanceKm } : {}),
+        };
+      });
 
       return {
         items: normalizeProductListModeration(products),
@@ -471,8 +514,10 @@ export const getSellerProducts = async (req, res) => {
       "price-desc": { price: -1, createdAt: -1 },
       "stock-asc": { stock: 1, createdAt: -1 },
       "stock-desc": { stock: -1, createdAt: -1 },
+      "display-asc": { displayOrder: 1, createdAt: -1 },
+      "display-desc": { displayOrder: -1, createdAt: -1 },
     };
-    const sortQuery = sortMap[String(sort || "newest").toLowerCase()] || sortMap.newest;
+    const sortQuery = sortMap[String(sort || "display-asc").toLowerCase()] || sortMap["display-asc"];
 
     const [
       products,
@@ -487,7 +532,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct variants addons importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct displayOrder variants addons importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -688,6 +733,16 @@ export const createProduct = async (req, res) => {
     if (productData.isSignatureProduct !== undefined) {
       productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
     }
+    if (productData.displayOrder !== undefined) {
+      const order = Number(productData.displayOrder);
+      productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
+    }
+
+    if (role === "admin" || role === "superadmin") {
+      Object.assign(productData, normalizeProductCommissionFields(productData));
+    } else {
+      stripCommissionFields(productData);
+    }
 
     // Handle variants if string (multipart/form-data sends as string)
     if (typeof productData.variants === "string") {
@@ -857,6 +912,16 @@ export const updateProduct = async (req, res) => {
     if (productData.isSignatureProduct !== undefined) {
       productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
     }
+    if (productData.displayOrder !== undefined) {
+      const order = Number(productData.displayOrder);
+      productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
+    }
+
+    if (role === "admin" || role === "superadmin") {
+      Object.assign(productData, normalizeProductCommissionFields(productData));
+    } else {
+      stripCommissionFields(productData);
+    }
 
     if (typeof productData.variants === "string") {
       try {
@@ -1000,7 +1065,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -1112,7 +1177,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

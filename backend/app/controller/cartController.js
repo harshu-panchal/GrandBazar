@@ -1,7 +1,9 @@
 import Cart from "../models/cart.js";
 import Product from "../models/product.js";
+import Store from "../models/store.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
+import { isStoreOperationallyOpen } from "../services/deliveryOptionResolver.js";
 
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
@@ -24,8 +26,34 @@ async function getCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id")
+    .select("_id sellerId")
     .lean();
+}
+
+function toSellerIdString(value) {
+  if (!value) return "";
+  if (typeof value === "object" && value._id) return String(value._id);
+  return String(value);
+}
+
+/**
+ * Keep only cart lines that belong to the given seller (single-store cart).
+ */
+async function keepOnlySellerItems(cart, sellerId) {
+  if (!cart?.items?.length || !sellerId) return { removed: 0 };
+  const productIds = cart.items.map((item) => item.productId).filter(Boolean);
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select("_id sellerId")
+    .lean();
+  const sellerByProductId = new Map(
+    products.map((product) => [String(product._id), toSellerIdString(product.sellerId)]),
+  );
+  const before = cart.items.length;
+  cart.items = cart.items.filter((item) => {
+    const lineSellerId = sellerByProductId.get(String(item.productId));
+    return lineSellerId && lineSellerId === String(sellerId);
+  });
+  return { removed: before - cart.items.length };
 }
 
 async function fetchPopulatedCart(cartId) {
@@ -78,11 +106,31 @@ export const addToCart = async (req, res) => {
       return handleResponse(res, 404, "Product is not available for purchase");
     }
 
+    const incomingSellerId = toSellerIdString(customerVisibleProduct.sellerId);
+    if (!incomingSellerId) {
+      return handleResponse(res, 400, "Product store is missing");
+    }
+
+    const store = await Store.findById(incomingSellerId)
+      .select("isActive isVerified isOpen availability timezone applicationStatus")
+      .lean();
+    const operational = isStoreOperationallyOpen(store);
+    if (!operational.open) {
+      return handleResponse(
+        res,
+        400,
+        operational.message || "This shop is currently closed and not accepting orders",
+      );
+    }
+
     let cart = await Cart.findOne({ customerId });
 
     if (!cart) {
       cart = new Cart({ customerId, items: [] });
     }
+
+    // One store per cart: drop items from any other seller before adding.
+    const { removed } = await keepOnlySellerItems(cart, incomingSellerId);
 
     const itemIndex = cart.items.findIndex(
       (item) =>
@@ -99,7 +147,18 @@ export const addToCart = async (req, res) => {
     await cart.save();
     const updatedCart = await fetchPopulatedCart(cart._id);
 
-    return handleResponse(res, 200, "Item added to cart", updatedCart);
+    return handleResponse(
+      res,
+      200,
+      removed > 0
+        ? "Cart updated for a single store. Previous store items were removed."
+        : "Item added to cart",
+      {
+        ...updatedCart,
+        replacedOtherSellerItems: removed > 0,
+        removedOtherSellerItemCount: removed,
+      },
+    );
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

@@ -54,6 +54,9 @@ const SellerDetail = () => {
         phone: '',
         category: '—',
         rating: null,
+        avgRating: 0,
+        reviewCount: 0,
+        favoriteCount: 0,
         status: 'active',
         joinedDate: '—',
         location: '—',
@@ -98,6 +101,10 @@ const SellerDetail = () => {
                     totalOrders: detail.totalOrders ?? prev.totalOrders,
                     totalRevenue: detail.totalRevenue ?? prev.totalRevenue,
                     serviceRadius: detail.serviceRadius ?? prev.serviceRadius,
+                    avgRating: Number(detail.avgRating || 0),
+                    reviewCount: Number(detail.reviewCount || 0),
+                    favoriteCount: Number(detail.favoriteCount || 0),
+                    rating: Number(detail.avgRating || 0),
                     bankInfo: detail.bankInfo || prev.bankInfo,
                 }));
             }
@@ -200,7 +207,7 @@ const SellerDetail = () => {
                     { label: 'Wallet Balance', value: '—', icon: Wallet, color: 'emerald', sub: 'Available for Payout' },
                     { label: 'Total Revenue', value: seller.totalRevenue ? `₹${(seller.totalRevenue / 1000).toFixed(1)}k` : '—', icon: TrendingUp, color: 'blue', sub: 'Gross Sales' },
                     { label: 'Orders Handled', value: seller.totalOrders || 0, icon: ShoppingBag, color: 'indigo', sub: 'Lifetime Orders' },
-                    { label: 'Store Rating', value: seller.rating ? `${seller.rating} / 5.0` : '—', icon: Star, color: 'amber', sub: 'Customer reviews' },
+                    { label: 'Store Rating', value: `${Number(seller.avgRating || seller.rating || 0).toFixed(1)} / 5`, icon: Star, color: 'amber', sub: `${seller.reviewCount || 0} customer reviews` },
                 ].map((stat, i) => (
                     <Card key={i} className="p-6 border-none shadow-xl ring-1 ring-slate-100 bg-white group hover:ring-primary/20 transition-all">
                         <div className="flex items-center justify-between mb-4">

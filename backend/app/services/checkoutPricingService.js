@@ -4,9 +4,11 @@ import { distanceMeters } from "../utils/geoUtils.js";
 import { HANDLING_FEE_STRATEGY } from "../constants/finance.js";
 import {
   calculateHandlingFee,
+  calculatePackingFee,
   generateOrderPaymentBreakdown,
   hydrateOrderItems,
 } from "./finance/pricingService.js";
+import { getOrCreateFinanceSettings } from "./finance/financeSettingsService.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 
 function normalizeLocation(location = null) {
@@ -92,9 +94,15 @@ function buildAggregateBreakdown(sellerBreakdowns = []) {
     productSubtotal: sumField(sellerBreakdowns, "productSubtotal"),
     deliveryFeeCharged: sumField(sellerBreakdowns, "deliveryFeeCharged"),
     handlingFeeCharged: sumField(sellerBreakdowns, "handlingFeeCharged"),
+    packingFeeCharged: sumField(sellerBreakdowns, "packingFeeCharged"),
     tipTotal: sumField(sellerBreakdowns, "tipTotal"),
     discountTotal: sumField(sellerBreakdowns, "discountTotal"),
     taxTotal: sumField(sellerBreakdowns, "taxTotal"),
+    customerSurchargeAmount: sumField(sellerBreakdowns, "customerSurchargeAmount"),
+    customerSurchargeReason:
+      sellerBreakdowns.find((row) => row?.customerSurchargeReason)?.customerSurchargeReason ||
+      "",
+    packagingChargeAmount: sumField(sellerBreakdowns, "packagingChargeAmount"),
     grandTotal: sumField(sellerBreakdowns, "grandTotal"),
     sellerPayoutTotal: sumField(sellerBreakdowns, "sellerPayoutTotal"),
     adminProductCommissionTotal: sumField(sellerBreakdowns, "adminProductCommissionTotal"),
@@ -116,6 +124,16 @@ function buildAggregateBreakdown(sellerBreakdowns = []) {
         sellerId: row.sellerId,
         snapshots: row.snapshots || {},
       })),
+      customerSurcharge: (() => {
+        const amount = sumField(sellerBreakdowns, "customerSurchargeAmount");
+        if (amount <= 0) return null;
+        return {
+          amount,
+          reason:
+            sellerBreakdowns.find((row) => row?.customerSurchargeReason)
+              ?.customerSurchargeReason || "Additional charge",
+        };
+      })(),
     },
     lineItems: sellerBreakdowns.flatMap((row) =>
       (Array.isArray(row.lineItems) ? row.lineItems : []).map((lineItem) => ({
@@ -167,19 +185,32 @@ function allocateCheckoutTipToSellerBreakdowns(
   });
 }
 
-async function computeGlobalHandlingFeeForCheckout(hydratedItems = [], { session = null } = {}) {
-  const headerIds = Array.from(
-    new Set(hydratedItems.map((item) => String(item?.headerCategoryId || "")).filter(Boolean)),
+async function computeGlobalCategoryFeesForCheckout(hydratedItems = [], { session = null } = {}) {
+  const categoryIds = Array.from(
+    new Set(
+      hydratedItems
+        .flatMap((item) => [
+          item?.headerCategoryId,
+          item?.categoryId,
+          item?.subcategoryId,
+        ])
+        .map((id) => String(id || ""))
+        .filter(Boolean),
+    ),
   );
-  if (headerIds.length === 0) {
+  if (categoryIds.length === 0) {
     return {
       handlingFeeCharged: 0,
       handlingCategoryUsed: null,
+      packingFeeCharged: 0,
+      packingCategoryUsed: null,
     };
   }
 
-  const categoryQuery = Category.find({ _id: { $in: headerIds } })
-    .select("_id name handlingFees handlingFeeType handlingFeeValue")
+  const categoryQuery = Category.find({ _id: { $in: categoryIds } })
+    .select(
+      "_id name type handlingFees handlingFeeType handlingFeeValue packingFees packingFeeType packingFeeValue",
+    )
     .lean();
   if (session) categoryQuery.session(session);
   const categories = await categoryQuery;
@@ -189,68 +220,169 @@ async function computeGlobalHandlingFeeForCheckout(hydratedItems = [], { session
     handlingFeeStrategy: HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE,
     categoryById,
   });
+  const packing = calculatePackingFee(hydratedItems, {
+    packingFeeStrategy: HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE,
+    categoryById,
+  });
 
   return {
     handlingFeeCharged: Number(handling.handlingFeeCharged || 0),
     handlingCategoryUsed: handling.handlingCategoryUsed || null,
+    packingFeeCharged: Number(packing.packingFeeCharged || 0),
+    packingCategoryUsed: packing.packingCategoryUsed || null,
   };
 }
 
-function applyGlobalHandlingFeeToSellerBreakdowns(
-  sellerBreakdownEntries = [],
-  globalHandling = { handlingFeeCharged: 0, handlingCategoryUsed: null },
-) {
-  const fee = Number(globalHandling?.handlingFeeCharged || 0);
-  if (!Number.isFinite(fee) || fee <= 0 || sellerBreakdownEntries.length === 0) return;
-
-  const usedHeaderId = String(globalHandling?.handlingCategoryUsed?.headerCategoryId || "");
-  let chosenSellerId = null;
-  if (usedHeaderId) {
+function pickSellerForCategoryFee(sellerBreakdownEntries = [], usedCategoryId = "") {
+  const feeCategoryId = String(usedCategoryId || "");
+  if (feeCategoryId) {
     for (const entry of sellerBreakdownEntries) {
       const entryItems = Array.isArray(entry?.items) ? entry.items : [];
-      if (entryItems.some((item) => String(item?.headerCategoryId || "") === usedHeaderId)) {
-        chosenSellerId = entry.sellerId;
-        break;
+      if (
+        entryItems.some((item) => {
+          const ids = [
+            item?.resolvedHandlingCategoryId,
+            item?.resolvedPackingCategoryId,
+            item?.headerCategoryId,
+            item?.categoryId,
+            item?.subcategoryId,
+          ].map((id) => String(id || ""));
+          return ids.includes(feeCategoryId);
+        })
+      ) {
+        return entry.sellerId;
       }
     }
   }
-  if (!chosenSellerId) {
-    chosenSellerId = sellerBreakdownEntries[0]?.sellerId || null;
-  }
+  return sellerBreakdownEntries[0]?.sellerId || null;
+}
+
+function applyGlobalCategoryFeesToSellerBreakdowns(
+  sellerBreakdownEntries = [],
+  globalFees = {
+    handlingFeeCharged: 0,
+    handlingCategoryUsed: null,
+    packingFeeCharged: 0,
+    packingCategoryUsed: null,
+  },
+) {
+  if (!sellerBreakdownEntries.length) return;
+
+  const handlingFee = Number(globalFees?.handlingFeeCharged || 0);
+  const packingFee = Number(globalFees?.packingFeeCharged || 0);
+  const hasHandling = Number.isFinite(handlingFee) && handlingFee > 0;
+  const hasPacking = Number.isFinite(packingFee) && packingFee > 0;
+  if (!hasHandling && !hasPacking) return;
+
+  const handlingSellerId = hasHandling
+    ? pickSellerForCategoryFee(
+        sellerBreakdownEntries,
+        globalFees?.handlingCategoryUsed?.categoryId ||
+          globalFees?.handlingCategoryUsed?.headerCategoryId,
+      )
+    : null;
+  const packingSellerId = hasPacking
+    ? pickSellerForCategoryFee(
+        sellerBreakdownEntries,
+        globalFees?.packingCategoryUsed?.categoryId ||
+          globalFees?.packingCategoryUsed?.headerCategoryId,
+      )
+    : null;
 
   for (const entry of sellerBreakdownEntries) {
     const breakdown = entry?.breakdown;
     if (!breakdown) continue;
 
-    const shouldCharge = chosenSellerId && entry.sellerId === chosenSellerId;
-    const handlingFeeCharged = shouldCharge ? fee : 0;
+    const handlingFeeCharged =
+      hasHandling && handlingSellerId && entry.sellerId === handlingSellerId
+        ? handlingFee
+        : 0;
+    const packingFeeCharged =
+      hasPacking && packingSellerId && entry.sellerId === packingSellerId
+        ? packingFee
+        : 0;
 
     breakdown.handlingFeeCharged = handlingFeeCharged;
-    breakdown.snapshots = breakdown.snapshots && typeof breakdown.snapshots === "object"
-      ? breakdown.snapshots
-      : {};
+    breakdown.packingFeeCharged = packingFeeCharged;
+    breakdown.snapshots =
+      breakdown.snapshots && typeof breakdown.snapshots === "object"
+        ? breakdown.snapshots
+        : {};
     breakdown.snapshots.handlingFeeStrategy = HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE;
-    breakdown.snapshots.handlingCategoryUsed = shouldCharge
-      ? globalHandling.handlingCategoryUsed || {}
-      : {};
+    breakdown.snapshots.packingFeeStrategy = HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE;
+    breakdown.snapshots.handlingCategoryUsed =
+      handlingFeeCharged > 0 ? globalFees.handlingCategoryUsed || {} : {};
+    breakdown.snapshots.packingCategoryUsed =
+      packingFeeCharged > 0 ? globalFees.packingCategoryUsed || {} : {};
 
     const productSubtotal = Number(breakdown.productSubtotal || 0);
     const deliveryFeeCharged = Number(breakdown.deliveryFeeCharged || 0);
     const discountTotal = Number(breakdown.discountTotal || 0);
     const taxTotal = Number(breakdown.taxTotal || 0);
+    const packagingChargeAmount = Number(breakdown.packagingChargeAmount || 0);
     const riderPayoutTotal = Number(breakdown.riderPayoutTotal || 0);
     const adminProductCommissionTotal = Number(breakdown.adminProductCommissionTotal || 0);
+    const tipTotal = Number(breakdown.tipTotal || 0);
+    const customerSurchargeAmount = Number(breakdown.customerSurchargeAmount || 0);
 
     breakdown.grandTotal = round2(
-      productSubtotal + deliveryFeeCharged + handlingFeeCharged - discountTotal + taxTotal,
+      productSubtotal +
+        deliveryFeeCharged +
+        handlingFeeCharged +
+        packingFeeCharged +
+        packagingChargeAmount +
+        tipTotal +
+        customerSurchargeAmount -
+        discountTotal +
+        taxTotal,
     );
     breakdown.platformLogisticsMargin = round2(
-      deliveryFeeCharged + handlingFeeCharged - riderPayoutTotal,
+      deliveryFeeCharged + handlingFeeCharged + packingFeeCharged - riderPayoutTotal,
     );
     breakdown.platformTotalEarning = round2(
-      adminProductCommissionTotal + breakdown.platformLogisticsMargin,
+      adminProductCommissionTotal +
+        breakdown.platformLogisticsMargin +
+        customerSurchargeAmount,
     );
   }
+}
+
+function applyCustomerSurchargeToSellerBreakdowns(
+  sellerBreakdownEntries = [],
+  surcharge = { amount: 0, reason: "" },
+) {
+  const amount = round2(surcharge?.amount || 0);
+  const reason = String(surcharge?.reason || "").trim();
+  if (!Number.isFinite(amount) || amount <= 0 || sellerBreakdownEntries.length === 0) {
+    for (const entry of sellerBreakdownEntries) {
+      if (!entry?.breakdown) continue;
+      entry.breakdown.customerSurchargeAmount = 0;
+      entry.breakdown.customerSurchargeReason = "";
+    }
+    return;
+  }
+
+  // Charge once on the primary (first) seller order — customer pays once
+  sellerBreakdownEntries.forEach((entry, index) => {
+    const breakdown = entry?.breakdown;
+    if (!breakdown) return;
+
+    if (index === 0) {
+      breakdown.customerSurchargeAmount = amount;
+      breakdown.customerSurchargeReason = reason || "Additional charge";
+      breakdown.grandTotal = round2(Number(breakdown.grandTotal || 0) + amount);
+      breakdown.platformTotalEarning = round2(
+        Number(breakdown.platformTotalEarning || 0) + amount,
+      );
+      breakdown.snapshots = {
+        ...(breakdown.snapshots || {}),
+        customerSurcharge: { amount, reason: breakdown.customerSurchargeReason },
+      };
+    } else {
+      breakdown.customerSurchargeAmount = 0;
+      breakdown.customerSurchargeReason = "";
+    }
+  });
 }
 
 export async function buildCheckoutPricingSnapshot({
@@ -277,7 +409,10 @@ export async function buildCheckoutPricingSnapshot({
   const sellerIds = Array.from(itemsBySeller.keys()).sort((a, b) => a.localeCompare(b));
   const sellerBreakdownEntries = [];
 
-  const globalHandling = await computeGlobalHandlingFeeForCheckout(hydratedItems, { session });
+  const [globalCategoryFees, financeSettings] = await Promise.all([
+    computeGlobalCategoryFeesForCheckout(hydratedItems, { session }),
+    getOrCreateFinanceSettings({ session }),
+  ]);
 
   // Pre-compute each seller's subtotal for proportional discount distribution
   const sellerSubtotals = new Map();
@@ -322,6 +457,7 @@ export async function buildCheckoutPricingSnapshot({
       taxTotal: 0,
       session,
       skipDeliveryFee: isCustomerPickup || Boolean(freeDelivery),
+      includeCustomerSurcharge: false,
     });
     sellerBreakdownEntries.push({
       sellerId,
@@ -335,8 +471,15 @@ export async function buildCheckoutPricingSnapshot({
     });
   }
 
-  applyGlobalHandlingFeeToSellerBreakdowns(sellerBreakdownEntries, globalHandling);
+  applyGlobalCategoryFeesToSellerBreakdowns(sellerBreakdownEntries, globalCategoryFees);
   allocateCheckoutTipToSellerBreakdowns(sellerBreakdownEntries, tipAmount);
+  applyCustomerSurchargeToSellerBreakdowns(sellerBreakdownEntries, {
+    amount:
+      financeSettings.customerSurchargeEnabled
+        ? Number(financeSettings.customerSurchargeAmount || 0)
+        : 0,
+    reason: financeSettings.customerSurchargeReason || "",
+  });
 
   const aggregateBreakdown = buildAggregateBreakdown(
     sellerBreakdownEntries.map((entry) => entry.breakdown),

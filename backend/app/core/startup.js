@@ -13,6 +13,7 @@ import { getProcessRole, isComponentEnabled, validateProcessRole } from './proce
 import { isRedisEnabled, getRedisClient, waitForRedis } from '../config/redis.js';
 import { createAllIndexes } from '../services/databaseIndexManager.js';
 import { startSearchIndexWorker } from '../services/searchSyncService.js';
+import { ensureReviewIndexes } from '../models/review.js';
 
 /**
  * Validation result structure
@@ -255,6 +256,7 @@ async function startup() {
     // Step 6: Create database indexes
     try {
       await createAllIndexes();
+      await ensureReviewIndexes();
     } catch (error) {
       console.error('[Startup] Warning: Failed to create indexes:', error.message);
     }

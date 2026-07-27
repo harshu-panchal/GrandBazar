@@ -42,6 +42,11 @@ const productSchema = new mongoose.Schema(
             type: Number,
             default: 5,
         },
+        // Optional best-before / expiry date (used by inventory "Expiring Soon" analytics)
+        expiryDate: {
+            type: Date,
+            default: null,
+        },
         brand: {
             type: String,
             trim: true,
@@ -135,6 +140,11 @@ const productSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        displayOrder: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
         addons: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "Product",
@@ -147,6 +157,41 @@ const productSchema = new mongoose.Schema(
         isPublished: {
             type: Boolean,
             default: true,
+        },
+        applyCommission: {
+            type: Boolean,
+            default: false,
+        },
+        adminCommission: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        adminCommissionType: {
+            type: String,
+            enum: ["percentage", "fixed"],
+            default: "percentage",
+        },
+        adminCommissionValue: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        adminCommissionFixedRule: {
+            type: String,
+            enum: ["per_qty", "per_item"],
+            default: "per_qty",
+        },
+        avgRating: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 5,
+        },
+        reviewCount: {
+            type: Number,
+            default: 0,
+            min: 0,
         },
     },
     { timestamps: true }
@@ -162,6 +207,7 @@ productSchema.index({ subcategoryId: 1, status: 1 });
 productSchema.index({ sellerId: 1, status: 1 });
 productSchema.index({ sellerId: 1, approvalStatus: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, createdAt: -1, _id: -1 });
+productSchema.index({ sellerId: 1, displayOrder: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, isPublished: 1, status: 1 });
 productSchema.index({ name: "text", tags: "text" }); // For better search if regex is too slow
 

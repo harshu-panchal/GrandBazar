@@ -1,10 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { customerApi } from "../services/customerApi";
 import { useAuth } from "../../../core/context/AuthContext";
+import {
+  resolveCartItemSellerId,
+  getCartSellerIds,
+} from "../../../shared/utils/couponEligibility";
+import { toast } from "sonner";
 
 const CartContext = createContext();
 
 export const useCart = () => useContext(CartContext);
+
+function resolveIncomingSellerId(product) {
+  return resolveCartItemSellerId(product);
+}
 
 export const CartProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -29,9 +38,12 @@ export const CartProvider = ({ children }) => {
       const product = item.productId;
       const variantKey = String(item.variantSku || "").trim();
       const { price, salePrice, variantName } = resolveVariantPricing(product, variantKey);
+      const sellerId =
+        product?.sellerId?._id || product?.sellerId || product?.branch?._id || product?.branch || null;
       return {
         ...product,
         id: product?._id, // Normalize ID
+        sellerId: sellerId ? String(sellerId) : product?.sellerId,
         quantity: item.quantity,
         variantSku: variantKey,
         variantName,
@@ -123,14 +135,35 @@ export const CartProvider = ({ children }) => {
     const id = product.id || product._id;
     const key = `${id}::${variantSku || ""}`;
     const { price, salePrice, variantName } = resolveVariantPricing(product, variantSku);
+    const incomingSellerId = resolveIncomingSellerId(product);
+    const existingSellerIds = getCartSellerIds(cart);
+    const hasOtherStoreItems =
+      Boolean(incomingSellerId) &&
+      existingSellerIds.some((sellerId) => sellerId && sellerId !== incomingSellerId);
 
-    // Optimistic UI update for instant feedback
+    if (hasOtherStoreItems) {
+      const confirmed = window.confirm(
+        "Your cart has items from another store. Clear those items and add this product?",
+      );
+      if (!confirmed) return;
+    }
+
+    // Optimistic UI update for instant feedback (single-store cart only)
     setCart((prev) => {
-      const existingItem = prev.find(
+      const sameStorePrev = incomingSellerId
+        ? prev.filter((item) => {
+            const itemSellerId = resolveCartItemSellerId(item);
+            // Keep lines without seller id only if we couldn't resolve incoming either
+            if (!itemSellerId) return !incomingSellerId;
+            return itemSellerId === incomingSellerId;
+          })
+        : prev;
+
+      const existingItem = sameStorePrev.find(
         (item) => `${item.id || item._id}::${String(item.variantSku || "").trim()}` === key,
       );
       if (existingItem) {
-        return prev.map((item) =>
+        return sameStorePrev.map((item) =>
           `${item.id || item._id}::${String(item.variantSku || "").trim()}` === key
             ? { ...item, quantity: item.quantity + 1 }
             : item,
@@ -138,10 +171,11 @@ export const CartProvider = ({ children }) => {
       }
 
       return [
-        ...prev,
+        ...sameStorePrev,
         {
           ...product,
           id,
+          sellerId: incomingSellerId || product.sellerId,
           variantSku,
           variantName,
           price,
@@ -152,6 +186,12 @@ export const CartProvider = ({ children }) => {
       ];
     });
 
+    if (hasOtherStoreItems) {
+      toast.message("Cart updated for one store", {
+        description: "Items from the previous store were removed.",
+      });
+    }
+
     if (isAuthenticated) {
       pendingRequestsRef.current += 1;
       try {
@@ -161,10 +201,17 @@ export const CartProvider = ({ children }) => {
           quantity: 1,
         });
         pendingRequestsRef.current -= 1;
-        await syncCart(response.data.result.items);
+        const result = response.data.result || {};
+        if (result.replacedOtherSellerItems && !hasOtherStoreItems) {
+          toast.message("Cart updated for one store", {
+            description: "Items from the previous store were removed.",
+          });
+        }
+        await syncCart(result.items);
       } catch (error) {
         pendingRequestsRef.current -= 1;
         console.error("Error adding to cart on backend", error);
+        toast.error(error?.response?.data?.message || "Failed to add item to cart");
         // Re-fetch entire cart to ensure consistency on error
         if (pendingRequestsRef.current === 0) {
           await fetchCart();
