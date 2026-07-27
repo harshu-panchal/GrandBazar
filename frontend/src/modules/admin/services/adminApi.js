@@ -216,4 +216,16 @@ export const adminApi = {
     logisticsOverride: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/override`, data),
     updateStoreDeliveryPolicy: (storeId, data) =>
         axiosInstance.put(`/orders/stores/${storeId}/delivery-policy`, data),
+
+    // Advance order booking (admin-curated preorders)
+    listAdvanceBookings: (params) =>
+        axiosInstance.get("/orders/admin/advance-bookings", { params }),
+    createAdvanceBooking: (data) =>
+        axiosInstance.post("/orders/admin/advance-bookings", data),
+    updateAdvanceBooking: (campaignId, data) =>
+        axiosInstance.put(`/orders/admin/advance-bookings/${campaignId}`, data),
+    deleteAdvanceBooking: (campaignId) =>
+        axiosInstance.delete(`/orders/admin/advance-bookings/${campaignId}`),
+    cancelAdvanceBooking: (campaignId, data) =>
+        axiosInstance.put(`/orders/admin/advance-bookings/${campaignId}/cancel`, data),
 };

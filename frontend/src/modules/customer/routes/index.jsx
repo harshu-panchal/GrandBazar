@@ -21,18 +21,19 @@ import OrderDetailPage from '../pages/OrderDetailPage';
 import ProductDetailPage from '../pages/ProductDetailPage';
 import CheckoutPage from '../pages/CheckoutPage';
 import PreOrderBrowsePage from '../pages/PreOrderBrowsePage';
+import PreOrderDetailPage from '../pages/PreOrderDetailPage';
 import PaymentStatusPage from '../pages/PaymentStatusPage';
 import ScrollToTop from '../components/shared/ScrollToTop';
 import { WishlistProvider } from '../context/WishlistContext';
 import { CartProvider } from '../context/CartContext';
 import { CartAnimationProvider } from '../context/CartAnimationContext';
-import { LocationProvider } from '../context/LocationContext';
 
 import ProtectedRoute from '../../../core/guards/ProtectedRoute';
 
 const CustomerRoutes = () => {
+    // LocationProvider lives in AppRouter's CustomerLayoutWrapper.
+    // Do not wrap again here — nested providers + HMR can desync context identity.
     return (
-        <LocationProvider>
             <WishlistProvider>
                 <CartProvider>
                     <CartAnimationProvider>
@@ -47,6 +48,7 @@ const CustomerRoutes = () => {
                             <Route path="about" element={<AboutPage />} />
                             <Route path="offers" element={<OffersPage />} />
                             <Route path="preorder" element={<PreOrderBrowsePage />} />
+                            <Route path="preorder/:campaignId" element={<PreOrderDetailPage />} />
 
                             {/* Protected Customer Routes */}
                             <Route path="wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
@@ -65,7 +67,6 @@ const CustomerRoutes = () => {
                     </CartAnimationProvider>
                 </CartProvider>
             </WishlistProvider>
-        </LocationProvider>
     );
 };
 

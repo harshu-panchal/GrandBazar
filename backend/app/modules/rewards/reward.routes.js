@@ -16,6 +16,8 @@ import {
   getCustomerGrants,
   getCustomerTransactions,
   getCustomerCoupons,
+  getCustomerCouponHistory,
+  getCustomerRewardNotifications,
   getMyReferrals,
   getMyReferralCode,
   inviteReferral,
@@ -43,6 +45,8 @@ router.get("/customer/summary", verifyToken, allowRoles("customer"), getCustomer
 router.get("/customer/grants", verifyToken, allowRoles("customer"), getCustomerGrants);
 router.get("/customer/transactions", verifyToken, allowRoles("customer"), getCustomerTransactions);
 router.get("/customer/coupons", verifyToken, allowRoles("customer"), getCustomerCoupons);
+router.get("/customer/coupon-history", verifyToken, allowRoles("customer"), getCustomerCouponHistory);
+router.get("/customer/notifications", verifyToken, allowRoles("customer"), getCustomerRewardNotifications);
 router.get("/customer/referrals", verifyToken, allowRoles("customer"), getMyReferrals);
 router.get("/customer/referral-code", verifyToken, allowRoles("customer"), getMyReferralCode);
 router.post("/customer/referrals/invite", verifyToken, allowRoles("customer"), inviteReferral);

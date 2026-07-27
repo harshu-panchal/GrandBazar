@@ -24,6 +24,7 @@ import {
   sanitizeApprovalNote,
   resolveProductApprovalStatus,
 } from "../services/productModerationService.js";
+import { attachAdvanceBookingMetaToProducts } from "../services/preOrderCampaignService.js";
 
 function buildProductListKey(queryParams) {
   const sorted = Object.keys(queryParams)
@@ -465,6 +466,13 @@ export const getProducts = async (req, res) => {
     const result = shouldCache
       ? await getOrSet(buildProductListKey(req.query), fetchFn, getTTL("productList"))
       : await fetchFn();
+
+    if (Array.isArray(result?.items) && role !== "admin" && role !== "seller") {
+      result.items = await attachAdvanceBookingMetaToProducts(result.items, {
+        lat: req.query?.lat,
+        lng: req.query?.lng,
+      });
+    }
 
     return handleResponse(res, 200, "Products fetched successfully", result);
   } catch (error) {

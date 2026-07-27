@@ -106,7 +106,8 @@ export const customerApi = {
   verifyCustomerPickup: (orderId, data) => axiosInstance.post(`/orders/${orderId}/pickup/verify`, data),
   getPickupStatus: (orderId) => axiosInstance.get(`/orders/${orderId}/pickup/status`),
   getActiveCampaigns: (params) => getWithDedupe("/orders/campaigns/active", params),
-  getCampaignDetail: (campaignId) => getWithDedupe(`/orders/campaigns/${campaignId}`),
+  getCampaignDetail: (campaignId, params) =>
+    getWithDedupe(`/orders/campaigns/${campaignId}`, params),
   rescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}`, data),
   requestReschedule: (orderId, data) =>
     axiosInstance.post(`/orders/reschedule/${orderId}/request`, data),
@@ -180,6 +181,8 @@ export const customerApi = {
   getRewardGrants: (params) => getWithDedupe("/rewards/customer/grants", params),
   getRewardTransactions: (params) => getWithDedupe("/rewards/customer/transactions", params),
   getMyRewardCoupons: () => getWithDedupe("/rewards/customer/coupons"),
+  getCouponHistory: (params) => getWithDedupe("/rewards/customer/coupon-history", params),
+  getRewardNotifications: (params) => getWithDedupe("/rewards/customer/notifications", params),
   getMyReferrals: (params) => getWithDedupe("/rewards/customer/referrals", params),
   getReferralCode: () => getWithDedupe("/rewards/customer/referral-code"),
   inviteReferral: (data) => axiosInstance.post("/rewards/customer/referrals/invite", data),

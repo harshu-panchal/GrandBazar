@@ -152,6 +152,7 @@ export async function createGrantFromCampaign({ campaign, order, amount, status 
     campaignType: campaign.campaignType,
     rewardSubtype: campaign.rewardConfig?.rewardSubtype,
     amount: roundAmount(amount),
+    remainingAmount: status === GRANT_STATUS.ACTIVE ? roundAmount(amount) : 0,
     status,
     fundedBy: campaign.fundingSource,
     expiresAt,
@@ -188,6 +189,7 @@ export async function processCashbackGrant({ campaign, order, amount }) {
     status: GRANT_STATUS.ACTIVE,
   });
   grant.activatedAt = new Date();
+  grant.remainingAmount = roundAmount(amount);
   await grant.save();
 
   await creditCustomerWallet({
@@ -222,6 +224,7 @@ export async function activatePendingGrant(grantId) {
 
   grant.status = GRANT_STATUS.ACTIVE;
   grant.activatedAt = new Date();
+  grant.remainingAmount = roundAmount(grant.amount);
   await grant.save();
 
   await creditCustomerWallet({
@@ -236,10 +239,131 @@ export async function activatePendingGrant(grantId) {
   return grant;
 }
 
+/**
+ * FIFO: consume active cashback/reward grant balances when wallet is spent at checkout.
+ */
+export async function applyWalletSpendToGrants({
+  customerId,
+  amount,
+  order = null,
+  balanceBefore = null,
+  balanceAfter = null,
+}) {
+  let remaining = roundAmount(amount);
+  if (remaining <= 0) return [];
+
+  const grants = await RewardGrant.find({
+    customerId,
+    status: GRANT_STATUS.ACTIVE,
+    remainingAmount: { $gt: 0 },
+    campaignType: { $in: ["cashback", "reward"] },
+    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+  })
+    .sort({ expiresAt: 1, createdAt: 1 })
+    .limit(50);
+
+  const touched = [];
+  let spent = 0;
+  for (const grant of grants) {
+    if (remaining <= 0) break;
+    const take = Math.min(roundAmount(grant.remainingAmount), remaining);
+    if (take <= 0) continue;
+
+    grant.remainingAmount = roundAmount(grant.remainingAmount - take);
+    if (grant.remainingAmount <= 0) {
+      grant.remainingAmount = 0;
+      grant.status = GRANT_STATUS.REDEEMED;
+      grant.redeemedAt = new Date();
+    }
+    grant.meta = {
+      ...(grant.meta || {}),
+      lastRedeemedOrderId: order?._id || order?.orderId || null,
+    };
+    await grant.save();
+
+    remaining = roundAmount(remaining - take);
+    spent = roundAmount(spent + take);
+    touched.push(grant);
+  }
+
+  if (spent > 0) {
+    await writeTransaction({
+      grantId: touched[0]?._id,
+      customerId,
+      campaignId: touched[0]?.campaignId,
+      orderId: order?._id,
+      orderPublicId: order?.orderId,
+      type: REWARD_TXN_TYPE.DEBIT,
+      amount: spent,
+      balanceBefore: balanceBefore ?? 0,
+      balanceAfter: balanceAfter ?? 0,
+      reason: "Wallet used at checkout",
+    });
+  }
+
+  return touched;
+}
+
+export async function expireExpiredGrants() {
+  const now = new Date();
+  const grants = await RewardGrant.find({
+    status: { $in: [GRANT_STATUS.ACTIVE, GRANT_STATUS.PENDING] },
+    expiresAt: { $ne: null, $lte: now },
+  }).limit(200);
+
+  let expired = 0;
+  for (const grant of grants) {
+    try {
+      const clawback = roundAmount(
+        grant.status === GRANT_STATUS.ACTIVE
+          ? grant.remainingAmount ?? grant.amount
+          : 0,
+      );
+
+      if (
+        clawback > 0 &&
+        (grant.campaignType === "cashback" || grant.campaignType === "reward") &&
+        !grant.linkedCouponId
+      ) {
+        await debitCustomerWallet({
+          customerId: grant.customerId,
+          amount: clawback,
+          grant,
+          reason: "Reward expired",
+        });
+      }
+
+      if (grant.linkedCouponId) {
+        const Coupon = (await import("../../../models/coupon.js")).default;
+        await Coupon.findByIdAndUpdate(grant.linkedCouponId, { isActive: false });
+      }
+
+      grant.status = GRANT_STATUS.EXPIRED;
+      grant.remainingAmount = 0;
+      grant.meta = { ...(grant.meta || {}), expiredAt: now };
+      await grant.save();
+
+      emitNotificationEvent(REWARD_NOTIFICATION_EVENTS.REWARD_EXPIRED, {
+        customerId: grant.customerId,
+        userId: grant.customerId,
+        role: "customer",
+        amount: grant.amount,
+      });
+
+      expired += 1;
+    } catch {
+      // continue batch
+    }
+  }
+  return expired;
+}
+
 export default {
   creditCustomerWallet,
   debitCustomerWallet,
   createGrantFromCampaign,
   processCashbackGrant,
   activatePendingGrant,
+  applyWalletSpendToGrants,
+  expireExpiredGrants,
 };

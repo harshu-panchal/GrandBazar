@@ -32,27 +32,46 @@ const SELLER_CASHBACK_TYPES = [
   },
   {
     value: "first_purchase",
-    label: "First Purchase Cashback",
+    label: "First Purchase / New Customer",
     desc: "Reward new customers on their first order",
     icon: "sparkles",
   },
   {
     value: "repeat_purchase",
-    label: "Repeat Purchase Cashback",
+    label: "Repeat Customer Rewards",
     desc: "Encourage returning customers",
     icon: "users",
   },
   {
+    value: "product_cashback",
+    label: "Product Purchase Rewards",
+    desc: "Cashback on selected products (set product IDs in rules)",
+    icon: "gift",
+  },
+  {
     value: "festival",
-    label: "Festival Cashback",
+    label: "Festival Rewards",
     desc: "Special cashback for festival periods",
     icon: "calendar",
   },
   {
+    value: "new_shop_promotion",
+    label: "New Shop Rewards",
+    desc: "Promote your shop while it is newly listed",
+    icon: "sparkles",
+  },
+  {
     value: "instant_cashback",
     label: "Instant Cashback",
-    desc: "Credit quickly after payment success",
+    desc: "Credit after order delivery",
     icon: "bolt",
+  },
+  {
+    value: "digital_voucher",
+    label: "Digital Reward Voucher",
+    desc: "Issue a personal discount voucher after purchase",
+    icon: "gift",
+    campaignType: "coupon",
   },
 ];
 
@@ -149,6 +168,7 @@ const SellerRewardCampaigns = () => {
   };
 
   const selectSubtype = (subtype) => {
+    const typeMeta = SELLER_CASHBACK_TYPES.find((t) => t.value === subtype);
     const rules = { ...form.rules };
     if (subtype === "first_purchase") rules.customerType = "new";
     else if (subtype === "repeat_purchase") rules.customerType = "existing";
@@ -156,10 +176,12 @@ const SellerRewardCampaigns = () => {
 
     setForm({
       ...form,
+      campaignType: typeMeta?.campaignType || "cashback",
       rules,
       rewardConfig: {
         ...form.rewardConfig,
         rewardSubtype: subtype,
+        valueType: subtype === "digital_voucher" ? "fixed" : form.rewardConfig.valueType,
         creditTiming: subtype === "instant_cashback" ? "on_payment" : "on_delivery",
       },
     });

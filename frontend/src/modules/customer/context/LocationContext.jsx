@@ -9,7 +9,11 @@ import React, {
 import { customerApi } from "../services/customerApi";
 import { hasValidStoredAuthToken } from "@core/utils/authStorage";
 
-const LocationContext = createContext(undefined);
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw "must be used within a LocationProvider".
+const LocationContext =
+  globalThis.__zintoLocationContext ??
+  (globalThis.__zintoLocationContext = createContext(undefined));
 // v3 clears the old hardcoded Indore default that was auto-persisted into location_v2.
 const STORAGE_KEY = "location_v3";
 const LEGACY_STORAGE_KEY = "location_v2";

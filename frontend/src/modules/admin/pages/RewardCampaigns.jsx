@@ -140,6 +140,14 @@ const emptyForm = () => ({
     validityDays: 30,
     creditTiming: "on_delivery",
     delayedDays: 0,
+    linkedCouponId: "",
+    festivalName: "",
+  },
+  redemptionRules: {
+    minOrderAmount: 0,
+    maxWalletPercent: 100,
+    maxWalletAmount: "",
+    allowWithCoupon: true,
   },
 });
 
@@ -248,7 +256,12 @@ const RewardCampaigns = () => {
           shopIdsText: joinCsvIds(rules.shopIds),
           cityIdsText: joinCsvIds(rules.cityIds),
         },
-        rewardConfig: { ...emptyForm().rewardConfig, ...(campaign.rewardConfig || {}) },
+        rewardConfig: { ...emptyForm().rewardConfig, ...(campaign.rewardConfig || {}), linkedCouponId: campaign.rewardConfig?.linkedCouponId || "" },
+        redemptionRules: {
+          ...emptyForm().redemptionRules,
+          ...(campaign.redemptionRules || {}),
+          maxWalletAmount: campaign.redemptionRules?.maxWalletAmount ?? "",
+        },
         sharedFunding: campaign.sharedFunding || emptyForm().sharedFunding,
       });
     } else {
@@ -364,6 +377,16 @@ const RewardCampaigns = () => {
             : null,
           validityDays: Number(form.rewardConfig.validityDays) || 30,
           delayedDays: Number(form.rewardConfig.delayedDays) || 0,
+          linkedCouponId: form.rewardConfig.linkedCouponId || null,
+          festivalName: form.rewardConfig.festivalName || "",
+        },
+        redemptionRules: {
+          minOrderAmount: Number(form.redemptionRules?.minOrderAmount) || 0,
+          maxWalletPercent: Number(form.redemptionRules?.maxWalletPercent) || 100,
+          maxWalletAmount: form.redemptionRules?.maxWalletAmount !== ""
+            ? Number(form.redemptionRules.maxWalletAmount)
+            : null,
+          allowWithCoupon: form.redemptionRules?.allowWithCoupon !== false,
         },
       };
 
@@ -878,6 +901,137 @@ const RewardCampaigns = () => {
                     />
                   </div>
                 )}
+                {(form.rewardConfig.rewardSubtype === "festival" ||
+                  form.campaignType === "coupon") && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">
+                      Festival name (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Diwali, Holi, Eid…"
+                      value={form.rewardConfig.festivalName || ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          rewardConfig: {
+                            ...form.rewardConfig,
+                            festivalName: e.target.value,
+                          },
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+                {(form.campaignType === "coupon" ||
+                  form.rewardConfig.rewardSubtype === "digital_voucher" ||
+                  form.rewardConfig.rewardSubtype === "voucher") && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">
+                      Linked coupon ID (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Leave blank to auto-issue personal voucher"
+                      value={form.rewardConfig.linkedCouponId || ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          rewardConfig: {
+                            ...form.rewardConfig,
+                            linkedCouponId: e.target.value,
+                          },
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <SectionTitle>Redemption Rules</SectionTitle>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Min order to redeem wallet (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.redemptionRules?.minOrderAmount ?? 0}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        redemptionRules: {
+                          ...form.redemptionRules,
+                          minOrderAmount: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max wallet % of order
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={form.redemptionRules?.maxWalletPercent ?? 100}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        redemptionRules: {
+                          ...form.redemptionRules,
+                          maxWalletPercent: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                    Max wallet amount / order (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.redemptionRules?.maxWalletAmount ?? ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        redemptionRules: {
+                          ...form.redemptionRules,
+                          maxWalletAmount: e.target.value,
+                        },
+                      })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    id="allowWithCoupon"
+                    type="checkbox"
+                    checked={form.redemptionRules?.allowWithCoupon !== false}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        redemptionRules: {
+                          ...form.redemptionRules,
+                          allowWithCoupon: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <label htmlFor="allowWithCoupon" className="text-xs font-bold text-slate-600">
+                    Allow wallet with coupon
+                  </label>
+                </div>
               </div>
 
               <SectionTitle>Eligibility Rules</SectionTitle>

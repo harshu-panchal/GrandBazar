@@ -8,6 +8,9 @@ import Transaction from "../models/transaction.js";
 import Coupon from "../models/coupon.js";
 import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
 import { applySingleCoupon } from "./couponApplicationService.js";
+import { markGrantRedeemedForCoupon } from "../modules/rewards/services/couponService.js";
+import { applyWalletSpendToGrants } from "../modules/rewards/services/cashbackService.js";
+import { DEFAULT_WALLET_REDEMPTION } from "../modules/rewards/reward.constants.js";
 import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS, FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
@@ -342,12 +345,46 @@ export async function placeOrderAtomic({
     const fulfillmentType = inferFulfillmentType(normalizedPayload);
     const isInstant = fulfillmentType === FULFILLMENT_TYPE.INSTANT && isInstantFulfillment(normalizedPayload);
 
-    // 1. Fetch user and validate wallet
+    // 1. Fetch user and validate wallet + redemption rules
     const user = await User.findById(customerId).session(session);
     if (walletAmount > 0) {
       if (!user) throw new Error("User not found");
       if (user.walletBalance < walletAmount) {
         throw new Error("Insufficient wallet balance");
+      }
+      const rules = DEFAULT_WALLET_REDEMPTION;
+      const estimatedCart = Math.max(
+        0,
+        Number(normalizedPayload.grandTotal || normalizedPayload.cartTotal || 0),
+      );
+      if (rules.minOrderAmount > 0 && estimatedCart < rules.minOrderAmount) {
+        throw new Error(
+          `Minimum order of ₹${rules.minOrderAmount} required to use reward wallet`,
+        );
+      }
+      if (
+        rules.allowWithCoupon === false &&
+        (normalizedPayload.couponId || normalizedPayload.couponCode)
+      ) {
+        throw new Error("Reward wallet cannot be combined with coupons");
+      }
+      if (rules.maxWalletPercent != null && estimatedCart > 0) {
+        const maxByPercent = Math.round(
+          (estimatedCart * Number(rules.maxWalletPercent)) / 100,
+        );
+        if (walletAmount > maxByPercent) {
+          throw new Error(
+            `You can use up to ${rules.maxWalletPercent}% of order amount from reward wallet`,
+          );
+        }
+      }
+      if (
+        rules.maxWalletAmount != null &&
+        walletAmount > Number(rules.maxWalletAmount)
+      ) {
+        throw new Error(
+          `Maximum reward wallet use is ₹${rules.maxWalletAmount} per order`,
+        );
       }
     }
 
@@ -633,8 +670,10 @@ export async function placeOrderAtomic({
 
     // Deduct wallet balance if used
     if (walletAmount > 0) {
+      const balanceBefore = Number(user.walletBalance || 0);
       user.walletBalance -= walletAmount;
       await user.save({ session });
+      const balanceAfter = Number(user.walletBalance || 0);
 
       await Transaction.create({
         user: customerId,
@@ -645,6 +684,15 @@ export async function placeOrderAtomic({
         reference: `WLT-CHOUT-${checkoutGroupId}`,
         meta: { checkoutGroupId }
       }, { session });
+
+      const primaryOrder = orders[0];
+      void applyWalletSpendToGrants({
+        customerId,
+        amount: walletAmount,
+        order: primaryOrder,
+        balanceBefore,
+        balanceAfter,
+      }).catch(() => {});
     }
 
     const transactionRows = orders.map((order) => ({
@@ -686,6 +734,7 @@ export async function placeOrderAtomic({
         couponCode: normalizedPayload.couponCode || null,
         discountAmount: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
       }).catch(() => {});
+      markGrantRedeemedForCoupon({ customerId, couponId }).catch(() => {});
     }
 
     const resultPayload = buildResultPayload({

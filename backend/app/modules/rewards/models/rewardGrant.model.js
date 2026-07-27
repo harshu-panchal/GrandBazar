@@ -34,6 +34,8 @@ const rewardGrantSchema = new mongoose.Schema(
     },
     rewardSubtype: { type: String, required: true },
     amount: { type: Number, default: 0 },
+    /** Remaining wallet credit not yet spent (cashback/reward grants). */
+    remainingAmount: { type: Number, default: 0 },
     status: {
       type: String,
       enum: Object.values(GRANT_STATUS),

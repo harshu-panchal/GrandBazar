@@ -47,6 +47,13 @@ export async function applySingleCoupon({
     throw err;
   }
 
+  const issuedTo = coupon.metadata?.issuedToCustomerId;
+  if (issuedTo && customerId && String(issuedTo) !== String(customerId)) {
+    const err = new Error("This reward voucher is not assigned to your account");
+    err.statusCode = 400;
+    throw err;
+  }
+
   if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
     const err = new Error("This coupon has reached its usage limit");
     err.statusCode = 400;

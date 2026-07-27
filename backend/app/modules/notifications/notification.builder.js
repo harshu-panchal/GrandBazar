@@ -559,6 +559,22 @@ function eventDefinition(eventType) {
         title: () => "New Coupon Issued",
         body: (payload) => `A new coupon ${payload.couponCode || ""} is available in your rewards.`,
       };
+    case NOTIFICATION_EVENTS.REWARD_EXPIRED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Reward Expired",
+        body: (payload) =>
+          `Your reward of ₹${payload.amount || 0} has expired and was removed from your wallet.`,
+      };
+    case NOTIFICATION_EVENTS.BIRTHDAY_REWARD:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Happy Birthday! 🎂",
+        body: (payload) =>
+          `₹${payload.amount || 0} birthday reward${payload.campaignName ? ` from ${payload.campaignName}` : ""} is in your wallet. Enjoy!`,
+      };
     case NOTIFICATION_EVENTS.REFERRAL_SUCCESS:
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,

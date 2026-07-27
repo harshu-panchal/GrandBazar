@@ -82,12 +82,12 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
     // Route-based visibility logic
     const path = location.pathname.replace(/\/$/, '') || '/';
 
-    const hideHeaderRoutes = ['/', '/categories', '/orders', '/transactions', '/profile', '/profile/edit', '/wishlist', '/addresses', '/wallet', '/support', '/privacy', '/about', '/terms', '/checkout', '/search', '/chat'];
+    const hideHeaderRoutes = ['/', '/categories', '/orders', '/transactions', '/profile', '/profile/edit', '/wishlist', '/addresses', '/wallet', '/rewards', '/support', '/privacy', '/about', '/terms', '/checkout', '/search', '/chat'];
     const hideBottomNavRoutes = ['/checkout', '/search', '/chat'];
     const hideCartRoutes = ['/checkout', '/search', '/chat'];
 
     // If props are passed, use them. Otherwise, use route-based logic.
-    const showHeader = showHeaderProp !== undefined ? showHeaderProp : (!hideHeaderRoutes.includes(path) && !path.startsWith('/category') && !path.startsWith('/orders') && !path.startsWith('/store'));
+    const showHeader = showHeaderProp !== undefined ? showHeaderProp : (!hideHeaderRoutes.includes(path) && !path.startsWith('/category') && !path.startsWith('/orders') && !path.startsWith('/store') && !path.startsWith('/preorder'));
     const showBottomNav = showBottomNavProp !== undefined ? showBottomNavProp : !hideBottomNavRoutes.includes(path);
     const showCart = showCartProp !== undefined ? showCartProp : (!hideCartRoutes.includes(path) && !path.startsWith('/orders'));
 

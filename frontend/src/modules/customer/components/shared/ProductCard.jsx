@@ -101,10 +101,25 @@ const ProductCard = React.memo(
       [isWishlisted, toggleWishlistGlobal, product, showToast],
     );
 
+    const advanceBooking = product?.advanceBooking || null;
+    const bookingLocked = Boolean(advanceBooking && advanceBooking.bookingOpen === false);
+
     const handleAddToCart = React.useCallback(
       (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (bookingLocked) {
+          const opensAt = advanceBooking?.bookingStartAt
+            ? new Date(advanceBooking.bookingStartAt).toLocaleString("en-IN")
+            : null;
+          showToast(
+            opensAt
+              ? `Booking opens on ${opensAt}`
+              : "Advance booking has not started yet",
+            "error",
+          );
+          return;
+        }
         if (imageRef.current) {
           animateAddToCart(
             imageRef.current.getBoundingClientRect(),
@@ -115,9 +130,20 @@ const ProductCard = React.memo(
           ...product,
           variantSku: variantKey,
           variantName: defaultVariant?.name || "",
+          campaignId: advanceBooking?.campaignId || product.campaignId,
+          preOrderCampaignId: advanceBooking?.campaignId || product.preOrderCampaignId,
         });
       },
-      [animateAddToCart, product, addToCart, variantKey, defaultVariant?.name],
+      [
+        animateAddToCart,
+        product,
+        addToCart,
+        variantKey,
+        defaultVariant?.name,
+        bookingLocked,
+        advanceBooking,
+        showToast,
+      ],
     );
 
     const handleIncrement = React.useCallback(
@@ -284,7 +310,20 @@ const ProductCard = React.memo(
 
           {/* Delivery Time / Distance from seller */}
           <div className={cn("flex items-center gap-1 text-gray-500", compact ? "mt-0 mb-1" : "mt-0.5 mb-1 sm:gap-1.5 sm:mt-1 sm:mb-2")}>
-            {(() => {
+            {advanceBooking ? (
+              <>
+                <Clock size={compact ? 8 : 10} className="text-violet-500 shrink-0" />
+                <span
+                  className={cn(
+                    "font-semibold text-violet-700",
+                    compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
+                  )}>
+                  {bookingLocked
+                    ? `Opens ${advanceBooking.bookingStartAt ? new Date(advanceBooking.bookingStartAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "soon"}`
+                    : `Deliver ${advanceBooking.deliveryStartDate ? new Date(advanceBooking.deliveryStartDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "later"}`}
+                </span>
+              </>
+            ) : (() => {
               const rawDistance = product.distance ?? product.distanceKm;
               const distanceKm = Number(rawDistance);
               const hasDistance =
@@ -375,13 +414,14 @@ const ProductCard = React.memo(
               ) : (
                 <button
                   onClick={handleAddToCart}
+                  disabled={bookingLocked}
                   className={cn(
-                    "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95",
+                    "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400",
                     compact
                       ? "px-2.5 py-1 text-[10px]"
                       : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
                   )}>
-                  ADD
+                  {bookingLocked ? "SOON" : "ADD"}
                 </button>
               )}
             </div>

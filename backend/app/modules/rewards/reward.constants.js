@@ -104,6 +104,18 @@ export const REWARD_NOTIFICATION_EVENTS = Object.freeze({
   CASHBACK_CREDITED: "CASHBACK_CREDITED",
   REWARD_EARNED: "REWARD_EARNED",
   REWARD_EXPIRING: "REWARD_EXPIRING",
+  REWARD_EXPIRED: "REWARD_EXPIRED",
   COUPON_ISSUED: "COUPON_ISSUED",
+  BIRTHDAY_REWARD: "BIRTHDAY_REWARD",
   REFERRAL_SUCCESS: "REFERRAL_SUCCESS",
+});
+
+/** Platform defaults for spending reward wallet at checkout */
+export const DEFAULT_WALLET_REDEMPTION = Object.freeze({
+  minOrderAmount: Number(process.env.REWARD_WALLET_MIN_ORDER || 0),
+  maxWalletPercent: Number(process.env.REWARD_WALLET_MAX_PERCENT || 100),
+  maxWalletAmount: process.env.REWARD_WALLET_MAX_AMOUNT
+    ? Number(process.env.REWARD_WALLET_MAX_AMOUNT)
+    : null,
+  allowWithCoupon: String(process.env.REWARD_WALLET_ALLOW_WITH_COUPON || "true") !== "false",
 });

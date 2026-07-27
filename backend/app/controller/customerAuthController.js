@@ -124,7 +124,7 @@ export const getCustomerProfile = async (req, res) => {
 ================================ */
 export const updateCustomerProfile = async (req, res) => {
     try {
-        const { name, email, addresses } = req.body;
+        const { name, email, addresses, dateOfBirth } = req.body;
 
         const customer = await Customer.findById(req.user.id);
         if (!customer) {
@@ -134,6 +134,17 @@ export const updateCustomerProfile = async (req, res) => {
         if (name) customer.name = name;
         if (email) customer.email = email;
         if (addresses) customer.addresses = addresses;
+        if (dateOfBirth !== undefined) {
+            if (dateOfBirth === null || dateOfBirth === "") {
+                customer.dateOfBirth = null;
+            } else {
+                const parsed = new Date(dateOfBirth);
+                if (Number.isNaN(parsed.getTime())) {
+                    return handleResponse(res, 400, "Invalid date of birth");
+                }
+                customer.dateOfBirth = parsed;
+            }
+        }
 
         await customer.save();
 
