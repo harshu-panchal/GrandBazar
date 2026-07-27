@@ -1,10 +1,18 @@
 import RewardCampaign from "./models/rewardCampaign.model.js";
 import RewardGrant from "./models/rewardGrant.model.js";
 import User from "../../models/customer.js";
-import { CAMPAIGN_STATUS, GRANT_STATUS, REWARD_JOB_NAMES } from "./reward.constants.js";
-import { activatePendingGrant } from "./services/cashbackService.js";
+import {
+  CAMPAIGN_STATUS,
+  GRANT_STATUS,
+  REWARD_JOB_NAMES,
+  REWARD_NOTIFICATION_EVENTS,
+} from "./reward.constants.js";
+import {
+  activatePendingGrant,
+  processCashbackGrant,
+  expireExpiredGrants,
+} from "./services/cashbackService.js";
 import { getActiveCampaigns } from "./services/eligibilityEngine.js";
-import { processCashbackGrant } from "./services/cashbackService.js";
 import { emitNotificationEvent } from "../notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../notifications/notification.constants.js";
 import { rewardQueue } from "./reward.queue.js";
@@ -25,7 +33,10 @@ export async function activateDuePendingGrants() {
     status: GRANT_STATUS.PENDING,
     $or: [
       { "meta.activateAt": { $lte: now } },
-      { createdAt: { $lte: new Date(now.getTime() - 86400000) }, "meta.activateAt": { $exists: false } },
+      {
+        createdAt: { $lte: new Date(now.getTime() - 86400000) },
+        "meta.activateAt": { $exists: false },
+      },
     ],
   }).limit(100);
 
@@ -35,7 +46,10 @@ export async function activateDuePendingGrants() {
       await activatePendingGrant(grant._id);
       activated += 1;
     } catch (error) {
-      logger.error("Failed to activate pending grant", { grantId: grant._id, message: error.message });
+      logger.error("Failed to activate pending grant", {
+        grantId: grant._id,
+        message: error.message,
+      });
     }
   }
   return activated;
@@ -43,7 +57,6 @@ export async function activateDuePendingGrants() {
 
 export async function sendExpiryReminders() {
   const in7days = new Date(Date.now() + 7 * 86400000);
-  const in1day = new Date(Date.now() + 86400000);
 
   const grants = await RewardGrant.find({
     status: GRANT_STATUS.ACTIVE,
@@ -93,11 +106,33 @@ export async function processBirthdayRewards() {
   for (const user of users) {
     for (const campaign of birthdayCampaigns) {
       try {
-        const pseudoOrder = { customer: user._id, _id: null, orderId: null, seller: null };
+        const already = await RewardGrant.findOne({
+          customerId: user._id,
+          campaignId: campaign._id,
+          createdAt: {
+            $gte: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+          },
+        }).lean();
+        if (already) continue;
+
+        const pseudoOrder = {
+          customer: user._id,
+          _id: null,
+          orderId: null,
+          seller: null,
+        };
+        const amount = campaign.rewardConfig?.value || 0;
         await processCashbackGrant({
           campaign,
           order: pseudoOrder,
-          amount: campaign.rewardConfig?.value || 0,
+          amount,
+        });
+        emitNotificationEvent(REWARD_NOTIFICATION_EVENTS.BIRTHDAY_REWARD, {
+          customerId: user._id,
+          userId: user._id,
+          role: "customer",
+          amount,
+          campaignName: campaign.name,
         });
         processed += 1;
       } catch {
@@ -109,7 +144,6 @@ export async function processBirthdayRewards() {
 }
 
 export async function runRewardMaintenanceJobs() {
-  // Reset daily counters at day boundary
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   await RewardCampaign.updateMany(
@@ -125,13 +159,21 @@ export async function runRewardMaintenanceJobs() {
     { $set: { monthlyUsed: 0 } },
   );
 
-  const [expired, activated, reminders, birthdays] = await Promise.all([
-    expireCampaigns(),
-    activateDuePendingGrants(),
-    sendExpiryReminders(),
-    processBirthdayRewards(),
-  ]);
-  return { expired, activated, reminders, birthdays };
+  const [expiredCampaigns, activated, reminders, birthdays, expiredGrants] =
+    await Promise.all([
+      expireCampaigns(),
+      activateDuePendingGrants(),
+      sendExpiryReminders(),
+      processBirthdayRewards(),
+      expireExpiredGrants(),
+    ]);
+  return {
+    expiredCampaigns,
+    activated,
+    reminders,
+    birthdays,
+    expiredGrants,
+  };
 }
 
 export function registerRewardQueueProcessors() {
@@ -142,7 +184,7 @@ export function registerRewardQueueProcessors() {
     if (grantId) await activatePendingGrant(grantId);
   });
 
-  rewardQueue.process(REWARD_JOB_NAMES.EXPIRE_CAMPAIGNS, async () => {
+  rewardQueue.process(REWARD_JOB_NAMES.EXPIRE_CAMPAIGN, async () => {
     await runRewardMaintenanceJobs();
   });
 }

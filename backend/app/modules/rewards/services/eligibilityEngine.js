@@ -356,14 +356,21 @@ export async function evaluateCampaignsForOrder(
 
 export async function evaluateReferralCampaigns({ referrerId, refereeId, trigger }) {
   const campaigns = await getActiveCampaigns({ campaignType: CAMPAIGN_TYPE.REFERRAL });
+  const normalized = String(trigger || "").toLowerCase();
   return campaigns.filter((c) => {
-    const subtype = c.rewardConfig?.rewardSubtype || "";
-    if (trigger === "registration") {
+    const subtype = String(c.rewardConfig?.rewardSubtype || "").toLowerCase();
+    if (
+      normalized === "registration" ||
+      normalized === REWARD_SUBTYPE.REFERRAL_REGISTRATION
+    ) {
       return subtype === REWARD_SUBTYPE.REFERRAL_REGISTRATION;
     }
-    if (trigger === "first_purchase") {
+    if (
+      normalized === "first_purchase" ||
+      normalized === REWARD_SUBTYPE.REFERRAL_FIRST_PURCHASE
+    ) {
       return subtype === REWARD_SUBTYPE.REFERRAL_FIRST_PURCHASE;
     }
-    return false;
+    return subtype === normalized;
   });
 }

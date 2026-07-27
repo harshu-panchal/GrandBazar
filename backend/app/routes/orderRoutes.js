@@ -45,6 +45,7 @@ import {
 } from "../controller/orderWorkflowController.js";
 import {
   verifyToken,
+  optionalVerifyToken,
   allowRoles,
   requireApprovedSeller,
   requireBusinessModelChosen,
@@ -80,6 +81,11 @@ import {
   listCustomerCampaigns,
   getCampaignDetail,
   cancelCampaign,
+  createAdminAdvanceBooking,
+  listAdminAdvanceBookings,
+  updateAdminAdvanceBooking,
+  deleteAdminAdvanceBooking,
+  cancelAdminAdvanceBooking,
   updateSelfLogisticsStatus,
   adminLogisticsOverride,
   getReassignCandidates,
@@ -455,9 +461,9 @@ router.put(
   resolveDisputeHandler,
 );
 
-// Pre-order campaigns
-router.get("/campaigns/active", verifyToken, listCustomerCampaigns);
-router.get("/campaigns/:campaignId", verifyToken, getCampaignDetail);
+// Pre-order / advance booking campaigns
+router.get("/campaigns/active", optionalVerifyToken, listCustomerCampaigns);
+router.get("/campaigns/:campaignId", optionalVerifyToken, getCampaignDetail);
 router.get(
   "/campaigns",
   ...sellerCampaignReadChain,
@@ -477,6 +483,43 @@ router.put(
   "/campaigns/:campaignId/cancel",
   ...sellerCampaignWriteChain,
   cancelCampaign,
+);
+
+// Admin advance booking (choose seller + products + booking/delivery windows)
+router.get(
+  "/admin/advance-bookings",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("marketing"),
+  listAdminAdvanceBookings,
+);
+router.post(
+  "/admin/advance-bookings",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("marketing"),
+  createAdminAdvanceBooking,
+);
+router.put(
+  "/admin/advance-bookings/:campaignId",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("marketing"),
+  updateAdminAdvanceBooking,
+);
+router.delete(
+  "/admin/advance-bookings/:campaignId",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("marketing"),
+  deleteAdminAdvanceBooking,
+);
+router.put(
+  "/admin/advance-bookings/:campaignId/cancel",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("marketing"),
+  cancelAdminAdvanceBooking,
 );
 
 // Self logistics & admin override

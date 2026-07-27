@@ -28,8 +28,15 @@ import {
   updatePreOrderCampaign,
   listSellerCampaigns,
   listActiveCampaignsForCustomer,
+  listDiscoverableCampaignsForCustomer,
   getCampaignProducts,
+  getCampaignDetailForCustomer,
   cancelPreOrderCampaign,
+  createAdminAdvanceBookingCampaign,
+  listAdminAdvanceBookingCampaigns,
+  updateAdminAdvanceBookingCampaign,
+  deleteAdminAdvanceBookingCampaign,
+  cancelAdminAdvanceBookingCampaign,
 } from "../services/preOrderCampaignService.js";
 import {
   createReplacementRequest,
@@ -368,8 +375,17 @@ export const listCampaigns = async (req, res) => {
 
 export const listCustomerCampaigns = async (req, res) => {
   try {
-    const campaigns = await listActiveCampaignsForCustomer(req.query);
-    return handleResponse(res, 200, "Active campaigns", campaigns);
+    const includeUpcoming =
+      String(req.query?.includeUpcoming || "true").toLowerCase() !== "false";
+    const params = {
+      sellerId: req.query?.sellerId,
+      lat: req.query?.lat,
+      lng: req.query?.lng,
+    };
+    const campaigns = includeUpcoming
+      ? await listDiscoverableCampaignsForCustomer(params)
+      : await listActiveCampaignsForCustomer(params);
+    return handleResponse(res, 200, "Advance booking campaigns", campaigns);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -377,8 +393,63 @@ export const listCustomerCampaigns = async (req, res) => {
 
 export const getCampaignDetail = async (req, res) => {
   try {
-    const data = await getCampaignProducts(req.params.campaignId);
+    const data = await getCampaignDetailForCustomer(req.params.campaignId, {
+      lat: req.query?.lat,
+      lng: req.query?.lng,
+    });
     return handleResponse(res, 200, "Campaign detail", data);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const createAdminAdvanceBooking = async (req, res) => {
+  try {
+    const campaign = await createAdminAdvanceBookingCampaign(req.user.id, req.body);
+    return handleResponse(res, 201, "Advance booking campaign created", campaign);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const listAdminAdvanceBookings = async (req, res) => {
+  try {
+    const campaigns = await listAdminAdvanceBookingCampaigns(req.query);
+    return handleResponse(res, 200, "Advance booking campaigns", campaigns);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const updateAdminAdvanceBooking = async (req, res) => {
+  try {
+    const campaign = await updateAdminAdvanceBookingCampaign(
+      req.user.id,
+      req.params.campaignId,
+      req.body,
+    );
+    return handleResponse(res, 200, "Advance booking campaign updated", campaign);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const deleteAdminAdvanceBooking = async (req, res) => {
+  try {
+    const result = await deleteAdminAdvanceBookingCampaign(req.params.campaignId);
+    return handleResponse(res, 200, "Advance booking campaign deleted", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const cancelAdminAdvanceBooking = async (req, res) => {
+  try {
+    const campaign = await cancelAdminAdvanceBookingCampaign(
+      req.params.campaignId,
+      req.body?.reason || "",
+    );
+    return handleResponse(res, 200, "Advance booking campaign cancelled", campaign);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

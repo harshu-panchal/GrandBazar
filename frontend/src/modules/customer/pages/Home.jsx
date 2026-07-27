@@ -38,6 +38,7 @@ import PromoMarquee from "../components/home/PromoMarquee";
 import QuickCategorySlider from "../components/home/QuickCategorySlider";
 import LowestPriceSection from "../components/home/LowestPriceSection";
 import OfferSections from "../components/home/OfferSections";
+import AdvanceBookingSection from "../components/home/AdvanceBookingSection";
 import BecomeSellerButton from "../components/shared/BecomeSellerButton";
 
 const DEFAULT_CATEGORY_THEME = {
@@ -509,6 +510,7 @@ const Home = () => {
             <BecomeSellerButton />
           </div>
           <LowestPriceSection products={products} onSeeAll={() => navigate("/category/all")} />
+          <AdvanceBookingSection />
           <OfferSections sections={offerSections} noServiceData={noServiceData} />
 
           {sectionsForRenderer.length > 0 && (

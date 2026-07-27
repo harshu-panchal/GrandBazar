@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, Mail, Camera, Save } from 'lucide-react';
+import { ArrowLeft, User, Phone, Mail, Camera, Save, Cake } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuth } from '@core/context/AuthContext';
@@ -15,7 +15,10 @@ const EditProfilePage = () => {
         name: user?.name || '',
         phone: formatIndiaPhoneForDisplay(user?.phone) || '',
         email: user?.email || '',
-        bio: user?.bio || ''
+        bio: user?.bio || '',
+        dateOfBirth: user?.dateOfBirth
+            ? new Date(user.dateOfBirth).toISOString().slice(0, 10)
+            : '',
     });
 
     useEffect(() => {
@@ -25,6 +28,9 @@ const EditProfilePage = () => {
             phone: formatIndiaPhoneForDisplay(user.phone) || '',
             email: user.email || '',
             bio: user.bio || '',
+            dateOfBirth: user.dateOfBirth
+                ? new Date(user.dateOfBirth).toISOString().slice(0, 10)
+                : '',
         });
     }, [user]);
 
@@ -121,6 +127,23 @@ const EditProfilePage = () => {
                                     placeholder="Enter email address"
                                 />
                             </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Date of Birth</label>
+                            <div className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all">
+                                <Cake size={20} className="text-slate-400" />
+                                <input
+                                    type="date"
+                                    name="dateOfBirth"
+                                    value={formData.dateOfBirth}
+                                    onChange={handleChange}
+                                    className="bg-transparent w-full text-slate-800 font-bold outline-none"
+                                />
+                            </div>
+                            <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
+                                Used for birthday rewards — keep this updated to receive them.
+                            </p>
                         </div>
 
                         <div>

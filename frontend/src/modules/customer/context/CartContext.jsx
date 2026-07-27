@@ -131,6 +131,19 @@ export const CartProvider = ({ children }) => {
   }, [cart, isAuthenticated]);
 
   const addToCart = async (product) => {
+    const booking = product?.advanceBooking;
+    if (booking && booking.bookingOpen === false) {
+      const opensAt = booking.bookingStartAt
+        ? new Date(booking.bookingStartAt).toLocaleString("en-IN")
+        : null;
+      toast.error(
+        opensAt
+          ? `Advance booking opens on ${opensAt}. Cannot add to cart yet.`
+          : "Advance booking has not started for this product yet.",
+      );
+      return;
+    }
+
     const variantSku = String(product?.variantSku || product?.variantName || "").trim();
     const id = product.id || product._id;
     const key = `${id}::${variantSku || ""}`;
@@ -145,7 +158,7 @@ export const CartProvider = ({ children }) => {
       const confirmed = window.confirm(
         "Your cart has items from another store. Clear those items and add this product?",
       );
-      if (!confirmed) return;
+      if (!confirmed) return { ok: false };
     }
 
     // Optimistic UI update for instant feedback (single-store cart only)
@@ -186,12 +199,15 @@ export const CartProvider = ({ children }) => {
       ];
     });
 
-    if (hasOtherStoreItems) {
+    // Skip store-replace toast when caller (e.g. advance booking page) shows its own success toast.
+    const skipStoreReplaceToast = Boolean(product?.advanceBooking);
+    if (hasOtherStoreItems && !skipStoreReplaceToast) {
       toast.message("Cart updated for one store", {
         description: "Items from the previous store were removed.",
       });
     }
 
+    let replacedOtherSellerItems = hasOtherStoreItems;
     if (isAuthenticated) {
       pendingRequestsRef.current += 1;
       try {
@@ -202,7 +218,10 @@ export const CartProvider = ({ children }) => {
         });
         pendingRequestsRef.current -= 1;
         const result = response.data.result || {};
-        if (result.replacedOtherSellerItems && !hasOtherStoreItems) {
+        if (result.replacedOtherSellerItems) {
+          replacedOtherSellerItems = true;
+        }
+        if (result.replacedOtherSellerItems && !hasOtherStoreItems && !skipStoreReplaceToast) {
           toast.message("Cart updated for one store", {
             description: "Items from the previous store were removed.",
           });
@@ -216,8 +235,11 @@ export const CartProvider = ({ children }) => {
         if (pendingRequestsRef.current === 0) {
           await fetchCart();
         }
+        throw error;
       }
     }
+
+    return { ok: true, replacedOtherSellerItems };
   };
 
   const removeFromCart = async (productId, variantSku = "") => {

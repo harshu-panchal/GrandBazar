@@ -25,6 +25,13 @@ const preOrderCampaignSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    /** All stores contributing products (admin multi-store campaigns). */
+    sellers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Store",
+      },
+    ],
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "", trim: true },
     status: {
@@ -48,6 +55,12 @@ const preOrderCampaignSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
+        /** Store that owns this product (required for multi-store admin campaigns). */
+        seller: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Store",
+          default: null,
+        },
         allocationCap: { type: Number, required: true, min: 1 },
         allocatedQty: { type: Number, default: 0, min: 0 },
         priceOverride: { type: Number, default: null },
@@ -65,6 +78,17 @@ const preOrderCampaignSchema = new mongoose.Schema(
       ref: "Seller",
       default: null,
     },
+    createdByRole: {
+      type: String,
+      enum: ["seller", "admin"],
+      default: "seller",
+      index: true,
+    },
+    createdByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, default: "" },
   },
@@ -72,6 +96,9 @@ const preOrderCampaignSchema = new mongoose.Schema(
 );
 
 preOrderCampaignSchema.index({ seller: 1, status: 1, "saleWindow.startAt": 1 });
+preOrderCampaignSchema.index({ sellers: 1, status: 1 });
 preOrderCampaignSchema.index({ "products.product": 1, status: 1 });
+preOrderCampaignSchema.index({ "products.seller": 1, status: 1 });
+preOrderCampaignSchema.index({ createdByRole: 1, status: 1, "saleWindow.startAt": 1 });
 
 export default mongoose.model("PreOrderCampaign", preOrderCampaignSchema);

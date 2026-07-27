@@ -4,6 +4,7 @@ import Store from "../models/store.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 import { isStoreOperationallyOpen } from "../services/deliveryOptionResolver.js";
+import { assertProductBookableForCart } from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
@@ -104,6 +105,19 @@ export const addToCart = async (req, res) => {
     const customerVisibleProduct = await getCustomerVisibleProductById(productId);
     if (!customerVisibleProduct) {
       return handleResponse(res, 404, "Product is not available for purchase");
+    }
+
+    try {
+      await assertProductBookableForCart(productId);
+    } catch (bookingError) {
+      return handleResponse(
+        res,
+        bookingError.statusCode || 400,
+        bookingError.message,
+        bookingError.advanceBooking
+          ? { advanceBooking: bookingError.advanceBooking }
+          : undefined,
+      );
     }
 
     const incomingSellerId = toSellerIdString(customerVisibleProduct.sellerId);

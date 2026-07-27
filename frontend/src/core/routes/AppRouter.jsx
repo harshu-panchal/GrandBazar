@@ -1,4 +1,4 @@
-import React, { lazy, useMemo, Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../guards/ProtectedRoute';
 import RoleGuard from '../guards/RoleGuard';
@@ -51,6 +51,8 @@ const SearchPage = lazy(() => import('../../modules/customer/pages/SearchPage'))
 const WalletPage = lazy(() => import('../../modules/customer/pages/WalletPage'));
 const RewardsPage = lazy(() => import('../../modules/customer/pages/RewardsPage'));
 const ReferAndEarnPage = lazy(() => import('../../modules/customer/pages/ReferAndEarnPage'));
+const PreOrderBrowsePage = lazy(() => import('../../modules/customer/pages/PreOrderBrowsePage'));
+const PreOrderDetailPage = lazy(() => import('../../modules/customer/pages/PreOrderDetailPage'));
 
 // Lazy load heavy modules
 const SellerModule = lazy(() => import('../../modules/seller/routes/index'));
@@ -80,8 +82,7 @@ const CustomerLayoutWrapper = () => (
     </LocationProvider>
 );
 
-const AppRouter = () => {
-    const router = useMemo(() => createBrowserRouter([
+const router = createBrowserRouter([
         {
             path: '/',
             element: <Outlet />,
@@ -166,6 +167,8 @@ const AppRouter = () => {
                         { path: 'privacy', element: <PrivacyPage /> },
                         { path: 'about', element: <AboutPage /> },
                         { path: 'offers', element: <OffersPage /> },
+                        { path: 'preorder', element: <PreOrderBrowsePage /> },
+                        { path: 'preorder/:campaignId', element: <PreOrderDetailPage /> },
                         { path: 'shop-by-store', element: <ShopByStorePage /> },
                         { path: 'stores', element: <StoresPage /> },
                         { path: 'store/:sellerId', element: <StoreDetailPage /> },
@@ -194,9 +197,8 @@ const AppRouter = () => {
                 }
             ]
         }
-    ]), []);
+    ]);
 
-    return <RouterProvider router={router} />;
-};
+const AppRouter = () => <RouterProvider router={router} />;
 
 export default AppRouter;

@@ -57,6 +57,18 @@ const rewardConfigSchema = new mongoose.Schema(
       ref: "Coupon",
       default: null,
     },
+    /** Festival label e.g. Diwali, Holi — used with festival subtype date window */
+    festivalName: { type: String, default: "", trim: true },
+  },
+  { _id: false },
+);
+
+const redemptionRulesSchema = new mongoose.Schema(
+  {
+    minOrderAmount: { type: Number, default: 0 },
+    maxWalletPercent: { type: Number, default: 100, min: 0, max: 100 },
+    maxWalletAmount: { type: Number, default: null },
+    allowWithCoupon: { type: Boolean, default: true },
   },
   { _id: false },
 );
@@ -102,6 +114,7 @@ const rewardCampaignSchema = new mongoose.Schema(
     dailyUsed: { type: Number, default: 0 },
     monthlyUsed: { type: Number, default: 0 },
     rules: { type: eligibilityRulesSchema, default: () => ({}) },
+    redemptionRules: { type: redemptionRulesSchema, default: () => ({}) },
     rewardConfig: { type: rewardConfigSchema, required: true },
     stats: {
       totalGrants: { type: Number, default: 0 },
