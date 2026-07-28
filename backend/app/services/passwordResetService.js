@@ -94,16 +94,7 @@ function randomOtp(length) {
 }
 
 function generateOtp() {
-  const production = process.env.NODE_ENV === "production";
-  const useRealDelivery = !useMockEmailOtp();
-
-  if (production && !useRealDelivery) {
-    const error = new Error("Email OTP delivery is not configured in production");
-    error.statusCode = 500;
-    throw error;
-  }
-
-  return useRealDelivery ? randomOtp(OTP_LENGTH) : getMockOtp();
+  return useMockEmailOtp() ? getMockOtp() : randomOtp(OTP_LENGTH);
 }
 
 function hashOtp(purpose, target, otp) {

@@ -15,6 +15,7 @@ jest.unstable_mockModule("../app/models/customer.js", () => ({
 jest.unstable_mockModule("../app/utils/otp.js", () => ({
   generateOTP: jest.fn(() => "1234"),
   useRealSMS: jest.fn(() => false),
+  useMockOtpEnabled: jest.fn(() => true),
 }));
 
 const { issueCustomerOtp, verifyCustomerOtpCode } = await import(
