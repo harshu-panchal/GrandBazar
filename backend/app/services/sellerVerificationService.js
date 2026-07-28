@@ -62,19 +62,7 @@ function useMockOtpForSellerChannel(channel) {
 }
 
 function generateSellerOtp(channel) {
-  const production = process.env.NODE_ENV === "production";
   const useRealDelivery = !useMockOtpForSellerChannel(channel);
-
-  if (production && !useRealDelivery) {
-    const error = new Error(
-      channel === "email"
-        ? "Email OTP delivery is not configured in production"
-        : "SMS OTP delivery is not configured in production",
-    );
-    error.statusCode = 500;
-    throw error;
-  }
-
   return useRealDelivery ? randomOtp(OTP_LENGTH()) : getMockOtp();
 }
 

@@ -15,6 +15,7 @@ import {
   getOtpLength,
   normalizeMobile,
 } from "../../utils/smsHelpers.js";
+import { useMockOtpEnabled } from "../../utils/otp.js";
 
 const SUPPORTED_USER_TYPES = ["Admin", "Seller", "Customer", "Delivery"];
 const SUPPORTED_PURPOSES = ["LOGIN", "SIGNUP", "PASSWORD_RESET"];
@@ -46,13 +47,7 @@ function safeCompare(left, right) {
 }
 
 function isMockOtpEnabled() {
-  if (process.env.USE_MOCK_OTP === "true" || process.env.USE_MOCK_OTP === "1") {
-    return true;
-  }
-  if (process.env.USE_REAL_SMS === "true" || process.env.USE_REAL_SMS === "1") {
-    return false;
-  }
-  return process.env.NODE_ENV !== "production";
+  return useMockOtpEnabled();
 }
 
 function getExpiryMinutes() {
@@ -166,12 +161,6 @@ export async function sendSmsOtp({ mobile, userType, purpose, ipAddress = "unkno
   const normalizedMobile = assertValidMobile(mobile);
   const account = await findAccountByUserType(userType, normalizedMobile);
   assertPurposeEligibility({ purpose, account, userType });
-
-  if (process.env.NODE_ENV === "production" && isMockOtpEnabled()) {
-    const error = new Error("Mock OTP mode cannot be enabled in production");
-    error.statusCode = 500;
-    throw error;
-  }
 
   let otp = generateOTP(getOtpLength());
   if (normalizedMobile === "6268423925" || normalizedMobile === "9111966732") {
