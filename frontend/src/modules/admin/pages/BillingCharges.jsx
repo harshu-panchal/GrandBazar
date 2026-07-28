@@ -49,6 +49,15 @@ const BillingCharges = () => {
         customerSurchargeAmount: 0,
         customerSurchargeReason: '',
     });
+    const [cityCommissions, setCityCommissions] = useState([]);
+    const [cityForm, setCityForm] = useState({
+        cityKey: '',
+        cityName: '',
+        applyCommission: false,
+        adminCommissionType: 'percentage',
+        adminCommissionValue: 0,
+        adminCommissionFixedRule: 'per_qty',
+    });
 
     const activeReasonChip = useMemo(() => {
         if (SURCHARGE_REASON_PRESETS.includes(config.customerSurchargeReason)) {
@@ -93,6 +102,12 @@ const BillingCharges = () => {
                         customerSurchargeAmount: s.customerSurchargeAmount ?? 0,
                         customerSurchargeReason: loadedReason,
                     }));
+                }
+                try {
+                    const cityRes = await adminApi.getCityCommissions();
+                    setCityCommissions(cityRes?.data?.results || cityRes?.data?.result || []);
+                } catch {
+                    setCityCommissions([]);
                 }
             } catch (error) {
                 console.error('Failed to load settings', error);
@@ -167,6 +182,22 @@ const BillingCharges = () => {
             showToast('Failed to update fees settings', 'error');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleSaveCityCommission = async () => {
+        const cityKey = String(cityForm.cityKey || '').trim().toLowerCase().replace(/\s+/g, '-');
+        if (!cityKey) {
+            showToast('Enter city key (for example: indore)', 'error');
+            return;
+        }
+        try {
+            await adminApi.upsertCityCommission(cityKey, cityForm);
+            showToast('City commission saved', 'success');
+            const cityRes = await adminApi.getCityCommissions();
+            setCityCommissions(cityRes?.data?.results || cityRes?.data?.result || []);
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to save city commission', 'error');
         }
     };
 
@@ -503,6 +534,120 @@ const BillingCharges = () => {
                                     <p className="text-[10px] font-bold text-slate-400">
                                         Flat amount paid to delivery partner for each approved return pickup (deducted from seller earnings).
                                     </p>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">
+                                City-wise Commission
+                            </h3>
+                            <p className="text-[11px] font-medium text-slate-500 mt-1">
+                                Used when Add-on/Product/Subcategory/Shop levels are not applicable.
+                            </p>
+                        </div>
+                        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City key</label>
+                                <input
+                                    value={cityForm.cityKey}
+                                    onChange={(e) => setCityForm((f) => ({ ...f, cityKey: e.target.value }))}
+                                    placeholder="indore"
+                                    className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City name</label>
+                                <input
+                                    value={cityForm.cityName}
+                                    onChange={(e) => setCityForm((f) => ({ ...f, cityName: e.target.value }))}
+                                    placeholder="Indore"
+                                    className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Commission type</label>
+                                <select
+                                    value={cityForm.adminCommissionType}
+                                    onChange={(e) => setCityForm((f) => ({ ...f, adminCommissionType: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                >
+                                    <option value="percentage">Percentage</option>
+                                    <option value="fixed">Fixed</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Commission value</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={cityForm.adminCommissionValue}
+                                    onChange={(e) => setCityForm((f) => ({ ...f, adminCommissionValue: Number(e.target.value || 0) }))}
+                                    className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                />
+                            </div>
+                            {cityForm.adminCommissionType === 'fixed' && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fixed rule</label>
+                                    <select
+                                        value={cityForm.adminCommissionFixedRule}
+                                        onChange={(e) => setCityForm((f) => ({ ...f, adminCommissionFixedRule: e.target.value }))}
+                                        className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                    >
+                                        <option value="per_qty">Per qty</option>
+                                        <option value="per_item">Per item</option>
+                                    </select>
+                                </div>
+                            )}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Apply commission</label>
+                                <label className="flex items-center gap-2 text-sm font-bold">
+                                    <input
+                                        type="checkbox"
+                                        checked={cityForm.applyCommission}
+                                        onChange={(e) => setCityForm((f) => ({ ...f, applyCommission: e.target.checked }))}
+                                    />
+                                    Enabled for city
+                                </label>
+                            </div>
+                            <div className="md:col-span-2">
+                                <button
+                                    type="button"
+                                    onClick={handleSaveCityCommission}
+                                    className="px-5 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                >
+                                    Save City Commission
+                                </button>
+                            </div>
+                            <div className="md:col-span-2">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Configured cities</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {cityCommissions.map((city) => (
+                                        <button
+                                            key={city.cityKey}
+                                            type="button"
+                                            onClick={() =>
+                                                setCityForm({
+                                                    cityKey: city.cityKey,
+                                                    cityName: city.cityName || city.cityKey,
+                                                    applyCommission: city.applyCommission === true,
+                                                    adminCommissionType: city.adminCommissionType || 'percentage',
+                                                    adminCommissionValue: Number(city.adminCommissionValue || 0),
+                                                    adminCommissionFixedRule: city.adminCommissionFixedRule || 'per_qty',
+                                                })
+                                            }
+                                            className="text-left p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white"
+                                        >
+                                            <p className="text-xs font-black text-slate-900">{city.cityName || city.cityKey}</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                                {city.adminCommissionType === 'percentage'
+                                                    ? `${city.adminCommissionValue}%`
+                                                    : `₹${city.adminCommissionValue} (${city.adminCommissionFixedRule})`}
+                                            </p>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         </div>

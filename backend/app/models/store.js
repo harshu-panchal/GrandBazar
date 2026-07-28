@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
 import { slugify } from "../utils/slugify.js";
+import {
+  ALL_COMMISSION_FIXED_RULES,
+  ALL_COMMISSION_TYPES,
+} from "../constants/finance.js";
 
 const storeSchema = new mongoose.Schema(
   {
@@ -19,7 +23,7 @@ const storeSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
-      index: true,
+      unique: true,
       sparse: true,
     },
     slugHistory: {
@@ -49,6 +53,30 @@ const storeSchema = new mongoose.Schema(
     categories: {
       type: [String],
       default: [],
+    },
+    applyCommission: {
+      type: Boolean,
+      default: false,
+    },
+    adminCommission: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    adminCommissionType: {
+      type: String,
+      enum: ALL_COMMISSION_TYPES,
+      default: "percentage",
+    },
+    adminCommissionValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    adminCommissionFixedRule: {
+      type: String,
+      enum: ALL_COMMISSION_FIXED_RULES,
+      default: "per_qty",
     },
 
     description: {
@@ -283,7 +311,7 @@ const storeSchema = new mongoose.Schema(
 storeSchema.index({ location: "2dsphere" });
 storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1 });
 storeSchema.index({ favoriteCount: -1 });
-storeSchema.index({ slug: 1 }, { unique: true, sparse: true });
+storeSchema.index({ city: 1, isActive: 1, isVerified: 1 });
 
 async function buildUniqueStoreSlug(doc, baseName) {
   const base = slugify(baseName || "store");
@@ -323,6 +351,21 @@ storeSchema.pre("save", async function syncStoreSlug(next) {
     if (previousSlug && previousSlug !== this.slug) {
       const history = new Set([...(this.slugHistory || []), String(previousSlug).toLowerCase()]);
       this.slugHistory = [...history];
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+storeSchema.pre("save", function syncStoreCommissionFields(next) {
+  try {
+    const value = Math.max(0, Number(this.adminCommissionValue ?? this.adminCommission ?? 0) || 0);
+    this.adminCommissionValue = value;
+    if (this.adminCommissionType === "percentage") {
+      this.adminCommission = value;
+    } else {
+      this.adminCommission = 0;
     }
     next();
   } catch (error) {

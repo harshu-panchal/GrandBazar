@@ -79,6 +79,13 @@ import {
     updateDeliverySettingsController,
 } from "../controller/adminFinanceController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
+import {
+    getStoreCommission,
+    getCityCommission,
+    listCityCommissions,
+    upsertCityCommissionController,
+    updateStoreCommission,
+} from "../controller/admin/commissionHierarchyController.js";
 
 import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
 import {
@@ -221,6 +228,11 @@ router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSel
 router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);
 router.put("/sellers/:id/business-model", verifyToken, allowRoles("admin"), updateAdminSellerBusinessModel);
 router.put("/sellers/:id/commission", verifyToken, allowRoles("admin"), updateAdminSellerCommission);
+router.get("/stores/:id/commission", verifyToken, allowRoles("admin"), getStoreCommission);
+router.put("/stores/:id/commission", verifyToken, allowRoles("admin"), updateStoreCommission);
+router.get("/commissions/cities", verifyToken, allowRoles("admin"), listCityCommissions);
+router.get("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), getCityCommission);
+router.put("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityCommissionController);
 router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), listModelSwitchRequests);
 router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), approveModelSwitchRequest);
 router.patch("/sellers/:id/model-switch/reject", verifyToken, allowRoles("admin"), rejectModelSwitchRequest);

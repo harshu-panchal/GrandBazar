@@ -266,6 +266,13 @@ const navItems = [
     permission: "billing",
   },
   {
+    label: "City Commissions",
+    path: "/admin/city-commissions",
+    icon: RotateCcw,
+    color: "red",
+    permission: "billing",
+  },
+  {
     label: "Settings",
     path: "/admin/settings",
     icon: Settings,
@@ -302,6 +309,7 @@ const navItems = [
 ];
 
 const BillingCharges = React.lazy(() => import("../pages/BillingCharges"));
+const CityCommissions = React.lazy(() => import("../pages/CityCommissions"));
 
 const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
@@ -421,6 +429,7 @@ const AdminRoutes = () => {
         )}
         
         {hasPermission("billing") && <Route path="/billing" element={<BillingCharges />} />}
+        {hasPermission("billing") && <Route path="/city-commissions" element={<CityCommissions />} />}
         {hasPermission("settings") && <Route path="/settings" element={<AdminSettings />} />}
         {hasPermission("system") && <Route path="/env" element={<EnvSettings />} />}
         

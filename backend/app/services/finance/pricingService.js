@@ -1,14 +1,15 @@
 import Product from "../../models/product.js";
 import Category from "../../models/category.js";
 import Store from "../../models/store.js";
+import CityCommission from "../../models/cityCommission.js";
 import {
   PRODUCT_APPROVAL_STATUS,
   resolveProductApprovalStatus,
 } from "../productModerationService.js";
 import {
   loadStoreOwnerBusinessModel,
-  resolveSellerCommissionConfig,
 } from "../sellerBusinessModelService.js";
+import { normalizeCityKey } from "../cityCommissionService.js";
 import {
   COMMISSION_FIXED_RULE,
   COMMISSION_TYPE,
@@ -24,6 +25,8 @@ import {
   roundCurrency,
 } from "../../utils/money.js";
 import { getOrCreateFinanceSettings } from "./financeSettingsService.js";
+const ENABLE_HIERARCHICAL_COMMISSION =
+  process.env.ENABLE_HIERARCHICAL_COMMISSION !== "false";
 
 function toObjectIdString(value) {
   if (!value) return "";
@@ -76,6 +79,21 @@ function resolveCommissionConfig(category) {
   };
 }
 
+function normalizeCommissionEntity(entity = null) {
+  if (!entity) return null;
+  return {
+    _id: entity._id || null,
+    name: entity.name || entity.shopName || entity.cityName || "",
+    applyCommission: entity.applyCommission === true,
+    enabled: entity.enabled !== false,
+    adminCommissionType: entity.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+    adminCommissionValue: Number(entity.adminCommissionValue ?? entity.adminCommission ?? 0),
+    adminCommission: Number(entity.adminCommission ?? entity.adminCommissionValue ?? 0),
+    adminCommissionFixedRule: entity.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+    cityKey: entity.cityKey || null,
+  };
+}
+
 /**
  * Whether this category level should supply commission.
  * Prefer explicit `applyCommission`; legacy docs without the flag count as
@@ -83,6 +101,7 @@ function resolveCommissionConfig(category) {
  */
 export function categoryAppliesCommission(category) {
   if (!category) return false;
+  if (category.enabled === false) return false;
   if (category.applyCommission === true || category.applyCommission === "true") {
     return true;
   }
@@ -125,6 +144,57 @@ export function resolveCategoryHierarchyCommission({
     category: fallback,
     level: null,
     categoryId: fallback?._id ? String(fallback._id) : null,
+  };
+}
+
+export function resolveEffectiveCommissionForLineItem({
+  addonProduct = null,
+  productCategory = null,
+  subcategory = null,
+  shopCommission = null,
+  cityCommission = null,
+} = {}) {
+  const chain = [
+    { level: "addon", category: normalizeCommissionEntity(addonProduct) },
+    { level: "product", category: normalizeCommissionEntity(productCategory) },
+    { level: "subcategory", category: normalizeCommissionEntity(subcategory) },
+    { level: "shop", category: normalizeCommissionEntity(shopCommission) },
+    { level: "city", category: normalizeCommissionEntity(cityCommission) },
+  ];
+
+  const fallbackTrail = [];
+  for (const entry of chain) {
+    if (!entry.category) {
+      fallbackTrail.push({ level: entry.level, reason: "missing" });
+      continue;
+    }
+    if (entry.category.enabled === false) {
+      fallbackTrail.push({ level: entry.level, reason: "disabled" });
+      continue;
+    }
+    if (categoryAppliesCommission(entry.category)) {
+      const value = Number(entry.category.adminCommissionValue ?? 0);
+      if (value > 0) {
+        return {
+          category: entry.category,
+          level: entry.level,
+          categoryId: entry.category?._id ? String(entry.category._id) : null,
+          cityKey: entry.category?.cityKey || null,
+          fallbackTrail,
+        };
+      }
+      fallbackTrail.push({ level: entry.level, reason: "zero_value" });
+      continue;
+    }
+    fallbackTrail.push({ level: entry.level, reason: "apply_false" });
+  }
+
+  return {
+    category: null,
+    level: null,
+    categoryId: null,
+    cityKey: null,
+    fallbackTrail,
   };
 }
 
@@ -582,7 +652,7 @@ export async function hydrateOrderItems(
 
   const productQuery = Product.find({ _id: { $in: productIds } })
     .select(
-      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
     )
     .lean();
   if (session) productQuery.session(session);
@@ -628,6 +698,16 @@ export async function hydrateOrderItems(
       ? serverUnitPrice
       : normalizeLinePrice(item.price) || serverUnitPrice;
 
+    const parentProductId = String(
+      item.parentProductId ||
+      item.parentId ||
+      item.baseProductId ||
+      item.meta?.parentProductId ||
+      "",
+    ).trim();
+    const explicitAddonFlag = item.isAddon === true || item.isAddOn === true || item.addon === true;
+    const isAddonLine = explicitAddonFlag || Boolean(parentProductId);
+
     return {
       productId,
       productName: item.name || product.name,
@@ -647,6 +727,8 @@ export async function hydrateOrderItems(
       ),
       adminCommissionFixedRule:
         product.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+      isAddonLine,
+      parentProductId: parentProductId || null,
     };
   });
 }
@@ -679,10 +761,18 @@ export async function generateOrderPaymentBreakdown({
   const storeId = sellerIds[0];
   const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
   const storePackagingQuery = Store.findById(storeId)
-    .select("packagingCharge packagingChargeEnabled shopName")
+    .select("packagingCharge packagingChargeEnabled shopName city applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
     .lean();
   if (session) storePackagingQuery.session(session);
   const storeDoc = await storePackagingQuery;
+  const cityKey = normalizeCityKey(storeDoc?.city || "");
+  const cityCommissionQuery = cityKey
+    ? CityCommission.findOne({ cityKey })
+        .select("cityKey cityName enabled applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
+        .lean()
+    : null;
+  if (session && cityCommissionQuery) cityCommissionQuery.session(session);
+  const cityCommission = cityCommissionQuery ? await cityCommissionQuery : null;
   const packagingChargeAmount =
     storeDoc?.packagingChargeEnabled && Number(storeDoc.packagingCharge || 0) > 0
       ? roundCurrency(storeDoc.packagingCharge)
@@ -726,6 +816,21 @@ export async function generateOrderPaymentBreakdown({
   if (session) categoryQuery.session(session);
   const categories = await categoryQuery;
   const categoryById = new Map(categories.map((category) => [String(category._id), category]));
+  const commissionProductIds = Array.from(
+    new Set(
+      normalizedItems
+        .flatMap((item) => [item.productId, item.parentProductId])
+        .filter(Boolean),
+    ),
+  );
+  const commissionProductDocs = commissionProductIds.length
+    ? await Product.find({ _id: { $in: commissionProductIds } })
+        .select("_id name addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
+        .lean()
+    : [];
+  const commissionProductById = new Map(
+    commissionProductDocs.map((doc) => [String(doc._id), doc]),
+  );
 
   const effectiveSettings =
     deliverySettings || (await getOrCreateFinanceSettings());
@@ -759,23 +864,53 @@ export async function generateOrderPaymentBreakdown({
               item.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
           }
         : null;
-    const hierarchy = resolveCategoryHierarchyCommission({
-      productCategory,
-      headerCategory,
-      level2Category,
-      subcategory,
-    });
-    const { config, source } = resolveSellerCommissionConfig(
-      effectiveOwner,
-      item.headerCategoryId,
-      hierarchy.category,
-    );
-    if (!config) {
-      const err = new Error("Seller business model is not configured for checkout");
-      err.statusCode = 403;
-      throw err;
-    }
-    const commission = calculateCategoryCommission(item, config);
+
+    const parentProduct = item.parentProductId
+      ? commissionProductById.get(String(item.parentProductId))
+      : null;
+    const addonProduct = item.isAddonLine && productCategory
+      ? {
+          ...productCategory,
+          _id: item.productId,
+          name: item.productName || "Add-on Product",
+        }
+      : null;
+    const addonAllowed = Boolean(
+      item.isAddonLine &&
+      parentProduct &&
+      Array.isArray(parentProduct.addons) &&
+      parentProduct.addons.some((id) => String(id) === String(item.productId)),
+    ) || Boolean(item.isAddonLine && item.parentProductId);
+
+    const resolved = ENABLE_HIERARCHICAL_COMMISSION
+      ? resolveEffectiveCommissionForLineItem({
+          addonProduct: addonAllowed ? addonProduct : null,
+          productCategory,
+          subcategory,
+          shopCommission: storeDoc,
+          cityCommission,
+        })
+      : (() => {
+          const legacy = resolveCategoryHierarchyCommission({
+            productCategory,
+            headerCategory,
+            level2Category,
+            subcategory,
+          });
+          return {
+            category: legacy.category,
+            level: legacy.level,
+            categoryId: legacy.categoryId,
+            cityKey: null,
+            fallbackTrail: [{ level: "legacy", reason: "feature_flag_disabled" }],
+          };
+        })();
+    const effectiveConfig = resolved.category || {
+      adminCommissionType: COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue: 0,
+      adminCommissionFixedRule: COMMISSION_FIXED_RULE.PER_QTY,
+    };
+    const commission = calculateCategoryCommission(item, effectiveConfig);
     productSubtotal = addMoney(productSubtotal, commission.itemSubtotal);
     sellerPayoutTotal = addMoney(sellerPayoutTotal, commission.sellerPayout);
     adminProductCommissionTotal = addMoney(
@@ -795,13 +930,20 @@ export async function generateOrderPaymentBreakdown({
       categoryId: item.categoryId || null,
       subcategoryId: item.subcategoryId || null,
       headerCategoryName: headerCategory?.name || "Unknown",
-      appliedCommissionCategoryId: hierarchy.categoryId,
-      appliedCommissionCategoryLevel: hierarchy.level,
-      appliedCommissionCategoryName: hierarchy.category?.name || null,
+      appliedCommissionCategoryId: resolved.categoryId,
+      appliedCommissionCategoryLevel: resolved.level,
+      appliedCommissionCategoryName: resolved.category?.name || null,
       appliedCommissionType: commission.appliedCommissionType,
       appliedCommissionValue: commission.appliedCommissionValue,
       appliedCommissionFixedRule: commission.appliedFixedRule,
-      appliedCommissionSource: source,
+      appliedCommissionSource: resolved.level || "none",
+      appliedCommissionSourceLevel: resolved.level || "none",
+      appliedCommissionSourceId: resolved.level === "city"
+        ? resolved.cityKey
+        : (resolved.categoryId || null),
+      commissionFallbackTrail: resolved.fallbackTrail || [],
+      isAddonLine: item.isAddonLine === true,
+      parentProductId: item.parentProductId || null,
     };
   });
 
@@ -875,6 +1017,13 @@ export async function generateOrderPaymentBreakdown({
   const platformTotalEarning = roundCurrency(
     adminProductCommissionTotal + platformLogisticsMargin + customerSurchargeAmount,
   );
+  const rolloutVerification = {
+    hierarchicalCommissionEnabled: ENABLE_HIERARCHICAL_COMMISSION,
+    linesWithoutCommissionSource: lineItems.filter(
+      (line) => !line.appliedCommissionSourceLevel || line.appliedCommissionSourceLevel === "none",
+    ).map((line) => line.productId),
+    verifiedAt: new Date().toISOString(),
+  };
 
   const snapshots = {
     deliverySettings: {
@@ -906,6 +1055,43 @@ export async function generateOrderPaymentBreakdown({
     packingCategoryUsed: packing.packingCategoryUsed,
     sellerBusinessModel: effectiveOwner.businessModel,
     sellerOwnerId: owner?._id ? String(owner._id) : null,
+    commissionResolutionOrder: [
+      "addon",
+      "product",
+      "subcategory",
+      "shop",
+      "city",
+    ],
+    featureFlags: {
+      hierarchicalCommission: ENABLE_HIERARCHICAL_COMMISSION,
+    },
+    rolloutVerification,
+    shopCommission: {
+      storeId: String(storeId),
+      shopName: storeDoc?.shopName || "",
+      city: storeDoc?.city || "",
+      applyCommission: storeDoc?.applyCommission === true,
+      adminCommissionType: storeDoc?.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue: Number(storeDoc?.adminCommissionValue ?? storeDoc?.adminCommission ?? 0),
+      adminCommissionFixedRule: storeDoc?.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+    },
+    cityCommission: cityCommission
+      ? {
+          cityKey: cityCommission.cityKey,
+          cityName: cityCommission.cityName || "",
+          enabled: cityCommission.enabled !== false,
+          applyCommission: cityCommission.applyCommission === true,
+          adminCommissionType: cityCommission.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+          adminCommissionValue: Number(cityCommission.adminCommissionValue ?? cityCommission.adminCommission ?? 0),
+          adminCommissionFixedRule: cityCommission.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+        }
+      : null,
+    appliedCommissionSources: lineItems.map((line) => ({
+      productId: line.productId,
+      sourceLevel: line.appliedCommissionSourceLevel,
+      sourceId: line.appliedCommissionSourceId,
+      fallbackTrail: line.commissionFallbackTrail || [],
+    })),
     customerSurcharge: customerSurchargeAmount > 0
       ? { amount: customerSurchargeAmount, reason: customerSurchargeReason }
       : null,

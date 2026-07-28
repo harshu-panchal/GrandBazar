@@ -46,6 +46,12 @@ const SellerDetail = () => {
         type: 'percentage',
         value: 0,
     });
+    const [shopCommissionForm, setShopCommissionForm] = useState({
+        applyCommission: false,
+        adminCommissionType: 'percentage',
+        adminCommissionValue: 0,
+        adminCommissionFixedRule: 'per_qty',
+    });
     const [seller, setSeller] = useState({
         id: id || '',
         shopName: 'Loading...',
@@ -121,6 +127,21 @@ const SellerDetail = () => {
                 }
             }
 
+            try {
+                const storeCommissionRes = await adminApi.getStoreCommission(id);
+                const payload = storeCommissionRes?.data?.result;
+                if (payload) {
+                    setShopCommissionForm({
+                        applyCommission: payload.applyCommission === true,
+                        adminCommissionType: payload.adminCommissionType || 'percentage',
+                        adminCommissionValue: Number(payload.adminCommissionValue || 0),
+                        adminCommissionFixedRule: payload.adminCommissionFixedRule || 'per_qty',
+                    });
+                }
+            } catch {
+                // optional; seller detail should still load.
+            }
+
             const orderPayload = ordersRes?.data?.result || ordersRes?.data?.results || {};
             const orderItems = Array.isArray(orderPayload.items)
                 ? orderPayload.items
@@ -150,6 +171,15 @@ const SellerDetail = () => {
             setBusinessModelData(res.data.result);
         } catch (error) {
             showToast(error.response?.data?.message || 'Failed to update commission', 'error');
+        }
+    };
+
+    const saveShopCommission = async () => {
+        try {
+            await adminApi.updateStoreCommission(id, shopCommissionForm);
+            showToast('Shop-level commission updated', 'success');
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update shop commission', 'error');
         }
     };
 
@@ -482,6 +512,72 @@ const SellerDetail = () => {
                                                                 </button>
                                                             </div>
                                                         )}
+                                                        <div className="mt-4 border-t pt-3 space-y-2">
+                                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Shop-level commission</p>
+                                                            <label className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={shopCommissionForm.applyCommission}
+                                                                    onChange={(e) =>
+                                                                        setShopCommissionForm((f) => ({
+                                                                            ...f,
+                                                                            applyCommission: e.target.checked,
+                                                                        }))
+                                                                    }
+                                                                />
+                                                                Apply at shop level
+                                                            </label>
+                                                            <select
+                                                                className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                value={shopCommissionForm.adminCommissionType}
+                                                                onChange={(e) =>
+                                                                    setShopCommissionForm((f) => ({
+                                                                        ...f,
+                                                                        adminCommissionType: e.target.value,
+                                                                    }))
+                                                                }
+                                                            >
+                                                                <option value="percentage">Percentage</option>
+                                                                <option value="fixed">Fixed</option>
+                                                            </select>
+                                                            <input
+                                                                type="number"
+                                                                min={0}
+                                                                className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                value={shopCommissionForm.adminCommissionValue}
+                                                                onChange={(e) =>
+                                                                    setShopCommissionForm((f) => ({
+                                                                        ...f,
+                                                                        adminCommissionValue: Number(e.target.value || 0),
+                                                                    }))
+                                                                }
+                                                            />
+                                                            {shopCommissionForm.adminCommissionType === 'fixed' && (
+                                                                <select
+                                                                    className="w-full text-xs border rounded-lg px-2 py-1.5"
+                                                                    value={shopCommissionForm.adminCommissionFixedRule}
+                                                                    onChange={(e) =>
+                                                                        setShopCommissionForm((f) => ({
+                                                                            ...f,
+                                                                            adminCommissionFixedRule: e.target.value,
+                                                                        }))
+                                                                    }
+                                                                >
+                                                                    <option value="per_qty">Per qty</option>
+                                                                    <option value="per_item">Per item</option>
+                                                                </select>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={saveShopCommission}
+                                                                className="w-full py-2 bg-brand-600 text-white rounded-lg text-[10px] font-black uppercase"
+                                                            >
+                                                                Save shop commission
+                                                            </button>
+                                                            <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                                                                Effective precedence: Add-on &gt; Product &gt; Subcategory &gt; Shop &gt; City.
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Joined</p>

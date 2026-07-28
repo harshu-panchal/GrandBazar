@@ -5,6 +5,7 @@ const mockCategoryFind = jest.fn();
 const mockStoreFindById = jest.fn();
 const mockSellerFindById = jest.fn();
 const mockGetOrCreateFinanceSettings = jest.fn();
+const mockCityCommissionFindOne = jest.fn();
 
 function createQueryChain(result) {
   return {
@@ -28,6 +29,12 @@ jest.unstable_mockModule("../app/models/category.js", () => ({
 jest.unstable_mockModule("../app/models/store.js", () => ({
   default: {
     findById: mockStoreFindById,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/cityCommission.js", () => ({
+  default: {
+    findOne: mockCityCommissionFindOne,
   },
 }));
 
@@ -55,15 +62,17 @@ const {
   categoryAppliesCommission,
   generateOrderPaymentBreakdown,
   hydrateOrderItems,
+  resolveEffectiveCommissionForLineItem,
   resolveCategoryHierarchyCommission,
 } = await import("../app/services/finance/pricingService.js");
 
 describe("finance pricing flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockProductFind.mockReturnValue(createQueryChain([]));
     mockStoreFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1" }),
+      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1", city: "Indore" }),
     });
     mockSellerFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -74,6 +83,7 @@ describe("finance pricing flow", () => {
       }),
     });
     mockGetActiveSubscriptionForSeller.mockResolvedValue({ _id: "sub1" });
+    mockCityCommissionFindOne.mockReturnValue(createQueryChain(null));
   });
 
   it("calculates product subtotal accurately", () => {
@@ -169,7 +179,7 @@ describe("finance pricing flow", () => {
     ).toBe(false);
   });
 
-  it("falls back to level2 commission during checkout when header is missing", async () => {
+  it("falls back to subcategory commission when product/addon commissions are missing", async () => {
     mockCategoryFind.mockReturnValue(
       createQueryChain([
         {
@@ -182,9 +192,9 @@ describe("finance pricing flow", () => {
           handlingFeeValue: 0,
         },
         {
-          _id: "c1",
-          name: "Level2",
-          type: "category",
+          _id: "s1",
+          name: "Subcategory",
+          type: "subcategory",
           applyCommission: true,
           adminCommissionType: "percentage",
           adminCommissionValue: 20,
@@ -213,8 +223,8 @@ describe("finance pricing flow", () => {
           quantity: 1,
           price: 100,
           headerCategoryId: "h1",
-          categoryId: "c1",
-          subcategoryId: null,
+          categoryId: null,
+          subcategoryId: "s1",
           sellerId: "seller-1",
         },
       ],
@@ -223,8 +233,81 @@ describe("finance pricing flow", () => {
     });
 
     expect(breakdown.adminProductCommissionTotal).toBe(20);
-    expect(breakdown.lineItems[0].appliedCommissionCategoryLevel).toBe("category");
+    expect(breakdown.lineItems[0].appliedCommissionCategoryLevel).toBe("subcategory");
     expect(breakdown.lineItems[0].appliedCommissionValue).toBe(20);
+  });
+
+  it("resolves effective commission with bottom-up fallback order", () => {
+    const result = resolveEffectiveCommissionForLineItem({
+      addonProduct: {
+        _id: "addon-1",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 12,
+      },
+      productCategory: {
+        _id: "prod-1",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 10,
+      },
+      subcategory: {
+        _id: "sub-1",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 8,
+      },
+      shopCommission: {
+        _id: "shop-1",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 6,
+      },
+      cityCommission: {
+        cityKey: "indore",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 4,
+      },
+    });
+    expect(result.level).toBe("addon");
+    expect(result.categoryId).toBe("addon-1");
+  });
+
+  it("falls back to city when deeper levels are disabled or zero", () => {
+    const result = resolveEffectiveCommissionForLineItem({
+      addonProduct: {
+        _id: "addon-1",
+        applyCommission: true,
+        enabled: false,
+        adminCommissionValue: 15,
+      },
+      productCategory: {
+        _id: "prod-1",
+        applyCommission: true,
+        adminCommissionValue: 0,
+      },
+      subcategory: {
+        _id: "sub-1",
+        applyCommission: false,
+        adminCommissionValue: 7,
+      },
+      shopCommission: {
+        _id: "shop-1",
+        applyCommission: true,
+        adminCommissionValue: 0,
+      },
+      cityCommission: {
+        cityKey: "indore",
+        cityName: "Indore",
+        applyCommission: true,
+        adminCommissionType: "percentage",
+        adminCommissionValue: 3,
+      },
+    });
+    expect(result.level).toBe("city");
+    expect(result.cityKey).toBe("indore");
+    expect(result.fallbackTrail.length).toBeGreaterThan(0);
   });
 
   it("supports handling fee strategies with category snapshots", () => {
@@ -393,8 +476,10 @@ describe("finance pricing flow", () => {
     mockCategoryFind.mockReturnValue(
       createQueryChain([
         {
-          _id: "cat-1",
-          name: "Fruits",
+          _id: "sub-1",
+          name: "Sub Fruits",
+          type: "subcategory",
+          applyCommission: true,
           adminCommissionType: "percentage",
           adminCommissionValue: 10,
           handlingFeeType: "fixed",
@@ -424,6 +509,7 @@ describe("finance pricing flow", () => {
           quantity: 2,
           price: 100,
           headerCategoryId: "cat-1",
+          subcategoryId: "sub-1",
           sellerId: "seller-1",
         },
       ],

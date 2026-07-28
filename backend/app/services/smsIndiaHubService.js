@@ -1,5 +1,6 @@
 import axios from "axios";
 import { buildMessage, toIndianNumber } from "../utils/smsHelpers.js";
+import { useMockOtpEnabled } from "../utils/otp.js";
 
 const SMS_INDIA_SUCCESS_CODE = "000";
 
@@ -88,6 +89,19 @@ function mapSmsIndiaError(code) {
 }
 
 export async function sendSmsIndiaHubOtp({ phone, otp, message }) {
+  if (useMockOtpEnabled()) {
+    return {
+      provider: "mock",
+      providerCode: "MOCK",
+      rawResponse: {
+        skipped: true,
+        reason: "USE_MOCK_OTP enabled",
+        phone: toIndianNumber(phone),
+        message: message || buildMessage(otp),
+      },
+    };
+  }
+
   const config = getSmsIndiaConfig();
   const requiredConfig = {
     apiKey: config.apiKey,

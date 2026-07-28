@@ -20,6 +20,12 @@ export const adminApi = {
     getSellerBusinessModel: (id) => axiosInstance.get(`/admin/sellers/${id}/business-model`),
     updateSellerBusinessModel: (id, data) => axiosInstance.put(`/admin/sellers/${id}/business-model`, data),
     updateSellerCommission: (id, data) => axiosInstance.put(`/admin/sellers/${id}/commission`, data),
+    getStoreCommission: (id) => axiosInstance.get(`/admin/stores/${id}/commission`),
+    updateStoreCommission: (id, data) => axiosInstance.put(`/admin/stores/${id}/commission`, data),
+    getCityCommissions: (params) => axiosInstance.get('/admin/commissions/cities', { params }),
+    getCityCommission: (cityKey) => axiosInstance.get(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`),
+    upsertCityCommission: (cityKey, data) =>
+        axiosInstance.put(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`, data),
     getModelSwitchRequests: (params) => axiosInstance.get('/admin/sellers/model-switch-requests', { params }),
     approveModelSwitch: (id) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/approve`),
     rejectModelSwitch: (id, data) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/reject`, data),
