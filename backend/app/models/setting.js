@@ -193,6 +193,19 @@ const settingSchema = new mongoose.Schema(
             upiId: { type: String, trim: true, default: "" },
             paymentInstructions: { type: String, trim: true, default: "" },
         },
+
+        // Platform Operating Hours & Refund Rules
+        operatingHours: {
+            enabled: { type: Boolean, default: false },
+            startHour: { type: String, default: "06:00" }, // HH:mm format (24h)
+            endHour: { type: String, default: "22:00" },   // 10:00 PM default cutoff
+            cutoffMessage: { type: String, default: "Orders are currently closed. We accept orders between 6:00 AM and 10:00 PM." },
+        },
+        refundWindowHours: {
+            type: Number,
+            default: 24,
+            min: 0,
+        },
     },
     {
         timestamps: true,

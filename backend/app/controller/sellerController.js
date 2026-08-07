@@ -492,3 +492,46 @@ export const getSellerDeliverySettings = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+
+/* ===============================
+   GET STORE ALTERNATIVES (Offline Seller Fallback)
+================================ */
+export const getStoreAlternatives = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let targetStore = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      targetStore = await Store.findById(id).lean();
+    }
+    if (!targetStore) {
+      targetStore = await Store.findOne({ slug: String(id).toLowerCase() }).lean();
+    }
+
+    if (!targetStore) {
+      return handleResponse(res, 404, "Store not found");
+    }
+
+    // Find active, open stores matching category or city
+    const alternatives = await Store.find({
+      _id: { $ne: targetStore._id },
+      isActive: true,
+      isOpen: true,
+      isVerified: true,
+      applicationStatus: "approved",
+      $or: [
+        { category: targetStore.category },
+        { categories: { $in: [targetStore.category] } },
+        { city: targetStore.city },
+      ],
+    })
+      .select("shopName slug category description banners storeVideo address locality city state location serviceRadius isActive isOpen isVerified avgRating reviewCount favoriteCount logoUrl")
+      .sort({ avgRating: -1, reviewCount: -1 })
+      .limit(6)
+      .lean();
+
+    return handleResponse(res, 200, "Store alternatives fetched successfully", alternatives);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};

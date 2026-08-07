@@ -1,266 +1,260 @@
 import nodemailer from "nodemailer";
-import logger from "./logger.js";
 
-let cachedTransporter = null;
+let transporter = null;
 
+function getTransporter() {
+  if (!transporter) {
+    const host = process.env.SMTP_HOST || "smtp.gmail.com";
+    const port = parseInt(process.env.SMTP_PORT || "587", 10);
+    const user = process.env.SMTP_USER || process.env.EMAIL_FROM || "";
+    const pass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || "";
+    const secure = process.env.SMTP_SECURE === "true" || port === 465;
+
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+  }
+  return transporter;
+}
+
+/**
+ * Sends welcome email with credentials and portal link to a newly created/approved seller.
+ * @param {Object} params
+ * @param {String} params.email - Seller email
+ * @param {String} params.name - Seller name
+ * @param {String} [params.password] - Generated/set password (if newly created)
+ * @param {String} [params.storeName] - Shop name
+ * @returns {Promise<Object>}
+ */
+export async function sendVendorWelcomeEmail({ email, name, password, storeName }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
+
+  const passwordBlock = password
+    ? `<p><strong>Temporary Password:</strong> <code>${password}</code></p>
+       <p><em>Please change your password after logging in for security.</em></p>`
+    : `<p>Use your registered password to log in.</p>`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to GrandBazar Seller Network!</h2>
+      <p>Hello <strong>${name}</strong>,</p>
+      <p>Your seller account ${storeName ? `for <strong>${storeName}</strong>` : ''} has been created and approved on GrandBazar.</p>
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
+        <p style="margin: 0 0 8px 0;"><strong>Portal Login Email:</strong> ${email}</p>
+        ${passwordBlock}
+      </div>
+      <p style="margin-top: 25px;">
+        <a href="${appLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Access Seller Dashboard
+        </a>
+      </p>
+      <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+        Or copy and paste this link into your browser: <br/>
+        <a href="${appLink}" style="color: #2563eb;">${appLink}</a>
+      </p>
+    </div>
+  `;
+
+  try {
+    const mailOptions = {
+      from: `GrandBazar Platform <${fromEmail}>`,
+      to: email,
+      subject: "Welcome to GrandBazar — Your Seller Credentials & Access Link",
+      html: htmlContent,
+    };
+
+    if (!process.env.SMTP_USER && !process.env.EMAIL_FROM) {
+      console.log("[emailService] Mocking Vendor Email Dispatch (No SMTP Configured):", {
+        to: email,
+        subject: mailOptions.subject,
+        password: password || "(already set)",
+        portalLink: appLink,
+      });
+      return { success: true, mocked: true };
+    }
+
+    const info = await getTransporter().sendMail(mailOptions);
+    console.log("[emailService] Vendor onboarding email sent:", info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send vendor onboarding email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Checks if real SMTP should be used for OTP dispatch.
+ */
 export function useRealEmailOTP() {
   return (
-    process.env.USE_REAL_EMAIL_OTP === "true" ||
-    process.env.USE_REAL_EMAIL_OTP === "1"
+    String(process.env.USE_REAL_EMAIL_OTP || "false").toLowerCase() === "true" ||
+    Boolean(process.env.SMTP_USER || process.env.EMAIL_FROM)
   );
 }
 
-function parseSmtpPort() {
-  return parseInt(process.env.SMTP_PORT || "587", 10);
-}
-
-function parseSmtpSecure(port) {
-  if (process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1") {
-    return true;
-  }
-
-  if (process.env.SMTP_SECURE === "false" || process.env.SMTP_SECURE === "0") {
-    return false;
-  }
-
-  return port === 465;
-}
-
-function getMailFrom() {
-  const fromAddress = String(process.env.MAIL_FROM || "").trim();
-  const fromName = String(process.env.MAIL_FROM_NAME || "").trim();
-
-  if (!fromAddress) {
-    const error = new Error("MAIL_FROM is required for email OTP delivery");
-    error.statusCode = 500;
-    throw error;
-  }
-
-  return fromName ? `${fromName} <${fromAddress}>` : fromAddress;
-}
-
-function getTransportConfig() {
-  const host = String(process.env.SMTP_HOST || "").trim();
-  const port = parseSmtpPort();
-  const secure = parseSmtpSecure(port);
-  const user = String(process.env.SMTP_USER || "").trim();
-  const pass = String(process.env.SMTP_PASS || "").trim();
-
-  if (!host) {
-    const error = new Error("SMTP_HOST is required for email OTP delivery");
-    error.statusCode = 500;
-    throw error;
-  }
-
-  if (!Number.isFinite(port) || port <= 0) {
-    const error = new Error("SMTP_PORT must be a valid number");
-    error.statusCode = 500;
-    throw error;
-  }
-
-  if ((user && !pass) || (!user && pass)) {
-    const error = new Error("SMTP_USER and SMTP_PASS must be provided together");
-    error.statusCode = 500;
-    throw error;
-  }
-
-  return {
-    host,
-    port,
-    secure,
-    ...(user && pass
-      ? {
-        auth: {
-          user,
-          pass,
-        },
-      }
-      : {}),
-  };
-}
-
-function getTransporter() {
-  if (!cachedTransporter) {
-    cachedTransporter = nodemailer.createTransport(getTransportConfig());
-  }
-
-  return cachedTransporter;
-}
-
-export async function sendSellerVerificationOtpEmail({
-  email,
-  otp,
-  expiresInMinutes,
-}) {
-  if (!useRealEmailOTP()) {
-    logger.info("Seller email OTP generated in mock mode", {
-      email,
-      otp,
-      mode: "mock",
-    });
-    return {
-      delivered: false,
-      mode: "mock",
-    };
-  }
-
-  const transporter = getTransporter();
-  await transporter.sendMail({
-    from: getMailFrom(),
-    to: email,
-    subject: "Verify your seller signup email",
-    text: `Your seller signup verification code is ${otp}. This code expires in ${expiresInMinutes} minutes.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #0f172a;">
-        <p>Your seller signup verification code is:</p>
-        <p style="font-size: 28px; font-weight: 700; letter-spacing: 6px;">${otp}</p>
-        <p>This code expires in ${expiresInMinutes} minutes.</p>
+/**
+ * Sends OTP email for password reset.
+ */
+export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user" }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Password Reset Verification Code</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>You requested to reset your password on GrandBazar. Use the following OTP code to complete your password reset:</p>
+      <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
+        ${otp}
       </div>
-    `,
-  });
-
-  return {
-    delivered: true,
-    mode: "real",
-  };
-}
-
-export async function sendPasswordResetOtpEmail({
-  email,
-  otp,
-  expiresInMinutes,
-  role = "seller",
-}) {
-  const roleLabel = role === "admin" ? "admin" : "seller";
+      <p style="color: #64748b; font-size: 13px;">This code will expire in 5 minutes. If you did not request a password reset, please ignore this email.</p>
+    </div>
+  `;
 
   if (!useRealEmailOTP()) {
-    logger.info("Password reset email OTP generated in mock mode", {
-      email,
-      otp,
-      role: roleLabel,
-      mode: "mock",
-    });
-    return {
-      delivered: false,
-      mode: "mock",
-    };
+    console.log(`[emailService] Mocking Password Reset OTP for ${email}: ${otp}`);
+    return { success: true, mocked: true };
   }
 
-  const transporter = getTransporter();
-  await transporter.sendMail({
-    from: getMailFrom(),
-    to: email,
-    subject: `Reset your ${roleLabel} password`,
-    text: `Your ${roleLabel} password reset code is ${otp}. This code expires in ${expiresInMinutes} minutes. If you did not request a password reset, you can ignore this email.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #0f172a;">
-        <p>Your ${roleLabel} password reset code is:</p>
-        <p style="font-size: 28px; font-weight: 700; letter-spacing: 6px;">${otp}</p>
-        <p>This code expires in ${expiresInMinutes} minutes.</p>
-        <p style="color: #64748b; font-size: 13px;">If you did not request a password reset, you can ignore this email.</p>
-      </div>
-    `,
-  });
-
-  return {
-    delivered: true,
-    mode: "real",
-  };
+  try {
+    const mailOptions = {
+      from: `GrandBazar Platform <${fromEmail}>`,
+      to: email,
+      subject: `Your GrandBazar Password Reset OTP: ${otp}`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send OTP email:", error.message);
+    return { success: false, error: error.message };
+  }
 }
 
-export async function sendStaffWelcomeEmail({
-  email,
-  name,
-  password,
-  role,
-}) {
-  const transporter = getTransporter();
-  const adminPanelLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/admin/auth`;
+/**
+ * Sends welcome email to newly created admin staff member (accountant/assistant).
+ */
+export async function sendStaffWelcomeEmail({ email, name, password, role }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const appLink = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/admin";
 
-  const formattedRole = role ? (role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()) : "Staff";
-  const lowercaseRole = role ? role.toLowerCase() : "staff";
-
-  await transporter.sendMail({
-    from: getMailFrom(),
-    to: email,
-    subject: `Congratulations! Your Zinto ${formattedRole} Account has been Created`,
-    text: `Hello ${name},\n\nCongratulations! Your ${lowercaseRole} account has been created successfully.\n\nHere are your login credentials:\nEmail: ${email}\nPassword: ${password}\n\nLogin to the admin panel at: ${adminPanelLink}\n\nBest regards,\nZinto Team`,
-    html: `
-      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-        <div style="text-align: center; margin-bottom: 24px;">
-          <h2 style="color: #4f46e5; margin: 0; font-size: 24px; font-weight: 800;">Zinto Admin Center</h2>
-        </div>
-        <p style="font-size: 16px; line-height: 1.5;">Hello <strong>${name}</strong>,</p>
-        <p style="font-size: 16px; line-height: 1.5; color: #475569;">
-          Congratulations! Your ${lowercaseRole} account has been successfully created. You have been assigned the role of <strong style="text-transform: capitalize; color: #4f46e5;">${role}</strong>.
-        </p>
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; margin: 24px 0;">
-          <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.05em;">Your Login Credentials</h3>
-          <p style="margin: 8px 0; font-size: 14px;"><strong>Email:</strong> ${email}</p>
-          <p style="margin: 8px 0; font-size: 14px;"><strong>Password:</strong> <span style="font-family: monospace; background-color: #cbd5e1; padding: 2px 6px; border-radius: 4px;">${password}</span></p>
-        </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${adminPanelLink}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Login to Admin Panel</a>
-        </div>
-        <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-          Please secure your password. If you did not request this, please contact your system administrator immediately.
-        </p>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to GrandBazar Admin Team!</h2>
+      <p>Hello <strong>${name}</strong>,</p>
+      <p>Your administrative staff account (${role}) has been created on GrandBazar.</p>
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
+        <p style="margin: 0 0 8px 0;"><strong>Admin Login Email:</strong> ${email}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Role:</strong> ${role}</p>
+        <p style="margin: 0;"><strong>Temporary Password:</strong> <code>${password}</code></p>
       </div>
-    `,
-  });
+      <p style="margin-top: 25px;">
+        <a href="${appLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Access Admin Dashboard
+        </a>
+      </p>
+    </div>
+  `;
 
-  return {
-    delivered: true,
-  };
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking Staff Email Dispatch for ${email}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `GrandBazar Admin Platform <${fromEmail}>`,
+      to: email,
+      subject: "Welcome to GrandBazar Admin Team — Credentials & Access",
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send staff welcome email:", error.message);
+    return { success: false, error: error.message };
+  }
 }
 
-export async function sendSellerStaffWelcomeEmail({
-  email,
-  name,
-  password,
-  role,
-  shopName,
-}) {
-  const transporter = getTransporter();
-  const sellerPanelLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/seller`;
-
-  const formattedRole = role ? (role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()) : "Staff";
-  const lowercaseRole = role ? role.toLowerCase() : "staff";
-
-  await transporter.sendMail({
-    from: getMailFrom(),
-    to: email,
-    subject: `Congratulations! Your Zinto Seller ${formattedRole} Account for ${shopName || "Store"} has been Created`,
-    text: `Hello ${name},\n\nCongratulations! Your ${lowercaseRole} account for ${shopName || "our store"} has been created successfully.\n\nHere are your login credentials:\nEmail: ${email}\nPassword: ${password}\n\nLogin to the seller panel at: ${sellerPanelLink}\n\nBest regards,\n${shopName || "Zinto"} Team`,
-    html: `
-      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-        <div style="text-align: center; margin-bottom: 24px;">
-          <h2 style="color: #4f46e5; margin: 0; font-size: 24px; font-weight: 800;">${shopName || "Zinto Store"} Console</h2>
-        </div>
-        <p style="font-size: 16px; line-height: 1.5;">Hello <strong>${name}</strong>,</p>
-        <p style="font-size: 16px; line-height: 1.5; color: #475569;">
-          Congratulations! Your ${lowercaseRole} account has been successfully created for <strong>${shopName || "our store"}</strong>. You have been assigned the role of <strong style="text-transform: capitalize; color: #4f46e5;">${role}</strong>.
-        </p>
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; margin: 24px 0;">
-          <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.05em;">Your Login Credentials</h3>
-          <p style="margin: 8px 0; font-size: 14px;"><strong>Email:</strong> ${email}</p>
-          <p style="margin: 8px 0; font-size: 14px;"><strong>Password:</strong> <span style="font-family: monospace; background-color: #cbd5e1; padding: 2px 6px; border-radius: 4px;">${password}</span></p>
-        </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${sellerPanelLink}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">Login to Seller Panel</a>
-        </div>
-        <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-          Please secure your password. If you did not request this, please contact your store owner immediately.
-        </p>
+/**
+ * Sends seller signup / verification OTP email.
+ */
+export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Seller Verification OTP</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>Thank you for registering on GrandBazar Seller Portal. Your verification OTP code is:</p>
+      <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
+        ${otp}
       </div>
-    `,
-  });
+      <p style="color: #64748b; font-size: 13px;">This code will expire in 5 minutes.</p>
+    </div>
+  `;
 
-  return {
-    delivered: true,
-  };
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking Seller Verification OTP for ${email}: ${otp}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `GrandBazar Seller Network <${fromEmail}>`,
+      to: email,
+      subject: `GrandBazar Seller Verification OTP: ${otp}`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send seller verification OTP email:", error.message);
+    return { success: false, error: error.message };
+  }
 }
 
-export function __resetEmailTransportForTests() {
-  cachedTransporter = null;
+/**
+ * Sends welcome email to sub-seller staff / assistant member.
+ */
+export async function sendSellerStaffWelcomeEmail({ email, name, password, storeName, roleTitle }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${storeName || 'GrandBazar Seller'} Team!</h2>
+      <p>Hello <strong>${name}</strong>,</p>
+      <p>You have been added as a team member (${roleTitle || 'Assistant'}) for <strong>${storeName || 'Store'}</strong>.</p>
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
+        <p style="margin: 0 0 8px 0;"><strong>Login Email:</strong> ${email}</p>
+        <p style="margin: 0;"><strong>Temporary Password:</strong> <code>${password}</code></p>
+      </div>
+      <p style="margin-top: 25px;">
+        <a href="${appLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Access Seller Dashboard
+        </a>
+      </p>
+    </div>
+  `;
+
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking Seller Staff Welcome Email for ${email}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `GrandBazar Seller Platform <${fromEmail}>`,
+      to: email,
+      subject: `Welcome to ${storeName || 'Store'} on GrandBazar — Your Login Credentials`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send seller staff welcome email:", error.message);
+    return { success: false, error: error.message };
+  }
 }

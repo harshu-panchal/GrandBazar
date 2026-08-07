@@ -436,6 +436,36 @@ const ProductDetailPage = () => {
                         </div>
                     </div>
 
+                    {/* Frequently Paired Add-ons Section */}
+                    {product?.addons && Array.isArray(product.addons) && product.addons.length > 0 && (
+                        <div className="w-full col-span-full mb-10 bg-amber-50/50 border border-amber-200/60 rounded-[2.5rem] p-8 shadow-sm">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Sparkles className="h-6 w-6 text-amber-600" />
+                                <h3 className="text-2xl font-black text-slate-900">Frequently Paired Add-ons</h3>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {product.addons.map((addon) => (
+                                    <div key={addon._id || addon.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col justify-between">
+                                        <div>
+                                            {addon.mainImage && (
+                                                <img src={addon.mainImage} alt={addon.name} className="w-full h-24 object-cover rounded-xl mb-3" />
+                                            )}
+                                            <p className="text-xs font-black text-slate-800 line-clamp-1">{addon.name}</p>
+                                            <p className="text-xs font-bold text-amber-600 mt-1">₹{addon.salePrice || addon.price}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAddToCart(addon)}
+                                            className="mt-3 w-full py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all active:scale-95"
+                                        >
+                                            + Add
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="lg:w-[60%] space-y-8">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-3xl font-black text-slate-800">Customer Reviews</h3>

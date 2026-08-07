@@ -4,7 +4,21 @@ import { useAuth } from "../../../core/context/AuthContext";
 
 const WishlistContext = createContext();
 
-export const useWishlist = () => useContext(WishlistContext);
+const defaultWishlistContext = {
+  wishlist: [],
+  loading: false,
+  isFullDataFetched: false,
+  count: 0,
+  isInWishlist: () => false,
+  toggleWishlist: () => {},
+  fetchWishlistIds: async () => {},
+  fetchFullWishlist: async () => {},
+};
+
+export const useWishlist = () => {
+  const context = useContext(WishlistContext);
+  return context || defaultWishlistContext;
+};
 
 export const WishlistProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();

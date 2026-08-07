@@ -514,8 +514,8 @@ const ProductDetailSheet = () => {
                                                 className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-[700] border border-orange-100/50"
                                             >
                                                 <Star size={10} fill="currentColor" />
-                                                {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
-                                                <span className="text-orange-400 font-medium">({reviews.length > 0 ? reviews.length : '120+'})</span>
+                                                {Array.isArray(reviews) && reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
+                                                <span className="text-orange-400 font-medium">({Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})</span>
                                             </motion.div>
                                         </div>
 
@@ -743,14 +743,14 @@ const ProductDetailSheet = () => {
                                             {/* Customer Reviews */}
                                             <AccordionItem 
                                                 id="reviews" 
-                                                title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
+                                                title={`Customer Reviews (${Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})`}
                                                 icon={<Star size={16} />}
                                             >
                                                 <div className="space-y-6 mt-2">
                                                     <div className="flex items-center justify-between mb-4">
                                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-primary rounded-xl text-xs font-black border border-brand-100">
                                                             <Star size={14} fill="currentColor" />
-                                                            {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
+                                                            {Array.isArray(reviews) && reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
                                                         </div>
                                                     </div>
 
@@ -789,7 +789,7 @@ const ProductDetailSheet = () => {
                                                     <div className="space-y-3">
                                                         {reviewLoading ? (
                                                             <div className="flex justify-center py-6"><Loader2 className="animate-spin text-primary" size={20} /></div>
-                                                        ) : reviews.length > 0 ? (
+                                                        ) : Array.isArray(reviews) && reviews.length > 0 ? (
                                                             reviews.map((r, rIdx) => (
                                                                 <div key={r._id} className="p-4 rounded-xl border border-slate-100 bg-white hover:shadow-md hover:translate-x-1 transition-all group">
                                                                     <div className="flex justify-between items-start mb-2">
@@ -1057,14 +1057,14 @@ const ProductDetailSheet = () => {
                                     {/* Customer Reviews */}
                                     <AccordionItem 
                                         id="reviews" 
-                                        title={`Customer Reviews (${reviews.length > 0 ? reviews.length : '120+'})`}
+                                        title={`Customer Reviews (${Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})`}
                                         icon={<Star size={18} strokeWidth={2.5} />}
                                     >
                                         <div className="space-y-6 mt-2">
                                             <div className="flex items-center justify-between mb-4">
                                                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-primary rounded-xl text-xs font-black border border-brand-100">
                                                     <Star size={16} fill="currentColor" />
-                                                    {reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
+                                                    {Array.isArray(reviews) && reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
                                                 </div>
                                             </div>
 
@@ -1099,7 +1099,7 @@ const ProductDetailSheet = () => {
                                             <div className="space-y-4">
                                                 {reviewLoading ? (
                                                     <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" size={24} /></div>
-                                                ) : reviews.length > 0 ? (
+                                                ) : Array.isArray(reviews) && reviews.length > 0 ? (
                                                     reviews.map((r, rIdx) => (
                                                         <div key={r._id} className="p-5 rounded-2xl border border-slate-100 bg-white hover:shadow-md transition-all">
                                                             <div className="flex justify-between items-start mb-2">

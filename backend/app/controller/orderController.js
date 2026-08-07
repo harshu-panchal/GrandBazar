@@ -112,18 +112,21 @@ function parsePositiveInt(value, fallback) {
 }
 
 function getReturnEligibilityDelayMinutes() {
-  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 2);
+  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 0);
 }
 
-function getReturnWindowMinutes() {
-  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 2);
+function getReturnWindowMinutes(customHours = null) {
+  if (customHours && typeof customHours === "number" && customHours > 0) {
+    return customHours * 60;
+  }
+  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 1440); // 24 hours default (1440 mins)
 }
 
-function computeReturnWindowForOrder(order) {
+function computeReturnWindowForOrder(order, customHours = null) {
   const base = order?.deliveredAt || order?.createdAt || new Date();
   const deliveredAt = base instanceof Date ? base : new Date(base);
   const eligibleDelay = getReturnEligibilityDelayMinutes();
-  const windowMinutes = getReturnWindowMinutes();
+  const windowMinutes = getReturnWindowMinutes(customHours);
   const eligibleAt = order?.returnEligibleAt || new Date(deliveredAt.getTime() + eligibleDelay * 60 * 1000);
   let windowExpiresAt = order?.returnWindowExpiresAt || new Date(deliveredAt.getTime() + windowMinutes * 60 * 1000);
   if (windowExpiresAt < eligibleAt) {
@@ -190,6 +193,8 @@ function buildFallbackBreakdownFromPricing(pricing = {}) {
   };
 }
 
+import { checkOperatingHours } from "../utils/operatingHours.js";
+
 /* ===============================
    PLACE ORDER
 ================================ */
@@ -198,6 +203,14 @@ export const placeOrder = async (req, res) => {
     const customerId = req.user?.id;
     if (!customerId) {
       return handleResponse(res, 401, "Unauthorized");
+    }
+
+    const platformSettings = await Setting.findOne({}).lean();
+    if (platformSettings?.operatingHours) {
+      const operatingCheck = checkOperatingHours(platformSettings.operatingHours);
+      if (!operatingCheck.isAllowed) {
+        return handleResponse(res, 403, operatingCheck.message || "Orders are currently closed.");
+      }
     }
 
     const { address, payment, timeSlot, items, paymentMode: paymentModeRaw } =
@@ -700,8 +713,9 @@ export const requestReturn = async (req, res) => {
     }
 
     const now = new Date();
+    const platformSettings = await Setting.findOne({}).lean();
     const { eligibleAt, windowExpiresAt, eligibleDelay, windowMinutes } =
-      computeReturnWindowForOrder(order);
+      computeReturnWindowForOrder(order, platformSettings?.refundWindowHours);
 
     if (now < eligibleAt) {
       return handleResponse(

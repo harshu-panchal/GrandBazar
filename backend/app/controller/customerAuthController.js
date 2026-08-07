@@ -1,6 +1,7 @@
 import Customer from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import handleResponse from "../utils/helper.js";
 import {
     issueCustomerOtp,
@@ -57,6 +58,42 @@ export const loginCustomer = async (req, res) => {
         return handleResponse(res, 200, "If the number is eligible, OTP has been sent");
     } catch (error) {
         return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+/* ===============================
+   LOGIN WITH EMAIL – Customer
+================================ */
+export const loginCustomerWithEmail = async (req, res) => {
+    try {
+        const { email, password } = req.body || {};
+        if (!email || !password) {
+            return handleResponse(res, 400, "Email and password are required");
+        }
+
+        const customer = await Customer.findOne({ email: String(email).toLowerCase() }).select("+password");
+        if (!customer) {
+            return handleResponse(res, 401, "Invalid email or password");
+        }
+
+        if (!customer.password) {
+            return handleResponse(res, 400, "Password not set for this account. Please log in via Mobile OTP.");
+        }
+
+        const isMatch = await bcrypt.compare(password, customer.password);
+        if (!isMatch) {
+            return handleResponse(res, 401, "Invalid email or password");
+        }
+
+        const token = generateToken(customer);
+        await recordLogin(customer, "Customer", req.ip, req.headers["user-agent"]).catch(() => {});
+
+        return handleResponse(res, 200, "Login successful", {
+            token,
+            customer: sanitizeCustomer(customer),
+        });
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
     }
 };
 

@@ -963,7 +963,28 @@ const CheckoutPage = () => {
     }
   }, [cartProductIdKey, cart]);
 
+  const operatingHours = settings?.operatingHours;
+  const isClosedNow = useMemo(() => {
+    if (!operatingHours || !operatingHours.enabled) return false;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [startH, startM] = (operatingHours.startHour || "06:00").split(":").map(Number);
+    const startMinutes = (startH || 0) * 60 + (startM || 0);
+    const [endH, endM] = (operatingHours.endHour || "22:00").split(":").map(Number);
+    const endMinutes = (endH || 0) * 60 + (endM || 0);
+
+    if (startMinutes <= endMinutes) {
+      return currentMinutes < startMinutes || currentMinutes > endMinutes;
+    } else {
+      return currentMinutes < startMinutes && currentMinutes > endMinutes;
+    }
+  }, [operatingHours]);
+
   const handlePlaceOrder = async () => {
+    if (isClosedNow) {
+      showToast(operatingHours?.cutoffMessage || "Orders are currently closed.", "error");
+      return;
+    }
     if (!policyAccepted) {
       showToast("Please accept the Return and Exchange Policy to proceed.", "error");
       return;

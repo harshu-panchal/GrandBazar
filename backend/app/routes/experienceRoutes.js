@@ -11,6 +11,7 @@ import {
   getPublicHeroConfig,
   getAdminHeroConfig,
   upsertHeroConfig,
+  getRecommendedStoresForUser,
 } from "../controller/experienceController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
@@ -79,5 +80,6 @@ router.post(
 // Public routes
 router.get("/experience", getPublicExperienceSections);
 router.get("/experience/hero", getPublicHeroConfig);
+router.get("/experience/recommended-stores", getRecommendedStoresForUser);
 
 export default router;

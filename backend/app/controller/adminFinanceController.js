@@ -2,6 +2,7 @@ import Payout from "../models/payout.js";
 import Wallet from "../models/wallet.js";
 import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
+import Order from "../models/order.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
@@ -151,6 +152,51 @@ export const processAdminFinancePayoutsController = async (req, res) => {
     });
 
     return handleResponse(res, 200, "Payout processing completed", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const settleSellerPayoutManualController = async (req, res) => {
+  try {
+    const { payoutId, remarks, transactionRef } = req.body || {};
+    if (!payoutId) {
+      return handleResponse(res, 400, "payoutId is required");
+    }
+
+    const payout = await Payout.findById(payoutId);
+    if (!payout) {
+      return handleResponse(res, 404, "Payout record not found");
+    }
+
+    if (payout.status === "COMPLETED") {
+      return handleResponse(res, 400, "Payout has already been marked as settled.");
+    }
+
+    payout.status = "COMPLETED";
+    payout.processedAt = new Date();
+    payout.createdBy = req.user?.id || null;
+    if (remarks) payout.remarks = remarks;
+    if (transactionRef) {
+      payout.metadata = { ...(payout.metadata || {}), transactionRef };
+    }
+    await payout.save();
+
+    // Mark related orders as settled
+    if (Array.isArray(payout.relatedOrderIds) && payout.relatedOrderIds.length > 0) {
+      await Order.updateMany(
+        { _id: { $in: payout.relatedOrderIds } },
+        {
+          $set: {
+            "settlementStatus.sellerPayout": "COMPLETED",
+            "settlementStatus.overall": "COMPLETED",
+            "settlementStatus.reconciledAt": new Date(),
+          },
+        }
+      );
+    }
+
+    return handleResponse(res, 200, "Seller payout successfully settled by admin", payout);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

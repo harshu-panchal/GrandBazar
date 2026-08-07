@@ -7,6 +7,7 @@ import {
 } from "./shared/sellerAdminUtils.js";
 import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
+import { sendVendorWelcomeEmail } from "../emailService.js";
 
 function buildPendingStoreQuery(normalizedStatus) {
   if (normalizedStatus === "pending") {
@@ -193,6 +194,13 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
       sellerId: owner._id || store.ownerId,
       shopName: store.shopName,
     }).catch(() => {});
+    if (owner.email) {
+      sendVendorWelcomeEmail({
+        email: owner.email,
+        name: owner.name || "Seller Partner",
+        storeName: store.shopName,
+      }).catch(() => {});
+    }
     return formatSellerApplication({
       ...store.toObject(),
       applicationType: "store",
@@ -229,10 +237,90 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
     sellerId: account._id,
   }).catch(() => {});
 
+  if (account.email) {
+    sendVendorWelcomeEmail({
+      email: account.email,
+      name: account.name || "Seller Partner",
+    }).catch(() => {});
+  }
+
   return formatSellerApplication({
     ...account.toObject(),
     applicationType: "seller_admin",
   });
+}
+
+/**
+ * Creates a new vendor/seller account directly from Admin Panel and dispatches welcome email with credentials.
+ */
+export async function createVendorAccountByAdmin({
+  name,
+  email,
+  phone,
+  password,
+  shopName,
+  category,
+  city,
+  reviewedBy,
+}) {
+  const existingSeller = await Seller.findOne({
+    $or: [{ email: email.toLowerCase() }, { phone }],
+  });
+
+  if (existingSeller) {
+    throw new Error("Seller with this email or phone already exists");
+  }
+
+  const generatedPassword = password || Math.random().toString(36).slice(-8) + "@Gb1";
+
+  const seller = await Seller.create({
+    name,
+    email: email.toLowerCase(),
+    phone,
+    password: generatedPassword,
+    accountType: "owner",
+    role: "seller",
+    isVerified: true,
+    isActive: true,
+    applicationStatus: "approved",
+    reviewedAt: new Date(),
+    reviewedBy,
+  });
+
+  let store = null;
+  if (shopName) {
+    store = await Store.create({
+      ownerId: seller._id,
+      shopName,
+      category: category || "General",
+      city: city || "",
+      isVerified: true,
+      isActive: true,
+      isOpen: true,
+      applicationStatus: "approved",
+    });
+  }
+
+  sendVendorWelcomeEmail({
+    email: seller.email,
+    name: seller.name,
+    password: generatedPassword,
+    storeName: shopName || "",
+  }).catch(() => {});
+
+  return {
+    seller: {
+      id: seller._id,
+      name: seller.name,
+      email: seller.email,
+      phone: seller.phone,
+    },
+    store: store ? { id: store._id, shopName: store.shopName } : null,
+    credentials: {
+      email: seller.email,
+      password: generatedPassword,
+    },
+  };
 }
 
 export async function rejectSellerApplicationById({

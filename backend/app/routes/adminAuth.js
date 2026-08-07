@@ -48,6 +48,7 @@ import {
     getPendingSellers,
     approveSellerApplication,
     rejectSellerApplication,
+    createVendorAccount,
     getSellerWithdrawals,
     getDeliveryWithdrawals,
     updateWithdrawalStatus,
@@ -76,6 +77,7 @@ import {
     getAdminFinanceSummaryController,
     getDeliverySettingsController,
     processAdminFinancePayoutsController,
+    settleSellerPayoutManualController,
     updateDeliverySettingsController,
 } from "../controller/adminFinanceController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
@@ -178,6 +180,12 @@ router.post(
     allowRoles("admin"),
     processAdminFinancePayoutsController,
 );
+router.post(
+    "/finance/settlement/manual",
+    verifyToken,
+    allowRoles("admin"),
+    settleSellerPayoutManualController,
+);
 router.get(
     "/finance/export-statement",
     verifyToken,
@@ -223,6 +231,7 @@ router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLoca
 router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers);
 router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), getActiveSellerById);
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
+router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
 router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
 router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);

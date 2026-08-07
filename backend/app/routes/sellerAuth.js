@@ -8,7 +8,7 @@ import {
     verifySellerForgotPasswordOtp,
     resetSellerPassword,
 } from "../controller/sellerAuthController.js";
-import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings } from "../controller/sellerController.js";
+import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings, getStoreAlternatives } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
 import { getSellerDashboard } from "../controller/seller/dashboardController.js";
 import {
@@ -109,6 +109,7 @@ router.post(
 router.post("/login", loginSeller);
 router.get("/nearby", getNearbySellers);
 router.get("/public/:id", getPublicSellerProfile);
+router.get("/public/:id/alternatives", getStoreAlternatives);
 
 const sellerAuthChain = [verifyToken, allowRoles("seller"), resolveActiveStore];
 

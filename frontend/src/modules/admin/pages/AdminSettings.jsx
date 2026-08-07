@@ -78,6 +78,13 @@ const AdminSettings = () => {
             sellerEditRequiresApproval: false,
         },
         defaultDeliveryProvider: 'zinto',
+        operatingHours: {
+            enabled: false,
+            startHour: '06:00',
+            endHour: '22:00',
+            cutoffMessage: 'Orders are currently closed. We accept orders between 6:00 AM and 10:00 PM.',
+        },
+        refundWindowHours: 24,
     });
 
     useEffect(() => {
@@ -394,6 +401,101 @@ const AdminSettings = () => {
                                             )}
                                         />
                                     </button>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden mt-6">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    Platform Operating Hours & Refund Rules
+                                </h3>
+                            </div>
+                            <div className="p-8 space-y-6">
+                                <div className="rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Enforce Platform Operating Hours (Cutoff Rule)</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">
+                                            When enabled, customers can only place orders within specified start and end hours (e.g. 10 PM cutoff).
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={Boolean(settings.operatingHours?.enabled)}
+                                        onClick={() => handleInputChange('operatingHours', {
+                                            ...settings.operatingHours,
+                                            enabled: !settings.operatingHours?.enabled
+                                        })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200",
+                                            settings.operatingHours?.enabled ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span
+                                            className={cn(
+                                                "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                                settings.operatingHours?.enabled ? "translate-x-7" : "translate-x-1"
+                                            )}
+                                        />
+                                    </button>
+                                </div>
+
+                                {settings.operatingHours?.enabled && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opening Hour (Start)</label>
+                                            <input
+                                                type="time"
+                                                value={settings.operatingHours?.startHour || '06:00'}
+                                                onChange={(e) => handleInputChange('operatingHours', {
+                                                    ...settings.operatingHours,
+                                                    startHour: e.target.value
+                                                })}
+                                                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Closing Hour (Cutoff)</label>
+                                            <input
+                                                type="time"
+                                                value={settings.operatingHours?.endHour || '22:00'}
+                                                onChange={(e) => handleInputChange('operatingHours', {
+                                                    ...settings.operatingHours,
+                                                    endHour: e.target.value
+                                                })}
+                                                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Closed Notice Message</label>
+                                            <input
+                                                type="text"
+                                                value={settings.operatingHours?.cutoffMessage || ''}
+                                                onChange={(e) => handleInputChange('operatingHours', {
+                                                    ...settings.operatingHours,
+                                                    cutoffMessage: e.target.value
+                                                })}
+                                                placeholder="Orders are currently closed. We accept orders between 6:00 AM and 10:00 PM."
+                                                className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2 pt-2 border-t border-slate-100">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Post-Delivery Refund Eligibility Window (Hours)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="720"
+                                        value={settings.refundWindowHours || 24}
+                                        onChange={(e) => handleInputChange('refundWindowHours', Number(e.target.value))}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-xs font-bold text-slate-500">
+                                        Customers can raise return/refund complaints within this number of hours after order delivery (Default: 24 hours).
+                                    </p>
                                 </div>
                             </div>
                         </Card>

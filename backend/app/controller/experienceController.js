@@ -2,6 +2,8 @@ import ExperienceSection from "../models/experienceSection.js";
 import HeroConfig from "../models/heroConfig.js";
 import Category from "../models/category.js";
 import Product from "../models/product.js";
+import Store from "../models/store.js";
+import Order from "../models/order.js";
 import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
@@ -541,6 +543,60 @@ export const upsertHeroConfig = async (req, res) => {
     await invalidate("cache:experience:hero:*");
 
     return handleResponse(res, 200, "Hero config saved", config);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   GET RECOMMENDED STORES (Order History + Ratings)
+================================ */
+export const getRecommendedStoresForUser = async (req, res) => {
+  try {
+    const customerId = req.user?.id;
+    let recommendedStores = [];
+    const storeSelect = "shopName slug category description banners storeVideo address locality city state location serviceRadius isActive isOpen isVerified avgRating reviewCount favoriteCount logoUrl";
+
+    if (customerId) {
+      // Pull stores from customer's past orders
+      const userOrders = await Order.find({ customer: customerId, status: { $ne: "cancelled" } })
+        .select("seller")
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      const orderedStoreIds = [...new Set(userOrders.map((o) => o.seller).filter(Boolean))];
+
+      if (orderedStoreIds.length > 0) {
+        recommendedStores = await Store.find({
+          _id: { $in: orderedStoreIds },
+          isActive: true,
+          isVerified: true,
+          applicationStatus: "approved",
+        })
+          .select(storeSelect)
+          .lean();
+      }
+    }
+
+    // Top-rated fallback if few or no order history stores
+    if (recommendedStores.length < 8) {
+      const excludeIds = recommendedStores.map((s) => s._id);
+      const topRated = await Store.find({
+        _id: { $nin: excludeIds },
+        isActive: true,
+        isVerified: true,
+        applicationStatus: "approved",
+      })
+        .select(storeSelect)
+        .sort({ avgRating: -1, reviewCount: -1 })
+        .limit(10 - recommendedStores.length)
+        .lean();
+
+      recommendedStores = [...recommendedStores, ...topRated];
+    }
+
+    return handleResponse(res, 200, "Recommended stores fetched successfully", recommendedStores);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

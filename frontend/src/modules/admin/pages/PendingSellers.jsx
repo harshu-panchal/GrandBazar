@@ -43,8 +43,46 @@ const PendingSellers = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [viewingSeller, setViewingSeller] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [createForm, setCreateForm] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        shopName: '',
+        category: 'Grocery',
+        city: 'Mumbai',
+    });
+
+    const handleCreateVendorSubmit = async (e) => {
+        e.preventDefault();
+        if (!createForm.name || !createForm.email || !createForm.phone) {
+            toast.error('Name, email, and phone are required');
+            return;
+        }
+        setIsProcessing(true);
+        try {
+            const res = await adminApi.createVendorAccount(createForm);
+            toast.success(res.data?.message || 'Vendor account created successfully! Credentials emailed.');
+            setIsCreateModalOpen(false);
+            setCreateForm({
+                name: '',
+                email: '',
+                phone: '',
+                password: '',
+                shopName: '',
+                category: 'Grocery',
+                city: 'Mumbai',
+            });
+            fetchPendingSellers();
+        } catch (err) {
+            toast.error(err.response?.data?.message || err.message || 'Failed to create vendor account');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const fetchPendingSellers = async () => {
         setIsLoading(true);
@@ -182,9 +220,18 @@ const PendingSellers = () => {
                             : 'Check new seller applications before they can start selling.'}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-xl ring-1 ring-amber-100">
-                    <HiOutlineClock className="h-4 w-4 text-amber-600" />
-                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Avg Review Time: {summaryStats.avgReviewTimeHours}h</span>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="px-4 py-2.5 bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-slate-800 shadow-md active:scale-95 flex items-center gap-2"
+                    >
+                        + Create Vendor Account
+                    </button>
+                    <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 rounded-xl ring-1 ring-amber-100">
+                        <HiOutlineClock className="h-4 w-4 text-amber-600" />
+                        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Avg Review: {summaryStats.avgReviewTimeHours}h</span>
+                    </div>
                 </div>
             </div>
 
@@ -646,6 +693,135 @@ const PendingSellers = () => {
                                         </div>
                                     </div>
                                 </div>
+                            </motion.div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Create Vendor Account Modal */}
+                {isCreateModalOpen && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm">
+                        <div className="flex min-h-full items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-100"
+                            >
+                                <div className="flex items-center justify-between border-b border-slate-100 p-6 bg-slate-50/50">
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-900 uppercase tracking-wider">Create Vendor Account</h3>
+                                        <p className="text-xs font-medium text-slate-500 mt-0.5">Admin-assisted vendor setup with email credentials dispatch</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCreateModalOpen(false)}
+                                        className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    >
+                                        <HiOutlineXMark className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleCreateVendorSubmit} className="p-6 space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={createForm.name}
+                                            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                                            placeholder="e.g. Ramesh Kumar"
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address *</label>
+                                            <input
+                                                type="email"
+                                                required
+                                                value={createForm.email}
+                                                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                                                placeholder="ramesh@example.com"
+                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone Number *</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={createForm.phone}
+                                                onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                                                placeholder="+919876543210"
+                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password (Leave blank for auto-generated)</label>
+                                        <input
+                                            type="password"
+                                            value={createForm.password}
+                                            onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                                            placeholder="Auto-generated if empty"
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1 pt-2 border-t border-slate-100">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Shop / Business Name (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={createForm.shopName}
+                                            onChange={(e) => setCreateForm({ ...createForm, shopName: e.target.value })}
+                                            placeholder="e.g. Ramesh Supermart"
+                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</label>
+                                            <input
+                                                type="text"
+                                                value={createForm.category}
+                                                onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                                                placeholder="Grocery"
+                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City</label>
+                                            <input
+                                                type="text"
+                                                value={createForm.city}
+                                                onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                                                placeholder="Mumbai"
+                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 flex items-center justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCreateModalOpen(false)}
+                                            className="px-5 py-3 text-xs font-bold text-slate-500 hover:text-slate-700"
+                                        >
+                                            CANCEL
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isProcessing}
+                                            className="px-6 py-3 bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-800 disabled:opacity-50"
+                                        >
+                                            {isProcessing ? 'CREATING & SENDING EMAIL...' : 'CREATE & SEND CREDENTIALS'}
+                                        </button>
+                                    </div>
+                                </form>
                             </motion.div>
                         </div>
                     </div>

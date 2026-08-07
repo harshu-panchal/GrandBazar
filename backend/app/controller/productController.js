@@ -360,6 +360,7 @@ export const getProducts = async (req, res) => {
     if (enforceRadius) {
       finalQuery.status = "active";
       finalQuery.isPublished = { $ne: false };
+      finalQuery.stock = { $gt: 0 }; // Hide out-of-stock products from customer app
       finalQuery = { $and: [finalQuery, getApprovedOrLegacyFilter()] };
     } else {
       if (status && status !== "all") {

@@ -5,6 +5,7 @@ export const customerApi = {
   sendLoginOtp: (data) => axiosInstance.post("/customer/send-login-otp", data),
   sendSignupOtp: (data) =>
     axiosInstance.post("/customer/send-signup-otp", data),
+  loginWithEmail: (data) => axiosInstance.post("/customer/login-email", data),
   verifyOtp: (data) => axiosInstance.post("/customer/verify-otp", data),
   getProfile: () => getWithDedupe("/customer/profile", {}, { ttl: 5000 }), // Short cache for profile
   updateProfile: (data) => {
@@ -21,6 +22,8 @@ export const customerApi = {
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),
   getSellerPublicProfile: (id) => getWithDedupe(`/seller/public/${id}`),
+  getRecommendedStores: () => getWithDedupe("/experience/recommended-stores", {}, { ttl: 10000 }),
+  getStoreAlternatives: (id) => getWithDedupe(`/seller/public/${id}/alternatives`),
   getDiscoverCityData: (citySlug) => getWithDedupe(`/public/discover/${encodeURIComponent(citySlug)}`),
   getDiscoverPincodeData: (citySlug, pincode) =>
     getWithDedupe(`/public/discover/${encodeURIComponent(citySlug)}/${encodeURIComponent(String(pincode))}`),

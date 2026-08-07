@@ -2,6 +2,7 @@ import express from "express";
 import {
     signupCustomer,
     loginCustomer,
+    loginCustomerWithEmail,
     verifyCustomerOTP,
     getCustomerProfile,
     updateCustomerProfile,
@@ -21,6 +22,7 @@ const smallAuthPayload = createContentLengthGuard(
 );
 router.post("/send-signup-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, signupCustomer);
 router.post("/send-login-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, loginCustomer);
+router.post("/login-email", authRouteRateLimiter, smallAuthPayload, loginCustomerWithEmail);
 router.post("/verify-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, verifyCustomerOTP);
 
 // Profile routes

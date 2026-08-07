@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useSettings } from "@core/context/SettingsContext";
 import { motion, AnimatePresence } from "framer-motion";
 import InvoiceModal from "../components/order/InvoiceModal";
 import HelpModal from "../components/order/HelpModal";
@@ -136,6 +137,7 @@ const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
 };
 
 const OrderDetailPage = () => {
+  const { settings } = useSettings();
   const { orderId } = useParams();
   const [showInvoice, setShowInvoice] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -160,14 +162,13 @@ const OrderDetailPage = () => {
   const [pickupQr, setPickupQr] = useState("");
   const [pickupVerifyInput, setPickupVerifyInput] = useState("");
   const [clockTick, setClockTick] = useState(Date.now());
-  const parsedReturnWindowMinutes = parseInt(
-    import.meta.env.VITE_RETURN_WINDOW_MINUTES || "2",
-    10,
-  );
-  const returnWindowMinutes =
-    Number.isFinite(parsedReturnWindowMinutes) && parsedReturnWindowMinutes > 0
-      ? parsedReturnWindowMinutes
-      : 2;
+  const returnWindowMinutes = useMemo(() => {
+    if (settings?.refundWindowHours && typeof settings.refundWindowHours === "number" && settings.refundWindowHours > 0) {
+      return settings.refundWindowHours * 60;
+    }
+    const parsed = parseInt(import.meta.env.VITE_RETURN_WINDOW_MINUTES || "1440", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1440;
+  }, [settings?.refundWindowHours]);
   const routeOriginRef = useRef(null);
   const routeRequestRef = useRef({ phase: "", startedAt: 0 });
   const [returnCountdown, setReturnCountdown] = useState(null);
