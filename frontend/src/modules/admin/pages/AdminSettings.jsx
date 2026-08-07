@@ -278,7 +278,8 @@ const AdminSettings = () => {
 
                     {/* General Settings */}
                     {activeTab === 'general' && (
-                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
+                        <div className="space-y-6">
+                            <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-slate-50 bg-slate-50/30">
                                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
                                     General Information
@@ -499,6 +500,7 @@ const AdminSettings = () => {
                                 </div>
                             </div>
                         </Card>
+                        </div>
                     )}
 
                     {/* Branding Settings */}
