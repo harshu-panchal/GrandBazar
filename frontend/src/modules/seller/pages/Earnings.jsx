@@ -469,7 +469,7 @@ const Earnings = () => {
                 <button
                   onClick={handleWithdraw}
                   disabled={isWithdrawing}
-                  className="py-3 rounded-lg bg-black text-primary-foreground font-black shadow-lg shadow-brand-200 hover:bg-brand-700 transition-all disabled:opacity-60"
+                  className="py-3 rounded-lg bg-brand-600 text-white font-black shadow-lg shadow-brand-200 hover:bg-brand-700 transition-all disabled:opacity-60"
                 >
                   {isWithdrawing ? "SUBMITTING..." : "CONFIRM"}
                 </button>

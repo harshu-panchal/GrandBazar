@@ -216,7 +216,7 @@ const CheckoutAddressSection = React.memo(function CheckoutAddressSection({
 
       {/* Confirmation banner */}
       <motion.div className="mt-3 rounded-2xl border border-brand-100 bg-brand-50/70 px-4 py-3 flex items-center gap-3 shadow-sm">
-        <div className="h-8 w-8 rounded-full bg-black  flex items-center justify-center shadow-brand-500/40 shadow-md">
+        <div className="h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center shadow-brand-500/40 shadow-md">
           <Check size={16} className="text-white stroke-[3]" />
         </div>
         <div className="flex-1">

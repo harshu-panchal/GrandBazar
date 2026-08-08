@@ -16,11 +16,14 @@ import {
   HiOutlineClock,
   HiOutlineArrowPath,
   HiOutlineDocumentText,
+  HiOutlinePlus,
+  HiOutlineArrowUpTray,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
+import MapPicker from "@/shared/components/MapPicker";
 
 const SORT_OPTIONS = [
   { value: "recent", label: "Newest first" },
@@ -58,6 +61,24 @@ const emptyStats = {
   averageRevenuePerSeller: 0,
   averageOrdersPerSeller: 0,
 };
+
+const STANDARD_CATEGORY_OPTIONS = [
+  "Grocery",
+  "Fruits & Vegetables",
+  "Bakery & Dairy",
+  "Meat & Fish",
+  "Beverages",
+  "Snacks & Branded Foods",
+  "Personal Care",
+  "Household Care",
+  "Electronics & Appliances",
+  "Fashion & Apparel",
+  "Pharmacy & Health",
+  "Beauty & Cosmetics",
+  "Pet Care",
+  "Home & Kitchen",
+  "General Store"
+];
 
 const normalizeSeller = (seller) => {
   const joinedAt = seller.joinedAt || seller.createdAt || null;
@@ -105,6 +126,7 @@ const ActiveSellers = () => {
   const [sellers, setSellers] = useState([]);
   const [stats, setStats] = useState(emptyStats);
   const [categories, setCategories] = useState([]);
+  const [dbCategories, setDbCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -118,7 +140,92 @@ const ActiveSellers = () => {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [selectedSellerDetails, setSelectedSellerDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [isReactivatingOwner, setIsReactivatingOwner] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreatingVendor, setIsCreatingVendor] = useState(false);
+  const [isMapOpen, setIsMapOpen] = useState(false);
+
+  const INITIAL_CREATE_FORM = {
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    shopName: "",
+    category: "Grocery",
+    categories: "",
+    description: "",
+    address: "",
+    locality: "",
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "",
+    serviceRadius: 5,
+    lat: null,
+    lng: null,
+    aadharNumber: "",
+    aadharDoc: "",
+    panNumber: "",
+    panDoc: "",
+    gstNumber: "",
+    gstDoc: "",
+    businessModel: "commission",
+    applyCommission: true,
+    adminCommissionType: "percentage",
+    adminCommissionValue: 10,
+    adminCommissionFixedRule: "per_qty",
+    subscriptionPlanId: "",
+    accountHolder: "",
+    accountNumber: "",
+    ifsc: "",
+    bankName: "",
+    packagingCharge: 0,
+    packagingChargeEnabled: false,
+    deliveryPolicy: {
+      customerPickup: false,
+      sellerDelivery: false,
+      platformLogistics: true,
+      autoSwitchToPlatform: false,
+    },
+  };
+
+  const [createForm, setCreateForm] = useState(INITIAL_CREATE_FORM);
+
+  const handleLocationSelect = (location) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      lat: location.lat,
+      lng: location.lng,
+      serviceRadius: location.radius || prev.serviceRadius,
+      locality: location.locality || prev.locality,
+      city: location.city || prev.city,
+      state: location.state || prev.state,
+      pincode: location.pincode || prev.pincode,
+      address: location.address || prev.address,
+    }));
+    toast.success("Store location pinned & address details auto-filled from Google Maps!");
+  };
+
+  const handleCreateVendorSubmit = async (e) => {
+    e.preventDefault();
+    if (!createForm.name || !createForm.email || !createForm.phone) {
+      toast.error("Owner name, email, and phone are required");
+      return;
+    }
+    setIsCreatingVendor(true);
+    try {
+      const res = await adminApi.createVendorAccount(createForm);
+      toast.success(res.data?.message || "Seller account & shop created successfully! Credentials emailed.");
+      setIsCreateModalOpen(false);
+      setCreateForm(INITIAL_CREATE_FORM);
+      setRefreshTick((v) => v + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || "Failed to create vendor account");
+    } finally {
+      setIsCreatingVendor(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -132,6 +239,80 @@ const ActiveSellers = () => {
   useEffect(() => {
     setPage(1);
   }, [categoryFilter, sortBy, pageSize]);
+
+  useEffect(() => {
+    const loadDbCategories = async () => {
+      try {
+        const res = await adminApi.getCategories({ type: "header" });
+        const rawPayload = res.data?.result || res.data?.results || res.data?.data || res.data;
+        const items = Array.isArray(rawPayload?.items)
+          ? rawPayload.items
+          : Array.isArray(rawPayload)
+          ? rawPayload
+          : [];
+
+        if (Array.isArray(items) && items.length > 0) {
+          const headerNames = items
+            .filter((c) => !c.type || c.type === "header")
+            .map((c) => (typeof c === "string" ? c : c.name))
+            .filter(Boolean);
+          if (headerNames.length > 0) {
+            setDbCategories(headerNames);
+          }
+        }
+      } catch (err) {
+        // Fallback gracefully to standard categories
+      }
+    };
+    loadDbCategories();
+  }, []);
+
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+
+  useEffect(() => {
+    const fetchSubscriptionPlans = async () => {
+      try {
+        const res = await adminApi.getSubscriptionPlans();
+        const list = res.data?.result || res.data?.results || res.data?.data || res.data || [];
+        if (Array.isArray(list)) {
+          setSubscriptionPlans(list);
+          if (list.length > 0) {
+            setCreateForm((prev) => ({ ...prev, subscriptionPlanId: list[0]._id || list[0].id }));
+          }
+        }
+      } catch (err) {
+        // Fallback
+      }
+    };
+    fetchSubscriptionPlans();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSeller) {
+      setSelectedSellerDetails(null);
+      return;
+    }
+    const fetchSellerDetails = async () => {
+      setLoadingDetails(true);
+      try {
+        const res = await adminApi.getActiveSellerById(selectedSeller.id || selectedSeller._id);
+        const data = res.data?.result || res.data?.results || res.data || null;
+        setSelectedSellerDetails(data);
+      } catch (err) {
+        console.error("Failed to load seller details:", err);
+      } finally {
+        setLoadingDetails(false);
+      }
+    };
+    fetchSellerDetails();
+  }, [selectedSeller]);
+
+  const allCategoryOptions = useMemo(() => {
+    if (dbCategories && dbCategories.length > 0) {
+      return Array.from(new Set(dbCategories)).filter(Boolean);
+    }
+    return STANDARD_CATEGORY_OPTIONS;
+  }, [dbCategories]);
 
   useEffect(() => {
     const currentSeq = ++requestSeq.current;
@@ -275,6 +456,13 @@ const ActiveSellers = () => {
                 : "Sync pending"}
             </span>
           </div>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-brand-700 transition-all"
+          >
+            <HiOutlinePlus className="h-4 w-4" />
+            Create Seller & Shop
+          </button>
           <button
             onClick={() => setRefreshTick((value) => value + 1)}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xl hover:bg-slate-800 transition-all"
@@ -564,7 +752,7 @@ const ActiveSellers = () => {
 
       <AnimatePresence>
         {selectedSeller && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto" data-lenis-prevent data-lenis-prevent-wheel data-lenis-prevent-touch>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -577,7 +765,10 @@ const ActiveSellers = () => {
               initial={{ opacity: 0, scale: 0.96, y: 24 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 24 }}
-              className="relative z-10 w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden"
+              data-lenis-prevent
+              data-lenis-prevent-wheel
+              data-lenis-prevent-touch
+              className="relative z-10 w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
               <div className="flex items-start justify-between p-5 border-b border-slate-100">
                 <div className="flex items-center gap-4">
@@ -635,7 +826,7 @@ const ActiveSellers = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12">
+              <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-y-auto min-h-0 custom-scrollbar">
                 <div className="lg:col-span-4 bg-slate-50 p-5 border-r border-slate-100">
                   <div className="space-y-5">
                     <div className="space-y-3">
@@ -763,6 +954,236 @@ const ActiveSellers = () => {
                     </div>
                   </div>
 
+                  {/* Expanded Custom Details Cards */}
+                  {selectedSellerDetails && (
+                    <div className="mt-6 space-y-6 pt-6 border-t border-slate-100">
+                      {/* Row 1: Monetization Plan & Bank Settlement Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Plan & Monetization Model Details */}
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-brand-600" />
+                            Monetization Plan
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Business Model:</span>
+                              <span className="text-slate-900 font-bold capitalize">
+                                {selectedSellerDetails.businessModel || "Commission"}
+                              </span>
+                            </div>
+                            {selectedSellerDetails.businessModel === "commission" ? (
+                              <>
+                                <div className="flex justify-between text-xs font-semibold">
+                                  <span className="text-slate-500">Apply Commission:</span>
+                                  <span className={cn("font-bold", selectedSellerDetails.applyCommission ? "text-brand-600" : "text-slate-500")}>
+                                    {selectedSellerDetails.applyCommission ? "Shop-Wise Custom Rate" : "Global Categories Rate"}
+                                  </span>
+                                </div>
+                                {selectedSellerDetails.applyCommission && (
+                                  <>
+                                    <div className="flex justify-between text-xs font-semibold">
+                                      <span className="text-slate-500">Rate/Value:</span>
+                                      <span className="text-slate-900 font-bold">
+                                        {selectedSellerDetails.adminCommissionType === "fixed" ? "₹" : ""}
+                                        {selectedSellerDetails.adminCommissionValue}
+                                        {selectedSellerDetails.adminCommissionType === "percentage" ? "%" : ""}
+                                      </span>
+                                    </div>
+                                    {selectedSellerDetails.adminCommissionType === "fixed" && (
+                                      <div className="flex justify-between text-xs font-semibold">
+                                        <span className="text-slate-500">Rule Precedence:</span>
+                                        <span className="text-slate-900 font-bold capitalize">
+                                          {String(selectedSellerDetails.adminCommissionFixedRule || "per_qty").replace("_", " ")}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <div className="flex justify-between text-xs font-semibold">
+                                <span className="text-slate-500">Active Subscription:</span>
+                                <span className="text-slate-900 font-bold text-emerald-600">Operational (Active)</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Settlement Bank Account Details */}
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-indigo-600" />
+                            Settlement Bank Details
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Bank Name:</span>
+                              <span className="text-slate-900 font-bold">
+                                {selectedSellerDetails.bankInfo?.bankName || "Not Set"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Account Holder:</span>
+                              <span className="text-slate-900 font-bold">
+                                {selectedSellerDetails.bankInfo?.accountHolder || "Not Set"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Account Number:</span>
+                              <span className="text-slate-900 font-bold">
+                                {selectedSellerDetails.bankInfo?.accountNo || "Not Set"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">IFSC Code:</span>
+                              <span className="text-slate-900 font-bold uppercase">
+                                {selectedSellerDetails.bankInfo?.ifsc || "Not Set"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 2: KYC Documents Verification Details */}
+                      <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3.5">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                          KYC Documents & Verification Details
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {/* Aadhaar Details Card */}
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aadhaar Card</span>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                                {selectedSellerDetails.aadharNumber || "Not Provided"}
+                              </p>
+                            </div>
+                            {selectedSellerDetails.aadharDoc && (
+                              <a
+                                href={selectedSellerDetails.aadharDoc}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] font-bold text-brand-600 hover:text-brand-700 underline mt-2 flex items-center gap-1 w-fit"
+                              >
+                                View Aadhaar Doc Document
+                              </a>
+                            )}
+                          </div>
+
+                          {/* PAN Details Card */}
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PAN Card</span>
+                              <p className="text-xs font-bold text-slate-800 uppercase mt-0.5">
+                                {selectedSellerDetails.panNumber || "Not Provided"}
+                              </p>
+                            </div>
+                            {selectedSellerDetails.panDoc && (
+                              <a
+                                href={selectedSellerDetails.panDoc}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] font-bold text-brand-600 hover:text-brand-700 underline mt-2 flex items-center gap-1 w-fit"
+                              >
+                                View PAN Doc Document
+                              </a>
+                            )}
+                          </div>
+
+                          {/* GST Details Card */}
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">GSTIN Number</span>
+                              <p className="text-xs font-bold text-slate-800 uppercase mt-0.5">
+                                {selectedSellerDetails.gstNumber || "Not Provided"}
+                              </p>
+                            </div>
+                            {selectedSellerDetails.gstDoc && (
+                              <a
+                                href={selectedSellerDetails.gstDoc}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] font-bold text-brand-600 hover:text-brand-700 underline mt-2 flex items-center gap-1 w-fit"
+                              >
+                                View GST Doc Document
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 3: Logistics Policy & Packaging Charges */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Logistics Policy Details */}
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-amber-600" />
+                            Logistics & Delivery Policy
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Customer Pickup:</span>
+                              <span className={cn("font-bold", selectedSellerDetails.deliveryPolicy?.customerPickup ? "text-emerald-600" : "text-slate-400")}>
+                                {selectedSellerDetails.deliveryPolicy?.customerPickup ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Seller Self Delivery:</span>
+                              <span className={cn("font-bold", selectedSellerDetails.deliveryPolicy?.sellerDelivery ? "text-emerald-600" : "text-slate-400")}>
+                                {selectedSellerDetails.deliveryPolicy?.sellerDelivery ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Platform Logistics:</span>
+                              <span className={cn("font-bold", selectedSellerDetails.deliveryPolicy?.platformLogistics ? "text-emerald-600" : "text-slate-400")}>
+                                {selectedSellerDetails.deliveryPolicy?.platformLogistics ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Auto-Switch to Platform:</span>
+                              <span className={cn("font-bold", selectedSellerDetails.deliveryPolicy?.autoSwitchToPlatform ? "text-emerald-600" : "text-slate-400")}>
+                                {selectedSellerDetails.deliveryPolicy?.autoSwitchToPlatform ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Packaging Charge Details */}
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-rose-600" />
+                            Packaging Charges
+                          </h4>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span className="text-slate-500">Status:</span>
+                              <span className={cn("font-bold", selectedSellerDetails.packagingChargeEnabled ? "text-emerald-600" : "text-slate-400")}>
+                                {selectedSellerDetails.packagingChargeEnabled ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                            {selectedSellerDetails.packagingChargeEnabled && (
+                              <div className="flex justify-between text-xs font-semibold">
+                                <span className="text-slate-500">Packaging Fee Amount:</span>
+                                <span className="text-slate-900 font-bold">
+                                  ₹{selectedSellerDetails.packagingCharge || 0}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {loadingDetails && (
+                    <div className="mt-6 py-12 flex flex-col items-center justify-center gap-3 border-t border-slate-100 animate-pulse">
+                      <HiOutlineArrowPath className="h-6 w-6 animate-spin text-brand-600" />
+                      <span className="text-xs font-bold text-slate-500">Loading complete shop setup data...</span>
+                    </div>
+                  )}
+
                   {!selectedSeller.ownerAccountApproved && (
                     <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-4">
                       <p className="text-sm font-bold text-rose-800">
@@ -801,6 +1222,789 @@ const ActiveSellers = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Create Seller & Shop Account Modal */}
+      <AnimatePresence>
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto" data-lenis-prevent data-lenis-prevent-wheel data-lenis-prevent-touch>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              data-lenis-prevent
+              data-lenis-prevent-wheel
+              data-lenis-prevent-touch
+              className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 custom-scrollbar"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <HiOutlineBuildingOffice2 className="h-5 w-5 text-brand-600" />
+                    Create Seller Account & Setup Shop
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Super Admin can create a new seller account and configure their store on their behalf.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-50"
+                >
+                  <HiOutlineXMark className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateVendorSubmit} className="space-y-6">
+                {/* 1. Seller Owner Information */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    1. Seller Owner Credentials & Account
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Owner Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={createForm.name}
+                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                        placeholder="e.g. Ramesh Kumar"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Login Email <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                        placeholder="seller@example.com"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Phone Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={createForm.phone}
+                        onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                        placeholder="+91 9876543210"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Password (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.password}
+                        onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                        placeholder="Auto-generated if empty"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Shop Profile & Categories */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    2. Shop Profile & Category Setup
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Shop Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={createForm.shopName}
+                        onChange={(e) => setCreateForm({ ...createForm, shopName: e.target.value })}
+                        placeholder="e.g. Fresh Daily Organics"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Primary Category <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={createForm.category}
+                        onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer"
+                      >
+                        <option value="" disabled>Select Primary Category</option>
+                        {allCategoryOptions.map((catName) => (
+                          <option key={catName} value={catName}>
+                            {catName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Additional Categories</label>
+                      <div className="space-y-2">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) return;
+                            const currentArr = createForm.categories ? createForm.categories.split(",").map(s => s.trim()).filter(Boolean) : [];
+                            if (!currentArr.includes(val)) {
+                              const updated = [...currentArr, val].join(", ");
+                              setCreateForm({ ...createForm, categories: updated });
+                            }
+                          }}
+                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer"
+                        >
+                          <option value="" disabled>+ Select additional category from list...</option>
+                          {allCategoryOptions
+                            .filter((c) => c !== createForm.category)
+                            .map((catName) => (
+                              <option key={catName} value={catName}>
+                                + {catName}
+                              </option>
+                            ))}
+                        </select>
+
+                        <input
+                          type="text"
+                          value={createForm.categories}
+                          onChange={(e) => setCreateForm({ ...createForm, categories: e.target.value })}
+                          placeholder="Or type comma separated categories (e.g. Grocery, Organic Produce, Dairy)"
+                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Shop Description</label>
+                      <textarea
+                        rows={2}
+                        value={createForm.description}
+                        onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                        placeholder="Brief overview of products and store specialization"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Shop Location & Address Details */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                      3. Shop Location & Address Details
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setIsMapOpen(true)}
+                      className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm group cursor-pointer"
+                    >
+                      <HiOutlineMapPin className="h-4 w-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+                      <span>{createForm.lat ? "Re-pin on Google Maps" : "Pin / Auto-Search on Google Maps"}</span>
+                    </button>
+                  </div>
+
+                  {createForm.lat && (
+                    <div className="mb-4 p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="success" className="text-[10px] font-black uppercase tracking-wider">Pinned</Badge>
+                        <span className="font-semibold text-emerald-900 truncate">
+                          Lat: {createForm.lat?.toFixed(5)}, Lng: {createForm.lng?.toFixed(5)}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700">Radius: {createForm.serviceRadius} km</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Street Address / Line 1</label>
+                      <input
+                        type="text"
+                        value={createForm.address}
+                        onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                        placeholder="Store full street address"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Locality / Area</label>
+                      <input
+                        type="text"
+                        value={createForm.locality}
+                        onChange={(e) => setCreateForm({ ...createForm, locality: e.target.value })}
+                        placeholder="e.g. Bandra West"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={createForm.city}
+                        onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                        placeholder="Mumbai, Delhi, Bangalore..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">State</label>
+                      <input
+                        type="text"
+                        value={createForm.state}
+                        onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                        placeholder="Maharashtra, Delhi, Karnataka..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Pincode (6 digits)</label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={createForm.pincode}
+                        onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value })}
+                        placeholder="400001"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Service Radius (km)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={createForm.serviceRadius}
+                        onChange={(e) => setCreateForm({ ...createForm, serviceRadius: Number(e.target.value) })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. KYC & Verification (Aadhaar, PAN, GSTIN & Document Images) */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    4. KYC & Verification (Aadhaar, PAN, GSTIN & Document Images)
+                  </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* Aadhaar Card */}
+                    <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1">
+                          Aadhaar Number (12 digits)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={12}
+                          value={createForm.aadharNumber}
+                          onChange={(e) => setCreateForm({ ...createForm, aadharNumber: e.target.value })}
+                          placeholder="12-digit Aadhaar number"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand-500 outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Aadhaar Card Document Image
+                        </label>
+                        {createForm.aadharDoc ? (
+                          <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              {createForm.aadharDoc.startsWith("data:image") || createForm.aadharDoc.startsWith("http") ? (
+                                <img src={createForm.aadharDoc} alt="Aadhaar preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                              ) : (
+                                <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
+                              )}
+                              <span className="text-[11px] font-semibold text-slate-700 truncate">Aadhaar Document</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm({ ...createForm, aadharDoc: "" })}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                              title="Remove document"
+                            >
+                              <HiOutlineXMark className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 p-2.5 bg-white border-2 border-dashed border-slate-200 hover:border-brand-500 rounded-xl cursor-pointer transition-colors text-center group">
+                            <HiOutlineArrowUpTray className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
+                            <span className="text-[11px] font-semibold text-slate-600 group-hover:text-brand-600">Upload Aadhaar Image/PDF</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setCreateForm({ ...createForm, aadharDoc: reader.result });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* PAN Card */}
+                    <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1">
+                          PAN Number (10 chars)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={10}
+                          value={createForm.panNumber}
+                          onChange={(e) => setCreateForm({ ...createForm, panNumber: e.target.value.toUpperCase() })}
+                          placeholder="ABCDE1234F"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold uppercase focus:ring-2 focus:ring-brand-500 outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          PAN Card Document Image
+                        </label>
+                        {createForm.panDoc ? (
+                          <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              {createForm.panDoc.startsWith("data:image") || createForm.panDoc.startsWith("http") ? (
+                                <img src={createForm.panDoc} alt="PAN preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                              ) : (
+                                <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
+                              )}
+                              <span className="text-[11px] font-semibold text-slate-700 truncate">PAN Document</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm({ ...createForm, panDoc: "" })}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                              title="Remove document"
+                            >
+                              <HiOutlineXMark className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 p-2.5 bg-white border-2 border-dashed border-slate-200 hover:border-brand-500 rounded-xl cursor-pointer transition-colors text-center group">
+                            <HiOutlineArrowUpTray className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
+                            <span className="text-[11px] font-semibold text-slate-600 group-hover:text-brand-600">Upload PAN Image/PDF</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setCreateForm({ ...createForm, panDoc: reader.result });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* GSTIN Certificate */}
+                    <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1">
+                          GSTIN Number (15 chars)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={15}
+                          value={createForm.gstNumber}
+                          onChange={(e) => setCreateForm({ ...createForm, gstNumber: e.target.value.toUpperCase() })}
+                          placeholder="22AAAAA0000A1Z5"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold uppercase focus:ring-2 focus:ring-brand-500 outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          GST Certificate Image / Doc
+                        </label>
+                        {createForm.gstDoc ? (
+                          <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              {createForm.gstDoc.startsWith("data:image") || createForm.gstDoc.startsWith("http") ? (
+                                <img src={createForm.gstDoc} alt="GST preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                              ) : (
+                                <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
+                              )}
+                              <span className="text-[11px] font-semibold text-slate-700 truncate">GST Document</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm({ ...createForm, gstDoc: "" })}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                              title="Remove document"
+                            >
+                              <HiOutlineXMark className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 p-2.5 bg-white border-2 border-dashed border-slate-200 hover:border-brand-500 rounded-xl cursor-pointer transition-colors text-center group">
+                            <HiOutlineArrowUpTray className="h-4 w-4 text-slate-400 group-hover:text-brand-600 transition-colors" />
+                            <span className="text-[11px] font-semibold text-slate-600 group-hover:text-brand-600">Upload GST Doc Image/PDF</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setCreateForm({ ...createForm, gstDoc: reader.result });
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Plan & Monetization Setup (Subscription vs Shop-wise Commission) */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    5. Monetization & Plan Setup (Subscription vs Commission)
+                  </h4>
+                  
+                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-4">
+                    {/* Model Type Selector Tabs */}
+                    <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setCreateForm((prev) => ({ ...prev, businessModel: "commission" }))}
+                        className={cn(
+                          "py-2 px-3 rounded-lg text-xs font-bold transition-all text-center",
+                          createForm.businessModel === "commission"
+                            ? "bg-white text-brand-700 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        Commission Based
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreateForm((prev) => ({ ...prev, businessModel: "subscription" }))}
+                        className={cn(
+                          "py-2 px-3 rounded-lg text-xs font-bold transition-all text-center",
+                          createForm.businessModel === "subscription"
+                            ? "bg-white text-brand-700 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        Subscription Plan
+                      </button>
+                    </div>
+
+                    {createForm.businessModel === "commission" ? (
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={createForm.applyCommission}
+                              onChange={(e) => setCreateForm((prev) => ({ ...prev, applyCommission: e.target.checked }))}
+                              className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                            />
+                            <span className="text-xs font-bold text-slate-800">Apply Shop-wise Custom Commission Rate</span>
+                          </label>
+                          <span className="text-[10px] font-semibold text-slate-500">Overrides Global Defaults</span>
+                        </div>
+
+                        {createForm.applyCommission && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Commission Type</label>
+                              <select
+                                value={createForm.adminCommissionType}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, adminCommissionType: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                              >
+                                <option value="percentage">Percentage (%)</option>
+                                <option value="fixed">Fixed Amount (₹)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                Rate ({createForm.adminCommissionType === "percentage" ? "%" : "₹"})
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={createForm.adminCommissionType === "percentage" ? 0.5 : 1}
+                                value={createForm.adminCommissionValue}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, adminCommissionValue: Number(e.target.value) }))}
+                                placeholder="e.g. 10"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500"
+                              />
+                            </div>
+
+                            {createForm.adminCommissionType === "fixed" && (
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rule Precedence</label>
+                                <select
+                                  value={createForm.adminCommissionFixedRule}
+                                  onChange={(e) => setCreateForm((prev) => ({ ...prev, adminCommissionFixedRule: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                                >
+                                  <option value="per_qty">Per Item Qty</option>
+                                  <option value="per_order">Per Entire Order</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2">
+                        <label className="block text-xs font-bold text-slate-800 mb-1">Choose Active Subscription Plan</label>
+                        <select
+                          value={createForm.subscriptionPlanId}
+                          onChange={(e) => setCreateForm((prev) => ({ ...prev, subscriptionPlanId: e.target.value }))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer"
+                        >
+                          <option value="" disabled>-- Select Subscription Plan --</option>
+                          {subscriptionPlans.map((plan) => (
+                            <option key={plan._id || plan.id} value={plan._id || plan.id}>
+                              {plan.name} — ₹{plan.price} / {plan.billingCycle || `${plan.durationDays} days`} ({plan.shopCount} shops, {plan.productCountPerShop} products/shop)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5. Settlement Bank Account Details */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    5. Settlement Bank Account Details
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Bank Name</label>
+                      <input
+                        type="text"
+                        value={createForm.bankName}
+                        onChange={(e) => setCreateForm({ ...createForm, bankName: e.target.value })}
+                        placeholder="e.g. State Bank of India, HDFC"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Account Holder Name</label>
+                      <input
+                        type="text"
+                        value={createForm.accountHolder}
+                        onChange={(e) => setCreateForm({ ...createForm, accountHolder: e.target.value })}
+                        placeholder="Name as per bank account"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        value={createForm.accountNumber}
+                        onChange={(e) => setCreateForm({ ...createForm, accountNumber: e.target.value })}
+                        placeholder="Bank account number"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">IFSC Code (11 chars)</label>
+                      <input
+                        type="text"
+                        maxLength={11}
+                        value={createForm.ifsc}
+                        onChange={(e) => setCreateForm({ ...createForm, ifsc: e.target.value.toUpperCase() })}
+                        placeholder="SBIN0001234"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium uppercase focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Logistics & Fulfillment Options */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    6. Logistics & Delivery Mode Options
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createForm.deliveryPolicy.customerPickup}
+                        onChange={(e) => setCreateForm({
+                          ...createForm,
+                          deliveryPolicy: { ...createForm.deliveryPolicy, customerPickup: e.target.checked }
+                        })}
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">Customer Pickup</span>
+                        <p className="text-[10px] text-slate-500">Allow customers to collect orders from shop</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createForm.deliveryPolicy.sellerDelivery}
+                        onChange={(e) => setCreateForm({
+                          ...createForm,
+                          deliveryPolicy: { ...createForm.deliveryPolicy, sellerDelivery: e.target.checked }
+                        })}
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">Seller Self Delivery</span>
+                        <p className="text-[10px] text-slate-500">Deliver with store's own delivery riders</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createForm.deliveryPolicy.platformLogistics}
+                        onChange={(e) => setCreateForm({
+                          ...createForm,
+                          deliveryPolicy: { ...createForm.deliveryPolicy, platformLogistics: e.target.checked }
+                        })}
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">Platform Logistics</span>
+                        <p className="text-[10px] text-slate-500">Use platform delivery partners</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createForm.deliveryPolicy.autoSwitchToPlatform}
+                        onChange={(e) => setCreateForm({
+                          ...createForm,
+                          deliveryPolicy: { ...createForm.deliveryPolicy, autoSwitchToPlatform: e.target.checked }
+                        })}
+                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">Auto-Switch to Platform</span>
+                        <p className="text-[10px] text-slate-500">Fallback to platform if seller unavailable</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 7. Packaging Charges */}
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-700 mb-3 bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                    7. Packaging Charge Options
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Packaging Charge (₹)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={createForm.packagingCharge}
+                        onChange={(e) => setCreateForm({ ...createForm, packagingCharge: Number(e.target.value) })}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-500 outline-none"
+                      />
+                    </div>
+                    <div className="pt-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createForm.packagingChargeEnabled}
+                          onChange={(e) => setCreateForm({ ...createForm, packagingChargeEnabled: e.target.checked })}
+                          className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-xs font-bold text-slate-700">Enable Packaging Charge for Customers</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingVendor}
+                    className="px-6 py-2.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-md transition-all disabled:opacity-60 flex items-center gap-2"
+                  >
+                    {isCreatingVendor ? "Creating & Emailing..." : "Create Seller & Send Credentials"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {isMapOpen && (
+        <MapPicker
+          isOpen={isMapOpen}
+          onClose={() => setIsMapOpen(false)}
+          onConfirm={handleLocationSelect}
+          initialLocation={
+            createForm.lat ? { lat: createForm.lat, lng: createForm.lng } : null
+          }
+          initialRadius={createForm.serviceRadius || 5}
+        />
+      )}
     </div>
   );
 };

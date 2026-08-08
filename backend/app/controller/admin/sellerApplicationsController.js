@@ -5,6 +5,8 @@ import {
   getPendingSellerApplications,
   rejectSellerApplicationById,
   createVendorAccountByAdmin,
+  updateStoreSetupByAdmin,
+  resendSellerCredentialsByAdmin,
 } from "../../services/admin/sellerApplicationService.js";
 
 export const getPendingSellers = async (req, res) => {
@@ -32,9 +34,13 @@ export const getPendingSellers = async (req, res) => {
 export const approveSellerApplication = async (req, res) => {
   try {
     const { id } = req.params;
+    const { businessModel, commissionConfig, subscriptionPlanId } = req.body || {};
     const seller = await approveSellerApplicationById({
       sellerId: id,
       reviewedBy: req.user.id,
+      businessModel,
+      commissionConfig,
+      subscriptionPlanId,
     });
 
     if (!seller) {
@@ -69,19 +75,20 @@ export const rejectSellerApplication = async (req, res) => {
 
 export const createVendorAccount = async (req, res) => {
   try {
-    const { name, email, phone, password, shopName, category, city } = req.body || {};
+    const {
+      name, email, phone, password, shopName, category, categories, city, state,
+      description, address, locality, pincode, serviceRadius, lat, lng,
+      aadharNumber, panNumber, gstNumber,
+      packagingCharge, packagingChargeEnabled, accountHolder,
+      accountNumber, ifsc, bankName, deliveryPolicy,
+    } = req.body || {};
+
     if (!name || !email || !phone) {
       return handleResponse(res, 400, "Name, email, and phone are required");
     }
 
     const result = await createVendorAccountByAdmin({
-      name,
-      email,
-      phone,
-      password,
-      shopName,
-      category,
-      city,
+      ...(req.body || {}),
       reviewedBy: req.user?.id,
     });
 
@@ -95,3 +102,24 @@ export const createVendorAccount = async (req, res) => {
     return handleResponse(res, 400, error.message);
   }
 };
+
+export const updateSellerStoreSetup = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedStore = await updateStoreSetupByAdmin(id, req.body || {});
+    return handleResponse(res, 200, "Store setup updated successfully", updatedStore);
+  } catch (error) {
+    return handleResponse(res, 400, error.message);
+  }
+};
+
+export const resendSellerCredentials = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await resendSellerCredentialsByAdmin(id);
+    return handleResponse(res, 200, "Seller credentials & app links dispatched via email", result);
+  } catch (error) {
+    return handleResponse(res, 400, error.message);
+  }
+};
+

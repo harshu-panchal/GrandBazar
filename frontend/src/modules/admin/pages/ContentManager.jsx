@@ -25,6 +25,8 @@ const DISPLAY_TYPES = [
     { id: 'categories', label: 'Categories' },
     { id: 'subcategories', label: 'Sub Categories' },
     { id: 'products', label: 'Products' },
+    { id: 'seller_highlights', label: 'Seller Highlights' },
+    { id: 'super_ads', label: 'Super AD Placements' },
 ];
 
 const ContentManager = () => {

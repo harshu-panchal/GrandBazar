@@ -634,7 +634,7 @@ const OrderDetails = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.1 }}
-              className="bg-black  rounded-[32px] p-8 text-white shadow-xl relative overflow-hidden mb-6"
+              className="bg-brand-600 rounded-[32px] p-8 text-white shadow-xl relative overflow-hidden mb-6"
             >
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
               <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-brand-400/20 rounded-full blur-3xl" />
@@ -958,7 +958,7 @@ const OrderDetails = () => {
                   <p className="text-gray-500 text-sm mb-4">
                     {isReturn ? order.seller?.address : order.address?.city}
                   </p>
-                  <Button onClick={handleNavigate} className="w-full bg-black  hover:bg-brand-700 text-primary-foreground border-none">
+                  <Button onClick={handleNavigate} className="w-full bg-brand-600 hover:bg-brand-700 text-white border-none">
                     <Navigation size={18} className="mr-2" />{" "}
                     {isReturn ? "Navigate to Seller" : "Navigate to Customer"}
                   </Button>

@@ -325,7 +325,7 @@ const CashCollection = () => {
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
                                                     onClick={() => handleSettlement(rider)}
-                                                    className="px-4 py-2 bg-brand-50 text-brand-600 rounded-xl text-[10px] font-black hover:bg-black  hover:text-white transition-all shadow-sm active:scale-95 uppercase tracking-widest"
+                                                    className="px-4 py-2 bg-brand-50 text-brand-600 rounded-xl text-[10px] font-black hover:bg-brand-600 hover:text-white transition-all shadow-sm active:scale-95 uppercase tracking-widest"
                                                 >
                                                     Settle
                                                 </button>
@@ -475,7 +475,7 @@ const CashCollection = () => {
                         <div className="pt-2 flex gap-3">
                             <button
                                 onClick={() => { setSelectedRider(null); handleSettlement(selectedRider); }}
-                                className="flex-1 py-4 bg-black  hover:bg-brand-700 text-primary-foreground rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-brand-100 transition-all active:scale-[0.98]"
+                                className="flex-1 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-brand-100 transition-all active:scale-[0.98]"
                             >
                                 Trigger Settlement
                             </button>

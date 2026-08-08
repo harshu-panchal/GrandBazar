@@ -118,6 +118,21 @@ const categorySchema = new mongoose.Schema(
       trim: true,
       default: null, // format "HH:mm"
     },
+    returnEligible: {
+      type: Boolean,
+      default: true,
+    },
+    refundWindowHours: {
+      type: Number,
+      default: 24,
+      min: 0,
+    },
+    restockFeePercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
   },
   {
     timestamps: true,

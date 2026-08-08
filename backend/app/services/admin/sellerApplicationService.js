@@ -171,22 +171,72 @@ export async function getPendingSellerApplications({
   };
 }
 
-export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
+export async function approveSellerApplicationById({
+  sellerId,
+  reviewedBy,
+  businessModel = "commission",
+  commissionConfig = {},
+  subscriptionPlanId = null,
+}) {
+  const storeUpdateData = {
+    isVerified: true,
+    isActive: true,
+    isOpen: true,
+    applicationStatus: "approved",
+    reviewedAt: new Date(),
+    reviewedBy,
+    rejectionReason: null,
+  };
+
+  if (businessModel === "commission" || commissionConfig?.applyCommission !== undefined) {
+    storeUpdateData.applyCommission = Boolean(commissionConfig.applyCommission);
+    storeUpdateData.adminCommissionType = commissionConfig.adminCommissionType || "percentage";
+    storeUpdateData.adminCommissionValue = Number(commissionConfig.adminCommissionValue ?? 0);
+    storeUpdateData.adminCommissionFixedRule = commissionConfig.adminCommissionFixedRule || "per_qty";
+    storeUpdateData.adminCommission = Number(commissionConfig.adminCommissionValue ?? 0);
+  }
+
   const store = await Store.findByIdAndUpdate(
     sellerId,
+    { $set: storeUpdateData },
+    { new: true }
+  ).populate("ownerId", "name email phone");
+
+  let ownerId = store ? (store.ownerId?._id || store.ownerId) : sellerId;
+
+  const account = await Seller.findOneAndUpdate(
+    {
+      _id: ownerId,
+      accountType: "owner",
+    },
     {
       $set: {
         isVerified: true,
         isActive: true,
-        isOpen: true,
         applicationStatus: "approved",
         reviewedAt: new Date(),
         reviewedBy,
         rejectionReason: null,
+        businessModel: businessModel || "commission",
+        businessModelChosenAt: new Date(),
       },
     },
-    { new: true },
-  ).populate("ownerId", "name email phone");
+    { new: true }
+  );
+
+  if (account && businessModel === "subscription" && subscriptionPlanId) {
+    try {
+      const { assignComplimentarySubscription } = await import("../subscriptionService.js");
+      await assignComplimentarySubscription({
+        sellerId: account._id,
+        planId: subscriptionPlanId,
+        adminId: reviewedBy,
+        note: "Assigned by admin during seller approval",
+      });
+    } catch (err) {
+      console.warn("Failed to assign subscription during approval:", err.message);
+    }
+  }
 
   if (store) {
     const owner = store.ownerId || {};
@@ -209,25 +259,6 @@ export async function approveSellerApplicationById({ sellerId, reviewedBy }) {
       phone: owner.phone || "",
     });
   }
-
-  const account = await Seller.findOneAndUpdate(
-    {
-      _id: sellerId,
-      accountType: "owner",
-      $or: [{ parentId: { $exists: false } }, { parentId: null }],
-    },
-    {
-      $set: {
-        isVerified: true,
-        isActive: true,
-        applicationStatus: "approved",
-        reviewedAt: new Date(),
-        reviewedBy,
-        rejectionReason: null,
-      },
-    },
-    { new: true },
-  );
 
   if (!account) {
     return null;
@@ -260,8 +291,34 @@ export async function createVendorAccountByAdmin({
   password,
   shopName,
   category,
+  categories,
+  description,
+  address,
+  locality,
   city,
+  state,
+  pincode,
+  serviceRadius,
+  lat,
+  lng,
+  aadharNumber,
+  panNumber,
+  gstNumber,
+  packagingCharge,
+  packagingChargeEnabled,
+  accountHolder,
+  accountNumber,
+  ifsc,
+  bankName,
+  deliveryPolicy,
   reviewedBy,
+  businessModel = "commission",
+  applyCommission,
+  adminCommissionType,
+  adminCommissionValue,
+  adminCommissionFixedRule,
+  commissionConfig,
+  subscriptionPlanId,
 }) {
   const existingSeller = await Seller.findOne({
     $or: [{ email: email.toLowerCase() }, { phone }],
@@ -285,15 +342,83 @@ export async function createVendorAccountByAdmin({
     applicationStatus: "approved",
     reviewedAt: new Date(),
     reviewedBy,
+    businessModel: businessModel || "commission",
+    businessModelChosenAt: new Date(),
   });
+
+  if (seller && businessModel === "subscription" && subscriptionPlanId) {
+    try {
+      const { assignComplimentarySubscription } = await import("../subscriptionService.js");
+      await assignComplimentarySubscription({
+        sellerId: seller._id,
+        planId: subscriptionPlanId,
+        adminId: reviewedBy,
+        note: "Assigned by admin during vendor account creation",
+      });
+    } catch (err) {
+      console.warn("Failed to assign subscription during vendor creation:", err.message);
+    }
+  }
 
   let store = null;
   if (shopName) {
+    const formattedCategories = Array.isArray(categories)
+      ? categories
+      : (typeof categories === 'string' && categories.trim())
+        ? categories.split(',').map((c) => c.trim())
+        : category ? [category] : ["General"];
+
+    const coordinates = (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng)))
+      ? [Number(lng), Number(lat)]
+      : [0, 0];
+
+    const isApplyCommission = applyCommission !== undefined 
+      ? Boolean(applyCommission) 
+      : commissionConfig?.applyCommission !== undefined 
+        ? Boolean(commissionConfig.applyCommission) 
+        : Boolean(deliveryPolicy?.applyCommission);
+
+    const commType = adminCommissionType || commissionConfig?.adminCommissionType || "percentage";
+    const commValue = Number(adminCommissionValue ?? commissionConfig?.adminCommissionValue ?? 0);
+    const commRule = adminCommissionFixedRule || commissionConfig?.adminCommissionFixedRule || "per_qty";
+
     store = await Store.create({
       ownerId: seller._id,
       shopName,
-      category: category || "General",
+      category: category || formattedCategories[0] || "General",
+      categories: formattedCategories,
+      description: description || "",
+      address: address || "",
+      locality: locality || "",
       city: city || "",
+      state: state || "",
+      pincode: pincode || "",
+      location: {
+        type: "Point",
+        coordinates,
+      },
+      serviceRadius: Number(serviceRadius) || 5,
+      aadharNumber: aadharNumber || "",
+      panNumber: panNumber ? String(panNumber).toUpperCase().trim() : "",
+      gstNumber: gstNumber ? String(gstNumber).toUpperCase().trim() : "",
+      packagingCharge: Number(packagingCharge) || 0,
+      packagingChargeEnabled: Boolean(packagingChargeEnabled),
+      applyCommission: isApplyCommission,
+      adminCommissionType: commType,
+      adminCommissionValue: commValue,
+      adminCommissionFixedRule: commRule,
+      adminCommission: commValue,
+      accountHolder: accountHolder || "",
+      accountNumber: accountNumber || "",
+      ifsc: ifsc ? String(ifsc).toUpperCase().trim() : "",
+      bankName: bankName || "",
+      deliveryPolicy: {
+        customerPickup: Boolean(deliveryPolicy?.customerPickup),
+        sellerDelivery: Boolean(deliveryPolicy?.sellerDelivery),
+        platformLogistics: deliveryPolicy?.platformLogistics !== undefined ? Boolean(deliveryPolicy.platformLogistics) : true,
+        autoSwitchToPlatform: Boolean(deliveryPolicy?.autoSwitchToPlatform),
+        platformLogisticsEnabledByAdmin: true,
+      },
       isVerified: true,
       isActive: true,
       isOpen: true,
@@ -321,6 +446,82 @@ export async function createVendorAccountByAdmin({
       password: generatedPassword,
     },
   };
+}
+
+/**
+ * Updates full store / shop profile on behalf of seller by Super Admin.
+ */
+export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}) {
+  let store = await Store.findById(sellerOrStoreId);
+  if (!store) {
+    store = await Store.findOne({ ownerId: sellerOrStoreId });
+  }
+
+  if (!store) {
+    throw new Error("Store profile not found for this seller");
+  }
+
+  const updateFields = {};
+  const allowed = [
+    "shopName", "description", "category", "categories", "address", "locality",
+    "city", "state", "pincode", "serviceRadius", "packagingCharge",
+    "packagingChargeEnabled", "isOpen", "isActive", "accountHolder",
+    "accountNumber", "ifsc", "bankName", "gstNumber", "panNumber", "isVerified"
+  ];
+
+  allowed.forEach((key) => {
+    if (storePayload[key] !== undefined) {
+      updateFields[key] = storePayload[key];
+    }
+  });
+
+  if (storePayload.lat != null && storePayload.lng != null && !isNaN(Number(storePayload.lat)) && !isNaN(Number(storePayload.lng))) {
+    updateFields.location = {
+      type: "Point",
+      coordinates: [Number(storePayload.lng), Number(storePayload.lat)],
+    };
+  }
+
+  if (storePayload.schedulingSettings) {
+    updateFields.schedulingSettings = storePayload.schedulingSettings;
+  }
+
+  const updatedStore = await Store.findByIdAndUpdate(
+    store._id,
+    { $set: updateFields },
+    { new: true, runValidators: true }
+  );
+
+  return updatedStore;
+}
+
+/**
+ * Resends credentials and portal links via email to seller.
+ */
+export async function resendSellerCredentialsByAdmin(sellerOrStoreId) {
+  let seller = await Seller.findById(sellerOrStoreId);
+  let store = null;
+  if (!seller) {
+    store = await Store.findById(sellerOrStoreId);
+    if (store) {
+      seller = await Seller.findById(store.ownerId);
+    }
+  } else {
+    store = await Store.findOne({ ownerId: seller._id });
+  }
+
+  if (!seller) {
+    throw new Error("Seller account not found");
+  }
+
+  const res = await sendVendorWelcomeEmail({
+    email: seller.email,
+    name: seller.name,
+    password: null, // Prompt to use registered password / reset link
+    storeName: store ? store.shopName : "",
+  });
+
+  return { sellerId: seller._id, email: seller.email, dispatch: res };
 }
 
 export async function rejectSellerApplicationById({

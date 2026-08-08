@@ -525,7 +525,7 @@ export async function getActiveSellerByIdData(id) {
   })
     .populate(
       "ownerId",
-      "name email phone applicationStatus isVerified isActive rejectionReason",
+      "name email phone applicationStatus isVerified isActive rejectionReason businessModel",
     )
     .lean();
 
@@ -537,7 +537,7 @@ export async function getActiveSellerByIdData(id) {
     })
       .populate(
         "ownerId",
-        "name email phone applicationStatus isVerified isActive rejectionReason",
+        "name email phone applicationStatus isVerified isActive rejectionReason businessModel",
       )
       .lean();
   }
@@ -632,6 +632,19 @@ export async function getActiveSellerByIdData(id) {
     reviewCount: Number(store.reviewCount || 0),
     favoriteCount: Number(store.favoriteCount || 0),
     gstNumber: store.gstNumber || "",
+    aadharNumber: store.aadharNumber || "",
+    panNumber: store.panNumber || "",
+    aadharDoc: store.aadharDoc || store.documents?.aadhar || "",
+    panDoc: store.panDoc || store.documents?.pan || "",
+    gstDoc: store.gstDoc || store.documents?.gstCertificate || "",
+    businessModel: owner.businessModel || "commission",
+    applyCommission: store.applyCommission,
+    adminCommissionType: store.adminCommissionType,
+    adminCommissionValue: store.adminCommissionValue,
+    adminCommissionFixedRule: store.adminCommissionFixedRule,
+    deliveryPolicy: store.deliveryPolicy || {},
+    packagingCharge: store.packagingCharge || 0,
+    packagingChargeEnabled: store.packagingChargeEnabled || false,
     bankInfo: {
       bankName: store.bankName || "",
       accountNo: store.accountNumber || "",

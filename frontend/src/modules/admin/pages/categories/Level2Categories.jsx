@@ -331,7 +331,7 @@ const Level2Categories = () => {
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-black  text-primary-foreground px-4 py-2 rounded-lg hover:bg-brand-700 transition-colors">
+          className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 transition-colors">
           <Plus className="w-5 h-5" />
           Add New Category
         </button>
@@ -771,7 +771,7 @@ const Level2Categories = () => {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="px-4 py-2 bg-black  text-primary-foreground rounded-lg hover:bg-brand-700 font-medium disabled:opacity-50 flex items-center gap-2">
+                    className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium disabled:opacity-50 flex items-center gap-2">
                     {isSaving && (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     )}

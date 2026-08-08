@@ -49,6 +49,8 @@ import {
     approveSellerApplication,
     rejectSellerApplication,
     createVendorAccount,
+    updateSellerStoreSetup,
+    resendSellerCredentials,
     getSellerWithdrawals,
     getDeliveryWithdrawals,
     updateWithdrawalStatus,
@@ -232,6 +234,8 @@ router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers
 router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), getActiveSellerById);
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
 router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
+router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), updateSellerStoreSetup);
+router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), resendSellerCredentials);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
 router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
 router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);

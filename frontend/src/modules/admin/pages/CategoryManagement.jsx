@@ -231,7 +231,10 @@ const CategoryManagement = () => {
                 description: item.description || '',
                 status: item.status || 'active',
                 type: item.type,
-                parentId: item.parentId || ''
+                parentId: item.parentId || '',
+                returnEligible: item.returnEligible !== false,
+                refundWindowHours: item.refundWindowHours ?? 24,
+                restockFeePercent: item.restockFeePercent ?? 0,
             });
             setEditingItem(item);
             setPreviewUrl(item.image || null);
@@ -243,7 +246,10 @@ const CategoryManagement = () => {
                 description: '',
                 status: 'active',
                 type: type,
-                parentId: parentId || ''
+                parentId: parentId || '',
+                returnEligible: true,
+                refundWindowHours: 24,
+                restockFeePercent: 0,
             });
             setEditingItem(null);
             setPreviewUrl(null);
@@ -758,9 +764,50 @@ const CategoryManagement = () => {
                                                     formData.status === 'inactive' ? "bg-white text-slate-700 shadow-sm" : "text-slate-400")}
                                             >
                                                 <EyeOff className="h-3.5 w-3.5" />
-                                                <span>DRAFT</span>
+                                                <span>HIDDEN</span>
                                             </button>
                                         </div>
+                                    </div>
+
+                                    {/* Category Refund Configuration */}
+                                    <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-100 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-900">Category Refund Policy</p>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Configure return eligibility & window</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.returnEligible}
+                                                    onChange={(e) => setFormData({ ...formData, returnEligible: e.target.checked })}
+                                                    className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                                                />
+                                                <span className="text-xs font-bold text-slate-700">Eligible for Return</span>
+                                            </label>
+                                        </div>
+                                        {formData.returnEligible && (
+                                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Refund Window (Hours)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.refundWindowHours}
+                                                        onChange={(e) => setFormData({ ...formData, refundWindowHours: Number(e.target.value) })}
+                                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Restocking Fee (%)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.restockFeePercent}
+                                                        onChange={(e) => setFormData({ ...formData, restockFeePercent: Number(e.target.value) })}
+                                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex gap-3 pt-2">

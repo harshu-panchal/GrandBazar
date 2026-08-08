@@ -553,7 +553,7 @@ const Returns = () => {
                   selectedReturn.returnStatus === "return_drop_pending") && selectedReturn.returnDeliveryBoy && (
                     <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100 space-y-2">
                       <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-lg bg-black  flex items-center justify-center text-white">
+                        <div className="h-8 w-8 rounded-lg bg-brand-600 flex items-center justify-center text-white">
                           <HiOutlineTruck className="h-5 w-5" />
                         </div>
                         <div>
@@ -734,7 +734,7 @@ const Returns = () => {
 
                   {selectedReturn.returnStatus === "return_approved" && (
                     <Button
-                      className="text-xs font-bold bg-black  hover:bg-brand-700"
+                      className="text-xs font-bold bg-brand-600 text-white hover:bg-brand-700"
                       disabled={assigningPickup}
                       onClick={() => handleAssignPickup(selectedReturn.orderId)}
                     >

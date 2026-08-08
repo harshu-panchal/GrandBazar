@@ -56,6 +56,60 @@ const PendingSellers = () => {
         city: 'Mumbai',
     });
 
+    const [headerCategories, setHeaderCategories] = useState([
+        "Grocery", "Fruits & Vegetables", "Bakery & Dairy", "Meat & Fish", "Beverages", 
+        "Snacks & Branded Foods", "Personal Care", "Household Care", "Electronics & Appliances", 
+        "Fashion & Apparel", "Pharmacy & Health", "Beauty & Cosmetics", "Pet Care", "General Store"
+    ]);
+
+    const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+    const [approvalPlanConfig, setApprovalPlanConfig] = useState({
+        businessModel: 'commission',
+        applyCommission: true,
+        adminCommissionType: 'percentage',
+        adminCommissionValue: 10,
+        adminCommissionFixedRule: 'per_qty',
+        subscriptionPlanId: '',
+    });
+
+    useEffect(() => {
+        const fetchHeaderCategories = async () => {
+            try {
+                const res = await adminApi.getCategories({ type: "header" });
+                const rawPayload = res.data?.result || res.data?.results || res.data?.data || res.data;
+                const items = Array.isArray(rawPayload?.items) ? rawPayload.items : (Array.isArray(rawPayload) ? rawPayload : []);
+                if (Array.isArray(items) && items.length > 0) {
+                    const fetchedNames = items
+                        .filter(c => !c.type || c.type === 'header')
+                        .map(c => typeof c === 'string' ? c : c.name)
+                        .filter(Boolean);
+                    if (fetchedNames.length > 0) {
+                        setHeaderCategories(Array.from(new Set(fetchedNames)));
+                    }
+                }
+            } catch (err) {
+                // Fallback gracefully
+            }
+        };
+        fetchHeaderCategories();
+
+        const fetchSubscriptionPlans = async () => {
+            try {
+                const res = await adminApi.getSubscriptionPlans();
+                const list = res.data?.result || res.data?.results || res.data?.data || res.data || [];
+                if (Array.isArray(list)) {
+                    setSubscriptionPlans(list);
+                    if (list.length > 0) {
+                        setApprovalPlanConfig(prev => ({ ...prev, subscriptionPlanId: list[0]._id || list[0].id }));
+                    }
+                }
+            } catch (err) {
+                // Fallback
+            }
+        };
+        fetchSubscriptionPlans();
+    }, []);
+
     const handleCreateVendorSubmit = async (e) => {
         e.preventDefault();
         if (!createForm.name || !createForm.email || !createForm.phone) {
@@ -161,10 +215,20 @@ const PendingSellers = () => {
     const handleApprove = async (id, { reactivate = false } = {}) => {
         setIsProcessing(true);
         try {
-            await adminApi.approveSeller(id);
+            const payload = {
+                businessModel: approvalPlanConfig.businessModel,
+                commissionConfig: {
+                    applyCommission: approvalPlanConfig.applyCommission,
+                    adminCommissionType: approvalPlanConfig.adminCommissionType,
+                    adminCommissionValue: Number(approvalPlanConfig.adminCommissionValue || 0),
+                    adminCommissionFixedRule: approvalPlanConfig.adminCommissionFixedRule,
+                },
+                subscriptionPlanId: approvalPlanConfig.subscriptionPlanId,
+            };
+            await adminApi.approveSeller(id, payload);
             setIsReviewModalOpen(false);
             setViewingSeller(null);
-            toast.success(reactivate ? 'Seller account reactivated successfully' : 'Seller approved successfully');
+            toast.success(reactivate ? 'Seller account reactivated successfully' : 'Seller approved with selected plan & commission settings!');
             await fetchPendingSellers();
         } catch (error) {
             console.error('Failed to approve seller', error);
@@ -396,7 +460,7 @@ const PendingSellers = () => {
                                             <div className="w-[1px] h-4 bg-slate-200 mx-1" />
                                             <button
                                                 onClick={() => { setViewingSeller(s); setIsReviewModalOpen(true); }}
-                                                className="h-9 px-4 bg-black  text-primary-foreground rounded-xl text-[10px] font-bold hover:bg-brand-700 transition-all shadow-md shadow-brand-100 hover:-translate-y-0.5 flex items-center gap-2"
+                                                className="h-9 px-4 bg-brand-600 text-white rounded-xl text-[10px] font-bold hover:bg-brand-700 transition-all shadow-md shadow-brand-100 hover:-translate-y-0.5 flex items-center gap-2"
                                             >
                                                 <HiOutlineEye className="h-4 w-4" />
                                                 REVIEW
@@ -428,7 +492,7 @@ const PendingSellers = () => {
             {/* Review Modal */}
             <AnimatePresence>
                 {isReviewModalOpen && viewingSeller && (
-                    <div className="fixed inset-0 z-[100] overflow-y-auto">
+                    <div className="fixed inset-0 z-[9999] overflow-y-auto" data-lenis-prevent data-lenis-prevent-wheel data-lenis-prevent-touch>
                         <div className="min-h-full flex items-center justify-center p-4 lg:p-4">
                             <motion.div
                                 initial={{ opacity: 0 }}
@@ -700,7 +764,7 @@ const PendingSellers = () => {
 
                 {/* Create Vendor Account Modal */}
                 {isCreateModalOpen && (
-                    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm">
+                    <div className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/60 backdrop-blur-sm" data-lenis-prevent data-lenis-prevent-wheel data-lenis-prevent-touch>
                         <div className="flex min-h-full items-center justify-center p-4">
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
@@ -785,13 +849,17 @@ const PendingSellers = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</label>
-                                            <input
-                                                type="text"
+                                            <select
                                                 value={createForm.category}
                                                 onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
-                                                placeholder="Grocery"
-                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
-                                            />
+                                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20 cursor-pointer"
+                                            >
+                                                {headerCategories.map((cat) => (
+                                                    <option key={cat} value={cat}>
+                                                        {cat}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City</label>

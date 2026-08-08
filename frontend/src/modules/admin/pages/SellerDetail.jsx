@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
+import MapPicker from '@/shared/components/MapPicker';
 
 const SellerDetail = () => {
     const { id } = useParams();
@@ -52,6 +53,91 @@ const SellerDetail = () => {
         adminCommissionValue: 0,
         adminCommissionFixedRule: 'per_qty',
     });
+    const [isSendingCredentials, setIsSendingCredentials] = useState(false);
+    const [isSavingShopSetup, setIsSavingShopSetup] = useState(false);
+    const [isMapOpen, setIsMapOpen] = useState(false);
+    const [shopSetupForm, setShopSetupForm] = useState({
+        shopName: '',
+        category: '',
+        description: '',
+        address: '',
+        locality: '',
+        city: '',
+        pincode: '',
+        serviceRadius: 5,
+        lat: null,
+        lng: null,
+        packagingCharge: 0,
+        packagingChargeEnabled: false,
+        businessModel: 'commission',
+        applyCommission: true,
+        adminCommissionType: 'percentage',
+        adminCommissionValue: 10,
+        adminCommissionFixedRule: 'per_qty',
+        subscriptionPlanId: '',
+        accountHolder: '',
+        accountNumber: '',
+        ifsc: '',
+        bankName: '',
+    });
+
+    const [headerCategories, setHeaderCategories] = useState([
+        "Grocery", "Fruits & Vegetables", "Bakery & Dairy", "Meat & Fish", "Beverages", 
+        "Snacks & Branded Foods", "Personal Care", "Household Care", "Electronics & Appliances", 
+        "Fashion & Apparel", "Pharmacy & Health", "Beauty & Cosmetics", "Pet Care", "General Store"
+    ]);
+
+    useEffect(() => {
+        const fetchHeaderCategories = async () => {
+            try {
+                const res = await adminApi.getCategories({ type: "header" });
+                const rawPayload = res.data?.result || res.data?.results || res.data?.data || res.data;
+                const items = Array.isArray(rawPayload?.items) ? rawPayload.items : (Array.isArray(rawPayload) ? rawPayload : []);
+                if (Array.isArray(items) && items.length > 0) {
+                    const fetchedNames = items
+                        .filter(c => !c.type || c.type === 'header')
+                        .map(c => typeof c === 'string' ? c : c.name)
+                        .filter(Boolean);
+                    if (fetchedNames.length > 0) {
+                        setHeaderCategories(Array.from(new Set(fetchedNames)));
+                    }
+                }
+            } catch (err) {
+                // Fallback gracefully
+            }
+        };
+        fetchHeaderCategories();
+
+        const fetchSubscriptionPlans = async () => {
+            try {
+                const res = await adminApi.getSubscriptionPlans();
+                const list = res.data?.result || res.data?.results || res.data?.data || res.data || [];
+                if (Array.isArray(list)) {
+                    setSubscriptionPlans(list);
+                    if (list.length > 0) {
+                        setShopSetupForm((prev) => ({ ...prev, subscriptionPlanId: list[0]._id || list[0].id }));
+                    }
+                }
+            } catch (err) {
+                // Fallback
+            }
+        };
+        fetchSubscriptionPlans();
+    }, []);
+
+    const handleLocationSelect = (location) => {
+        setShopSetupForm((prev) => ({
+            ...prev,
+            lat: location.lat,
+            lng: location.lng,
+            serviceRadius: location.radius || prev.serviceRadius,
+            locality: location.locality || prev.locality,
+            city: location.city || prev.city,
+            pincode: location.pincode || prev.pincode,
+            address: location.address || prev.address,
+        }));
+        showToast('Store location pinned & address auto-filled from Google Maps', 'success');
+    };
     const [seller, setSeller] = useState({
         id: id || '',
         shopName: 'Loading...',
@@ -92,6 +178,28 @@ const SellerDetail = () => {
 
             const detail = detailRes?.data?.result;
             if (detail) {
+                const coords = detail.location?.coordinates || detail.coordinates;
+                const lat = Array.isArray(coords) && coords.length === 2 ? coords[1] : detail.lat || null;
+                const lng = Array.isArray(coords) && coords.length === 2 ? coords[0] : detail.lng || null;
+
+                setShopSetupForm({
+                    shopName: detail.shopName || '',
+                    category: detail.category || '',
+                    description: detail.description || '',
+                    address: detail.address || '',
+                    locality: detail.locality || '',
+                    city: detail.city || '',
+                    pincode: detail.pincode || '',
+                    serviceRadius: detail.serviceRadius ?? 5,
+                    lat: lat,
+                    lng: lng,
+                    packagingCharge: detail.packagingCharge ?? 0,
+                    packagingChargeEnabled: Boolean(detail.packagingChargeEnabled),
+                    accountHolder: detail.bankInfo?.accountHolder || detail.accountHolder || '',
+                    accountNumber: detail.bankInfo?.accountNo || detail.accountNumber || '',
+                    ifsc: detail.bankInfo?.ifsc || detail.ifsc || '',
+                    bankName: detail.bankInfo?.bankName || detail.bankName || '',
+                });
                 setSeller((prev) => ({
                     ...prev,
                     id: detail.id || id,
@@ -196,6 +304,34 @@ const SellerDetail = () => {
         showToast('Seller data synchronized', 'success');
     };
 
+    const handleResendCredentials = async () => {
+        if (!id) return;
+        setIsSendingCredentials(true);
+        try {
+            await adminApi.resendSellerCredentials(id);
+            showToast('Seller credentials & app link dispatched via email', 'success');
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to resend credentials', 'error');
+        } finally {
+            setIsSendingCredentials(false);
+        }
+    };
+
+    const handleSaveShopSetup = async (e) => {
+        e?.preventDefault();
+        if (!id) return;
+        setIsSavingShopSetup(true);
+        try {
+            await adminApi.updateSellerStoreSetup(id, shopSetupForm);
+            showToast('Shop setup updated successfully on behalf of seller', 'success');
+            await loadSellerData();
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to update shop setup', 'error');
+        } finally {
+            setIsSavingShopSetup(false);
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
             {/* Header / Action Bar */}
@@ -218,13 +354,24 @@ const SellerDetail = () => {
 
                 <div className="flex items-center gap-3">
                     <button
+                        onClick={handleResendCredentials}
+                        disabled={isSendingCredentials}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 ring-1 ring-amber-200 text-amber-800 rounded-2xl text-xs font-bold hover:bg-amber-100 transition-all disabled:opacity-60"
+                    >
+                        <Mail className="h-4 w-4 text-amber-600" />
+                        {isSendingCredentials ? 'SENDING...' : 'RESEND CREDENTIALS'}
+                    </button>
+                    <button
                         onClick={handleRefresh}
-                        className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all"
                     >
                         <RotateCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
                         SYNC DATA
                     </button>
-                    <button className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                    <button
+                        onClick={() => setActiveTab('shop-setup')}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                    >
                         <Edit3 className="h-4 w-4" />
                         EDIT SHOP
                     </button>
@@ -268,6 +415,7 @@ const SellerDetail = () => {
                             { id: 'delivery', label: 'Delivery', icon: MapPin },
                             { id: 'payouts', label: 'Withdrawals', icon: Wallet },
                             { id: 'info', label: 'Store Info', icon: Building2 },
+                            { id: 'shop-setup', label: 'Shop Setup', icon: Edit3 },
                         ].map((tab) => (
                             <button
                                 key={tab.id}
@@ -641,6 +789,348 @@ const SellerDetail = () => {
                                 </div>
                             </div>
                         )}
+
+                        {activeTab === 'shop-setup' && (
+                            <div className="p-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                                <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                                            Super Admin Shop Setup & Profile Management
+                                        </h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Configure store profile details, location, packaging charges, and settlement bank info on behalf of the seller.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveShopSetup}
+                                        disabled={isSavingShopSetup}
+                                        className="px-6 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all shadow-md disabled:opacity-60"
+                                    >
+                                        {isSavingShopSetup ? 'Saving Changes...' : 'Save Shop Setup'}
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleSaveShopSetup} className="space-y-6">
+                                    {/* Store Details */}
+                                    <div className="space-y-4">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Store Basic Profile
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Shop Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.shopName}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, shopName: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                                                <select
+                                                    value={shopSetupForm.category}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, category: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer"
+                                                >
+                                                    {headerCategories.map((cat) => (
+                                                        <option key={cat} value={cat}>
+                                                            {cat}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
+                                                <textarea
+                                                    rows={3}
+                                                    value={shopSetupForm.description}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, description: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none resize-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Location Details */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <div className="flex items-center justify-between">
+                                            <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                                Location & Delivery Radius
+                                            </h5>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsMapOpen(true)}
+                                                className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                            >
+                                                <MapPin className="h-4 w-4 text-emerald-600" />
+                                                <span>{shopSetupForm.lat ? 'Re-pin on Google Maps' : 'Pin / Auto-Search on Google Maps'}</span>
+                                            </button>
+                                        </div>
+
+                                        {shopSetupForm.lat && (
+                                            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="success" className="text-[10px] font-black uppercase tracking-wider">Pinned</Badge>
+                                                    <span className="font-semibold text-emerald-900 truncate">
+                                                        Lat: {shopSetupForm.lat?.toFixed(5)}, Lng: {shopSetupForm.lng?.toFixed(5)}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-emerald-700">Radius: {shopSetupForm.serviceRadius} km</span>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Street Address</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.address}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, address: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Locality</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.locality}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, locality: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">City</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.city}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, city: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Pincode</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.pincode}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, pincode: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Service Radius (km)</label>
+                                                <input
+                                                    type="number"
+                                                    value={shopSetupForm.serviceRadius}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, serviceRadius: Number(e.target.value) })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Plan & Monetization Setup (Subscription vs Shop-wise Commission) */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Plan & Monetization Setup (Subscription vs Commission)
+                                        </h5>
+                                        
+                                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-4">
+                                            {/* Model Type Selector Tabs */}
+                                            <div className="grid grid-cols-2 gap-2 bg-slate-200/60 p-1 rounded-xl">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShopSetupForm((prev) => ({ ...prev, businessModel: "commission" }))}
+                                                    className={cn(
+                                                        "py-2 px-3 rounded-lg text-xs font-bold transition-all text-center",
+                                                        shopSetupForm.businessModel === "commission"
+                                                            ? "bg-white text-brand-700 shadow-sm"
+                                                            : "text-slate-600 hover:text-slate-900"
+                                                    )}
+                                                >
+                                                    Commission Based
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShopSetupForm((prev) => ({ ...prev, businessModel: "subscription" }))}
+                                                    className={cn(
+                                                        "py-2 px-3 rounded-lg text-xs font-bold transition-all text-center",
+                                                        shopSetupForm.businessModel === "subscription"
+                                                            ? "bg-white text-brand-700 shadow-sm"
+                                                            : "text-slate-600 hover:text-slate-900"
+                                                    )}
+                                                >
+                                                    Subscription Plan
+                                                </button>
+                                            </div>
+
+                                            {shopSetupForm.businessModel === "commission" ? (
+                                                <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={shopSetupForm.applyCommission}
+                                                                onChange={(e) => setShopSetupForm((prev) => ({ ...prev, applyCommission: e.target.checked }))}
+                                                                className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                                                            />
+                                                            <span className="text-xs font-bold text-slate-800">Apply Shop-wise Custom Commission Rate</span>
+                                                        </label>
+                                                        <span className="text-[10px] font-semibold text-slate-500">Overrides Global Defaults</span>
+                                                    </div>
+
+                                                    {shopSetupForm.applyCommission && (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                                                            <div>
+                                                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Commission Type</label>
+                                                                <select
+                                                                    value={shopSetupForm.adminCommissionType}
+                                                                    onChange={(e) => setShopSetupForm((prev) => ({ ...prev, adminCommissionType: e.target.value }))}
+                                                                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                                                                >
+                                                                    <option value="percentage">Percentage (%)</option>
+                                                                    <option value="fixed">Fixed Amount (₹)</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                                                    Rate ({shopSetupForm.adminCommissionType === "percentage" ? "%" : "₹"})
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    step={shopSetupForm.adminCommissionType === "percentage" ? 0.5 : 1}
+                                                                    value={shopSetupForm.adminCommissionValue}
+                                                                    onChange={(e) => setShopSetupForm((prev) => ({ ...prev, adminCommissionValue: Number(e.target.value) }))}
+                                                                    placeholder="e.g. 10"
+                                                                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500"
+                                                                />
+                                                            </div>
+
+                                                            {shopSetupForm.adminCommissionType === "fixed" && (
+                                                                <div>
+                                                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Rule Precedence</label>
+                                                                    <select
+                                                                        value={shopSetupForm.adminCommissionFixedRule}
+                                                                        onChange={(e) => setShopSetupForm((prev) => ({ ...prev, adminCommissionFixedRule: e.target.value }))}
+                                                                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                                                                    >
+                                                                        <option value="per_qty">Per Item Qty</option>
+                                                                        <option value="per_order">Per Entire Order</option>
+                                                                    </select>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2">
+                                                    <label className="block text-xs font-bold text-slate-800 mb-1">Choose Active Subscription Plan</label>
+                                                    <select
+                                                        value={shopSetupForm.subscriptionPlanId}
+                                                        onChange={(e) => setShopSetupForm((prev) => ({ ...prev, subscriptionPlanId: e.target.value }))}
+                                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer"
+                                                    >
+                                                        <option value="" disabled>-- Select Subscription Plan --</option>
+                                                        {subscriptionPlans.map((plan) => (
+                                                            <option key={plan._id || plan.id} value={plan._id || plan.id}>
+                                                                {plan.name} — ₹{plan.price} / {plan.billingCycle || `${plan.durationDays} days`} ({plan.shopCount} shops, {plan.productCountPerShop} products/shop)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Packaging & Charges */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Packaging Charges
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Packaging Charge (₹)</label>
+                                                <input
+                                                    type="number"
+                                                    value={shopSetupForm.packagingCharge}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, packagingCharge: Number(e.target.value) })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div className="pt-4">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={shopSetupForm.packagingChargeEnabled}
+                                                        onChange={(e) => setShopSetupForm({ ...shopSetupForm, packagingChargeEnabled: e.target.checked })}
+                                                        className="h-4 w-4 rounded text-brand-600 focus:ring-brand-500"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-700">Enable Packaging Charge for Customers</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Bank Account Details */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Settlement Bank Account Details
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Bank Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.bankName}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, bankName: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Account Holder Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.accountHolder}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, accountHolder: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">Account Number</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.accountNumber}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, accountNumber: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 mb-1">IFSC Code</label>
+                                                <input
+                                                    type="text"
+                                                    value={shopSetupForm.ifsc}
+                                                    onChange={(e) => setShopSetupForm({ ...shopSetupForm, ifsc: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none uppercase"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end pt-4 border-t border-slate-100">
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingShopSetup}
+                                            className="px-6 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all shadow-md disabled:opacity-60"
+                                        >
+                                            {isSavingShopSetup ? 'Saving Changes...' : 'Save Shop Setup'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
                     </Card>
                 </div>
 
@@ -700,6 +1190,18 @@ const SellerDetail = () => {
                     </Card>
                 </div>
             </div>
+
+            {isMapOpen && (
+                <MapPicker
+                    isOpen={isMapOpen}
+                    onClose={() => setIsMapOpen(false)}
+                    onConfirm={handleLocationSelect}
+                    initialLocation={
+                        shopSetupForm.lat ? { lat: shopSetupForm.lat, lng: shopSetupForm.lng } : null
+                    }
+                    initialRadius={shopSetupForm.serviceRadius || 5}
+                />
+            )}
         </div>
     );
 };

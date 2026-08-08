@@ -396,6 +396,30 @@ const MapPicker = ({
             Customers within this radius from your shop will be able to see and
             order from you.
           </p>
+
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <Button variant="outline" type="button" onClick={onClose} className="rounded-xl font-bold">
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              disabled={!marker || isGeocoding}
+              className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold px-6 shadow-md"
+            >
+              {isGeocoding ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <MapPin className="w-4 h-4 mr-1.5" />
+                  <span>Confirm Location & Radius ({radius}km)</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>
