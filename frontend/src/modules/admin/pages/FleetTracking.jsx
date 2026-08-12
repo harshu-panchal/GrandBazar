@@ -11,7 +11,10 @@ import {
   HiOutlineStar,
   HiOutlineCalendarDays,
   HiOutlineTruck,
+  HiOutlineUserPlus,
+  HiOutlineExclamationTriangle,
 } from "react-icons/hi2";
+import { Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Pagination from "@shared/components/ui/Pagination";
 import { adminApi } from "../services/adminApi";
@@ -34,6 +37,72 @@ const FleetTrackingTable = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBoy, setSelectedBoy] = useState(null);
+
+  const [unassignedOrders, setUnassignedOrders] = useState([]);
+  const [isLoadingUnassigned, setIsLoadingUnassigned] = useState(true);
+  const [assignModalOrder, setAssignModalOrder] = useState(null);
+  const [availableRiders, setAvailableRiders] = useState([]);
+  const [isLoadingRiders, setIsLoadingRiders] = useState(false);
+  const [selectedRiderId, setSelectedRiderId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  const fetchUnassignedOrders = async () => {
+    setIsLoadingUnassigned(true);
+    try {
+      const response = await adminApi.getUnassignedOrders({ limit: 50 });
+      const payload = response.data.result || {};
+      setUnassignedOrders(Array.isArray(payload.items) ? payload.items : []);
+    } catch (error) {
+      console.error("Fetch Unassigned Orders Error:", error);
+    } finally {
+      setIsLoadingUnassigned(false);
+    }
+  };
+
+  const openAssignModal = async (order) => {
+    setAssignModalOrder(order);
+    setSelectedRiderId("");
+    setIsLoadingRiders(true);
+    try {
+      const response = await adminApi.getDeliveryPartners({ status: "online", verified: "true", limit: 100 });
+      const payload = response.data.result || {};
+      const list = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
+      setAvailableRiders(list);
+    } catch (error) {
+      toast.error("Failed to load available delivery partners");
+      setAvailableRiders([]);
+    } finally {
+      setIsLoadingRiders(false);
+    }
+  };
+
+  const closeAssignModal = () => {
+    if (isAssigning) return;
+    setAssignModalOrder(null);
+    setAvailableRiders([]);
+    setSelectedRiderId("");
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!selectedRiderId || !assignModalOrder) return;
+    setIsAssigning(true);
+    try {
+      const response = await adminApi.assignOrderToRider(assignModalOrder.id, selectedRiderId);
+      const distanceKm = response.data?.result?.distanceKm;
+      toast.success(
+        distanceKm != null
+          ? `Rider assigned — approx. ${distanceKm} km from pickup`
+          : "Rider assigned successfully",
+      );
+      closeAssignModal();
+      fetchUnassignedOrders();
+      fetchFleet(page);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to assign rider");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   const fetchFleet = async (requestedPage = 1) => {
     setIsLoading(true);
@@ -68,6 +137,13 @@ const FleetTrackingTable = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
+  useEffect(() => {
+    fetchUnassignedOrders();
+    const interval = setInterval(fetchUnassignedOrders, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filteredFleet = fleet.filter(
     (item) =>
       item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,6 +170,53 @@ const FleetTrackingTable = () => {
           />
         </div>
       </div>
+
+      {unassignedOrders.length > 0 && (
+        <Card className="overflow-hidden border-amber-200 shadow-sm bg-amber-50/40">
+          <div className="px-6 py-4 border-b border-amber-100 flex items-center gap-2">
+            <HiOutlineExclamationTriangle className="h-5 w-5 text-amber-600" />
+            <h2 className="text-sm font-black text-amber-900 uppercase tracking-wider">
+              Orders Awaiting Rider Assignment ({unassignedOrders.length})
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-amber-50/60 border-b border-amber-100">
+                  <th className="px-6 py-3 text-[11px] font-bold text-amber-700 uppercase tracking-wider">Order ID</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-amber-700 uppercase tracking-wider">Seller</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-amber-700 uppercase tracking-wider">Customer</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-amber-700 uppercase tracking-wider text-right">Waiting Since</th>
+                  <th className="px-6 py-3 text-[11px] font-bold text-amber-700 uppercase tracking-wider text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-100">
+                {isLoadingUnassigned ? (
+                  <tr><td colSpan="5" className="px-6 py-8 text-center text-amber-600 text-xs font-bold">Loading…</td></tr>
+                ) : (
+                  unassignedOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-amber-50/60 transition-colors">
+                      <td className="px-6 py-3 text-sm font-bold text-slate-900">{order.id}</td>
+                      <td className="px-6 py-3 text-xs font-semibold text-slate-700">{order.seller?.name}</td>
+                      <td className="px-6 py-3 text-xs font-semibold text-slate-700">{order.customer?.name}</td>
+                      <td className="px-6 py-3 text-xs text-slate-500 text-right">{formatTimeDistance(order.createdAt)}</td>
+                      <td className="px-6 py-3 text-right">
+                        <button
+                          onClick={() => openAssignModal(order)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all"
+                        >
+                          <HiOutlineUserPlus className="h-3.5 w-3.5" />
+                          Assign
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card className="overflow-hidden border-slate-200 shadow-sm bg-white">
         <div className="overflow-x-auto">
@@ -311,6 +434,75 @@ const FleetTrackingTable = () => {
                     VIEW FULL PROFILE
                   </Button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Assign Rider Modal */}
+      <AnimatePresence>
+        {assignModalOrder && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeAssignModal}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Assign Delivery Partner</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Order {assignModalOrder.id} · {assignModalOrder.seller?.name}</p>
+                </div>
+                <button onClick={closeAssignModal} disabled={isAssigning} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
+                  <HiOutlineXMark className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
+                {isLoadingRiders ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                  </div>
+                ) : availableRiders.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-6">No online, verified delivery partners available right now.</p>
+                ) : (
+                  availableRiders.map((rider) => (
+                    <button
+                      key={rider._id}
+                      type="button"
+                      onClick={() => setSelectedRiderId(rider._id)}
+                      className={`w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-all ${
+                        selectedRiderId === rider._id
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/50"
+                          : "border-slate-200 hover:border-slate-300 bg-white"
+                      }`}
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">{rider.name}</p>
+                        <p className="text-[10px] text-slate-500 font-medium">{rider.phone} · {rider.vehicleType || "N/A"}</p>
+                      </div>
+                      {selectedRiderId === rider._id && (
+                        <span className="text-[10px] font-black text-primary uppercase">Selected</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <Button variant="outline" onClick={closeAssignModal} disabled={isAssigning} className="flex-1 text-xs">
+                  CANCEL
+                </Button>
+                <Button onClick={handleConfirmAssign} disabled={!selectedRiderId || isAssigning} className="flex-1 text-xs">
+                  {isAssigning ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "CONFIRM ASSIGNMENT"}
+                </Button>
               </div>
             </motion.div>
           </div>

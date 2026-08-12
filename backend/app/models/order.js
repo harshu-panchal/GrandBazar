@@ -53,6 +53,7 @@ const orderSchema = new mongoose.Schema(
       name: String,
       address: String,
       city: String,
+      state: String,
       phone: String,
       landmark: String,
       location: {
@@ -214,8 +215,17 @@ const orderSchema = new mongoose.Schema(
       tipTotal: { type: Number, default: 0 },
       discountTotal: { type: Number, default: 0 },
       taxTotal: { type: Number, default: 0 },
+      cgstTotal: { type: Number, default: 0 },
+      sgstTotal: { type: Number, default: 0 },
+      igstTotal: { type: Number, default: 0 },
+      taxJurisdiction: { type: String, enum: ["intra_state", "inter_state", null], default: null },
       customerSurchargeAmount: { type: Number, default: 0 },
       customerSurchargeReason: { type: String, default: "" },
+      oddHourSurchargeAmount: { type: Number, default: 0 },
+      weatherSurchargeAmount: { type: Number, default: 0 },
+      isBulkOrder: { type: Boolean, default: false },
+      bulkOrderReason: { type: String, enum: ["value_threshold", "qty_threshold", null], default: null },
+      bulkOrderLineIndexes: { type: [Number], default: [] },
       packagingChargeAmount: { type: Number, default: 0 },
       grandTotal: { type: Number, default: 0 },
       sellerPayoutTotal: { type: Number, default: 0 },
@@ -253,6 +263,8 @@ const orderSchema = new mongoose.Schema(
     },
     couponCode: { type: String, default: null, trim: true },
     freeDeliveryApplied: { type: Boolean, default: false },
+    isBulkOrder: { type: Boolean, default: false, index: true },
+    bulkOrderReason: { type: String, enum: ["value_threshold", "qty_threshold", null], default: null },
     rewardGrants: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -267,6 +279,15 @@ const orderSchema = new mongoose.Schema(
       riderPayoutQueued: { type: Boolean, default: false },
       adminEarningCredited: { type: Boolean, default: false },
       rewardsApplied: { type: Boolean, default: false },
+      sellerPayoutHeld: { type: Boolean, default: false },
+      // Distinct from the automatic return-window hold: set only when an
+      // admin explicitly places a payout on hold (see
+      // adminFinanceController.js holdSellerPayoutController). Excluded
+      // from returnWindowReleaseJob.js's auto-release query — a manual
+      // hold only clears via the matching manual release action, even if
+      // the return window has since expired.
+      manualSettlementHold: { type: Boolean, default: false },
+      manualSettlementHoldReason: { type: String, default: "" },
     },
     status: {
       type: String,
@@ -305,6 +326,11 @@ const orderSchema = new mongoose.Schema(
     deliverySearchExpiresAt: Date,
     sellerAcceptedAt: Date,
     assignedAt: Date,
+    assignedByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
     assignmentVersion: {
       type: Number,
       default: 0,
@@ -542,6 +568,7 @@ const orderSchema = new mongoose.Schema(
       cancelledItemIndexes: { type: [Number], default: [] },
       cancelledAt: { type: Date, default: null },
       reason: { type: String, default: "" },
+      updatedEtaAt: { type: Date, default: null },
     },
     deliveryBoy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -651,6 +678,7 @@ const orderSchema = new mongoose.Schema(
         "returned",
         "qc_passed",
         "qc_failed",
+        "refund_initiated",
         "refund_completed",
       ],
       default: "none",
@@ -718,6 +746,10 @@ const orderSchema = new mongoose.Schema(
       default: 0,
     },
     returnRefundAmount: {
+      type: Number,
+      default: 0,
+    },
+    returnRestockFeeDeducted: {
       type: Number,
       default: 0,
     },

@@ -44,6 +44,12 @@ const PendingSellers = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [inviteForm, setInviteForm] = useState({ email: '', phone: '' });
+    const [isSendingInvite, setIsSendingInvite] = useState(false);
+    const [invites, setInvites] = useState([]);
+    const [showInvites, setShowInvites] = useState(false);
+    const [isLoadingInvites, setIsLoadingInvites] = useState(false);
     const [viewingSeller, setViewingSeller] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [createForm, setCreateForm] = useState({
@@ -136,6 +142,44 @@ const PendingSellers = () => {
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleSendInvite = async (e) => {
+        e.preventDefault();
+        if (!inviteForm.email) {
+            toast.error('Email is required to send an invite');
+            return;
+        }
+        setIsSendingInvite(true);
+        try {
+            const res = await adminApi.inviteSeller(inviteForm);
+            toast.success(res.data?.message || 'Invite sent');
+            setIsInviteModalOpen(false);
+            setInviteForm({ email: '', phone: '' });
+            if (showInvites) fetchInvites();
+        } catch (err) {
+            toast.error(err.response?.data?.message || err.message || 'Failed to send invite');
+        } finally {
+            setIsSendingInvite(false);
+        }
+    };
+
+    const fetchInvites = async () => {
+        setIsLoadingInvites(true);
+        try {
+            const res = await adminApi.listSellerInvites();
+            setInvites(Array.isArray(res.data?.result) ? res.data.result : []);
+        } catch (error) {
+            toast.error('Failed to load invites');
+        } finally {
+            setIsLoadingInvites(false);
+        }
+    };
+
+    const toggleInvitesPanel = () => {
+        const next = !showInvites;
+        setShowInvites(next);
+        if (next && !invites.length) fetchInvites();
     };
 
     const fetchPendingSellers = async () => {
@@ -287,6 +331,20 @@ const PendingSellers = () => {
                 <div className="flex items-center gap-3">
                     <button
                         type="button"
+                        onClick={toggleInvitesPanel}
+                        className="px-4 py-2.5 bg-white text-slate-700 ring-1 ring-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-slate-50 active:scale-95 flex items-center gap-2"
+                    >
+                        {showInvites ? 'Hide Invites' : 'View Invites'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsInviteModalOpen(true)}
+                        className="px-4 py-2.5 bg-white text-slate-700 ring-1 ring-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-slate-50 shadow-sm active:scale-95 flex items-center gap-2"
+                    >
+                        + Invite Seller
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setIsCreateModalOpen(true)}
                         className="px-4 py-2.5 bg-black text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-slate-800 shadow-md active:scale-95 flex items-center gap-2"
                     >
@@ -298,6 +356,90 @@ const PendingSellers = () => {
                     </div>
                 </div>
             </div>
+
+            {showInvites && (
+                <Card className="p-5">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
+                        Sent Invites
+                    </h3>
+                    {isLoadingInvites ? (
+                        <p className="text-xs text-slate-400">Loading...</p>
+                    ) : invites.length === 0 ? (
+                        <p className="text-xs text-slate-400">No invites sent yet.</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-100">
+                                        <th className="py-2 pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</th>
+                                        <th className="py-2 pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone</th>
+                                        <th className="py-2 pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sent</th>
+                                        <th className="py-2 pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {invites.map((inv) => (
+                                        <tr key={inv._id}>
+                                            <td className="py-2 pr-4 text-xs font-bold text-slate-800">{inv.email}</td>
+                                            <td className="py-2 pr-4 text-xs text-slate-500">{inv.phone || '—'}</td>
+                                            <td className="py-2 pr-4 text-xs text-slate-500">
+                                                {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-IN') : '—'}
+                                            </td>
+                                            <td className="py-2 pr-4">
+                                                <Badge variant={inv.status === 'used' ? 'success' : inv.status === 'expired' ? 'error' : 'warning'} className="text-[9px]">
+                                                    {inv.status}
+                                                </Badge>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </Card>
+            )}
+
+            {isInviteModalOpen && (
+                <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4" onClick={() => setIsInviteModalOpen(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-base font-black text-slate-900 uppercase tracking-wider mb-4">Invite Seller</h3>
+                        <form onSubmit={handleSendInvite} className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email *</label>
+                                <input
+                                    type="email"
+                                    required
+                                    value={inviteForm.email}
+                                    onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                                    className="w-full mt-1 px-3 py-2.5 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10"
+                                    placeholder="prospect@example.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone (optional)</label>
+                                <input
+                                    type="tel"
+                                    value={inviteForm.phone}
+                                    onChange={(e) => setInviteForm({ ...inviteForm, phone: e.target.value })}
+                                    className="w-full mt-1 px-3 py-2.5 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10"
+                                    placeholder="9876543210"
+                                />
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                                We'll email them a link to start their seller application. The link expires in 14 days.
+                            </p>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => setIsInviteModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={isSendingInvite} className="px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50">
+                                    {isSendingInvite ? 'Sending...' : 'Send Invite'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Status Tabs */}
             <div className="flex flex-wrap gap-2">

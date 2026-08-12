@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import { adminApi } from '../services/adminApi';
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const ProductManagement = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]); // All categories for dropdowns
     const [page, setPage] = useState(1);
@@ -80,10 +82,43 @@ const ProductManagement = () => {
         galleryImages: [],
         applyCommission: false,
         adminCommission: '',
+        adminCommissionType: 'percentage',
+        adminCommissionFixedRule: 'per_qty',
+        sellerId: '',
+        isPreorderEligible: false,
+        addons: [],
         variants: [
             { id: Date.now(), name: 'Default', price: '', salePrice: '', stock: '', sku: '' }
         ]
     });
+
+    const [sellers, setSellers] = useState([]);
+    const [sellerProductsForAddons, setSellerProductsForAddons] = useState([]);
+
+    const fetchSellerProductsForAddons = async (sellerId, excludeProductId) => {
+        if (!sellerId) {
+            setSellerProductsForAddons([]);
+            return;
+        }
+        try {
+            const response = await adminApi.getProductModerationList({ sellerId, limit: 200 });
+            const payload = response.data.result || {};
+            const list = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
+            setSellerProductsForAddons(list.filter((p) => String(p._id) !== String(excludeProductId || '')));
+        } catch (error) {
+            setSellerProductsForAddons([]);
+        }
+    };
+
+    const fetchSellers = async () => {
+        try {
+            const response = await adminApi.getSellers();
+            const list = response.data.results || response.data.result || [];
+            setSellers(Array.isArray(list) ? list : []);
+        } catch (error) {
+            console.error('Failed to fetch sellers');
+        }
+    };
 
     const [viewingVariants, setViewingVariants] = useState(null);
     const [isVariantsViewModalOpen, setIsVariantsViewModalOpen] = useState(false);
@@ -132,6 +167,7 @@ const ProductManagement = () => {
 
     useEffect(() => {
         fetchCategories();
+        fetchSellers();
     }, []);
 
     useEffect(() => {
@@ -142,12 +178,11 @@ const ProductManagement = () => {
     }, [searchTerm, filterCategory, filterStatus, filterApprovalStatus, sortBy, pageSize]);
 
     const handleSave = async () => {
-        if (!editingItem) {
-            return toast.error('Only product editing is allowed for admins');
-        }
-
         if (!formData.name || !formData.price || !formData.stock || !formData.header || !formData.categoryId || !formData.subcategoryId) {
             return toast.error('Please fill all required fields, including categories');
+        }
+        if (!editingItem && !formData.sellerId) {
+            return toast.error('Please select which seller this product belongs to');
         }
 
         setIsSaving(true);
@@ -171,14 +206,23 @@ const ProductManagement = () => {
             data.append('weight', formData.weight);
             data.append('tags', formData.tags);
             data.append('variants', JSON.stringify(formData.variants));
+            data.append('isPreorderEligible', formData.isPreorderEligible);
+            if (formData.addons && formData.addons.length > 0) {
+                data.append('addons', JSON.stringify(formData.addons));
+            } else {
+                data.append('addons', JSON.stringify([]));
+            }
             const applyCommission = !!formData.applyCommission;
             const commissionValue = applyCommission
                 ? Math.max(0, Number(formData.adminCommission) || 0)
                 : 0;
+            const commissionType = formData.adminCommissionType === 'fixed' ? 'fixed' : 'percentage';
+            const commissionFixedRule = formData.adminCommissionFixedRule === 'per_item' ? 'per_item' : 'per_qty';
             data.append('applyCommission', applyCommission);
             data.append('adminCommission', commissionValue);
             data.append('adminCommissionValue', commissionValue);
-            data.append('adminCommissionType', 'percentage');
+            data.append('adminCommissionType', commissionType);
+            data.append('adminCommissionFixedRule', commissionFixedRule);
 
             if (formData.mainImageFile) {
                 data.append('mainImage', formData.mainImageFile);
@@ -187,8 +231,14 @@ const ProductManagement = () => {
                 formData.galleryFiles.forEach((file) => data.append('galleryImages', file));
             }
 
-            await adminApi.updateProduct(editingItem._id, data);
-            toast.success('Product updated successfully');
+            if (editingItem) {
+                await adminApi.updateProduct(editingItem._id, data);
+                toast.success('Product updated successfully');
+            } else {
+                data.append('sellerId', formData.sellerId);
+                await adminApi.createProduct(data);
+                toast.success('Product created successfully');
+            }
             setIsProductModalOpen(false);
             fetchProducts(page);
         } catch (error) {
@@ -322,6 +372,11 @@ const ProductManagement = () => {
                 galleryImages: item.galleryImages || item.images || [],
                 applyCommission,
                 adminCommission: item.adminCommissionValue ?? item.adminCommission ?? '',
+                adminCommissionType: item.adminCommissionType === 'fixed' ? 'fixed' : 'percentage',
+                adminCommissionFixedRule: item.adminCommissionFixedRule === 'per_item' ? 'per_item' : 'per_qty',
+                sellerId: item.sellerId?._id || item.sellerId || '',
+                isPreorderEligible: item.isPreorderEligible || false,
+                addons: Array.isArray(item.addons) ? item.addons.map((a) => a?._id || a) : [],
                 variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => ({ ...v, id: v._id || Date.now() })) : [
                     {
                         id: Date.now(),
@@ -334,6 +389,7 @@ const ProductManagement = () => {
                 ]
             });
             setEditingItem(item);
+            fetchSellerProductsForAddons(item.sellerId?._id || item.sellerId, item._id);
         } else {
             setFormData({
                 name: '', slug: '', sku: '', description: '', price: '',
@@ -343,15 +399,68 @@ const ProductManagement = () => {
                 mainImage: null, galleryImages: [],
                 applyCommission: false,
                 adminCommission: '',
+                adminCommissionType: 'percentage',
+                adminCommissionFixedRule: 'per_qty',
+                sellerId: '',
+                isPreorderEligible: false,
+                addons: [],
                 variants: [
                     { id: Date.now(), name: 'Default', price: '', salePrice: '', stock: '', sku: '' }
                 ]
             });
             setEditingItem(null);
+            setSellerProductsForAddons([]);
         }
         setModalTab('general');
         setIsProductModalOpen(true);
     };
+
+    // Deep-link support (used by the seller-detail "Products" tab's quick links):
+    //   ?edit=<productId>       auto-opens that product's editor
+    //   ?newForSeller=<sellerId> opens the create form pre-scoped to that seller
+    useEffect(() => {
+        const editId = searchParams.get('edit');
+        const newForSeller = searchParams.get('newForSeller');
+        if (!editId && !newForSeller) return;
+
+        if (newForSeller) {
+            openModal(null);
+            setFormData((prev) => ({ ...prev, sellerId: newForSeller }));
+            fetchSellerProductsForAddons(newForSeller, null);
+            setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('newForSeller');
+                return next;
+            }, { replace: true });
+            return;
+        }
+
+        let cancelled = false;
+        adminApi.getProductById(editId)
+            .then((response) => {
+                if (cancelled) return;
+                const product = response.data?.result;
+                if (product) {
+                    openModal(product);
+                } else {
+                    toast.error('Product not found');
+                }
+            })
+            .catch(() => {
+                if (!cancelled) toast.error('Failed to load product for editing');
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.delete('edit');
+                        return next;
+                    }, { replace: true });
+                }
+            });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     const productsList = Array.isArray(products) ? products : [];
     const stats = useMemo(() => ({
@@ -390,6 +499,14 @@ const ProductManagement = () => {
                     </h1>
                     <p className="ds-description mt-0.5">Track your items, prices, and how many are left in stock.</p>
                 </div>
+                <button
+                    type="button"
+                    onClick={() => openModal(null)}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 transition-colors shadow-sm"
+                >
+                    <HiOutlinePlus className="h-5 w-5" />
+                    Add Product
+                </button>
             </div>
 
             {/* Quick Stats */}
@@ -500,6 +617,7 @@ const ProductManagement = () => {
                             <option value="price-desc">Price High-Low</option>
                             <option value="stock-asc">Stock Low-High</option>
                             <option value="stock-desc">Stock High-Low</option>
+                            <option value="seller-asc">Group by Seller</option>
                         </select>
                     </div>
                 </div>
@@ -543,9 +661,24 @@ const ProductManagement = () => {
                                 <tr>
                                     <td colSpan="7" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
                                 </tr>
-                            ) : productsList.map((p) => (
+                            ) : productsList.map((p, idx) => {
+                                const isGrouped = sortBy === 'seller-asc';
+                                const prevSellerId = idx > 0 ? (productsList[idx - 1].sellerId?._id || productsList[idx - 1].sellerId) : null;
+                                const currentSellerId = p.sellerId?._id || p.sellerId;
+                                const showSellerHeader = isGrouped && currentSellerId !== prevSellerId;
+                                return (
+                                <React.Fragment key={p._id}>
+                                    {showSellerHeader && (
+                                        <tr className="bg-slate-100/80">
+                                            <td colSpan="7" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                                                {p.sellerId?.shopName || 'Admin'}
+                                                <span className="ml-2 font-medium normal-case text-slate-400">
+                                                    {productsList.filter((item) => (item.sellerId?._id || item.sellerId) === currentSellerId).length} product(s) on this page
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}
                                 <tr
-                                    key={p._id}
                                     className={cn(
                                         "group transition-colors hover:bg-slate-50/60",
                                         String(p.approvalStatus || '').toLowerCase() === 'pending' && "bg-amber-50/40"
@@ -663,7 +796,9 @@ const ProductManagement = () => {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                                </React.Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -711,7 +846,7 @@ const ProductManagement = () => {
                                     </div>
                                     <div>
                                         <h3 className="admin-h3">
-                                            Edit Product
+                                            {editingItem ? 'Edit Product' : 'Add Product'}
                                         </h3>
                                         <div className="flex items-center space-x-2 mt-0.5">
                                             <Badge variant="primary" className="text-[7px] font-bold uppercase tracking-widest px-1">SYSTEM</Badge>
@@ -731,6 +866,7 @@ const ProductManagement = () => {
                                     {[
                                         { id: 'general', label: 'General Info', icon: HiOutlineTag },
                                         { id: 'variants', label: 'Item Variants', icon: HiOutlineSwatch },
+                                        { id: 'addons', label: 'Add-ons', icon: HiOutlineSquaresPlus },
                                         { id: 'category', label: 'Groups', icon: HiOutlineFolderOpen },
                                         { id: 'media', label: 'Photos', icon: HiOutlinePhoto }
                                     ].map((tab) => (
@@ -770,6 +906,15 @@ const ProductManagement = () => {
                                                 className="h-4 w-4 rounded border-brand-300 text-primary focus:ring-primary"
                                             />
                                         </div>
+                                        <div className="mt-3 p-4 bg-brand-50 rounded-2xl border border-brand-100 flex items-center justify-between gap-2">
+                                            <p className="text-[9px] font-bold text-brand-600 uppercase tracking-widest">Future/Pre-order</p>
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.isPreorderEligible}
+                                                onChange={(e) => setFormData({ ...formData, isPreorderEligible: e.target.checked })}
+                                                className="h-4 w-4 rounded border-brand-300 text-primary focus:ring-primary"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -777,6 +922,27 @@ const ProductManagement = () => {
                                 <div className="flex-1 p-4 overflow-y-auto overscroll-contain touch-pan-y min-h-0">
                                     {modalTab === 'general' && (
                                         <div className="ds-section-spacing animate-in fade-in slide-in-from-right-2 duration-300">
+                                            {!editingItem && (
+                                                <div className="space-y-1.5 flex flex-col">
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Seller / Store</label>
+                                                    <select
+                                                        value={formData.sellerId}
+                                                        onChange={(e) => {
+                                                            setFormData({ ...formData, sellerId: e.target.value, addons: [] });
+                                                            fetchSellerProductsForAddons(e.target.value, null);
+                                                        }}
+                                                        className="w-full px-4 py-2.5 bg-amber-50 ring-1 ring-amber-200 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                                                    >
+                                                        <option value="">Select the seller this product belongs to…</option>
+                                                        {sellers.map((s) => (
+                                                            <option key={s._id} value={s._id}>{s.shopName} {s.category ? `· ${s.category}` : ''}</option>
+                                                        ))}
+                                                    </select>
+                                                    <span className="text-[10px] text-slate-400 font-medium ml-1">
+                                                        This product will be created directly under the selected seller's store and auto-approved.
+                                                    </span>
+                                                </div>
+                                            )}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 <div className="space-y-1.5 flex flex-col">
                                                     <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Product Title</label>
@@ -851,24 +1017,119 @@ const ProductManagement = () => {
                                                 <p className="text-xs text-slate-500">
                                                     Works for main products and add-on products. When enabled, this overrides category commission at checkout.
                                                 </p>
-                                                <div className="max-w-xs space-y-2">
-                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                        Admin Commission (%)
-                                                    </label>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="any"
-                                                        value={formData.adminCommission}
-                                                        disabled={!formData.applyCommission}
-                                                        onChange={(e) =>
-                                                            setFormData({ ...formData, adminCommission: e.target.value })
-                                                        }
-                                                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50 disabled:bg-slate-100"
-                                                        placeholder="e.g. 10"
-                                                    />
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            Commission Type
+                                                        </label>
+                                                        <select
+                                                            value={formData.adminCommissionType}
+                                                            disabled={!formData.applyCommission}
+                                                            onChange={(e) =>
+                                                                setFormData({ ...formData, adminCommissionType: e.target.value })
+                                                            }
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50 disabled:bg-slate-100 cursor-pointer"
+                                                        >
+                                                            <option value="percentage">Percentage</option>
+                                                            <option value="fixed">Fixed Amount</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            Admin Commission ({formData.adminCommissionType === 'fixed' ? '₹' : '%'})
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="any"
+                                                            value={formData.adminCommission}
+                                                            disabled={!formData.applyCommission}
+                                                            onChange={(e) =>
+                                                                setFormData({ ...formData, adminCommission: e.target.value })
+                                                            }
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50 disabled:bg-slate-100"
+                                                            placeholder="e.g. 10"
+                                                        />
+                                                    </div>
+                                                    {formData.adminCommissionType === 'fixed' && (
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                                Rule Precedence
+                                                            </label>
+                                                            <select
+                                                                value={formData.adminCommissionFixedRule}
+                                                                disabled={!formData.applyCommission}
+                                                                onChange={(e) =>
+                                                                    setFormData({ ...formData, adminCommissionFixedRule: e.target.value })
+                                                                }
+                                                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50 disabled:bg-slate-100 cursor-pointer"
+                                                            >
+                                                                <option value="per_qty">Per Item Qty</option>
+                                                                <option value="per_item">Per Item</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {modalTab === 'addons' && (
+                                        <div className="ds-section-spacing animate-in fade-in slide-in-from-right-2 duration-300">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900">Product Add-ons</h4>
+                                                <p className="text-xs text-slate-600 font-medium mt-1">
+                                                    Select other products from the same seller to recommend alongside this one.
+                                                </p>
+                                            </div>
+                                            {!formData.sellerId ? (
+                                                <p className="text-sm text-slate-500">Select a seller in General Info first.</p>
+                                            ) : sellerProductsForAddons.length === 0 ? (
+                                                <p className="text-sm text-slate-500">No other products found for this seller.</p>
+                                            ) : (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {sellerProductsForAddons.map((prod) => {
+                                                        const isSelected = formData.addons.includes(prod._id);
+                                                        return (
+                                                            <div
+                                                                key={prod._id}
+                                                                onClick={() => {
+                                                                    setFormData((prev) => ({
+                                                                        ...prev,
+                                                                        addons: isSelected
+                                                                            ? prev.addons.filter((id) => id !== prod._id)
+                                                                            : [...prev.addons, prod._id],
+                                                                    }));
+                                                                }}
+                                                                className={cn(
+                                                                    "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                                                                    isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/50" : "border-slate-200 hover:border-slate-300 bg-white"
+                                                                )}
+                                                            >
+                                                                <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                                                                    {prod.mainImage ? (
+                                                                        <img src={prod.mainImage} alt={prod.name} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <HiOutlinePhoto className="w-full h-full p-3 text-slate-300" />
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                                                                    <p className="text-[10px] text-slate-500 font-medium">₹{prod.price}</p>
+                                                                </div>
+                                                                <div className={cn(
+                                                                    "w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0",
+                                                                    isSelected ? "bg-primary border-primary text-white" : "border-slate-300 text-transparent"
+                                                                )}>
+                                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -1002,7 +1263,7 @@ const ProductManagement = () => {
                                                                         placeholder="mango-001"
                                                                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none ring-0 focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                                                                     />
-                                                                    <button
+                                                    <button
                                                                         type="button"
                                                                         onClick={() => setFormData({ ...formData, variants: formData.variants.filter((_, idx) => idx !== i) })}
                                                                         className="mt-0.5 rounded-xl p-2 text-rose-500 transition-colors hover:bg-rose-50"
@@ -1012,6 +1273,38 @@ const ProductManagement = () => {
                                                                     </button>
                                                                 </div>
                                                             </div>
+                                                        </div>
+
+                                                        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2.5">
+                                                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!v.applyCommission}
+                                                                    onChange={e => {
+                                                                        const news = [...formData.variants];
+                                                                        news[i].applyCommission = e.target.checked;
+                                                                        if (!e.target.checked) news[i].adminCommissionValue = '';
+                                                                        setFormData({ ...formData, variants: news });
+                                                                    }}
+                                                                    className="h-3.5 w-3.5 rounded border-slate-300 text-black focus:ring-black"
+                                                                />
+                                                                Variant-specific commission
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                step="any"
+                                                                value={v.adminCommissionValue ?? ''}
+                                                                disabled={!v.applyCommission}
+                                                                onChange={e => {
+                                                                    const news = [...formData.variants];
+                                                                    news[i].adminCommissionValue = e.target.value;
+                                                                    setFormData({ ...formData, variants: news });
+                                                                }}
+                                                                placeholder="e.g. 8"
+                                                                className="w-28 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-black/5 disabled:opacity-50"
+                                                            />
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">% — overrides product/category commission for this variant only</span>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -1104,7 +1397,7 @@ const ProductManagement = () => {
                                     disabled={isSaving}
                                     className="bg-slate-900 text-white px-10 py-2.5 rounded-xl text-xs font-bold shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50"
                                 >
-                                    {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
+                                    {isSaving ? 'SAVING...' : editingItem ? 'SAVE CHANGES' : 'CREATE PRODUCT'}
                                 </button>
                             </div>
                         </motion.div>

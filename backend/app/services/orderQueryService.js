@@ -38,7 +38,7 @@ export async function attachDeliveryPartners(orders = []) {
   if (missingIds.size === 0) return orders;
 
   const partners = await Delivery.find({ _id: { $in: [...missingIds] } })
-    .select("name phone profileImage")
+    .select("name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
     .lean();
   const map = new Map(partners.map((p) => [String(p._id), p]));
 

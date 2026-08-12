@@ -176,6 +176,10 @@ const ProductDetailSheet = () => {
         : null;
     const quantity = cartItem ? cartItem.quantity : 0;
     const isWishlisted = selectedProduct ? isInWishlist(selectedProduct.id) : false;
+    const hasVariants = Array.isArray(selectedProduct?.variants) && selectedProduct.variants.length > 0;
+    const isOutOfStock = hasVariants
+        ? !(Number(selectedVariant?.stock) > 0)
+        : !(Number(selectedProduct?.stock) > 0);
 
     useEffect(() => {
         if (isOpen) {
@@ -262,6 +266,10 @@ const ProductDetailSheet = () => {
     };
 
     const handleAddToCart = () => {
+        if (isOutOfStock) {
+            showToast("This product is out of stock", "error");
+            return;
+        }
         addToCart({
             ...selectedProduct,
             variantSku: String(selectedVariant?.sku || selectedVariant?.name || "").trim(),
@@ -574,13 +582,19 @@ const ProductDetailSheet = () => {
                                                         </div>
                                                     ) : (
                                                     <motion.button
-                                                        whileHover={{ scale: 1.02, y: -2 }}
-                                                        whileTap={{ scale: 0.98 }}
+                                                        whileHover={isOutOfStock ? {} : { scale: 1.02, y: -2 }}
+                                                        whileTap={isOutOfStock ? {} : { scale: 0.98 }}
                                                         onClick={handleAddToCart}
-                                                        className="bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-12 px-8 rounded-xl font-black text-[13px] flex items-center gap-2 shadow-lg shadow-brand-100 hover:shadow-brand-200 transition-all uppercase tracking-widest border border-white/20"
+                                                        disabled={isOutOfStock}
+                                                        className={cn(
+                                                            "h-12 px-8 rounded-xl font-black text-[13px] flex items-center gap-2 transition-all uppercase tracking-widest border border-white/20",
+                                                            isOutOfStock
+                                                                ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                                                : "bg-gradient-to-r from-primary to-[var(--brand-400)] text-white shadow-lg shadow-brand-100 hover:shadow-brand-200"
+                                                        )}
                                                     >
                                                         <ShoppingBag size={16} strokeWidth={3} />
-                                                        Add to Cart
+                                                        {isOutOfStock ? "Out of Stock" : "Add to Cart"}
                                                     </motion.button>
                                                     )}
                                                 </div>
@@ -1173,13 +1187,19 @@ const ProductDetailSheet = () => {
                                         </div>
                                     ) : (
                                         <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.95 }}
+                                            whileHover={isOutOfStock ? {} : { scale: 1.02 }}
+                                            whileTap={isOutOfStock ? {} : { scale: 0.95 }}
                                             onClick={handleAddToCart}
-                                            className="flex-1 bg-gradient-to-r from-primary to-[var(--brand-400)] text-white h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-brand-100 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4"
+                                            disabled={isOutOfStock}
+                                            className={cn(
+                                                "flex-1 h-[56px] rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all border border-white/20 uppercase tracking-[0.05em] whitespace-nowrap px-4",
+                                                isOutOfStock
+                                                    ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                                    : "bg-gradient-to-r from-primary to-[var(--brand-400)] text-white shadow-xl shadow-brand-100"
+                                            )}
                                         >
                                             <ShoppingBag size={18} strokeWidth={3} />
-                                            ADD TO CART
+                                            {isOutOfStock ? "OUT OF STOCK" : "ADD TO CART"}
                                         </motion.button>
                                     )}
                                 </div>

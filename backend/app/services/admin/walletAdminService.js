@@ -65,11 +65,18 @@ export async function getDeliveryTransactionsData({ page, limit, skip }) {
 }
 
 export async function getSellerWithdrawalsData({ page, limit, skip }) {
-  const query = { userModel: "Seller", type: "Withdrawal" };
+  // Seller withdrawals are created with userModel: "Store" (sellerController.js) —
+  // "user" always holds a Store _id, never a Seller _id, for seller-side transactions.
+  const query = { userModel: "Store", type: "Withdrawal" };
 
   const [transactions, total] = await Promise.all([
     Transaction.find(query)
-      .populate("user", "name shopName phone")
+      .populate({
+        path: "user",
+        model: "Store",
+        select: "shopName accountHolder accountNumber ifsc bankName ownerId",
+        populate: { path: "ownerId", model: "Seller", select: "name phone" },
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -89,10 +96,21 @@ export async function getSellerWithdrawalsData({ page, limit, skip }) {
 export async function getSellerTransactionsData({ page, limit, skip }) {
   const query = { userModel: "Seller" };
   const transactions = await Transaction.find(query)
-    .populate("user", "name shopName phone bankDetails")
+    // NOTE: these Transaction docs are labeled userModel:"Seller" but "user" actually
+    // holds a Store _id (see orderPlacementService.js) — refPath("Seller") would look
+    // the id up in the wrong collection and always return null. Populate Store explicitly.
+    .populate({
+      path: "user",
+      model: "Store",
+      select: "shopName accountHolder accountNumber ifsc bankName ownerId",
+      populate: { path: "ownerId", model: "Seller", select: "name phone" },
+    })
     .populate({
       path: "order",
-      select: "orderId pricing",
+      // Was "orderId pricing" only — paymentBreakdown/isBulkOrder were never
+      // sent, so the admin UI's commission/tax/packaging/bulk-order fields
+      // (which read from paymentBreakdown) were silently always zero/false.
+      select: "orderId pricing paymentBreakdown isBulkOrder items",
       populate: {
         path: "items.product",
         select: "name",

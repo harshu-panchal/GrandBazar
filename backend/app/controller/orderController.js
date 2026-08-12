@@ -29,6 +29,8 @@ import {
   freezeFinancialSnapshot,
   reverseOrderFinanceOnCancellation,
 } from "../services/finance/orderFinanceService.js";
+import { getInvoiceForOrder } from "../services/finance/invoiceService.js";
+import { buildReorderManifest } from "../services/reorderService.js";
 import {
   generateOrderPaymentBreakdown,
   hydrateOrderItems,
@@ -105,41 +107,7 @@ function inferPaymentMode(payment = {}) {
   return null;
 }
 
-function parsePositiveInt(value, fallback) {
-  const parsed = parseInt(value, 10);
-  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
-  return fallback;
-}
-
-function getReturnEligibilityDelayMinutes() {
-  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 0);
-}
-
-function getReturnWindowMinutes(customHours = null) {
-  if (customHours && typeof customHours === "number" && customHours > 0) {
-    return customHours * 60;
-  }
-  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 1440); // 24 hours default (1440 mins)
-}
-
-function computeReturnWindowForOrder(order, customHours = null) {
-  const base = order?.deliveredAt || order?.createdAt || new Date();
-  const deliveredAt = base instanceof Date ? base : new Date(base);
-  const eligibleDelay = getReturnEligibilityDelayMinutes();
-  const windowMinutes = getReturnWindowMinutes(customHours);
-  const eligibleAt = order?.returnEligibleAt || new Date(deliveredAt.getTime() + eligibleDelay * 60 * 1000);
-  let windowExpiresAt = order?.returnWindowExpiresAt || new Date(deliveredAt.getTime() + windowMinutes * 60 * 1000);
-  if (windowExpiresAt < eligibleAt) {
-    windowExpiresAt = eligibleAt;
-  }
-
-  return {
-    eligibleAt,
-    windowExpiresAt,
-    eligibleDelay,
-    windowMinutes,
-  };
-}
+import { computeReturnWindowForOrder } from "../utils/returnWindow.js";
 
 async function deriveDistanceKm({ sellerId, addressLocation }) {
   if (
@@ -380,6 +348,56 @@ function refToIdString(ref) {
 /* ===============================
    GET ORDER DETAILS
 ================================ */
+export const getOrderInvoice = async (req, res) => {
+  try {
+    const { orderId, type } = req.params;
+    const { role } = req.user;
+    const userId = String(req.user?.id ?? req.user?._id ?? "").trim();
+
+    if (type !== "customer" && type !== "seller") {
+      return handleResponse(res, 400, "Invalid invoice type");
+    }
+
+    const orderKey = orderMatchQueryFlexible(orderId);
+    if (!orderKey) {
+      return handleResponse(res, 404, "Order not found");
+    }
+    const order = await Order.findOne(orderKey)
+      .select("_id orderId customer seller")
+      .lean();
+    if (!order) {
+      return handleResponse(res, 404, "Order not found");
+    }
+
+    const isOwningCustomer = role === "customer" && String(order.customer) === userId;
+    const isOwningSeller = role === "seller" && String(order.seller) === userId;
+    const isAdmin = role === "admin";
+    if (!isAdmin) {
+      if (type === "customer" && !isOwningCustomer) {
+        return handleResponse(res, 403, "Not authorized to view this invoice");
+      }
+      if (type === "seller" && !isOwningSeller) {
+        return handleResponse(res, 403, "Not authorized to view this invoice");
+      }
+    }
+
+    const invoice = await getInvoiceForOrder(order.orderId, type);
+    if (!invoice) {
+      return handleResponse(res, 404, "Invoice not yet generated for this order — invoices are created once the order is delivered.");
+    }
+
+    return handleResponse(res, 200, "Invoice fetched", {
+      invoiceNumber: invoice.invoiceNumber,
+      pdfUrl: invoice.pdfUrl,
+      grandTotal: invoice.grandTotal,
+      generatedAt: invoice.generatedAt,
+    });
+  } catch (error) {
+    console.error("getOrderInvoice error:", error);
+    return handleResponse(res, 500, "Failed to fetch invoice");
+  }
+};
+
 export const getOrderDetails = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -394,10 +412,14 @@ export const getOrderDetails = async (req, res) => {
 
     let order = await Order.findOne(orderKey)
       .populate("customer", "name email phone")
-      .populate("items.product", "name mainImage price salePrice")
-      .populate("deliveryBoy", "name phone profileImage")
-      .populate("deliveryPartner", "name phone profileImage")
-      .populate("returnDeliveryBoy", "name phone")
+      .populate({
+        path: "items.product",
+        select: "name mainImage price salePrice categoryId",
+        populate: { path: "categoryId", select: "packagingType name" },
+      })
+      .populate("deliveryBoy", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
+      .populate("deliveryPartner", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
+      .populate("returnDeliveryBoy", "name phone email profileImage vehicleType vehicleNumber")
       .populate("seller", "shopName name address phone location")
       .lean();
 
@@ -527,6 +549,18 @@ export const getOrderDetails = async (req, res) => {
   } catch (error) {
     console.error(`[ORDER_ERROR] Error fetching order details:`, error);
     return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   REORDER ("Buy Again")
+================================ */
+export const reorderOrder = async (req, res) => {
+  try {
+    const manifest = await buildReorderManifest(req.user.id, req.params.orderId);
+    return handleResponse(res, 200, "Reorder manifest built", manifest);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
@@ -714,8 +748,54 @@ export const requestReturn = async (req, res) => {
 
     const now = new Date();
     const platformSettings = await Setting.findOne({}).lean();
+
+    // Category-based refund control: a category can disable returns outright
+    // or set its own (typically shorter) return window, overriding the
+    // platform-wide default for items in that category.
+    const requestedProductIds = items
+      .map((entry) => order.items?.[entry?.itemIndex]?.product)
+      .filter(Boolean);
+    let categoryRefundOverrideHours = null;
+    if (requestedProductIds.length > 0) {
+      const requestedProducts = await Product.find({ _id: { $in: requestedProductIds } })
+        .select("_id name categoryId")
+        .lean();
+      const categoryIds = Array.from(
+        new Set(requestedProducts.map((p) => String(p.categoryId || "")).filter(Boolean)),
+      );
+      if (categoryIds.length > 0) {
+        const Category = (await import("../models/category.js")).default;
+        const categories = await Category.find({ _id: { $in: categoryIds } })
+          .select("_id name returnEligible refundWindowHours")
+          .lean();
+        const categoryById = new Map(categories.map((c) => [String(c._id), c]));
+
+        const ineligibleProduct = requestedProducts.find((p) => {
+          const cat = categoryById.get(String(p.categoryId || ""));
+          return cat && cat.returnEligible === false;
+        });
+        if (ineligibleProduct) {
+          return handleResponse(
+            res,
+            400,
+            `"${ineligibleProduct.name}" is not eligible for return per category policy.`,
+          );
+        }
+
+        const configuredWindows = categories
+          .map((c) => Number(c.refundWindowHours))
+          .filter((hours) => Number.isFinite(hours) && hours >= 0);
+        if (configuredWindows.length > 0) {
+          categoryRefundOverrideHours = Math.min(...configuredWindows);
+        }
+      }
+    }
+
     const { eligibleAt, windowExpiresAt, eligibleDelay, windowMinutes } =
-      computeReturnWindowForOrder(order, platformSettings?.refundWindowHours);
+      computeReturnWindowForOrder(
+        order,
+        categoryRefundOverrideHours ?? platformSettings?.refundWindowHours,
+      );
 
     if (now < eligibleAt) {
       return handleResponse(
@@ -913,7 +993,7 @@ export const getReturnDetails = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { status, deliveryBoyId } = req.body;
+    const { status, deliveryBoyId, cancelReason } = req.body;
     const { id: userId, role } = req.user;
 
     const orderKey = orderMatchQueryFromRouteParam(orderId);
@@ -935,6 +1015,7 @@ export const updateOrderStatus = async (req, res) => {
           userId,
           canonicalOrderId,
           String(status).toLowerCase(),
+          { cancelReason },
         );
         if (updated) {
           return handleResponse(res, 200, "Order status updated", updated);
@@ -1615,7 +1696,7 @@ export const completeReturnAndRefund = async (order) => {
     return order;
   }
 
-  const refundAmount =
+  const grossRefundAmount =
     order.returnRefundAmount ||
     (Array.isArray(order.returnItems)
       ? order.returnItems.reduce(
@@ -1624,8 +1705,66 @@ export const completeReturnAndRefund = async (order) => {
       )
       : 0);
 
+  // Category-based restocking fee: deduct per-item before crediting the refund.
+  let restockFeeDeducted = 0;
+  if (!order.returnRefundAmount && Array.isArray(order.returnItems) && order.returnItems.length > 0) {
+    const productIds = order.returnItems.map((item) => item.product).filter(Boolean);
+    if (productIds.length > 0) {
+      const products = await Product.find({ _id: { $in: productIds } })
+        .select("_id categoryId")
+        .lean();
+      const productCategoryById = new Map(
+        products.map((p) => [String(p._id), String(p.categoryId || "")]),
+      );
+      const categoryIds = Array.from(new Set(productCategoryById.values())).filter(Boolean);
+      if (categoryIds.length > 0) {
+        const Category = (await import("../models/category.js")).default;
+        const categories = await Category.find({ _id: { $in: categoryIds } })
+          .select("_id restockFeePercent")
+          .lean();
+        const restockFeeByCategory = new Map(
+          categories.map((c) => [String(c._id), Number(c.restockFeePercent || 0)]),
+        );
+        for (const item of order.returnItems) {
+          const catId = productCategoryById.get(String(item.product || ""));
+          const feePercent = catId ? restockFeeByCategory.get(catId) || 0 : 0;
+          if (feePercent > 0) {
+            const itemTotal = (item.price || 0) * (item.quantity || 0);
+            restockFeeDeducted += Number(((itemTotal * feePercent) / 100).toFixed(2));
+          }
+        }
+      }
+    }
+  }
+
+  const refundAmount = Math.max(0, Number((grossRefundAmount - restockFeeDeducted).toFixed(2)));
   const commission = order.returnDeliveryCommission || 0;
   const walletRefundTotal = refundAmount;
+
+  if (restockFeeDeducted > 0) {
+    order.returnRestockFeeDeducted = restockFeeDeducted;
+  }
+
+  // Refund Initiated: a visible intermediate state before money actually
+  // moves, so a slow/partial failure downstream isn't silently invisible.
+  const Refund = (await import("../models/refund.js")).default;
+  const refundRecord = await Refund.create({
+    order: order._id,
+    orderId: order.orderId,
+    type: "return",
+    amount: refundAmount,
+    mode: order.paymentMode === "COD" ? "wallet" : "wallet",
+    status: "initiated",
+  });
+  order.returnStatus = "refund_initiated";
+  await order.save();
+  emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_INITIATED, {
+    orderId: order.orderId,
+    customerId: order.customer,
+    userId: order.customer,
+    sellerId: order.seller,
+    data: { refundAmount },
+  });
 
   // 1. Credit customer wallet (full refund, even for COD)
   if (order.customer && walletRefundTotal > 0) {
@@ -1642,7 +1781,12 @@ export const completeReturnAndRefund = async (order) => {
         amount: Number(walletRefundTotal.toFixed(2)),
         status: "Settled",
         reference: `REF-WALLET-${order.orderId}`,
-        meta: { orderId: order._id, type: "return_wallet" }
+        meta: {
+          orderId: order._id,
+          type: "return_wallet",
+          grossRefundAmount,
+          restockFeeDeducted,
+        },
       });
     }
   }
@@ -1732,6 +1876,9 @@ export const completeReturnAndRefund = async (order) => {
   }
 
   await order.save();
+  refundRecord.status = "completed";
+  refundRecord.completedAt = new Date();
+  await refundRecord.save();
   emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
     orderId: order.orderId,
     customerId: order.customer,

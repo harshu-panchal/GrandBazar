@@ -56,9 +56,36 @@ const deliverySchema = new mongoose.Schema(
             trim: true,
         },
 
+        vehicleModel: {
+            type: String,
+            trim: true,
+        },
+
+        vehicleColor: {
+            type: String,
+            trim: true,
+        },
+
+        fuelType: {
+            type: String,
+            enum: ["petrol", "diesel", "electric", "cng", "other", ""],
+            default: "",
+        },
+
         drivingLicenseNumber: {
             type: String,
             trim: true,
+        },
+
+        emergencyContacts: {
+            type: [
+                {
+                    name: { type: String, trim: true, required: true },
+                    relation: { type: String, trim: true, default: "" },
+                    phone: { type: String, trim: true, required: true },
+                },
+            ],
+            default: [],
         },
 
         currentArea: {
@@ -75,11 +102,15 @@ const deliverySchema = new mongoose.Schema(
             default: false,
         },
 
-
+        /** Phone/OTP verified — distinct from `isVerified`, which means admin-approved. */
+        isPhoneVerified: {
+            type: Boolean,
+            default: false,
+        },
 
         isOnline: {
             type: Boolean,
-            default: true,
+            default: false,
         },
         location: {
             type: {

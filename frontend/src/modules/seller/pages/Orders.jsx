@@ -183,6 +183,15 @@ const Orders = () => {
     const [adjustItems, setAdjustItems] = useState([]);
     const [adjustReason, setAdjustReason] = useState('');
     const [adjustSaving, setAdjustSaving] = useState(false);
+    // Dedicated "item unavailable" flow — distinct from Adjust Price. Calls
+    // the partial-cancel endpoint so stock is released and the customer sees
+    // the proper cancelled-item refund + updated-ETA banner, instead of the
+    // generic price-adjustment path.
+    const [cancelItemsMode, setCancelItemsMode] = useState(false);
+    const [cancelItemsList, setCancelItemsList] = useState([]);
+    const [cancelItemIndexes, setCancelItemIndexes] = useState([]);
+    const [cancelItemsReason, setCancelItemsReason] = useState('');
+    const [cancelItemsSaving, setCancelItemsSaving] = useState(false);
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
@@ -191,6 +200,29 @@ const Orders = () => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [replacementSaving, setReplacementSaving] = useState(false);
     const [splitSaving, setSplitSaving] = useState(false);
+    const [isReplacementModalOpen, setIsReplacementModalOpen] = useState(false);
+    const [replacementItemIndex, setReplacementItemIndex] = useState(0);
+    const [replacementProducts, setReplacementProducts] = useState([]);
+    const [replacementProductsLoading, setReplacementProductsLoading] = useState(false);
+    const [replacementProductId, setReplacementProductId] = useState('');
+    const [replacementPrice, setReplacementPrice] = useState('');
+    const [replacementReason, setReplacementReason] = useState('Item unavailable');
+    const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+    const [splitFirstLegIndexes, setSplitFirstLegIndexes] = useState([]);
+    const [splitExtraFee, setSplitExtraFee] = useState('20');
+    const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+    const [rescheduleTarget, setRescheduleTarget] = useState(null);
+    const [rescheduleDate, setRescheduleDate] = useState('');
+    const [rescheduleWindow, setRescheduleWindow] = useState('');
+    const [rescheduleNote, setRescheduleNote] = useState('');
+    const [rescheduleWindows, setRescheduleWindows] = useState([]);
+    const [rescheduleMaxDaysAhead, setRescheduleMaxDaysAhead] = useState(7);
+    const [isLoadingRescheduleOptions, setIsLoadingRescheduleOptions] = useState(false);
+    const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
+    const [isCancelReasonModalOpen, setIsCancelReasonModalOpen] = useState(false);
+    const [cancelReasonTarget, setCancelReasonTarget] = useState(null);
+    const [cancelReasonText, setCancelReasonText] = useState('');
+    const [isSubmittingCancelReason, setIsSubmittingCancelReason] = useState(false);
     const { showToast } = useToast();
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -337,7 +369,8 @@ const Orders = () => {
     // Lock page scroll while any order modal is open; keep scrolling inside the modal.
     useEffect(() => {
         const modalOpen =
-            isDetailsModalOpen || isQuickViewModalOpen || isPickupModalOpen;
+            isDetailsModalOpen || isQuickViewModalOpen || isPickupModalOpen || isRescheduleModalOpen
+            || isCancelReasonModalOpen || isReplacementModalOpen || isSplitModalOpen;
         if (!modalOpen) return undefined;
 
         const prevBodyOverflow = document.body.style.overflow;
@@ -349,7 +382,7 @@ const Orders = () => {
             document.body.style.overflow = prevBodyOverflow;
             document.documentElement.style.overflow = prevHtmlOverflow;
         };
-    }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen]);
+    }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen, isRescheduleModalOpen, isCancelReasonModalOpen, isReplacementModalOpen, isSplitModalOpen]);
 
     const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
     const todayStr = new Date().toISOString().split('T')[0];
@@ -444,6 +477,12 @@ const Orders = () => {
                     reschedule: full.reschedule || prev?.reschedule,
                     storeReassignment:
                         getOrderStoreReassignment(full) || prev?.storeReassignment || null,
+                    items: Array.isArray(prev?.items)
+                        ? prev.items.map((item, idx) => ({
+                              ...item,
+                              packagingType: full.items?.[idx]?.product?.categoryId?.packagingType || 'standard',
+                          }))
+                        : prev?.items,
                 }));
             }
         } catch (error) {
@@ -456,6 +495,13 @@ const Orders = () => {
             setPendingStatusUpdate({ orderId, status: newStatus });
             setPickupImage(null);
             setIsPickupModalOpen(true);
+            return;
+        }
+
+        if (String(newStatus).toLowerCase() === 'cancelled' && !additionalData.cancelReason) {
+            setCancelReasonTarget(orderId);
+            setCancelReasonText('');
+            setIsCancelReasonModalOpen(true);
             return;
         }
 
@@ -473,6 +519,11 @@ const Orders = () => {
                 setIsPickupModalOpen(false);
                 setPendingStatusUpdate(null);
                 setPickupImage(null);
+            }
+            if (isCancelReasonModalOpen) {
+                setIsCancelReasonModalOpen(false);
+                setCancelReasonTarget(null);
+                setCancelReasonText('');
             }
         } catch (error) {
             console.error("Failed to update status:", error);
@@ -505,6 +556,76 @@ const Orders = () => {
             fetchOrders();
         } catch (error) {
             showToast(error?.response?.data?.message || "Failed to reject reschedule", "error");
+        }
+    };
+
+    const openSellerRescheduleModal = async (order) => {
+        setRescheduleTarget(order);
+        setRescheduleDate('');
+        setRescheduleWindow('');
+        setRescheduleNote('');
+        setRescheduleWindows([]);
+        setIsRescheduleModalOpen(true);
+        setIsLoadingRescheduleOptions(true);
+        try {
+            const res = await sellerApi.getSchedulingSettings();
+            const settings = res.data?.result || {};
+            setRescheduleWindows(Array.isArray(settings.deliveryWindows) ? settings.deliveryWindows : []);
+            setRescheduleMaxDaysAhead(Number(settings.maxDaysAhead) || 7);
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to load delivery windows", "error");
+        } finally {
+            setIsLoadingRescheduleOptions(false);
+        }
+    };
+
+    const closeSellerRescheduleModal = () => {
+        if (isSubmittingReschedule) return;
+        setIsRescheduleModalOpen(false);
+        setRescheduleTarget(null);
+    };
+
+    const handleSubmitSellerReschedule = async () => {
+        if (!rescheduleTarget || !rescheduleDate || !rescheduleWindow) {
+            showToast("Please select a delivery date and window", "error");
+            return;
+        }
+        setIsSubmittingReschedule(true);
+        try {
+            await sellerApi.sellerReschedule(rescheduleTarget._id || rescheduleTarget.id, {
+                deliveryDate: rescheduleDate,
+                windowLabel: rescheduleWindow,
+                note: rescheduleNote,
+            });
+            showToast("Order rescheduled", "success");
+            setIsRescheduleModalOpen(false);
+            setRescheduleTarget(null);
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to reschedule order", "error");
+        } finally {
+            setIsSubmittingReschedule(false);
+        }
+    };
+
+    const closeCancelReasonModal = () => {
+        if (isSubmittingCancelReason) return;
+        setIsCancelReasonModalOpen(false);
+        setCancelReasonTarget(null);
+        setCancelReasonText('');
+    };
+
+    const handleConfirmCancelWithReason = async () => {
+        if (cancelReasonText.trim().length < 10) {
+            showToast("Please provide a cancellation reason (at least 10 characters)", "error");
+            return;
+        }
+        setIsSubmittingCancelReason(true);
+        try {
+            await handleStatusUpdate(cancelReasonTarget, 'Cancelled', { cancelReason: cancelReasonText.trim() });
+        } finally {
+            setIsSubmittingCancelReason(false);
         }
     };
 
@@ -564,71 +685,128 @@ const Orders = () => {
         }
     };
 
-    const handleRequestReplacement = async () => {
-        if (!selectedOrder) return;
-        const itemIndexInput = window.prompt('Enter item index to replace (starting from 1):', '1');
-        if (itemIndexInput === null) return;
-        const itemIndex = Math.max(0, Number(itemIndexInput) - 1);
-        if (!selectedOrder?.rawItems?.[itemIndex]) {
-            showToast('Invalid item index for this order', 'error');
+    const openCancelItemsEditor = (order) => {
+        setCancelItemsList((order.rawItems || []).map((it, idx) => ({ ...it, originalIndex: idx })));
+        setCancelItemIndexes([]);
+        setCancelItemsReason('');
+        setCancelItemsMode(true);
+    };
+
+    const closeCancelItemsEditor = () => {
+        setCancelItemsMode(false);
+        setCancelItemsList([]);
+        setCancelItemIndexes([]);
+        setCancelItemsReason('');
+    };
+
+    const toggleCancelItemIndex = (originalIndex) => {
+        setCancelItemIndexes((prev) =>
+            prev.includes(originalIndex)
+                ? prev.filter((i) => i !== originalIndex)
+                : [...prev, originalIndex]
+        );
+    };
+
+    const handleApplyCancelItems = async () => {
+        if (!cancelItemIndexes.length) {
+            showToast("Select at least one item to mark unavailable", "error");
             return;
         }
+        if (cancelItemIndexes.length >= cancelItemsList.length) {
+            showToast("Cannot cancel all items this way — use Cancel Order for a full cancellation.", "error");
+            return;
+        }
+        if (cancelItemsReason.trim().length < 10) {
+            showToast("Please provide a reason (at least 10 characters)", "error");
+            return;
+        }
+        try {
+            setCancelItemsSaving(true);
+            await sellerApi.partialCancelOrder(selectedOrder._id || selectedOrder.id, {
+                itemIndexes: cancelItemIndexes,
+                reason: cancelItemsReason.trim(),
+            });
+            showToast("Unavailable item(s) cancelled and customer refunded", "success");
+            closeCancelItemsEditor();
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to cancel item(s)", "error");
+        } finally {
+            setCancelItemsSaving(false);
+        }
+    };
 
-        let replacementProducts = [];
+    const openReplacementModal = async (order) => {
+        if (!order?.rawItems?.length) return;
+        setReplacementItemIndex(0);
+        setReplacementProductId('');
+        setReplacementPrice('');
+        setReplacementReason('Item unavailable');
+        setIsReplacementModalOpen(true);
+        setReplacementProductsLoading(true);
         try {
             const productsRes = await sellerApi.getProducts({ limit: 100, status: 'active' });
-            replacementProducts = productsRes?.data?.result?.items
+            let items = productsRes?.data?.result?.items
                 || productsRes?.data?.results
                 || productsRes?.data?.result
                 || [];
-            if (!Array.isArray(replacementProducts)) replacementProducts = [];
+            if (!Array.isArray(items)) items = [];
+            setReplacementProducts(items);
         } catch {
-            replacementProducts = [];
+            setReplacementProducts([]);
+        } finally {
+            setReplacementProductsLoading(false);
         }
+    };
 
-        if (!replacementProducts.length) {
-            showToast('No active products found to offer as replacement', 'error');
+    const closeReplacementModal = () => {
+        if (replacementSaving) return;
+        setIsReplacementModalOpen(false);
+    };
+
+    const handleReplacementProductChange = (productId) => {
+        setReplacementProductId(productId);
+        const product = replacementProducts.find((p) => String(p._id) === String(productId));
+        if (product) {
+            setReplacementPrice(String(Number(product.salePrice || product.price || 0)));
+        }
+    };
+
+    const handleSubmitReplacement = async () => {
+        if (!selectedOrder) return;
+        const chosenProduct = replacementProducts.find((p) => String(p._id) === String(replacementProductId));
+        if (!chosenProduct) {
+            showToast('Select a replacement product', 'error');
             return;
         }
-
-        const productChoices = replacementProducts
-            .slice(0, 20)
-            .map((p, idx) => `${idx + 1}. ${p.name} (₹${Number(p.salePrice || p.price || 0)})`)
-            .join('\n');
-        const chosenInput = window.prompt(
-            `Pick replacement product number:\n${productChoices}`,
-            '1',
-        );
-        if (chosenInput === null) return;
-        const chosenIdx = Math.max(0, Number(chosenInput) - 1);
-        const chosenProduct = replacementProducts[chosenIdx];
-        if (!chosenProduct?._id) {
-            showToast('Invalid replacement product selected', 'error');
+        const priceNum = Number(replacementPrice);
+        if (!Number.isFinite(priceNum) || priceNum <= 0) {
+            showToast('Enter a valid replacement price', 'error');
             return;
         }
-
-        const defaultPrice = Number(chosenProduct.salePrice || chosenProduct.price || 0);
-        const altPriceInput = window.prompt('Replacement price:', String(defaultPrice));
-        if (altPriceInput === null) return;
-        const altPrice = Number(altPriceInput);
-        const reason = window.prompt('Reason for replacement request:', 'Item unavailable') || 'Item unavailable';
+        if (!replacementReason.trim()) {
+            showToast('Please provide a reason for the replacement', 'error');
+            return;
+        }
 
         try {
             setReplacementSaving(true);
             await sellerApi.requestProductReplacement(selectedOrder.id, {
-                itemIndex,
-                reason,
+                itemIndex: replacementItemIndex,
+                reason: replacementReason.trim(),
                 alternatives: [
                     {
                         product: chosenProduct._id,
                         name: chosenProduct.name,
-                        price: Number.isFinite(altPrice) ? altPrice : defaultPrice,
-                        quantity: Number(selectedOrder?.rawItems?.[itemIndex]?.quantity || 1),
+                        price: priceNum,
+                        quantity: Number(selectedOrder?.rawItems?.[replacementItemIndex]?.quantity || 1),
                         variantSlot: chosenProduct.variants?.[0]?.sku || '',
                     },
                 ],
             });
             showToast('Replacement request sent to customer', 'success');
+            setIsReplacementModalOpen(false);
             fetchOrders(page, false);
         } catch (error) {
             showToast(error?.response?.data?.message || 'Failed to create replacement request', 'error');
@@ -637,30 +815,57 @@ const Orders = () => {
         }
     };
 
-    const handleSplitDeliveryPlan = async () => {
-        if (!selectedOrder || !Array.isArray(selectedOrder.rawItems) || selectedOrder.rawItems.length < 2) {
+    const openSplitModal = (order) => {
+        if (!order || !Array.isArray(order.rawItems) || order.rawItems.length < 2) {
             showToast('At least 2 items required for split delivery', 'error');
             return;
         }
-        const firstLegIndexes = [0];
-        const secondLegIndexes = selectedOrder.rawItems.map((_, idx) => idx).filter((idx) => idx !== 0);
+        setSplitFirstLegIndexes([0]);
+        setSplitExtraFee('20');
+        setIsSplitModalOpen(true);
+    };
+
+    const closeSplitModal = () => {
+        if (splitSaving) return;
+        setIsSplitModalOpen(false);
+    };
+
+    const toggleSplitFirstLegIndex = (idx) => {
+        setSplitFirstLegIndexes((prev) =>
+            prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+        );
+    };
+
+    const handleSubmitSplitDelivery = async () => {
+        if (!selectedOrder || !Array.isArray(selectedOrder.rawItems)) return;
+        const totalItems = selectedOrder.rawItems.length;
+        if (!splitFirstLegIndexes.length || splitFirstLegIndexes.length >= totalItems) {
+            showToast('Select at least one item for the first delivery, leaving at least one for the second', 'error');
+            return;
+        }
+        const secondLegIndexes = selectedOrder.rawItems
+            .map((_, idx) => idx)
+            .filter((idx) => !splitFirstLegIndexes.includes(idx));
+        const feeNum = Number(splitExtraFee);
+
         try {
             setSplitSaving(true);
             await sellerApi.splitOrderDelivery(selectedOrder.id, {
                 splits: [
                     {
                         label: 'Part 1 - Immediate',
-                        itemIndexes: firstLegIndexes,
+                        itemIndexes: splitFirstLegIndexes,
                         additionalDeliveryFee: 0,
                     },
                     {
                         label: 'Part 2 - Next delivery',
                         itemIndexes: secondLegIndexes,
-                        additionalDeliveryFee: 20,
+                        additionalDeliveryFee: Number.isFinite(feeNum) && feeNum >= 0 ? feeNum : 0,
                     },
                 ],
             });
             showToast('Split delivery plan created', 'success');
+            setIsSplitModalOpen(false);
             fetchOrders(page, false);
         } catch (error) {
             showToast(error?.response?.data?.message || 'Failed to create split delivery', 'error');
@@ -1305,6 +1510,382 @@ const Orders = () => {
                     </AnimatePresence>
 
                     <AnimatePresence>
+                        {isRescheduleModalOpen && rescheduleTarget && (
+                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={closeSellerRescheduleModal}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineCalendarDays className="h-5 w-5 text-primary" />
+                                            Reschedule Delivery
+                                        </h3>
+                                        <button
+                                            onClick={closeSellerRescheduleModal}
+                                            disabled={isSubmittingReschedule}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-5 space-y-4">
+                                        {isLoadingRescheduleOptions ? (
+                                            <div className="flex justify-center py-6">
+                                                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">New delivery date</label>
+                                                    <DatePicker
+                                                        value={rescheduleDate}
+                                                        onChange={setRescheduleDate}
+                                                        min={new Date().toISOString().split('T')[0]}
+                                                        max={new Date(Date.now() + rescheduleMaxDaysAhead * 86400000).toISOString().split('T')[0]}
+                                                        placeholder="Select date"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Delivery window</label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {rescheduleWindows.map((w) => (
+                                                            <button
+                                                                key={w.label}
+                                                                type="button"
+                                                                onClick={() => setRescheduleWindow(w.label)}
+                                                                className={cn(
+                                                                    "px-2.5 py-2 rounded-lg text-[11px] font-bold border transition-all",
+                                                                    rescheduleWindow === w.label
+                                                                        ? "bg-slate-900 text-white border-slate-900"
+                                                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                                                                )}
+                                                            >
+                                                                {w.label}
+                                                            </button>
+                                                        ))}
+                                                        {rescheduleWindows.length === 0 && (
+                                                            <p className="col-span-2 text-xs text-slate-400 font-semibold">No delivery windows configured</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Note (optional)</label>
+                                                    <textarea
+                                                        value={rescheduleNote}
+                                                        onChange={(e) => setRescheduleNote(e.target.value)}
+                                                        rows={2}
+                                                        placeholder="Reason for rescheduling…"
+                                                        className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            onClick={closeSellerRescheduleModal}
+                                            className="flex-1 text-xs"
+                                            disabled={isSubmittingReschedule}
+                                        >
+                                            CANCEL
+                                        </Button>
+                                        <Button
+                                            onClick={handleSubmitSellerReschedule}
+                                            disabled={!rescheduleDate || !rescheduleWindow || isSubmittingReschedule}
+                                            className="flex-1 text-xs"
+                                        >
+                                            {isSubmittingReschedule ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CONFIRM'}
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                        {isCancelReasonModalOpen && (
+                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={closeCancelReasonModal}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineXMark className="h-5 w-5 text-rose-600" />
+                                            Cancel Order
+                                        </h3>
+                                        <button
+                                            onClick={closeCancelReasonModal}
+                                            disabled={isSubmittingCancelReason}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-5 space-y-3">
+                                        <p className="text-xs font-semibold text-slate-600">
+                                            Please tell the customer why this order is being cancelled. This reason will be visible to them.
+                                        </p>
+                                        <textarea
+                                            value={cancelReasonText}
+                                            onChange={(e) => setCancelReasonText(e.target.value)}
+                                            rows={3}
+                                            autoFocus
+                                            placeholder="e.g. Item out of stock, unable to fulfill this order…"
+                                            className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                                        />
+                                        <p className="text-[10px] font-bold text-slate-400">{cancelReasonText.trim().length}/10 characters minimum</p>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            onClick={closeCancelReasonModal}
+                                            className="flex-1 text-xs"
+                                            disabled={isSubmittingCancelReason}
+                                        >
+                                            BACK
+                                        </Button>
+                                        <Button
+                                            onClick={handleConfirmCancelWithReason}
+                                            disabled={cancelReasonText.trim().length < 10 || isSubmittingCancelReason}
+                                            className="flex-1 text-xs bg-rose-600 hover:bg-rose-700"
+                                        >
+                                            {isSubmittingCancelReason ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CONFIRM CANCELLATION'}
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                        {isReplacementModalOpen && selectedOrder && (
+                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={closeReplacementModal}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineArchiveBoxXMark className="h-5 w-5 text-amber-600" />
+                                            Request Replacement
+                                        </h3>
+                                        <button
+                                            onClick={closeReplacementModal}
+                                            disabled={replacementSaving}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-5 space-y-4 overflow-y-auto">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Item to replace</label>
+                                            <select
+                                                value={replacementItemIndex}
+                                                onChange={(e) => setReplacementItemIndex(Number(e.target.value))}
+                                                className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                            >
+                                                {(selectedOrder.rawItems || []).map((item, idx) => (
+                                                    <option key={idx} value={idx}>
+                                                        {item.name || `Item ${idx + 1}`} (Qty {item.quantity})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Replacement product</label>
+                                            {replacementProductsLoading ? (
+                                                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 py-2">
+                                                    <Loader2 className="h-4 w-4 animate-spin" /> Loading your products…
+                                                </div>
+                                            ) : (
+                                                <select
+                                                    value={replacementProductId}
+                                                    onChange={(e) => handleReplacementProductChange(e.target.value)}
+                                                    className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                                >
+                                                    <option value="">Select a product…</option>
+                                                    {replacementProducts.map((p) => (
+                                                        <option key={p._id} value={p._id}>
+                                                            {p.name} (₹{Number(p.salePrice || p.price || 0)})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            {!replacementProductsLoading && replacementProducts.length === 0 && (
+                                                <p className="text-[10px] font-bold text-rose-500 mt-1">No active products found to offer as replacement.</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Replacement price</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={replacementPrice}
+                                                    onChange={(e) => setReplacementPrice(e.target.value)}
+                                                    className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 pl-6 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Reason (shared with customer)</label>
+                                            <textarea
+                                                value={replacementReason}
+                                                onChange={(e) => setReplacementReason(e.target.value)}
+                                                rows={2}
+                                                placeholder="e.g. Item unavailable, out of stock…"
+                                                className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
+                                        <Button
+                                            variant="outline"
+                                            onClick={closeReplacementModal}
+                                            className="flex-1 text-xs"
+                                            disabled={replacementSaving}
+                                        >
+                                            CANCEL
+                                        </Button>
+                                        <Button
+                                            onClick={handleSubmitReplacement}
+                                            disabled={replacementSaving || !replacementProductId || !replacementPrice}
+                                            className="flex-1 text-xs bg-amber-600 hover:bg-amber-700"
+                                        >
+                                            {replacementSaving ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'SEND REQUEST'}
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                        {isSplitModalOpen && selectedOrder && (
+                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={closeSplitModal}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineTruck className="h-5 w-5 text-indigo-600" />
+                                            Split Delivery
+                                        </h3>
+                                        <button
+                                            onClick={closeSplitModal}
+                                            disabled={splitSaving}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-5 space-y-3 overflow-y-auto">
+                                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                                            Select the item(s) to send in the first delivery now. Everything else goes in a second delivery.
+                                        </p>
+                                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                            {(selectedOrder.rawItems || []).map((item, idx) => {
+                                                const checked = splitFirstLegIndexes.includes(idx);
+                                                return (
+                                                    <label
+                                                        key={idx}
+                                                        className={`flex items-center gap-3 p-3 rounded-2xl ring-1 cursor-pointer transition-all ${
+                                                            checked ? 'bg-indigo-50 ring-indigo-200' : 'bg-white ring-slate-100'
+                                                        }`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={checked}
+                                                            onChange={() => toggleSplitFirstLegIndex(idx)}
+                                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400 shrink-0"
+                                                        />
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-bold text-slate-900 truncate">{item.name || `Item ${idx + 1}`}</p>
+                                                            <p className="text-xs font-semibold text-slate-600 mt-0.5">Qty {item.quantity} · ₹{Number(item.price || 0).toFixed(2)} each</p>
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Extra delivery fee for 2nd part</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={splitExtraFee}
+                                                    onChange={(e) => setSplitExtraFee(e.target.value)}
+                                                    className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 pl-6 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
+                                        <Button
+                                            variant="outline"
+                                            onClick={closeSplitModal}
+                                            className="flex-1 text-xs"
+                                            disabled={splitSaving}
+                                        >
+                                            CANCEL
+                                        </Button>
+                                        <Button
+                                            onClick={handleSubmitSplitDelivery}
+                                            disabled={splitSaving || !splitFirstLegIndexes.length || splitFirstLegIndexes.length >= (selectedOrder.rawItems || []).length}
+                                            className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700"
+                                        >
+                                            {splitSaving ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CREATE SPLIT'}
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
                         {isDetailsModalOpen && selectedOrder && (
                             <div
                                 className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center p-3 sm:p-6 lg:p-12 overflow-hidden overscroll-none"
@@ -1476,13 +2057,34 @@ const Orders = () => {
                                                 </div>
                                             </div>
                                         )}
+                                        {!['delivered', 'cancelled', 'returned'].includes((selectedOrder.status || '').toLowerCase())
+                                            && selectedOrder.reschedule?.status !== 'requested' && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Delivery Schedule</p>
+                                                    <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                                                        {selectedOrder.schedule?.deliveryDate
+                                                            ? `${new Date(selectedOrder.schedule.deliveryDate).toLocaleDateString()} · ${selectedOrder.schedule.windowLabel || ''}`
+                                                            : 'Not scheduled'}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => openSellerRescheduleModal(selectedOrder)}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0"
+                                                >
+                                                    <HiOutlineCalendarDays className="h-3.5 w-3.5" />
+                                                    Reschedule
+                                                </button>
+                                            </div>
+                                        )}
                                         {(() => {
                                             const s = (selectedOrder.status || '').toLowerCase();
                                             const canAdjustPrice =
                                                 !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
                                                 && canSellerManuallyUpdateStatus(selectedOrder);
                                             const canSplitOrReplace = canSellerSplitOrReplace(selectedOrder);
-                                            const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode;
+                                            const canCancelItems = canAdjustPrice && selectedOrder.items.length > 1;
+                                            const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode && !cancelItemsMode;
                                             return (
                                                 <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
                                                     <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest">Items Ordered ({selectedOrder.items.length})</h4>
@@ -1491,13 +2093,16 @@ const Orders = () => {
                                                             {canAdjustPrice && (
                                                                 <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
                                                             )}
+                                                            {canCancelItems && (
+                                                                <button onClick={() => openCancelItemsEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all">Item Unavailable</button>
+                                                            )}
                                                             {canSplitOrReplace && (
                                                                 <>
-                                                                    <button onClick={handleRequestReplacement} disabled={replacementSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-60">
-                                                                        {replacementSaving ? 'Sending...' : 'Replacement'}
+                                                                    <button onClick={() => openReplacementModal(selectedOrder)} disabled={replacementSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-60">
+                                                                        Replacement
                                                                     </button>
-                                                                    <button onClick={handleSplitDeliveryPlan} disabled={splitSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60">
-                                                                        {splitSaving ? 'Saving...' : 'Split Delivery'}
+                                                                    <button onClick={() => openSplitModal(selectedOrder)} disabled={splitSaving} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60">
+                                                                        Split Delivery
                                                                     </button>
                                                                 </>
                                                             )}
@@ -1506,10 +2111,67 @@ const Orders = () => {
                                                     {adjustMode && (
                                                         <button onClick={closeAdjustEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
                                                     )}
+                                                    {cancelItemsMode && (
+                                                        <button onClick={closeCancelItemsEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
+                                                    )}
                                                 </div>
                                             );
                                         })()}
-                                        {adjustMode ? (
+                                        {cancelItemsMode ? (
+                                            <div className="space-y-3">
+                                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                                    Select the item(s) that are unavailable. The customer is refunded for exactly those items and the remaining items continue as normal — stock reserved for the cancelled item(s) is released.
+                                                </p>
+                                                <div className="space-y-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
+                                                    {cancelItemsList.map((item) => {
+                                                        const checked = cancelItemIndexes.includes(item.originalIndex);
+                                                        return (
+                                                            <label
+                                                                key={item.originalIndex}
+                                                                className={`flex items-center justify-between gap-2 p-3 rounded-2xl ring-1 cursor-pointer transition-all ${
+                                                                    checked ? 'bg-rose-50 ring-rose-200' : 'bg-white ring-slate-100'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={checked}
+                                                                        onChange={() => toggleCancelItemIndex(item.originalIndex)}
+                                                                        className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-400 shrink-0"
+                                                                    />
+                                                                    <div className="h-10 w-10 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 shrink-0">
+                                                                        <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                                                                        <p className="text-xs font-semibold text-slate-600 mt-0.5">Qty {item.quantity} · ₹{Number(item.price).toFixed(2)} each</p>
+                                                                    </div>
+                                                                </div>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <textarea
+                                                    value={cancelItemsReason}
+                                                    onChange={(e) => setCancelItemsReason(e.target.value)}
+                                                    placeholder="Why is this item unavailable? (shared with customer)"
+                                                    rows={2}
+                                                    className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                                                />
+                                                <p className="text-[10px] font-bold text-slate-400">{cancelItemsReason.trim().length}/10 characters minimum</p>
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={closeCancelItemsEditor} disabled={cancelItemsSaving} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Discard</button>
+                                                    <button
+                                                        onClick={handleApplyCancelItems}
+                                                        disabled={cancelItemsSaving || !cancelItemIndexes.length || cancelItemsReason.trim().length < 10}
+                                                        className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {cancelItemsSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                                        Cancel {cancelItemIndexes.length || ''} Item{cancelItemIndexes.length === 1 ? '' : 's'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : adjustMode ? (
                                             <div className="space-y-3">
                                                 <div className="space-y-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
                                                     {adjustItems.map((item, idx) => (
@@ -1570,6 +2232,16 @@ const Orders = () => {
                                                         <div>
                                                             <p className="text-xs font-bold text-slate-900">{item.name}</p>
                                                             <p className="text-xs font-semibold text-slate-600 mt-0.5">₹{item.price.toFixed(2)} × {item.qty}</p>
+                                                            {item.packagingType && item.packagingType !== 'standard' && (
+                                                                <span className={cn(
+                                                                    "inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider",
+                                                                    item.packagingType === 'fragile' ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200" :
+                                                                    item.packagingType === 'liquid' ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200" :
+                                                                    "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                                                                )}>
+                                                                    ⚠ {item.packagingType === 'fragile' ? 'Fragile — pack with care' : item.packagingType === 'liquid' ? 'Liquid — seal well' : 'Perishable — keep cool'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
@@ -1578,6 +2250,49 @@ const Orders = () => {
                                                 </div>
                                             ))}
                                         </div>
+                                        )}
+
+                                        {Array.isArray(selectedOrder.splitDeliveries) && selectedOrder.splitDeliveries.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                                                <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2">Split Deliveries</h4>
+                                                {selectedOrder.splitDeliveries.map((split) => (
+                                                    <div key={split.splitId} className="flex items-center justify-between gap-2 p-3 bg-white ring-1 ring-slate-100 rounded-2xl">
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-900">{split.label}</p>
+                                                            <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{split.itemIndexes?.length || 0} item(s)</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant={split.status === 'delivered' ? 'success' : split.status === 'cancelled' ? 'danger' : 'warning'} className="text-[9px]">
+                                                                {split.status}
+                                                            </Badge>
+                                                            {!['delivered', 'cancelled'].includes(split.status) && (
+                                                                <select
+                                                                    value=""
+                                                                    onChange={async (e) => {
+                                                                        const nextStatus = e.target.value;
+                                                                        if (!nextStatus) return;
+                                                                        try {
+                                                                            await sellerApi.updateSplitDeliveryStatus(selectedOrder._id || selectedOrder.id, split.splitId, { status: nextStatus });
+                                                                            showToast('Split delivery status updated', 'success');
+                                                                            fetchOrders(page, false);
+                                                                        } catch (error) {
+                                                                            showToast(error?.response?.data?.message || 'Failed to update split status', 'error');
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] font-bold border border-slate-200 rounded-lg px-2 py-1.5"
+                                                                >
+                                                                    <option value="">Update status…</option>
+                                                                    {['processing', 'out_for_delivery', 'delivered', 'cancelled']
+                                                                        .filter((s) => s !== split.status)
+                                                                        .map((s) => (
+                                                                            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                                                                        ))}
+                                                                </select>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
 

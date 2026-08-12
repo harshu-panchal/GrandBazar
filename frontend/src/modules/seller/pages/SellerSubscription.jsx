@@ -54,7 +54,18 @@ const SellerSubscription = () => {
         planId: selectedPlanId,
         requestType,
       });
-      const { redirectUrl } = response.data.result || {};
+      const { redirectUrl, activated } = response.data.result || {};
+
+      if (activated) {
+        toast.success("Plan activated — no payment required");
+        if (typeof refreshUser === "function") {
+          await refreshUser();
+        }
+        setIsPaying(false);
+        await loadData();
+        return;
+      }
+
       if (!redirectUrl) {
         throw new Error("Payment URL not received");
       }

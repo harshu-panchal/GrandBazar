@@ -58,6 +58,27 @@ const payoutSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    isBulkSettlement: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    // Itemized breakdown for seller-facing transparency (checklist 67, 332):
+    // commission/packaging/tax are already computed in the order's
+    // paymentBreakdown — surfaced here too so a payout record is
+    // self-explanatory without joining back to the order.
+    commissionAmount: {
+      type: Number,
+      default: 0,
+    },
+    packagingAmount: {
+      type: Number,
+      default: 0,
+    },
+    taxAmount: {
+      type: Number,
+      default: 0,
+    },
     metadata: {
       type: Object,
       default: {},

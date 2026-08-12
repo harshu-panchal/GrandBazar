@@ -58,6 +58,7 @@ const FavoriteStoresPage = () => {
               const initial = String(store.shopName || store.name || "S")
                 .charAt(0)
                 .toUpperCase();
+              const logoUrl = store.logoUrl || store.logo || store.shopLogo || store.avatarImage || store.avatar || "";
               const favorites = Number(store.favoriteCount || 0);
               return (
                 <div
@@ -69,8 +70,20 @@ const FavoriteStoresPage = () => {
                     onClick={() => navigate(buildStorePath({ ...store, _id: storeId }))}
                     className="flex flex-1 items-center gap-3 text-left min-w-0"
                   >
-                    <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 text-white font-black text-xl flex items-center justify-center shrink-0">
-                      {initial}
+                    <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 text-white font-black text-xl flex items-center justify-center shrink-0 overflow-hidden border border-slate-100">
+                      {logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={store.shopName || store.name}
+                          className="w-full h-full object-cover bg-white"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling;
+                            if (fallback) fallback.style.display = "inline";
+                          }}
+                        />
+                      ) : null}
+                      <span style={{ display: logoUrl ? "none" : "inline" }}>{initial}</span>
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-bold text-slate-900 truncate">

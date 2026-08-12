@@ -1,7 +1,7 @@
 import Product from "../models/product.js";
 import { enqueueProductIndex } from "./searchSyncService.js";
 import { invalidate, buildKey } from "./cacheService.js";
-import { assertCanPublishProduct } from "./subscriptionService.js";
+import { assertCanPublishProduct, assertCanCreateFreeTierProduct } from "./subscriptionService.js";
 export async function publishProductPricing({
   productId,
   storeId,
@@ -31,6 +31,10 @@ export async function publishProductPricing({
   }
 
   await assertCanPublishProduct(storeId, 1);
+  // No-op unless admin has switched Setting.freeTierEnforcementMode to
+  // "hard" — in the default "soft" mode this never blocks, only the
+  // checkout-time commission surcharge applies.
+  await assertCanCreateFreeTierProduct(storeId);
 
   product.price = parsedPrice;
   product.salePrice = parsedSalePrice;

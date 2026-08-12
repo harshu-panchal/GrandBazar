@@ -62,6 +62,7 @@
     "multer": "^2.0.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^8.0.5",
+    "pdfkit": "^0.15.2",
     "socket.io": "^4.5.4"
   },
   "devDependencies": {

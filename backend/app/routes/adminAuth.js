@@ -38,7 +38,10 @@ import {
     getDeliveryPartners,
     approveDeliveryPartner,
     rejectDeliveryPartner,
+    updateDeliveryPartner,
     getActiveFleet,
+    getUnassignedOrders,
+    assignOrderToRider,
     getAdminWalletData,
     getDeliveryTransactions,
     settleTransaction,
@@ -51,6 +54,8 @@ import {
     createVendorAccount,
     updateSellerStoreSetup,
     resendSellerCredentials,
+    inviteSeller,
+    listSellerInvites,
     getSellerWithdrawals,
     getDeliveryWithdrawals,
     updateWithdrawalStatus,
@@ -73,6 +78,7 @@ import {
      terminateSession
  } from "../controller/adminController.js";
 import {
+    adjustPayoutController,
     exportAdminFinanceStatementController,
     getAdminFinanceLedgerController,
     getAdminFinancePayoutsController,
@@ -81,6 +87,8 @@ import {
     processAdminFinancePayoutsController,
     settleSellerPayoutManualController,
     updateDeliverySettingsController,
+    holdSellerPayoutController,
+    releaseSellerPayoutController,
 } from "../controller/adminFinanceController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
 import {
@@ -188,6 +196,24 @@ router.post(
     allowRoles("admin"),
     settleSellerPayoutManualController,
 );
+router.post(
+    "/finance/payouts/:payoutId/adjust",
+    verifyToken,
+    allowRoles("admin"),
+    adjustPayoutController,
+);
+router.post(
+    "/finance/orders/:orderId/hold",
+    verifyToken,
+    allowRoles("admin"),
+    holdSellerPayoutController,
+);
+router.post(
+    "/finance/orders/:orderId/release",
+    verifyToken,
+    allowRoles("admin"),
+    releaseSellerPayoutController,
+);
 router.get(
     "/finance/export-statement",
     verifyToken,
@@ -236,6 +262,8 @@ router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSelle
 router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
 router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), updateSellerStoreSetup);
 router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), resendSellerCredentials);
+router.post("/sellers/invite", verifyToken, allowRoles("admin"), inviteSeller);
+router.get("/sellers/invites", verifyToken, allowRoles("admin"), listSellerInvites);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
 router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
 router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);
@@ -285,7 +313,16 @@ router.delete(
     rejectDeliveryPartner
 );
 
+router.put(
+    "/delivery-partners/:id",
+    verifyToken,
+    allowRoles("admin"),
+    updateDeliveryPartner
+);
+
 router.get("/active-fleet", verifyToken, allowRoles("admin"), getActiveFleet);
+router.get("/unassigned-orders", verifyToken, allowRoles("admin"), getUnassignedOrders);
+router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), assignOrderToRider);
 router.get("/wallet-data", verifyToken, allowRoles("admin"), getAdminWalletData);
 
 // Delivery Payouts / Funds

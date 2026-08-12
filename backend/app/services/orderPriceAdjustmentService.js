@@ -7,6 +7,7 @@ import {
   WORKFLOW_STATUS,
   legacyStatusFromWorkflow,
   DEFAULT_EXTRA_PAYMENT_DEADLINE_MS,
+  DEFAULT_ACTIVATION_LEAD_MS,
 } from "../constants/orderWorkflow.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
@@ -18,6 +19,8 @@ import { extraPaymentDeadlineQueue, JOB_NAMES } from "../queues/orderQueues.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { computeActivationAt } from "../utils/scheduleDateUtils.js";
+import { scheduleOrderActivationJob } from "./orderSchedulingService.js";
 
 function generateCreditNoteId() {
   return `CN-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -93,7 +96,21 @@ async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) 
     issuedByModel: actorLabel === "seller" ? "Seller" : "Admin",
   });
 
+  const Refund = (await import("../models/refund.js")).default;
+
   if (order.paymentMode !== "ONLINE") {
+    // Wallet credit is synchronous and confirmed within this call — the
+    // Refund record can go straight to completed.
+    const refundRecord = await Refund.create({
+      order: order._id,
+      orderId: order.orderId,
+      type: "price_adjustment",
+      amount: deltaAmount,
+      mode: "wallet",
+      status: "initiated",
+      creditNoteId: creditNote._id,
+    });
+
     await User.findByIdAndUpdate(order.customer, { $inc: { walletBalance: deltaAmount } });
     await Transaction.create({
       user: order.customer,
@@ -103,9 +120,14 @@ async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) 
       amount: deltaAmount,
       status: "Settled",
       reference: creditNoteId,
+      paymentMethod: order.paymentMode || null,
+      refundStatus: "completed",
       meta: { orderId: order.orderId, creditNoteId },
     });
     await CreditNote.updateOne({ _id: creditNote._id }, { $set: { status: "applied" } });
+    refundRecord.status = "completed";
+    refundRecord.completedAt = new Date();
+    await refundRecord.save();
     emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -113,6 +135,19 @@ async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) 
       amount: deltaAmount,
     });
   } else {
+    // Gateway refunds aren't reconciled automatically in this codebase yet —
+    // record stays "initiated" (visible, not silently stuck) until a
+    // payment-gateway webhook/reconciliation flips it and the CreditNote to
+    // "applied". That reconciliation is a separate integration, not built here.
+    await Refund.create({
+      order: order._id,
+      orderId: order.orderId,
+      type: "price_adjustment",
+      amount: deltaAmount,
+      mode: "gateway",
+      status: "initiated",
+      creditNoteId: creditNote._id,
+    });
     emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_INITIATED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -206,8 +241,26 @@ export async function applyOrderPriceAdjustment({
     updateSet["partialCancellation.cancelledItemIndexes"] = partialCancelIndexes;
     updateSet["partialCancellation.cancelledAt"] = new Date();
     updateSet["partialCancellation.reason"] = reason || "";
+    updateSet["partialCancellation.updatedEtaAt"] = new Date();
     updateSet.status = "partial_cancelled";
     updateSet.orderStatus = "partial_cancelled";
+
+    // Fewer items remain — re-sync the activation timing for the (unchanged)
+    // committed slot rather than leaving a stale value computed pre-cancellation.
+    if (order.schedule?.deliveryDate && order.schedule?.windowStart) {
+      const recomputedActivationAt = computeActivationAt(
+        order.schedule.deliveryDate,
+        order.schedule.windowStart,
+        DEFAULT_ACTIVATION_LEAD_MS(),
+      );
+      updateSet["schedule.activationAt"] = recomputedActivationAt;
+      if (order.schedule.activationJobId) {
+        updateSet["schedule.activationJobId"] = await scheduleOrderActivationJob(
+          orderId,
+          recomputedActivationAt,
+        );
+      }
+    }
   }
 
   if (direction === "increase" && order.paymentMode === "ONLINE") {
@@ -341,6 +394,7 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
       amount: -walletUse,
       status: "Settled",
       reference: `EXTRA-${orderId}`,
+      paymentMethod: "WALLET",
     });
   }
 

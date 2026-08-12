@@ -406,6 +406,8 @@ const StoresPage = () => {
               
               // Custom inline banner design
               const initialLetter = String(s.shopName || s.name || "S").charAt(0).toUpperCase();
+              const bannerUrl = (Array.isArray(s.banners) && s.banners.length > 0 && s.banners[0]) || s.bannerImage || s.banner || s.coverImage || s.heroImage || "";
+              const logoUrl = s.logoUrl || s.logo || s.shopLogo || s.logoImage || s.avatarImage || s.avatar || s.image || "";
 
               return (
                 <div
@@ -414,40 +416,69 @@ const StoresPage = () => {
                   className={`relative flex flex-col rounded-[1.5rem] border border-slate-100/80 bg-gradient-to-b ${theme.gradient} ${theme.border} ${glowClass} transition-all duration-500 hover:-translate-y-1 shadow-[0_8px_30px_rgba(0,0,0,0.02)] cursor-pointer group overflow-hidden`}
                 >
                   {/* Shop Banner Graphic Card */}
-                  <div className={`h-26 w-full relative ${theme.bannerBg} flex items-center justify-center p-4 overflow-hidden`}>
-                    <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
-                    
+                  <div className={`h-28 w-full relative ${theme.bannerBg} flex items-center justify-center p-4 overflow-hidden`}>
+                    {bannerUrl ? (
+                      <>
+                        <img
+                          src={bannerUrl}
+                          alt={`${s.shopName || s.name || "Store"} banner`}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/25 to-slate-900/40 pointer-events-none" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent scale-150 pointer-events-none" />
+                        <span className="absolute right-0 bottom-0 text-[8rem] font-black text-white/5 leading-none select-none translate-y-8 translate-x-2">
+                          {initialLetter}
+                        </span>
+                      </>
+                    )}
+
                     {/* Glowing Category Badge */}
-                    <div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-widest text-white shadow-sm flex items-center gap-1">
-                      <div className={`h-1 w-1 rounded-full ${theme.dot}`} />
+                    <div className="absolute top-3 left-3 z-10 px-2.5 py-0.5 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/20 text-[9px] font-black uppercase tracking-widest text-white shadow-sm flex items-center gap-1">
+                      <div className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
                       <span>{s.category || "General Store"}</span>
                     </div>
 
                     {/* Proximity / Distance Tag */}
-                    <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
+                    <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1">
                       {Number(s.favoriteCount || 0) >= 5 && (
-                        <div className="px-2.5 py-0.5 rounded-full bg-amber-500/90 backdrop-blur-md border border-white/20 text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-1">
+                        <div className="px-2.5 py-0.5 rounded-full bg-amber-500/90 backdrop-blur-md border border-white/20 text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-1 shadow-sm">
                           <Sparkles size={10} />
                           Popular
                         </div>
                       )}
                       {s.distance !== undefined && (
-                        <div className="px-2.5 py-0.5 rounded-full bg-slate-900/40 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-widest text-amber-200">
+                        <div className="px-2.5 py-0.5 rounded-full bg-slate-900/60 backdrop-blur-md border border-white/20 text-[9px] font-black uppercase tracking-widest text-amber-200 shadow-sm">
                           📍 {s.distance < 0.1 ? "Very close" : `${s.distance.toFixed(1)} km`}
                         </div>
                       )}
                     </div>
-
-                    {/* Large Background Watermark Initials */}
-                    <span className="absolute right-0 bottom-0 text-[8rem] font-black text-white/5 leading-none select-none translate-y-8 translate-x-2">
-                      {initialLetter}
-                    </span>
                   </div>
 
                   {/* Shop Profile Icon (Floating overlay) */}
-                  <div className="px-5 relative -mt-8 flex items-end justify-between">
-                    <div className="h-15 w-15 rounded-xl bg-white border border-slate-100/50 p-0.5 flex items-center justify-center shadow-md transform group-hover:scale-105 group-hover:rotate-3 transition-transform duration-300">
-                      <div className={`h-full w-full rounded-lg flex items-center justify-center font-black text-xl text-white bg-gradient-to-br ${theme.badge} shadow-inner`}>
+                  <div className="px-5 relative -mt-8 flex items-end justify-between z-10">
+                    <div className="h-15 w-15 rounded-xl bg-white border border-slate-100/60 p-0.5 flex items-center justify-center shadow-md transform group-hover:scale-105 group-hover:rotate-3 transition-transform duration-300 overflow-hidden shrink-0">
+                      {logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${s.shopName || s.name || "Store"} logo`}
+                          className="h-full w-full rounded-lg object-cover bg-white"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className={`h-full w-full rounded-lg flex items-center justify-center font-black text-xl text-white bg-gradient-to-br ${theme.badge} shadow-inner`}
+                        style={{ display: logoUrl ? "none" : "flex" }}
+                      >
                         {initialLetter}
                       </div>
                     </div>
@@ -582,7 +613,7 @@ const StoresPage = () => {
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Time</span>
-                          <span className="text-xs font-black text-slate-700">{s.distance < 2 ? "10-15 mins" : "15-25 mins"}</span>
+                          <span className="text-xs font-black text-slate-700">{s.deliveryEta?.label || (s.distance < 2 ? "10-15 mins" : "15-25 mins")}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 group-hover:translate-y-[-2px] transition-transform duration-300">

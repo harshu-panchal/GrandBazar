@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@core/context/AuthContext";
 import { setRoleToken } from "@core/utils/authSession";
 import { useSettings } from "@core/context/SettingsContext";
@@ -71,6 +71,9 @@ const Auth = () => {
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite") || "";
+  const [inviteState, setInviteState] = useState({ checked: false, valid: false });
   const appName = settings?.appName || "App";
   const logoUrl = settings?.logoUrl || "";
   const [verifications, setVerifications] = useState({
@@ -84,6 +87,39 @@ const Auth = () => {
     name: "",
     phone: "",
   });
+
+  // A prospective seller arriving via an admin-sent invite link
+  // (?invite=<token>) — pre-fills and locks the email, and skips straight
+  // to the signup form instead of the login form.
+  useEffect(() => {
+    if (!inviteToken) return;
+    let cancelled = false;
+    sellerApi
+      .validateInvite(inviteToken)
+      .then((res) => {
+        if (cancelled) return;
+        const result = res.data?.result || {};
+        if (result.valid) {
+          setInviteState({ checked: true, valid: true });
+          setIsLogin(false);
+          setFormData((prev) => ({ ...prev, email: result.email || prev.email }));
+        } else {
+          setInviteState({ checked: true, valid: false });
+          if (result.reason === "expired") {
+            toast.info("This invite link has expired — continue with regular signup below.");
+          } else if (result.reason === "already_used") {
+            toast.info("This invite has already been used — log in below, or continue with regular signup.");
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInviteState({ checked: true, valid: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken]);
 
   const exitForgotPassword = () => {
     setForgotStep(null);
@@ -381,6 +417,7 @@ const Auth = () => {
           password: formData.password,
           emailVerificationToken: verifications.email.token,
           phoneVerificationToken: verifications.phone.token,
+          ...(inviteState.valid ? { invite: inviteToken } : {}),
         });
 
       if (isLogin) {
@@ -660,6 +697,12 @@ const Auth = () => {
                   {!forgotStep && !isLogin &&
                     "Set up your seller admin profile. You will add individual shops with location and KYC from My Stores after signup."}
                 </p>
+                {!forgotStep && !isLogin && inviteState.valid && (
+                  <div className="flex items-center gap-2 justify-center md:justify-start text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 max-w-sm mx-auto md:mx-0 md:max-w-none">
+                    <CheckCircle size={14} className="shrink-0" />
+                    You were invited by GrandBazar — your email is pre-filled below.
+                  </div>
+                )}
               </div>
 
               {!isLogin && !forgotStep && (
@@ -839,7 +882,8 @@ const Auth = () => {
                         inputMode="email"
                         autoComplete="email"
                         placeholder="Business Email"
-                        className="w-full pl-12 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300"
+                        disabled={!isLogin && inviteState.valid}
+                        className="w-full pl-12 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 disabled:opacity-70 disabled:cursor-not-allowed"
                         value={formData.email}
                         onChange={handleChange}
                       />

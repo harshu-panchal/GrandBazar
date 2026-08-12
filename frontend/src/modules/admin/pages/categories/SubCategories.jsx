@@ -54,6 +54,7 @@ const SubCategories = () => {
     adminCommission: "",
     handlingFees: "",
     packingFees: "",
+    gstSlab: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -208,7 +209,7 @@ const SubCategories = () => {
           data.append(key, formData.applyCommission ? "true" : "false");
           return;
         }
-        if (key === "adminCommission" || key === "handlingFees" || key === "packingFees") {
+        if (key === "adminCommission" || key === "handlingFees" || key === "packingFees" || key === "gstSlab") {
           data.append(key, formData[key] === "" ? "0" : String(formData[key]));
           return;
         }
@@ -268,6 +269,7 @@ const SubCategories = () => {
       adminCommission: "",
       handlingFees: "",
       packingFees: "",
+      gstSlab: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -289,6 +291,7 @@ const SubCategories = () => {
       adminCommission: item.adminCommission ?? "",
       handlingFees: item.handlingFees ?? "",
       packingFees: item.packingFees ?? "",
+      gstSlab: item.gstSlab ?? "",
     });
     const currentImage = item.image && typeof item.image === 'object' ? item.image.url : (item.image || null);
     setPreviewUrl(currentImage);
@@ -431,6 +434,9 @@ const SubCategories = () => {
                   Pack (₹)
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  GST (%)
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -441,13 +447,13 @@ const SubCategories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="10" className="text-center py-8 text-gray-500">
+                  <td colSpan="11" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="text-center py-8 text-gray-500">
+                  <td colSpan="11" className="text-center py-8 text-gray-500">
                     No subcategories found
                   </td>
                 </tr>
@@ -505,6 +511,9 @@ const SubCategories = () => {
                       </td>
                       <td className="py-3 px-4 text-gray-500 font-medium">
                         ₹{cat.packingFees ?? 0}
+                      </td>
+                      <td className="py-3 px-4 text-gray-500 font-medium">
+                        {cat.gstSlab ?? 0}%
                       </td>
                       <td className="py-3 px-4">
                         <Badge
@@ -747,6 +756,25 @@ const SubCategories = () => {
                   <p className="text-xs text-gray-500">
                     Deepest category wins for packing/handling (Subcategory → Level 2 → Header).
                   </p>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      GST Slab (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.gstSlab}
+                      onChange={(e) =>
+                        setFormData({ ...formData, gstSlab: e.target.value })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      placeholder="0"
+                      min="0"
+                      max="100"
+                    />
+                    <p className="text-xs text-gray-500">
+                      GST is charged on checkout for products in this category. A product-level override, if set, wins over this.
+                    </p>
+                  </div>
                 </div>
               </div>
 

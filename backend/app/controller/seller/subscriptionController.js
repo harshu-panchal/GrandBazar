@@ -4,7 +4,9 @@ import {
   createSubscriptionPaymentRequest,
   getSellerSubscriptionSummary,
   listActivePlans,
+  activateFreeSubscriptionPlan,
 } from "../../services/subscriptionService.js";
+import SubscriptionPlan from "../../models/subscriptionPlan.js";
 import {
   createSubscriptionPhonePeCheckout,
   verifySubscriptionPhonePePayment,
@@ -99,6 +101,22 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
     const { planId, requestType } = req.body || {};
     if (!planId) {
       return handleResponse(res, 400, "planId is required");
+    }
+
+    // A ₹0 plan has nothing to pay — PhonePe checkout requires a real amount
+    // (sub-₹1 is rejected), so activate it directly instead of routing
+    // through the payment gateway.
+    const plan = await SubscriptionPlan.findById(planId).select("price").lean();
+    if (plan && Number(plan.price) <= 0) {
+      const { subscription } = await activateFreeSubscriptionPlan({
+        sellerId: ownerId,
+        planId,
+        requestType: requestType || PAYMENT_REQUEST_TYPE.NEW,
+      });
+      return handleResponse(res, 200, "Free plan activated", {
+        activated: true,
+        subscription,
+      });
     }
 
     const result = await createSubscriptionPhonePeCheckout({

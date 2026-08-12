@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Order from "../models/order.js";
 import Product from "../models/product.js";
+import Setting from "../models/setting.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { applyOrderPriceAdjustment } from "./orderPriceAdjustmentService.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
@@ -85,6 +86,11 @@ export async function createReplacementRequest({
   const requestId = new mongoose.Types.ObjectId().toString();
   const sellerId = order.seller;
   const normalizedAlternatives = [];
+  const originalItemPrice = Number(order.items[itemIndex].price || 0);
+
+  const settings = await Setting.findOne({}).select("replacementPriceTolerancePercent").lean();
+  const tolerancePercent = Number(settings?.replacementPriceTolerancePercent ?? 0);
+  const maxAllowedPrice = originalItemPrice * (1 + tolerancePercent / 100);
 
   for (const alt of alternatives) {
     const resolved = await resolveReplacementProduct({
@@ -104,10 +110,22 @@ export async function createReplacementRequest({
     const quantity = Math.max(1, Number(alt.quantity || order.items[itemIndex].quantity || 1));
     const fallbackPrice = Number(resolved.salePrice || resolved.price || 0);
     const price = Number(alt.price);
+    const resolvedPrice = Number.isFinite(price) && price >= 0 ? price : fallbackPrice;
+
+    if (originalItemPrice > 0 && resolvedPrice > maxAllowedPrice) {
+      const err = new Error(
+        tolerancePercent > 0
+          ? `Replacement price (₹${resolvedPrice}) exceeds the original item price (₹${originalItemPrice}) by more than the allowed ${tolerancePercent}% tolerance. Use a price adjustment request instead if a pricier substitute is needed.`
+          : `Replacement price (₹${resolvedPrice}) cannot exceed the original item price (₹${originalItemPrice}). Use a price adjustment request instead if a pricier substitute is needed.`,
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
     normalizedAlternatives.push({
       product: resolved._id,
       name: String(alt.name || resolved.name || "").trim(),
-      price: Number.isFinite(price) && price >= 0 ? price : fallbackPrice,
+      price: resolvedPrice,
       variantSlot: String(alt.variantSlot || alt.variantSku || "").trim(),
       quantity,
     });
@@ -331,6 +349,60 @@ export async function createSplitDeliveries({
     meta: { splitCount: mapped.length, extraDeliveryFee },
   });
   emitOrderStatusUpdate(orderId, { splitDeliveryCreated: true, splitCount: mapped.length }, updated?.customer);
+  return updated;
+}
+
+/**
+ * Advances one split's status (e.g. to "delivered") — the transition
+ * createSplitDeliveries's own schema anticipates (see order.js
+ * splitDeliveries.status enum) but that nothing previously ever wrote past
+ * the initial "pending" value.
+ *
+ * Deliberately does NOT create a separate per-stage payout — the seller's
+ * payout for the whole order is still created once, when the order itself
+ * reaches "delivered" (see orderFinanceService.createPendingSellerPayout),
+ * which already reflects the split's extra delivery fee via the grandTotal
+ * adjustment createSplitDeliveries makes. Splitting the actual payout
+ * per-stage is a real, separate change to the settlement engine's payment
+ * timing that needs its own design pass (double-payment risk if done
+ * without care) rather than being bolted on here — this function closes
+ * the status-visibility gap without touching money movement.
+ */
+export async function markSplitDeliveryStage({ orderId, splitId, status, actorRole = "seller", actorId = "" }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const allowedStatuses = ["processing", "out_for_delivery", "delivered", "cancelled"];
+  if (!allowedStatuses.includes(status)) {
+    const err = new Error(`status must be one of: ${allowedStatuses.join(", ")}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const order = await Order.findOne({ orderId, "splitDeliveries.splitId": splitId });
+  if (!order) {
+    const err = new Error("Order or split delivery not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const setFields = { "splitDeliveries.$.status": status };
+  if (status === "delivered") {
+    setFields["splitDeliveries.$.deliveredAt"] = new Date();
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { orderId, "splitDeliveries.splitId": splitId },
+    { $set: setFields },
+    { new: true },
+  );
+
+  await pushTimeline(orderId, {
+    type: "split_delivery_status",
+    actorRole,
+    actorId: String(actorId || ""),
+    note: `Split ${splitId} marked ${status}`,
+    meta: { splitId, status },
+  });
+  emitOrderStatusUpdate(orderId, { splitDeliveryStatus: status, splitId }, updated?.customer);
   return updated;
 }
 

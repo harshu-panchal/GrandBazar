@@ -75,7 +75,7 @@ const Profile = () => {
         const response = await axiosInstance.get("/public/faqs", {
           params: { category: "Delivery", status: "published" },
         });
-        setFaqs(response.data.results || []);
+        setFaqs(response.data?.result?.items || []);
       } catch (error) {
         console.error("Error fetching FAQs:", error);
       }

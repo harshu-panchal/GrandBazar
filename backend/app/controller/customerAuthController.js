@@ -32,8 +32,10 @@ export const signupCustomer = async (req, res) => {
         await issueCustomerOtp({
             name: payload.name,
             rawPhone: payload.phone,
+            email: payload.email,
             flow: "signup",
             ipAddress: req.ip,
+            agreedToTerms: Boolean(payload.agreedToTerms),
         });
 
         return handleResponse(res, 200, "If the number is eligible, OTP has been sent");
@@ -85,6 +87,10 @@ export const loginCustomerWithEmail = async (req, res) => {
             return handleResponse(res, 401, "Invalid email or password");
         }
 
+        if (customer.isActive === false) {
+            return handleResponse(res, 403, "This account has been deleted. Please contact support.");
+        }
+
         const token = generateToken(customer);
         await recordLogin(customer, "Customer", req.ip, req.headers["user-agent"]).catch(() => {});
 
@@ -111,6 +117,10 @@ export const verifyCustomerOTP = async (req, res) => {
             otp: payload.otp,
             ipAddress: req.ip,
         });
+
+        if (customer.isActive === false) {
+            return handleResponse(res, 403, "This account has been deleted. Please contact support.");
+        }
 
         if (payload.referralCode) {
             const { attachReferralOnSignup } = await import("../modules/rewards/services/referralService.js");
@@ -161,7 +171,7 @@ export const getCustomerProfile = async (req, res) => {
 ================================ */
 export const updateCustomerProfile = async (req, res) => {
     try {
-        const { name, email, addresses, dateOfBirth } = req.body;
+        const { name, email, addresses, dateOfBirth, notificationsEnabled } = req.body;
 
         const customer = await Customer.findById(req.user.id);
         if (!customer) {
@@ -171,6 +181,9 @@ export const updateCustomerProfile = async (req, res) => {
         if (name) customer.name = name;
         if (email) customer.email = email;
         if (addresses) customer.addresses = addresses;
+        if (notificationsEnabled !== undefined) {
+            customer.notificationsEnabled = Boolean(notificationsEnabled);
+        }
         if (dateOfBirth !== undefined) {
             if (dateOfBirth === null || dateOfBirth === "") {
                 customer.dateOfBirth = null;
@@ -186,6 +199,28 @@ export const updateCustomerProfile = async (req, res) => {
         await customer.save();
 
         return handleResponse(res, 200, "Profile updated successfully", sanitizeCustomer(customer));
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
+/* ===============================
+   DELETE ACCOUNT (soft delete)
+================================ */
+export const deleteCustomerAccount = async (req, res) => {
+    try {
+        const customer = await Customer.findById(req.user.id);
+        if (!customer) {
+            return handleResponse(res, 404, "Customer not found");
+        }
+
+        // Soft delete: keep the document (orders/transactions still reference it)
+        // but mark inactive so the account can no longer authenticate, mirroring
+        // the isActive convention used for store deactivation elsewhere.
+        customer.isActive = false;
+        await customer.save();
+
+        return handleResponse(res, 200, "Account deleted successfully");
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }

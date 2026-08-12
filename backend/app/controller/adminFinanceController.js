@@ -17,6 +17,10 @@ import {
   updateDeliveryFinanceSettings,
 } from "../services/finance/financeSettingsService.js";
 import { createFinanceAuditLog } from "../services/finance/auditLogService.js";
+import { createLedgerEntry } from "../services/finance/ledgerService.js";
+import { getOrCreateWallet } from "../services/finance/walletService.js";
+import { LEDGER_DIRECTION, LEDGER_TRANSACTION_TYPE, PAYOUT_STATUS } from "../constants/finance.js";
+import { roundCurrency } from "../utils/money.js";
 import {
   financeLedgerQuerySchema,
   payoutProcessSchema,
@@ -68,12 +72,14 @@ export const getAdminFinancePayoutsController = async (req, res) => {
       seller,
       rider,
       status,
+      bulkOnly,
       page = 1,
       limit = 25,
     } = req.query;
 
     const query = {};
     if (status) query.status = status;
+    if (String(bulkOnly).toLowerCase() === "true") query.isBulkSettlement = true;
 
     const includeSeller = String(seller).toLowerCase() === "true";
     const includeRider = String(rider).toLowerCase() === "true";
@@ -89,7 +95,7 @@ export const getAdminFinancePayoutsController = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(safeLimit)
-        .populate("relatedOrderIds", "orderId paymentMode paymentStatus status")
+        .populate("relatedOrderIds", "orderId paymentMode paymentStatus status settlementStatus")
         .lean(),
       Payout.countDocuments(query),
     ]);
@@ -197,6 +203,178 @@ export const settleSellerPayoutManualController = async (req, res) => {
     }
 
     return handleResponse(res, 200, "Seller payout successfully settled by admin", payout);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/**
+ * Manually place a seller's payout for this order on hold — distinct from
+ * the automatic return-window hold (order.js financeFlags.sellerPayoutHeld).
+ * Excluded from returnWindowReleaseJob.js's auto-release query, so this
+ * only clears via releaseSellerPayoutController below, not by the return
+ * window simply expiring.
+ */
+export const holdSellerPayoutController = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim()) {
+      return handleResponse(res, 400, "reason is required to place a payout on hold");
+    }
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      return handleResponse(res, 404, "Order not found");
+    }
+    if (["COMPLETED", "NOT_APPLICABLE"].includes(order.settlementStatus?.sellerPayout)) {
+      return handleResponse(res, 400, `Cannot hold a payout that is already ${order.settlementStatus?.sellerPayout}`);
+    }
+
+    order.settlementStatus = {
+      ...(order.settlementStatus || {}),
+      sellerPayout: "HOLD",
+    };
+    order.financeFlags = {
+      ...(order.financeFlags || {}),
+      sellerPayoutHeld: true,
+      manualSettlementHold: true,
+      manualSettlementHoldReason: String(reason).trim(),
+    };
+    await order.save();
+
+    await createFinanceAuditLog({
+      action: FINANCE_AUDIT_ACTION.SELLER_PAYOUT_HELD,
+      actorType: OWNER_TYPE.ADMIN,
+      actorId: req.user?.id || null,
+      orderId: order._id,
+      metadata: { reason: String(reason).trim() },
+    });
+
+    return handleResponse(res, 200, "Seller payout placed on hold", order);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/** Releases a manual hold placed by holdSellerPayoutController above. */
+export const releaseSellerPayoutController = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      return handleResponse(res, 404, "Order not found");
+    }
+    if (order.settlementStatus?.sellerPayout !== "HOLD") {
+      return handleResponse(res, 400, "This payout is not currently on hold");
+    }
+
+    order.settlementStatus = {
+      ...(order.settlementStatus || {}),
+      sellerPayout: "PENDING",
+    };
+    order.financeFlags = {
+      ...(order.financeFlags || {}),
+      sellerPayoutHeld: false,
+      manualSettlementHold: false,
+      manualSettlementHoldReason: "",
+    };
+    await order.save();
+
+    await createFinanceAuditLog({
+      action: FINANCE_AUDIT_ACTION.SELLER_PAYOUT_RELEASED,
+      actorType: OWNER_TYPE.ADMIN,
+      actorId: req.user?.id || null,
+      orderId: order._id,
+    });
+
+    return handleResponse(res, 200, "Seller payout hold released", order);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/**
+ * Apply a manual settlement adjustment (deduction or addition) to a seller
+ * payout — the "apply settlement deductions" admin capability the checklist
+ * asks for that previously didn't exist (admin could only mark a payout
+ * COMPLETED wholesale, never adjust its amount).
+ */
+export const adjustPayoutController = async (req, res) => {
+  try {
+    const { payoutId } = req.params;
+    const { amount, reason } = req.body || {};
+
+    const normalizedAmount = Number(amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount === 0) {
+      return handleResponse(res, 400, "amount must be a non-zero number (positive = credit seller, negative = deduct)");
+    }
+    if (!reason || !String(reason).trim()) {
+      return handleResponse(res, 400, "reason is required for a settlement adjustment");
+    }
+
+    const payout = await Payout.findById(payoutId);
+    if (!payout) {
+      return handleResponse(res, 404, "Payout record not found");
+    }
+    if (payout.status === PAYOUT_STATUS.CANCELLED) {
+      return handleResponse(res, 400, "Cannot adjust a cancelled payout");
+    }
+
+    const isCredit = normalizedAmount > 0;
+    const absAmount = roundCurrency(Math.abs(normalizedAmount));
+    const ownerType = payout.payoutType === "SELLER" ? "SELLER" : "DELIVERY_PARTNER";
+    const wallet = await getOrCreateWallet(ownerType, payout.beneficiaryId);
+
+    if (payout.status === PAYOUT_STATUS.PENDING || payout.status === PAYOUT_STATUS.PROCESSING) {
+      // Not yet paid out — adjust both the payout total and the pending bucket it's sitting in.
+      const newAmount = roundCurrency(payout.amount + normalizedAmount);
+      if (newAmount < 0) {
+        return handleResponse(res, 400, `Adjustment would make payout amount negative (current: ${payout.amount})`);
+      }
+      payout.amount = newAmount;
+      wallet.pendingBalance = roundCurrency(Math.max(0, (wallet.pendingBalance || 0) + normalizedAmount));
+    } else {
+      // Already settled — adjust the available balance directly; the payout
+      // record's original amount is left as history, the adjustment is its
+      // own ledger entry so the settlement stays auditable.
+      if (!isCredit && (wallet.availableBalance || 0) < absAmount) {
+        return handleResponse(res, 400, "Insufficient available balance for this deduction");
+      }
+      wallet.availableBalance = roundCurrency((wallet.availableBalance || 0) + normalizedAmount);
+    }
+
+    payout.metadata = {
+      ...(payout.metadata || {}),
+      adjustments: [
+        ...((payout.metadata || {}).adjustments || []),
+        { amount: normalizedAmount, reason: String(reason).trim(), adminId: req.user?.id || null, at: new Date() },
+      ],
+    };
+    await Promise.all([payout.save(), wallet.save()]);
+
+    await createLedgerEntry({
+      orderId: payout.relatedOrderIds?.[0] || null,
+      payoutId: payout._id,
+      walletId: wallet._id,
+      actorType: ownerType,
+      actorId: payout.beneficiaryId,
+      type: LEDGER_TRANSACTION_TYPE.ADJUSTMENT,
+      direction: isCredit ? LEDGER_DIRECTION.CREDIT : LEDGER_DIRECTION.DEBIT,
+      amount: absAmount,
+      description: `Admin settlement adjustment: ${String(reason).trim()}`,
+    });
+
+    await createFinanceAuditLog({
+      action: FINANCE_AUDIT_ACTION.FINANCE_ADJUSTMENT_APPLIED,
+      actorType: OWNER_TYPE.ADMIN,
+      actorId: req.user?.id || null,
+      payoutId: payout._id,
+      metadata: { amount: normalizedAmount, reason: String(reason).trim() },
+    });
+
+    return handleResponse(res, 200, "Settlement adjustment applied", { payout, wallet });
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

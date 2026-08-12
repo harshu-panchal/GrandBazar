@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Landmark, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Landmark, AlertTriangle, CheckCircle2, RotateCw } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
 import Input from "@/shared/components/ui/Input";
 import { useAuth } from "@core/context/AuthContext";
 import { toast } from "sonner";
+import { deliveryApi } from "../../services/deliveryApi";
 
 const maskAccount = (accountNumber) => {
   if (!accountNumber) return "Not added";
@@ -16,6 +17,8 @@ const maskAccount = (accountNumber) => {
 const BankAccount = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [form, setForm] = useState({ accountHolder: "", accountNumber: "", ifsc: "" });
+  const [submitting, setSubmitting] = useState(false);
 
   const bankDetails = {
     accountHolder: user?.accountHolder || user?.name || "—",
@@ -24,6 +27,45 @@ const BankAccount = () => {
       : "Not added",
     ifsc: user?.ifsc || "—",
     hasAccount: Boolean(user?.accountNumber),
+  };
+
+  const handleChange = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSubmit = async () => {
+    const holder = form.accountHolder.trim();
+    const accountNumber = form.accountNumber.trim();
+    const ifsc = form.ifsc.trim();
+
+    if (!holder || !accountNumber || !ifsc) {
+      toast.error("Please fill in all fields before submitting");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await deliveryApi.createSupportTicket({
+        subject: "Bank Account Change Request",
+        description: [
+          "Please update my bank account details for payouts.",
+          `Account Holder: ${holder}`,
+          `Account Number: ${accountNumber}`,
+          `IFSC Code: ${ifsc}`,
+        ].join("\n"),
+        priority: "medium",
+        userType: "Rider",
+      });
+      toast.success("Request submitted — support will contact you shortly");
+      setForm({ accountHolder: "", accountNumber: "", ifsc: "" });
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          "Failed to submit request. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -90,26 +132,46 @@ const BankAccount = () => {
               Payment Information
             </h4>
             <p className="text-xs text-yellow-700 leading-relaxed">
-              Your weekly earnings will be deposited to this account. Changes to
-              bank details may delay your next payout.
+              Your weekly earnings will be deposited to this account. Bank
+              detail changes are verified by support before they take effect.
             </p>
           </div>
         </div>
 
         {/* Change Request Form */}
         <div className="pt-4">
-          <h3 className="ds-h4 text-gray-900 mb-4">Request Change</h3>
+          <h3 className="ds-h4 text-gray-900 mb-1">Request Change</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            This creates a support ticket. Our team will verify your identity
+            before updating your bank details.
+          </p>
           <div className="space-y-4">
-            <Input label="Account Holder Name" placeholder="As per bank records" />
-            <Input label="Account Number" placeholder="Enter new account number" />
-            <Input label="IFSC Code" placeholder="e.g. HDFC0001234" />
-            <Button
-              className="w-full"
-              onClick={() =>
-                toast.info("Bank change requests are handled by support")
-              }
-            >
-              Submit Request
+            <Input
+              label="Account Holder Name"
+              placeholder="As per bank records"
+              value={form.accountHolder}
+              onChange={handleChange("accountHolder")}
+              disabled={submitting}
+            />
+            <Input
+              label="Account Number"
+              placeholder="Enter new account number"
+              value={form.accountNumber}
+              onChange={handleChange("accountNumber")}
+              disabled={submitting}
+            />
+            <Input
+              label="IFSC Code"
+              placeholder="e.g. HDFC0001234"
+              value={form.ifsc}
+              onChange={handleChange("ifsc")}
+              disabled={submitting}
+            />
+            <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? (
+                <RotateCw className="animate-spin mr-2" size={16} />
+              ) : null}
+              {submitting ? "Submitting..." : "Submit Request"}
             </Button>
           </div>
         </div>

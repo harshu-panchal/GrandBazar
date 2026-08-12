@@ -188,13 +188,27 @@ function eventDefinition(eventType) {
       };
     case NOTIFICATION_EVENTS.DELIVERY_ASSIGNED:
       return {
-        role: NOTIFICATION_ROLES.DELIVERY,
-        recipientIds: (payload) => normalizeIdList(payload.deliveryId),
-        title: () => "Delivery Assigned",
-        body: (payload) =>
-          payload.orderId
-            ? `You have been assigned order #${payload.orderId}.`
-            : "A new delivery has been assigned to you.",
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.DELIVERY,
+            recipientIds: (payload) => normalizeIdList(payload.deliveryId),
+            title: () => "Delivery Assigned",
+            body: (payload) =>
+              payload.orderId
+                ? `You have been assigned order #${payload.orderId}.`
+                : "A new delivery has been assigned to you.",
+          },
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+            title: () => "Delivery Partner Assigned",
+            body: (payload) =>
+              payload.orderId
+                ? `A delivery partner has been assigned to order #${payload.orderId} and is preparing to pick it up.`
+                : "A delivery partner has been assigned to your order.",
+          },
+        ],
       };
     case NOTIFICATION_EVENTS.NEW_DELIVERY_BROADCAST:
       return {

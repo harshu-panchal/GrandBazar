@@ -7,6 +7,7 @@ import {
     sendSellerForgotPasswordOtp,
     verifySellerForgotPasswordOtp,
     resetSellerPassword,
+    validateSellerInvite,
 } from "../controller/sellerAuthController.js";
 import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings, getStoreAlternatives } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
@@ -107,6 +108,7 @@ router.post(
     signupSeller
 );
 router.post("/login", loginSeller);
+router.get("/invite/:token", validateSellerInvite);
 router.get("/nearby", getNearbySellers);
 router.get("/public/:id", getPublicSellerProfile);
 router.get("/public/:id/alternatives", getStoreAlternatives);

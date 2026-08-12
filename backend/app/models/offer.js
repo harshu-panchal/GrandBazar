@@ -30,6 +30,24 @@ const offerSchema = new mongoose.Schema(
       min: 1,
       default: 1,
     },
+    // Informational discount value shown on the promo badge — the actual
+    // discount is applied at checkout via a linked Coupon (offer.code), this
+    // is purely for display/reporting so the offer is self-describing.
+    discountValue: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    usageLimit: {
+      type: Number,
+      min: 0,
+      default: 0, // 0 = unlimited
+    },
+    usageCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     order: {
       type: Number,
       default: 0,

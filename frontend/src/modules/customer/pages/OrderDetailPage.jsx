@@ -7,6 +7,7 @@ import HelpModal from "../components/order/HelpModal";
 import LiveTrackingMap from "../components/order/LiveTrackingMap";
 import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
 import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
+import RateOrderItems from "../components/order/RateOrderItems";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
 import OrderProgressTracker from "../components/order/OrderProgressTracker";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
@@ -29,8 +30,10 @@ import {
   Navigation2,
   Camera,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
+import { useCart } from "../context/CartContext";
 import { toast } from "sonner";
 import { subscribeToOrderLocation, subscribeToOrderTrail, subscribeToOrderRoute } from "@/core/services/trackingClient";
 import {
@@ -177,8 +180,48 @@ const OrderDetailPage = () => {
   const extraRoomRef = useRef("");
 
   const navigate = useNavigate();
+  const { addToCart } = useCart();
+  const [isReordering, setIsReordering] = useState(false);
   const resolveOrderLookupId = (ord) =>
     String(ord?.orderId || ord?.checkoutGroupId || orderId || "").trim();
+
+  const handleReorder = async () => {
+    setIsReordering(true);
+    try {
+      const res = await customerApi.reorderOrder(resolveOrderLookupId(order));
+      const { addable = [], unavailable = [] } = res.data?.result || {};
+
+      for (const item of addable) {
+        await addToCart({
+          id: item.productId,
+          _id: item.productId,
+          sellerId: item.sellerId,
+          variantSku: item.variantSku,
+          variantName: item.variantName,
+          name: item.name,
+          image: item.image,
+          price: item.price,
+          salePrice: item.price,
+        });
+      }
+
+      if (addable.length > 0) {
+        toast.success(`${addable.length} item${addable.length === 1 ? '' : 's'} added to cart`);
+      }
+      if (unavailable.length > 0) {
+        toast.message(`${unavailable.length} item${unavailable.length === 1 ? '' : 's'} couldn't be added`, {
+          description: unavailable.map((u) => `${u.name} — ${u.reason}`).join(', '),
+        });
+      }
+      if (addable.length > 0) {
+        navigate('/cart');
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to reorder');
+    } finally {
+      setIsReordering(false);
+    }
+  };
 
   const handleBack = () => {
     const idx = window?.history?.state?.idx;
@@ -935,6 +978,18 @@ const OrderDetailPage = () => {
           </motion.div>
         )}
 
+        {order?.partialCancellation?.isPartial && order?.partialCancellation?.updatedEtaAt && (
+          <div className="flex items-start gap-2.5 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
+            <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs font-semibold text-amber-800">
+              Delivery time updated after an item was cancelled from this order.
+              {order?.schedule?.deliveryDate && order?.schedule?.windowLabel
+                ? ` New window: ${new Date(order.schedule.deliveryDate).toLocaleDateString()} · ${order.schedule.windowLabel}.`
+                : ""}
+            </p>
+          </div>
+        )}
+
         {/* Order Progress Tracker - New Component */}
         {!isAwaitingOnlinePayment && (
           <OrderProgressTracker
@@ -1267,6 +1322,27 @@ const OrderDetailPage = () => {
           </motion.button>
         )}
 
+        {status === "delivered" && (
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+            onClick={handleReorder}
+            disabled={isReordering}
+            className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-bold hover:bg-brand-700 transition-all flex items-center justify-center gap-2 text-sm shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-60"
+          >
+            {isReordering ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Adding to cart…
+              </>
+            ) : (
+              <>
+                <RotateCcw size={18} /> Buy Again
+              </>
+            )}
+          </motion.button>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1373,7 +1449,11 @@ const OrderDetailPage = () => {
       </div>
 
       <div className="px-4 pb-4">
-        <OrderLifecycleActions order={order} onRefresh={refreshOrder} />
+        <OrderLifecycleActions order={order} onRefresh={refreshOrder} returnWindowMinutes={returnWindowMinutes} />
+      </div>
+
+      <div className="px-4 pb-4">
+        <RateOrderItems order={order} />
       </div>
 
       {/* Modals */}

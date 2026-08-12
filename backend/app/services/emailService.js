@@ -216,6 +216,57 @@ export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
 }
 
 /**
+ * Sends a pre-application invite to a prospective seller — before any
+ * Seller account exists. Distinct from sendVendorWelcomeEmail, which is the
+ * post-approval credentials email.
+ */
+export async function sendSellerInviteEmail({ email, inviteLink }) {
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">You're invited to sell on GrandBazar</h2>
+      <p>Hello,</p>
+      <p>The GrandBazar team would like to invite you to become a seller on our platform. Click below to start your application — it only takes a few minutes.</p>
+      <p style="margin-top: 25px;">
+        <a href="${inviteLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Start Your Application
+        </a>
+      </p>
+      <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+        Or copy and paste this link into your browser: <br/>
+        <a href="${inviteLink}" style="color: #2563eb;">${inviteLink}</a>
+      </p>
+      <p style="color: #94a3b8; font-size: 11px; margin-top: 20px;">This invite link expires in 14 days.</p>
+    </div>
+  `;
+
+  try {
+    const mailOptions = {
+      from: `GrandBazar Platform <${fromEmail}>`,
+      to: email,
+      subject: "You're invited to sell on GrandBazar",
+      html: htmlContent,
+    };
+
+    if (!process.env.SMTP_USER && !process.env.EMAIL_FROM) {
+      console.log("[emailService] Mocking Seller Invite Email Dispatch (No SMTP Configured):", {
+        to: email,
+        inviteLink,
+      });
+      return { success: true, mocked: true };
+    }
+
+    const info = await getTransporter().sendMail(mailOptions);
+    console.log("[emailService] Seller invite email sent:", info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send seller invite email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Sends welcome email to sub-seller staff / assistant member.
  */
 export async function sendSellerStaffWelcomeEmail({ email, name, password, storeName, roleTitle }) {

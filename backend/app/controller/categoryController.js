@@ -142,7 +142,7 @@ export const getCategories = async (req, res) => {
 export const createCategory = async (req, res) => {
   try {
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "packingFees", "packingFeeType", "packingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "packingFees", "packingFeeType", "packingFeeValue", "returnEligible", "refundWindowHours", "restockFeePercent", "gstSlab", "packagingType"];
     
     // Strict Whitelisting and Sanitization
     for (const key of allowedKeys) {
@@ -153,6 +153,10 @@ export const createCategory = async (req, res) => {
            continue;
         }
         if (key === "applyCommission") {
+          categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
+          continue;
+        }
+        if (key === "returnEligible") {
           categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
           continue;
         }
@@ -227,7 +231,7 @@ export const updateCategory = async (req, res) => {
     }
 
     const categoryData = {};
-    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "packingFees", "packingFeeType", "packingFeeValue"];
+    const allowedKeys = ["name", "slug", "description", "type", "parentId", "status", "iconId", "headerColor", "headerFontColor", "headerIconColor", "applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue", "handlingFees", "handlingFeeType", "handlingFeeValue", "packingFees", "packingFeeType", "packingFeeValue", "returnEligible", "refundWindowHours", "restockFeePercent", "gstSlab", "packagingType"];
     
     for (const key of allowedKeys) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
@@ -236,6 +240,10 @@ export const updateCategory = async (req, res) => {
            continue;
         }
         if (key === "applyCommission") {
+          categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
+          continue;
+        }
+        if (key === "returnEligible") {
           categoryData[key] = val === true || val === "true" || val === "1" || val === 1;
           continue;
         }

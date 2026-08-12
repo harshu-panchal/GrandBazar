@@ -148,7 +148,7 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
       if (hasFullSchedulingPayload) {
         update.schedulingSettings = {
           enabled: Boolean(schedulingSettings.enabled),
-          maxDaysAhead: Number(schedulingSettings.maxDaysAhead || 7),
+          maxDaysAhead: Number(schedulingSettings.maxDaysAhead || 30),
           rescheduleCutoffDays: Number(schedulingSettings.rescheduleCutoffDays ?? 1),
           selfLogistics: Boolean(
             schedulingSettings.selfLogistics ?? deliveryPolicy?.sellerDelivery,
@@ -192,6 +192,21 @@ export const updateSellerDeliveryPolicy = async (req, res) => {
       serviceRadius: updated.serviceRadius,
       packagingChargeEnabled: Boolean(updated.packagingChargeEnabled),
       packagingCharge: Number(updated.packagingCharge || 0),
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const adminGetStoreDeliveryPolicy = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const store = await Store.findById(storeId).lean();
+    if (!store) return handleResponse(res, 404, "Store not found");
+
+    return handleResponse(res, 200, "Store delivery policy", {
+      deliveryPolicy: resolveStoreDeliveryPolicy(store),
+      availability: resolveStoreAvailability(store),
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);

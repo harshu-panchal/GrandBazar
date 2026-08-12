@@ -7,6 +7,8 @@ import {
   createVendorAccountByAdmin,
   updateStoreSetupByAdmin,
   resendSellerCredentialsByAdmin,
+  inviteSellerByAdmin,
+  listSellerInvitesByAdmin,
 } from "../../services/admin/sellerApplicationService.js";
 
 export const getPendingSellers = async (req, res) => {
@@ -120,6 +122,26 @@ export const resendSellerCredentials = async (req, res) => {
     return handleResponse(res, 200, "Seller credentials & app links dispatched via email", result);
   } catch (error) {
     return handleResponse(res, 400, error.message);
+  }
+};
+
+export const inviteSeller = async (req, res) => {
+  try {
+    const { email, phone } = req.body || {};
+    const result = await inviteSellerByAdmin({ email, phone, invitedBy: req.user.id });
+    return handleResponse(res, 201, "Invite sent", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 400, error.message);
+  }
+};
+
+export const listSellerInvites = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const invites = await listSellerInvitesByAdmin({ status });
+    return handleResponse(res, 200, "Seller invites fetched", invites);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
   }
 };
 

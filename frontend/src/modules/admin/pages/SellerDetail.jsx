@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import Pagination from '@shared/components/ui/Pagination';
 import { adminApi, unwrapList } from '../services/adminApi';
 import {
     ChevronLeft,
@@ -25,13 +26,27 @@ import {
     XCircle,
     RotateCw,
     Search,
-    Download
+    Download,
+    Plus,
+    Trash2,
+    Video,
+    Image as ImageIcon,
+    Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
 import MapPicker from '@/shared/components/MapPicker';
+
+const getVideoEmbedUrl = (url) => {
+    if (!url) return "";
+    const shortMatch = url.match(/shorts\/([^/?]+)/);
+    const watchMatch = url.match(/[?&]v=([^&]+)/);
+    const youtuMatch = url.match(/youtu\.be\/([^/?]+)/);
+    const videoId = shortMatch ? shortMatch[1] : watchMatch ? watchMatch[1] : youtuMatch ? youtuMatch[1] : null;
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+};
 
 const SellerDetail = () => {
     const { id } = useParams();
@@ -41,6 +56,21 @@ const SellerDetail = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [orders, setOrders] = useState([]);
+    const [sellerProductsList, setSellerProductsList] = useState([]);
+    const [isLoadingSellerProducts, setIsLoadingSellerProducts] = useState(false);
+    const [sellerProductsPage, setSellerProductsPage] = useState(1);
+    const [sellerProductsPageSize, setSellerProductsPageSize] = useState(25);
+    const [sellerProductsTotal, setSellerProductsTotal] = useState(0);
+    const [deliveryPolicyForm, setDeliveryPolicyForm] = useState({
+        customerPickup: false,
+        sellerDelivery: false,
+        platformLogistics: true,
+        autoSwitchToPlatform: false,
+        platformLogisticsEnabledByAdmin: true,
+        sameDayCutoffTime: '18:00',
+    });
+    const [isLoadingDeliveryPolicy, setIsLoadingDeliveryPolicy] = useState(false);
+    const [isSavingDeliveryPolicy, setIsSavingDeliveryPolicy] = useState(false);
     const [businessModelData, setBusinessModelData] = useState(null);
     const [commissionForm, setCommissionForm] = useState({
         scope: 'category',
@@ -79,6 +109,10 @@ const SellerDetail = () => {
         accountNumber: '',
         ifsc: '',
         bankName: '',
+        logoUrl: '',
+        banners: [],
+        storeVideo: '',
+        excludeFromAlternatives: false,
     });
 
     const [headerCategories, setHeaderCategories] = useState([
@@ -199,6 +233,10 @@ const SellerDetail = () => {
                     accountNumber: detail.bankInfo?.accountNo || detail.accountNumber || '',
                     ifsc: detail.bankInfo?.ifsc || detail.ifsc || '',
                     bankName: detail.bankInfo?.bankName || detail.bankName || '',
+                    logoUrl: detail.logoUrl || '',
+                    banners: Array.isArray(detail.banners) ? detail.banners : [],
+                    storeVideo: detail.storeVideo || '',
+                    excludeFromAlternatives: Boolean(detail.excludeFromAlternatives),
                 });
                 setSeller((prev) => ({
                     ...prev,
@@ -271,6 +309,70 @@ const SellerDetail = () => {
         loadSellerData();
     }, [loadSellerData]);
 
+    useEffect(() => {
+        setSellerProductsPage(1);
+    }, [id]);
+
+    useEffect(() => {
+        if (activeTab !== 'products' || !id) return;
+        let cancelled = false;
+        setIsLoadingSellerProducts(true);
+        adminApi.getProductModerationList({ sellerId: id, page: sellerProductsPage, limit: sellerProductsPageSize })
+            .then((response) => {
+                if (cancelled) return;
+                const payload = response.data?.result || {};
+                const list = Array.isArray(payload.items) ? payload.items : (response.data?.results || []);
+                setSellerProductsList(list);
+                setSellerProductsTotal(typeof payload.total === 'number' ? payload.total : list.length);
+            })
+            .catch(() => {
+                if (!cancelled) showToast('Failed to load products for this seller', 'error');
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoadingSellerProducts(false);
+            });
+        return () => { cancelled = true; };
+    }, [activeTab, id, sellerProductsPage, sellerProductsPageSize, showToast]);
+
+    useEffect(() => {
+        if (activeTab !== 'delivery-policy' || !id) return;
+        let cancelled = false;
+        setIsLoadingDeliveryPolicy(true);
+        adminApi.getStoreDeliveryPolicy(id)
+            .then((response) => {
+                if (cancelled) return;
+                const result = response.data?.result || {};
+                setDeliveryPolicyForm((prev) => ({
+                    ...prev,
+                    ...(result.deliveryPolicy || {}),
+                }));
+            })
+            .catch(() => {
+                if (!cancelled) showToast('Failed to load delivery policy', 'error');
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoadingDeliveryPolicy(false);
+            });
+        return () => { cancelled = true; };
+    }, [activeTab, id, showToast]);
+
+    const handleSaveDeliveryPolicy = async () => {
+        if (!id) return;
+        setIsSavingDeliveryPolicy(true);
+        try {
+            const { platformLogisticsEnabledByAdmin, ...rest } = deliveryPolicyForm;
+            await adminApi.updateStoreDeliveryPolicy(id, {
+                platformLogisticsEnabledByAdmin,
+                deliveryPolicy: rest,
+            });
+            showToast('Delivery policy updated on behalf of seller', 'success');
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to update delivery policy', 'error');
+        } finally {
+            setIsSavingDeliveryPolicy(false);
+        }
+    };
+
     const saveCommissionConfig = async () => {
         try {
             await adminApi.updateSellerCommission(id, commissionForm);
@@ -317,12 +419,72 @@ const SellerDetail = () => {
         }
     };
 
+    const handleBannerUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('Image size must be less than 2MB', 'error');
+            return;
+        }
+        if (shopSetupForm.banners.length >= 5) {
+            showToast('Maximum 5 banners allowed', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setShopSetupForm((prev) => ({ ...prev, banners: [...prev.banners, reader.result] }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleRemoveBanner = (index) => {
+        setShopSetupForm((prev) => ({ ...prev, banners: prev.banners.filter((_, i) => i !== index) }));
+    };
+
+    const handleLogoUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 1 * 1024 * 1024) {
+            showToast('Logo size must be less than 1MB', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setShopSetupForm((prev) => ({ ...prev, logoUrl: reader.result }));
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleSaveShopSetup = async (e) => {
         e?.preventDefault();
         if (!id) return;
         setIsSavingShopSetup(true);
         try {
             await adminApi.updateSellerStoreSetup(id, shopSetupForm);
+
+            // businessModel/commission/subscriptionPlanId aren't part of the
+            // store-setup allowlist (that endpoint only touches shop profile
+            // fields) — they have their own dedicated endpoints.
+            await adminApi.updateSellerBusinessModel(id, {
+                businessModel: shopSetupForm.businessModel,
+            });
+            if (shopSetupForm.businessModel === 'commission') {
+                await adminApi.updateStoreCommission(id, {
+                    applyCommission: shopSetupForm.applyCommission,
+                    adminCommissionType: shopSetupForm.adminCommissionType,
+                    adminCommissionValue: shopSetupForm.adminCommissionValue,
+                    adminCommissionFixedRule: shopSetupForm.adminCommissionFixedRule,
+                });
+            } else if (shopSetupForm.businessModel === 'subscription' && shopSetupForm.subscriptionPlanId) {
+                await adminApi.assignComplimentarySubscription({
+                    sellerId: id,
+                    planId: shopSetupForm.subscriptionPlanId,
+                });
+            }
+
+            const res = await adminApi.getSellerBusinessModel(id);
+            setBusinessModelData(res.data.result);
+
             showToast('Shop setup updated successfully on behalf of seller', 'success');
             await loadSellerData();
         } catch (err) {
@@ -415,6 +577,8 @@ const SellerDetail = () => {
                             { id: 'delivery', label: 'Delivery', icon: MapPin },
                             { id: 'payouts', label: 'Withdrawals', icon: Wallet },
                             { id: 'info', label: 'Store Info', icon: Building2 },
+                            { id: 'products', label: 'Products', icon: ShoppingBag },
+                            { id: 'delivery-policy', label: 'Delivery Mode', icon: Truck },
                             { id: 'shop-setup', label: 'Shop Setup', icon: Edit3 },
                         ].map((tab) => (
                             <button
@@ -790,6 +954,158 @@ const SellerDetail = () => {
                             </div>
                         )}
 
+                        {activeTab === 'products' && (
+                            <div className="p-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                                <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                                            Products from this Seller
+                                        </h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {sellerProductsTotal} product{sellerProductsTotal === 1 ? '' : 's'} · Edit any product directly on behalf of this seller.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/admin/products?newForSeller=${id}`)}
+                                        className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-sm"
+                                    >
+                                        + Add Product for this Seller
+                                    </button>
+                                </div>
+
+                                {isLoadingSellerProducts ? (
+                                    <div className="flex items-center justify-center py-16">
+                                        <RotateCw className="h-6 w-6 text-slate-300 animate-spin" />
+                                    </div>
+                                ) : sellerProductsList.length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-12">No products found for this seller yet.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {sellerProductsList.map((product) => (
+                                            <div key={product._id} className="flex items-center gap-4 p-3 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all">
+                                                <div className="h-12 w-12 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                                                    {product.mainImage ? (
+                                                        <img src={product.mainImage} alt={product.name} className="w-full h-full object-cover" />
+                                                    ) : null}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-slate-800 truncate">{product.name}</p>
+                                                    <p className="text-[10px] text-slate-500 font-medium">₹{product.price} · Stock: {product.stock}</p>
+                                                </div>
+                                                <Badge variant={product.status === 'active' ? 'success' : 'gray'} className="text-[9px] px-1.5 py-0">
+                                                    {product.status === 'active' ? 'Active' : 'Draft'}
+                                                </Badge>
+                                                <Badge
+                                                    variant={product.approvalStatus === 'rejected' ? 'error' : product.approvalStatus === 'pending' ? 'warning' : 'success'}
+                                                    className="text-[9px] px-1.5 py-0"
+                                                >
+                                                    {product.approvalStatus || 'approved'}
+                                                </Badge>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/admin/products?edit=${product._id}`)}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all shrink-0"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {sellerProductsTotal > 0 && (
+                                    <div className="pt-4 mt-4 border-t border-slate-100">
+                                        <Pagination
+                                            page={sellerProductsPage}
+                                            totalPages={Math.ceil(sellerProductsTotal / sellerProductsPageSize) || 1}
+                                            total={sellerProductsTotal}
+                                            pageSize={sellerProductsPageSize}
+                                            onPageChange={(p) => setSellerProductsPage(p)}
+                                            onPageSizeChange={(newSize) => {
+                                                setSellerProductsPageSize(newSize);
+                                                setSellerProductsPage(1);
+                                            }}
+                                            loading={isLoadingSellerProducts}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'delivery-policy' && (
+                            <div className="p-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                                <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                                            Delivery Mode & Logistics Policy
+                                        </h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Control how this seller fulfills orders and whether platform riders can serve their store.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveDeliveryPolicy}
+                                        disabled={isSavingDeliveryPolicy || isLoadingDeliveryPolicy}
+                                        className="px-6 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all shadow-md disabled:opacity-60"
+                                    >
+                                        {isSavingDeliveryPolicy ? 'Saving…' : 'Save Delivery Policy'}
+                                    </button>
+                                </div>
+
+                                {isLoadingDeliveryPolicy ? (
+                                    <div className="flex items-center justify-center py-16">
+                                        <RotateCw className="h-6 w-6 text-slate-300 animate-spin" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-5 max-w-xl">
+                                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs font-bold text-amber-900">Platform Logistics Enabled (Admin Override)</p>
+                                                <p className="text-[10px] text-amber-700 mt-0.5">Master switch — when off, platform riders will never be dispatched to this store regardless of the toggles below.</p>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(deliveryPolicyForm.platformLogisticsEnabledByAdmin)}
+                                                onChange={(e) => setDeliveryPolicyForm({ ...deliveryPolicyForm, platformLogisticsEnabledByAdmin: e.target.checked })}
+                                                className="h-5 w-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 shrink-0"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {[
+                                                ['customerPickup', 'Customer Pickup'],
+                                                ['sellerDelivery', 'Seller Self Delivery'],
+                                                ['platformLogistics', 'Platform Logistics'],
+                                                ['autoSwitchToPlatform', 'Auto-switch to platform when seller unavailable'],
+                                            ].map(([key, label]) => (
+                                                <label key={key} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(deliveryPolicyForm[key])}
+                                                        onChange={(e) => setDeliveryPolicyForm({ ...deliveryPolicyForm, [key]: e.target.checked })}
+                                                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-700">{label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 mb-1">Same-day order cutoff</label>
+                                            <input
+                                                type="time"
+                                                value={deliveryPolicyForm.sameDayCutoffTime}
+                                                onChange={(e) => setDeliveryPolicyForm({ ...deliveryPolicyForm, sameDayCutoffTime: e.target.value })}
+                                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none max-w-[200px]"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {activeTab === 'shop-setup' && (
                             <div className="p-6 animate-in fade-in slide-in-from-right-2 duration-300">
                                 <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
@@ -1018,7 +1334,7 @@ const SellerDetail = () => {
                                                                         className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
                                                                     >
                                                                         <option value="per_qty">Per Item Qty</option>
-                                                                        <option value="per_order">Per Entire Order</option>
+                                                                        <option value="per_item">Per Item</option>
                                                                     </select>
                                                                 </div>
                                                             )}
@@ -1043,6 +1359,108 @@ const SellerDetail = () => {
                                                 </div>
                                             )}
                                         </div>
+                                    </div>
+
+                                    {/* Storefront Media */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Storefront Media
+                                        </h5>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-2">Store Logo</p>
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-16 w-16 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
+                                                    {shopSetupForm.logoUrl ? (
+                                                        <img src={shopSetupForm.logoUrl} alt="Store logo" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <ImageIcon className="h-5 w-5 text-slate-300" />
+                                                    )}
+                                                </div>
+                                                <label className="cursor-pointer bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-4 py-2 text-[11px] font-black tracking-wide text-slate-700 transition-colors">
+                                                    {shopSetupForm.logoUrl ? 'Change Logo' : 'Upload Logo'}
+                                                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                                                </label>
+                                                {shopSetupForm.logoUrl && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShopSetupForm((prev) => ({ ...prev, logoUrl: '' }))}
+                                                        className="text-[11px] font-bold text-red-500 hover:text-red-600"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-2">Carousel Banners (up to 5)</p>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                {shopSetupForm.banners.map((banner, index) => (
+                                                    <div key={index} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-[21/9] bg-slate-50">
+                                                        <img src={banner} alt={`Banner ${index + 1}`} className="w-full h-full object-cover" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveBanner(index)}
+                                                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                                        >
+                                                            <Trash2 className="h-5 w-5 text-white" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {shopSetupForm.banners.length < 5 && (
+                                                    <label className="border-2 border-dashed border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 rounded-xl aspect-[21/9] flex flex-col items-center justify-center cursor-pointer transition-all">
+                                                        <Plus className="h-5 w-5 text-slate-500 mb-1" />
+                                                        <span className="text-[10px] font-bold text-slate-500">Add Banner</span>
+                                                        <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} />
+                                                    </label>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                                                <Video className="h-3.5 w-3.5 text-brand-600" /> Store Promotional Video URL
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={shopSetupForm.storeVideo}
+                                                onChange={(e) => setShopSetupForm({ ...shopSetupForm, storeVideo: e.target.value })}
+                                                placeholder="e.g., https://www.youtube.com/watch?v=..."
+                                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                            />
+                                            {shopSetupForm.storeVideo && (
+                                                <div className="mt-3 rounded-xl overflow-hidden aspect-video bg-slate-100 border border-slate-200 max-w-md">
+                                                    {shopSetupForm.storeVideo.includes('youtube.com') || shopSetupForm.storeVideo.includes('youtu.be') ? (
+                                                        <iframe
+                                                            className="w-full h-full"
+                                                            src={getVideoEmbedUrl(shopSetupForm.storeVideo)}
+                                                            title="Store Promotional Video"
+                                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                            allowFullScreen
+                                                        ></iframe>
+                                                    ) : (
+                                                        <video src={shopSetupForm.storeVideo} controls className="w-full h-full object-contain" />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Discovery Controls */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
+                                            Discovery Controls
+                                        </h5>
+                                        <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer max-w-xl">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(shopSetupForm.excludeFromAlternatives)}
+                                                onChange={(e) => setShopSetupForm({ ...shopSetupForm, excludeFromAlternatives: e.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                            />
+                                            <span>
+                                                <span className="block text-xs font-bold text-slate-700">Exclude from "Other stores near you" suggestions</span>
+                                                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">When another nearby store is closed, this store will never be suggested as an alternative.</span>
+                                            </span>
+                                        </label>
                                     </div>
 
                                     {/* Packaging & Charges */}

@@ -26,6 +26,7 @@ export const checkoutPreviewSchema = Joi.object({
     name: Joi.string().allow("", null),
     address: Joi.string().allow("", null),
     city: Joi.string().allow("", null),
+    state: Joi.string().allow("", null),
     phone: Joi.string().allow("", null),
     landmark: Joi.string().allow("", null),
     location: locationSchema.optional(),
@@ -120,6 +121,26 @@ export const updateDeliverySettingsSchema = Joi.object({
   customerSurchargeEnabled: Joi.boolean().optional(),
   customerSurchargeAmount: Joi.number().min(0).optional(),
   customerSurchargeReason: Joi.string().allow("", null).max(120).optional(),
+  oddHourSurcharge: Joi.object({
+    enabled: Joi.boolean().optional(),
+    amount: Joi.number().min(0).optional(),
+    windowStart: Joi.string().allow("", null).optional(),
+    windowEnd: Joi.string().allow("", null).optional(),
+    revenueSplit: Joi.object({
+      platform: Joi.number().min(0).max(100).optional(),
+      seller: Joi.number().min(0).max(100).optional(),
+    }).unknown(false).optional(),
+  }).unknown(false).optional(),
+  weatherSurcharge: Joi.object({
+    enabled: Joi.boolean().optional(),
+    amount: Joi.number().min(0).optional(),
+    revenueSplit: Joi.object({
+      platform: Joi.number().min(0).max(100).optional(),
+      seller: Joi.number().min(0).max(100).optional(),
+    }).unknown(false).optional(),
+  }).unknown(false).optional(),
+  platformFee: Joi.number().min(0).optional(),
+  freeDeliveryThreshold: Joi.number().min(0).optional(),
 }).or(
   "deliveryPricingMode",
   "pricingMode",
@@ -137,4 +158,8 @@ export const updateDeliverySettingsSchema = Joi.object({
   "customerSurchargeEnabled",
   "customerSurchargeAmount",
   "customerSurchargeReason",
+  "oddHourSurcharge",
+  "weatherSurcharge",
+  "platformFee",
+  "freeDeliveryThreshold",
 );

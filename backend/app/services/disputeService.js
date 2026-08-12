@@ -3,12 +3,18 @@ import Order from "../models/order.js";
 import Dispute from "../models/dispute.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
+import Setting from "../models/setting.js";
 import { WORKFLOW_STATUS, legacyStatusFromWorkflow } from "../constants/orderWorkflow.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { applyOrderPriceAdjustment } from "./orderPriceAdjustmentService.js";
+import {
+  computeReturnWindowForOrder,
+  resolveCategoryWindowOverrideHours,
+} from "../utils/returnWindow.js";
+import { REFUND_STATUS } from "../constants/finance.js";
 
 function generateDisputeId() {
   return `DSP-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -35,6 +41,40 @@ export async function raiseDispute({ orderId, raisedBy, raisedById, reason, reas
   if (order.returnStatus && order.returnStatus !== "none") {
     const err = new Error("Cannot raise dispute while return is in progress");
     err.statusCode = 409;
+    throw err;
+  }
+
+  // Complaints share the same post-delivery window as returns/refunds (same
+  // admin setting, same category-level override) — see returnWindow.js.
+  const productIds = (order.items || []).map((item) => item.product).filter(Boolean);
+  const [platformSettings, { overrideHours, ineligibleProductName }] = await Promise.all([
+    Setting.findOne({}).select("refundWindowHours").lean(),
+    resolveCategoryWindowOverrideHours(productIds),
+  ]);
+  if (ineligibleProductName) {
+    const err = new Error(
+      `"${ineligibleProductName}" is not eligible for a complaint per category policy.`,
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  const { eligibleAt, windowExpiresAt, eligibleDelay, windowMinutes } = computeReturnWindowForOrder(
+    order,
+    overrideHours ?? platformSettings?.refundWindowHours,
+  );
+  const now = new Date();
+  if (now < eligibleAt) {
+    const err = new Error(
+      `Complaints can be raised after ${eligibleDelay} minutes from delivery. Please try again later.`,
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  if (windowExpiresAt && now > windowExpiresAt) {
+    const err = new Error(
+      `The complaint window has closed. You can only raise a complaint within ${windowMinutes} minutes of delivery.`,
+    );
+    err.statusCode = 400;
     throw err;
   }
 
@@ -68,6 +108,21 @@ export async function raiseDispute({ orderId, raisedBy, raisedById, reason, reas
     ],
   });
 
+  // Reinforce the settlement hold explicitly (on top of the status flip
+  // below, which already removes this order from returnWindowReleaseJob's
+  // `status: "delivered"` query) — belt-and-suspenders so a dispute can
+  // never be silently paid around regardless of which settlement path a
+  // given deployment uses. Left untouched if the payout is already
+  // COMPLETED/NOT_APPLICABLE — a dispute doesn't reverse a finished payout.
+  const payoutStatus = order.settlementStatus?.sellerPayout;
+  const holdUpdate =
+    payoutStatus && !["COMPLETED", "NOT_APPLICABLE"].includes(payoutStatus)
+      ? {
+          "settlementStatus.sellerPayout": "HOLD",
+          "financeFlags.sellerPayoutHeld": true,
+        }
+      : {};
+
   const updated = await Order.findOneAndUpdate(
     { _id: order._id },
     {
@@ -76,6 +131,7 @@ export async function raiseDispute({ orderId, raisedBy, raisedById, reason, reas
         status: "disputed",
         orderStatus: "disputed",
         disputeRef: dispute._id,
+        ...holdUpdate,
       },
     },
     { new: true },
@@ -126,6 +182,7 @@ export async function resolveDispute({
         amount,
         status: "Settled",
         reference: `DSP-${disputeId}`,
+        refundStatus: resolution === "refund" ? REFUND_STATUS.COMPLETED : null,
         meta: { disputeId, resolution },
       });
       emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
@@ -167,6 +224,21 @@ export async function resolveDispute({
     },
   );
 
+  // Release the dispute's settlement hold now that it's resolved — restores
+  // order.status to "delivered" so returnWindowReleaseJob.js (or a manual
+  // admin settlement run) picks this payout back up through its normal
+  // path, same as it does for an ordinary return-window hold. This mirrors
+  // that job's own "auto-release disabled" fallback (flip to PENDING rather
+  // than force-processing it here) — it doesn't try to duplicate payout
+  // processing logic, just un-blocks it.
+  const releaseHold =
+    order.settlementStatus?.sellerPayout === "HOLD"
+      ? {
+          "settlementStatus.sellerPayout": "PENDING",
+          "financeFlags.sellerPayoutHeld": false,
+        }
+      : {};
+
   const updatedOrder = await Order.findOneAndUpdate(
     { _id: order._id },
     {
@@ -174,6 +246,7 @@ export async function resolveDispute({
         workflowStatus: WORKFLOW_STATUS.DELIVERED,
         status: "delivered",
         orderStatus: "delivered",
+        ...releaseHold,
       },
     },
     { new: true },

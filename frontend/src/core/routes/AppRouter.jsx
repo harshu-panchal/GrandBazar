@@ -37,14 +37,17 @@ const OrdersPage = lazy(() => import('../../modules/customer/pages/OrdersPage'))
 const OrderTransactionsPage = lazy(() => import('../../modules/customer/pages/OrderTransactionsPage'));
 const AddressesPage = lazy(() => import('../../modules/customer/pages/AddressesPage'));
 const SettingsPage = lazy(() => import('../../modules/customer/pages/SettingsPage'));
+const NotificationsPage = lazy(() => import('../../modules/customer/pages/NotificationsPage'));
 const SupportPage = lazy(() => import('../../modules/customer/pages/SupportPage'));
 const ChatPage = lazy(() => import('../../modules/customer/pages/ChatPage'));
 const TermsPage = lazy(() => import('../../modules/customer/pages/TermsPage'));
 const PrivacyPage = lazy(() => import('../../modules/customer/pages/PrivacyPage'));
+const ReturnPolicyPage = lazy(() => import('../../modules/customer/pages/ReturnPolicyPage'));
 const AboutPage = lazy(() => import('../../modules/customer/pages/AboutPage'));
 const EditProfilePage = lazy(() => import('../../modules/customer/pages/EditProfilePage'));
 const OrderDetailPage = lazy(() => import('../../modules/customer/pages/OrderDetailPage'));
 const ProductDetailPage = lazy(() => import('../../modules/customer/pages/ProductDetailPage'));
+const CartPage = lazy(() => import('../../modules/customer/pages/CartPage'));
 const CheckoutPage = lazy(() => import('../../modules/customer/pages/CheckoutPage'));
 const PaymentStatusPage = lazy(() => import('../../modules/customer/pages/PaymentStatusPage'));
 const SearchPage = lazy(() => import('../../modules/customer/pages/SearchPage'));
@@ -167,6 +170,9 @@ const router = createBrowserRouter([
                         { path: 'product/:slugAndId', element: <ProductDetailPage /> },
                         { path: 'terms', element: <TermsPage /> },
                         { path: 'privacy', element: <PrivacyPage /> },
+                        { path: 'privacy-policy', element: <PrivacyPage /> },
+                        { path: 'return-policy', element: <ReturnPolicyPage /> },
+                        { path: 'returns', element: <ReturnPolicyPage /> },
                         { path: 'about', element: <AboutPage /> },
                         { path: 'offers', element: <OffersPage /> },
                         { path: 'preorder', element: <PreOrderBrowsePage /> },
@@ -183,8 +189,10 @@ const router = createBrowserRouter([
                         { path: 'transactions', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },
                         { path: 'addresses', element: <ProtectedRoute><AddressesPage /></ProtectedRoute> },
                         { path: 'settings', element: <ProtectedRoute><SettingsPage /></ProtectedRoute> },
+                        { path: 'notifications', element: <ProtectedRoute><NotificationsPage /></ProtectedRoute> },
                         { path: 'support', element: <ProtectedRoute><SupportPage /></ProtectedRoute> },
                         { path: 'chat', element: <ProtectedRoute><ChatPage /></ProtectedRoute> },
+                        { path: 'cart', element: <CartPage /> },
                         { path: 'checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute> },
                         { path: 'payment-status', element: <PaymentStatusPage /> },
                         { path: 'profile', element: <ProtectedRoute><ProfilePage /></ProtectedRoute> },

@@ -33,6 +33,7 @@ const StockManagement = React.lazy(() => import("../pages/StockManagement"));
 const AddProduct = React.lazy(() => import("../pages/AddProduct"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const Earnings = React.lazy(() => import("../pages/Earnings"));
+const Invoices = React.lazy(() => import("../pages/Invoices"));
 const Analytics = React.lazy(() => import("../pages/Analytics"));
 const Transactions = React.lazy(() => import("../pages/Transactions"));
 const DeliveryTracking = React.lazy(() => import("../pages/DeliveryTracking"));
@@ -85,6 +86,12 @@ const navItems = [
     label: "Earnings",
     path: "/seller/earnings",
     icon: HiOutlineCurrencyDollar,
+    permission: "withdrawals",
+  },
+  {
+    label: "GST Invoices",
+    path: "/seller/invoices",
+    icon: HiOutlineCreditCard,
     permission: "withdrawals",
   },
   {
@@ -169,6 +176,7 @@ const SellerRoutes = () => {
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="earnings" element={<Earnings />} />
+            <Route path="invoices" element={<Invoices />} />
           </>
         )}
         <Route path="profile" element={<Profile />} />

@@ -7,7 +7,9 @@ import {
 } from "./shared/sellerAdminUtils.js";
 import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
-import { sendVendorWelcomeEmail } from "../emailService.js";
+import { sendVendorWelcomeEmail, sendSellerInviteEmail } from "../emailService.js";
+import SellerInvite from "../../models/sellerInvite.js";
+import { recordAuditLog } from "../auditTrailService.js";
 
 function buildPendingStoreQuery(normalizedStatus) {
   if (normalizedStatus === "pending") {
@@ -238,6 +240,15 @@ export async function approveSellerApplicationById({
     }
   }
 
+  void recordAuditLog({
+    actorId: reviewedBy,
+    action: "SELLER_APPLICATION_APPROVED",
+    targetType: store ? "Store" : "Seller",
+    targetId: store ? store._id : ownerId,
+    after: { applicationStatus: "approved", businessModel },
+    metadata: { subscriptionPlanId },
+  });
+
   if (store) {
     const owner = store.ownerId || {};
     emitNotificationEvent(NOTIFICATION_EVENTS.STORE_APPLICATION_APPROVED, {
@@ -466,7 +477,8 @@ export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}
     "shopName", "description", "category", "categories", "address", "locality",
     "city", "state", "pincode", "serviceRadius", "packagingCharge",
     "packagingChargeEnabled", "isOpen", "isActive", "accountHolder",
-    "accountNumber", "ifsc", "bankName", "gstNumber", "panNumber", "isVerified"
+    "accountNumber", "ifsc", "bankName", "gstNumber", "panNumber", "isVerified",
+    "banners", "storeVideo", "logoUrl", "excludeFromAlternatives"
   ];
 
   allowed.forEach((key) => {
@@ -545,6 +557,14 @@ export async function rejectSellerApplicationById({
   ).populate("ownerId", "name email phone");
 
   if (store) {
+    void recordAuditLog({
+      actorId: reviewedBy,
+      action: "SELLER_APPLICATION_REJECTED",
+      targetType: "Store",
+      targetId: store._id,
+      after: { applicationStatus: "rejected" },
+      metadata: { reason: reason || "" },
+    });
     const owner = store.ownerId || {};
     emitNotificationEvent(NOTIFICATION_EVENTS.STORE_APPLICATION_REJECTED, {
       sellerId: owner._id || store.ownerId,
@@ -583,6 +603,15 @@ export async function rejectSellerApplicationById({
     return null;
   }
 
+  void recordAuditLog({
+    actorId: reviewedBy,
+    action: "SELLER_APPLICATION_REJECTED",
+    targetType: "Seller",
+    targetId: account._id,
+    after: { applicationStatus: "rejected" },
+    metadata: { reason: reason || "" },
+  });
+
   emitNotificationEvent(NOTIFICATION_EVENTS.SELLER_ACCOUNT_REJECTED, {
     sellerId: account._id,
     reason: reason || "",
@@ -592,4 +621,82 @@ export async function rejectSellerApplicationById({
     ...account.toObject(),
     applicationType: "seller_admin",
   });
+}
+
+/**
+ * Invite a prospective seller to apply — before any Seller account exists.
+ * Distinct from resendSellerCredentialsByAdmin, which re-sends credentials
+ * for an already-created account.
+ */
+export async function inviteSellerByAdmin({ email, phone = "", invitedBy }) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    const err = new Error("Email is required to send an invite");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const existingSeller = await Seller.findOne({ email: normalizedEmail }).select("_id").lean();
+  if (existingSeller) {
+    const err = new Error("A seller account with this email already exists");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const invite = await SellerInvite.create({
+    email: normalizedEmail,
+    phone: String(phone || "").trim(),
+    invitedBy,
+  });
+
+  const baseUrl = process.env.FRONTEND_URL || "https://grandbazar.com";
+  const inviteLink = `${baseUrl.replace(/\/$/, "")}/seller/auth?invite=${invite.token}`;
+
+  const emailResult = await sendSellerInviteEmail({ email: normalizedEmail, inviteLink });
+
+  return { invite: invite.toObject(), emailDispatched: Boolean(emailResult?.success) };
+}
+
+export async function listSellerInvitesByAdmin({ status } = {}) {
+  const query = {};
+  if (status) query.status = status;
+  const now = new Date();
+  // Lazily flip anything past its expiry rather than running a separate job
+  // for what's a low-volume, read-mostly list.
+  await SellerInvite.updateMany(
+    { status: "pending", expiresAt: { $lt: now } },
+    { $set: { status: "expired" } },
+  );
+  return SellerInvite.find(query).sort({ createdAt: -1 }).limit(200).lean();
+}
+
+/**
+ * Validates an invite token for the public signup page (no auth) — returns
+ * just enough to pre-fill the form, never the full invite record.
+ */
+export async function validateSellerInviteToken(token) {
+  const raw = String(token || "").trim();
+  if (!raw) return { valid: false };
+
+  const invite = await SellerInvite.findOne({ token: raw });
+  if (!invite) return { valid: false };
+  if (invite.status === "used") return { valid: false, reason: "already_used" };
+  if (invite.status === "expired" || invite.expiresAt < new Date()) {
+    if (invite.status !== "expired") {
+      await SellerInvite.updateOne({ _id: invite._id }, { $set: { status: "expired" } });
+    }
+    return { valid: false, reason: "expired" };
+  }
+
+  return { valid: true, email: invite.email, phone: invite.phone };
+}
+
+/** Marks an invite used once the invited prospect completes signup. */
+export async function markSellerInviteUsed(token, sellerId) {
+  const raw = String(token || "").trim();
+  if (!raw) return;
+  await SellerInvite.updateOne(
+    { token: raw, status: "pending" },
+    { $set: { status: "used", usedAt: new Date(), resultingSeller: sellerId } },
+  );
 }

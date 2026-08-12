@@ -148,8 +148,10 @@ const settingSchema = new mongoose.Schema(
             default: true,
         },
         /**
-         * Optional customer-only surcharge (e.g. weather).
-         * Charged to the customer and credited to platform — not seller/rider.
+         * Legacy generic customer surcharge — superseded by the distinct
+         * oddHourSurcharge/weatherSurcharge blocks below. Kept only so old
+         * Setting documents that haven't been migrated still resolve to
+         * something sensible (see scripts/migrate_surcharge_split.js).
          */
         customerSurchargeEnabled: {
             type: Boolean,
@@ -164,6 +166,97 @@ const settingSchema = new mongoose.Schema(
             type: String,
             trim: true,
             default: "",
+        },
+        /**
+         * Odd-hour delivery surcharge — auto-applied when an order is placed
+         * inside the configured time window (e.g. 22:00-06:00). Independently
+         * split between platform and seller.
+         */
+        oddHourSurcharge: {
+            enabled: { type: Boolean, default: false },
+            amount: { type: Number, default: 0, min: 0 },
+            windowStart: { type: String, default: "22:00" }, // HH:mm
+            windowEnd: { type: String, default: "06:00" },   // HH:mm
+            revenueSplit: {
+                platform: { type: Number, default: 100, min: 0, max: 100 },
+                seller: { type: Number, default: 0, min: 0, max: 100 },
+            },
+        },
+        /**
+         * Weather surcharge — manually toggled by admin (no automated weather
+         * feed is integrated). Independently split between platform and seller.
+         */
+        weatherSurcharge: {
+            enabled: { type: Boolean, default: false },
+            amount: { type: Number, default: 0, min: 0 },
+            activatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+            activatedAt: { type: Date, default: null },
+            revenueSplit: {
+                platform: { type: Number, default: 100, min: 0, max: 100 },
+                seller: { type: Number, default: 0, min: 0, max: 100 },
+            },
+        },
+        /** Flat fee added to every order on top of the resolved customer surcharge. */
+        platformFee: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        /** Orders with a subtotal at/above this amount get free delivery. 0 = disabled. */
+        freeDeliveryThreshold: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        bulkOrderQtyThreshold: {
+            type: Number,
+            default: 20,
+            min: 1,
+        },
+        bulkOrderValueThreshold: {
+            type: Number,
+            default: 15000,
+            min: 0,
+        },
+        bulkOrderCommissionRate: {
+            type: Number,
+            default: 0, // 0 = use standard resolved commission, no bulk override
+            min: 0,
+        },
+        freeTierProductLimit: {
+            type: Number,
+            default: 30,
+            min: 1,
+        },
+        overLimitCommissionSurchargePercent: {
+            type: Number,
+            default: 5,
+            min: 0,
+        },
+        // Controls what happens once a commission-model seller publishes past
+        // freeTierProductLimit: "soft" (default) keeps publishing allowed and
+        // only applies the surcharge above; "hard" blocks creating further
+        // products until the seller picks a subscription plan. Admin-set —
+        // there's no code-level "right answer" here.
+        freeTierEnforcementMode: {
+            type: String,
+            enum: ["soft", "hard"],
+            default: "soft",
+        },
+        sellerSettlementModuleEnabled: {
+            type: Boolean,
+            default: true,
+        },
+        replacementPriceTolerancePercent: {
+            type: Number,
+            default: 0, // 0 = replacement must match original item price exactly
+            min: 0,
+        },
+        alternativesDisplayLimit: {
+            type: Number,
+            default: 6,
+            min: 1,
+            max: 20,
         },
         lowStockAlertsEnabled: {
             type: Boolean,
@@ -205,6 +298,15 @@ const settingSchema = new mongoose.Schema(
             type: Number,
             default: 24,
             min: 0,
+        },
+
+        // Delivery-time estimate shown on store cards / store detail / checkout —
+        // one computed value (see deliveryEtaService.js) instead of independent
+        // hardcoded strings scattered across frontend components.
+        deliveryEta: {
+            basePrepTimeMinutes: { type: Number, default: 8, min: 0 },
+            minutesPerKm: { type: Number, default: 4, min: 0 },
+            rangeSpreadMinutes: { type: Number, default: 7, min: 0 },
         },
     },
     {

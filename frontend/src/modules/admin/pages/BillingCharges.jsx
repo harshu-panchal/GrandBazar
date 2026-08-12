@@ -11,6 +11,7 @@ import {
     MapPin,
     History,
     CloudRain,
+    Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -30,6 +31,14 @@ const BillingCharges = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [deliveryMode, setDeliveryMode] = useState('distance'); // 'fixed' or 'distance'
     const [returnDeliveryCommission, setReturnDeliveryCommission] = useState(0);
+    const [freeTierProductLimit, setFreeTierProductLimit] = useState(30);
+    const [overLimitCommissionSurchargePercent, setOverLimitCommissionSurchargePercent] = useState(5);
+    const [freeTierEnforcementMode, setFreeTierEnforcementMode] = useState('soft');
+    const [replacementPriceTolerancePercent, setReplacementPriceTolerancePercent] = useState(0);
+    const [alternativesDisplayLimit, setAlternativesDisplayLimit] = useState(6);
+    const [bulkOrderQtyThreshold, setBulkOrderQtyThreshold] = useState(20);
+    const [bulkOrderValueThreshold, setBulkOrderValueThreshold] = useState(15000);
+    const [bulkOrderCommissionRate, setBulkOrderCommissionRate] = useState(0);
     const [reasonPreset, setReasonPreset] = useState(OTHER_REASON_PRESET);
     const reasonInputRef = useRef(null);
 
@@ -48,6 +57,14 @@ const BillingCharges = () => {
         customerSurchargeEnabled: false,
         customerSurchargeAmount: 0,
         customerSurchargeReason: '',
+        oddHourSurchargeEnabled: false,
+        oddHourSurchargeAmount: 0,
+        oddHourWindowStart: '22:00',
+        oddHourWindowEnd: '06:00',
+        oddHourSellerSplitPercent: 0,
+        weatherSurchargeEnabled: false,
+        weatherSurchargeAmount: 0,
+        weatherSellerSplitPercent: 0,
     });
     const [cityCommissions, setCityCommissions] = useState([]);
     const [cityForm, setCityForm] = useState({
@@ -76,6 +93,14 @@ const BillingCharges = () => {
 
                 if (platformRes.data?.success && platformRes.data.result) {
                     setReturnDeliveryCommission(platformRes.data.result.returnDeliveryCommission ?? 0);
+                    setFreeTierProductLimit(platformRes.data.result.freeTierProductLimit ?? 30);
+                    setOverLimitCommissionSurchargePercent(platformRes.data.result.overLimitCommissionSurchargePercent ?? 5);
+                    setFreeTierEnforcementMode(platformRes.data.result.freeTierEnforcementMode === 'hard' ? 'hard' : 'soft');
+                    setReplacementPriceTolerancePercent(platformRes.data.result.replacementPriceTolerancePercent ?? 0);
+                    setAlternativesDisplayLimit(platformRes.data.result.alternativesDisplayLimit ?? 6);
+                    setBulkOrderQtyThreshold(platformRes.data.result.bulkOrderQtyThreshold ?? 20);
+                    setBulkOrderValueThreshold(platformRes.data.result.bulkOrderValueThreshold ?? 15000);
+                    setBulkOrderCommissionRate(platformRes.data.result.bulkOrderCommissionRate ?? 0);
                 }
 
                 if (deliveryRes.data?.success && deliveryRes.data.result) {
@@ -89,6 +114,8 @@ const BillingCharges = () => {
                     );
                     setConfig((prev) => ({
                         ...prev,
+                        platformFee: s.platformFee ?? prev.platformFee,
+                        freeDeliveryThreshold: s.freeDeliveryThreshold ?? prev.freeDeliveryThreshold,
                         baseCharge: s.customerBaseDeliveryFee ?? s.baseDeliveryCharge ?? prev.baseCharge,
                         riderBasePayout: s.riderBasePayout ?? s.customerBaseDeliveryFee ?? prev.riderBasePayout,
                         baseDistance: s.baseDistanceCapacityKm ?? prev.baseDistance,
@@ -101,6 +128,14 @@ const BillingCharges = () => {
                         customerSurchargeEnabled: Boolean(s.customerSurchargeEnabled),
                         customerSurchargeAmount: s.customerSurchargeAmount ?? 0,
                         customerSurchargeReason: loadedReason,
+                        oddHourSurchargeEnabled: Boolean(s.oddHourSurcharge?.enabled),
+                        oddHourSurchargeAmount: s.oddHourSurcharge?.amount ?? 0,
+                        oddHourWindowStart: s.oddHourSurcharge?.windowStart || '22:00',
+                        oddHourWindowEnd: s.oddHourSurcharge?.windowEnd || '06:00',
+                        oddHourSellerSplitPercent: s.oddHourSurcharge?.revenueSplit?.seller ?? 0,
+                        weatherSurchargeEnabled: Boolean(s.weatherSurcharge?.enabled),
+                        weatherSurchargeAmount: s.weatherSurcharge?.amount ?? 0,
+                        weatherSellerSplitPercent: s.weatherSurcharge?.revenueSplit?.seller ?? 0,
                     }));
                 }
                 try {
@@ -156,9 +191,19 @@ const BillingCharges = () => {
             await Promise.all([
                 adminApi.updatePlatformSettings({
                     returnDeliveryCommission,
+                    freeTierProductLimit: Number(freeTierProductLimit) || 0,
+                    overLimitCommissionSurchargePercent: Number(overLimitCommissionSurchargePercent) || 0,
+                    freeTierEnforcementMode: freeTierEnforcementMode === 'hard' ? 'hard' : 'soft',
+                    replacementPriceTolerancePercent: Number(replacementPriceTolerancePercent) || 0,
+                    alternativesDisplayLimit: Number(alternativesDisplayLimit) || 6,
+                    bulkOrderQtyThreshold: Number(bulkOrderQtyThreshold) || 0,
+                    bulkOrderValueThreshold: Number(bulkOrderValueThreshold) || 0,
+                    bulkOrderCommissionRate: Number(bulkOrderCommissionRate) || 0,
                 }),
                 adminApi.updateDeliveryFinanceSettings({
                     deliveryPricingMode: deliveryMode === 'fixed' ? 'fixed_price' : 'distance_based',
+                    platformFee: Number(config.platformFee) || 0,
+                    freeDeliveryThreshold: Number(config.freeDeliveryThreshold) || 0,
                     customerBaseDeliveryFee: config.baseCharge,
                     riderBasePayout: config.riderBasePayout,
                     baseDeliveryCharge: config.baseCharge,
@@ -173,6 +218,24 @@ const BillingCharges = () => {
                     customerSurchargeEnabled: Boolean(config.customerSurchargeEnabled),
                     customerSurchargeAmount: Number(config.customerSurchargeAmount) || 0,
                     customerSurchargeReason: String(config.customerSurchargeReason || '').trim(),
+                    oddHourSurcharge: {
+                        enabled: Boolean(config.oddHourSurchargeEnabled),
+                        amount: Number(config.oddHourSurchargeAmount) || 0,
+                        windowStart: config.oddHourWindowStart,
+                        windowEnd: config.oddHourWindowEnd,
+                        revenueSplit: {
+                            seller: Number(config.oddHourSellerSplitPercent) || 0,
+                            platform: 100 - (Number(config.oddHourSellerSplitPercent) || 0),
+                        },
+                    },
+                    weatherSurcharge: {
+                        enabled: Boolean(config.weatherSurchargeEnabled),
+                        amount: Number(config.weatherSurchargeAmount) || 0,
+                        revenueSplit: {
+                            seller: Number(config.weatherSellerSplitPercent) || 0,
+                            platform: 100 - (Number(config.weatherSellerSplitPercent) || 0),
+                        },
+                    },
                 }),
             ]);
 
@@ -410,6 +473,166 @@ const BillingCharges = () => {
                         </div>
                     </Card>
 
+                    {/* Odd-hour delivery surcharge — auto-applied in a time window */}
+                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    <Clock className="h-4 w-4 text-indigo-500" />
+                                    Odd-Hour Delivery Charge
+                                </h3>
+                                <p className="text-[11px] font-medium text-slate-500 mt-1">
+                                    Automatically applied to orders placed inside the time window below. Separate from the weather surcharge.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        oddHourSurchargeEnabled: !prev.oddHourSurchargeEnabled,
+                                    }))
+                                }
+                                className={cn(
+                                    "relative h-8 w-14 rounded-full transition-colors shrink-0",
+                                    config.oddHourSurchargeEnabled ? "bg-indigo-500" : "bg-slate-200",
+                                )}
+                                aria-label="Toggle odd-hour surcharge"
+                            >
+                                <span
+                                    className={cn(
+                                        "absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform",
+                                        config.oddHourSurchargeEnabled && "translate-x-6",
+                                    )}
+                                />
+                            </button>
+                        </div>
+                        <div className={cn("p-8 grid grid-cols-1 md:grid-cols-2 gap-8", !config.oddHourSurchargeEnabled && "opacity-50 pointer-events-none")}>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Charge Amount (₹)
+                                </label>
+                                <div className="relative group">
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300">₹</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={config.oddHourSurchargeAmount}
+                                        onChange={(e) => handleInputChange('oddHourSurchargeAmount', e.target.value)}
+                                        className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Seller Revenue Share (%)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={config.oddHourSellerSplitPercent}
+                                    onChange={(e) => handleInputChange('oddHourSellerSplitPercent', e.target.value)}
+                                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                                />
+                                <p className="text-[10px] font-bold text-slate-400 italic">
+                                    Remaining {100 - (Number(config.oddHourSellerSplitPercent) || 0)}% goes to the platform.
+                                </p>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Window Start
+                                </label>
+                                <input
+                                    type="time"
+                                    value={config.oddHourWindowStart}
+                                    onChange={(e) => setConfig((prev) => ({ ...prev, oddHourWindowStart: e.target.value }))}
+                                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                                />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Window End
+                                </label>
+                                <input
+                                    type="time"
+                                    value={config.oddHourWindowEnd}
+                                    onChange={(e) => setConfig((prev) => ({ ...prev, oddHourWindowEnd: e.target.value }))}
+                                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                                />
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Weather surcharge — manual toggle, independent revenue split */}
+                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    <CloudRain className="h-4 w-4 text-amber-500" />
+                                    Weather Surcharge
+                                </h3>
+                                <p className="text-[11px] font-medium text-slate-500 mt-1">
+                                    Manually toggled during bad weather. Independent of the odd-hour charge above.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        weatherSurchargeEnabled: !prev.weatherSurchargeEnabled,
+                                    }))
+                                }
+                                className={cn(
+                                    "relative h-8 w-14 rounded-full transition-colors shrink-0",
+                                    config.weatherSurchargeEnabled ? "bg-amber-500" : "bg-slate-200",
+                                )}
+                                aria-label="Toggle weather surcharge"
+                            >
+                                <span
+                                    className={cn(
+                                        "absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform",
+                                        config.weatherSurchargeEnabled && "translate-x-6",
+                                    )}
+                                />
+                            </button>
+                        </div>
+                        <div className={cn("p-8 grid grid-cols-1 md:grid-cols-2 gap-8", !config.weatherSurchargeEnabled && "opacity-50 pointer-events-none")}>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Charge Amount (₹)
+                                </label>
+                                <div className="relative group">
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300">₹</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={config.weatherSurchargeAmount}
+                                        onChange={(e) => handleInputChange('weatherSurchargeAmount', e.target.value)}
+                                        className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-amber-500/10 transition-all"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Seller Revenue Share (%)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={config.weatherSellerSplitPercent}
+                                    onChange={(e) => handleInputChange('weatherSellerSplitPercent', e.target.value)}
+                                    className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-base font-black text-slate-900 outline-none focus:ring-2 focus:ring-amber-500/10 transition-all"
+                                />
+                                <p className="text-[10px] font-bold text-slate-400 italic">
+                                    Remaining {100 - (Number(config.weatherSellerSplitPercent) || 0)}% goes to the platform.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+
                     {/* Delivery Fee Settings */}
                     <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
                         <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -533,6 +756,151 @@ const BillingCharges = () => {
                                     </div>
                                     <p className="text-[10px] font-bold text-slate-400">
                                         Flat amount paid to delivery partner for each approved return pickup (deducted from seller earnings).
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t border-dashed border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Free-Tier Product Limit
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={freeTierProductLimit}
+                                        onChange={(e) => setFreeTierProductLimit(Number(e.target.value) || 0)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        Commission-model sellers can publish up to this many products before the limit applies. Subscription-tier sellers are governed by their plan instead.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Once Limit Is Reached
+                                    </label>
+                                    <div className="flex gap-2">
+                                        {[
+                                            { value: 'soft', label: 'Surcharge only' },
+                                            { value: 'hard', label: 'Block publishing' },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setFreeTierEnforcementMode(opt.value)}
+                                                className={`flex-1 px-3 py-4 rounded-2xl text-xs font-black transition-all ${
+                                                    freeTierEnforcementMode === opt.value
+                                                        ? 'bg-brand-600 text-white'
+                                                        : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        "Surcharge only" always allows publishing (a nudge). "Block publishing" stops new products until the seller picks a subscription plan.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Over-Limit Commission Surcharge (%)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={overLimitCommissionSurchargePercent}
+                                        onChange={(e) => setOverLimitCommissionSurchargePercent(Number(e.target.value) || 0)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        Added on top of the normally-resolved commission rate once a seller exceeds the free-tier limit (applies in "Surcharge only" mode).
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t border-dashed border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Bulk Order Qty Threshold
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={bulkOrderQtyThreshold}
+                                        onChange={(e) => setBulkOrderQtyThreshold(Number(e.target.value) || 0)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        A single line item with quantity at or above this is flagged as a bulk order.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Bulk Order Value Threshold (₹)
+                                    </label>
+                                    <div className="relative group">
+                                        <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-300">₹</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={bulkOrderValueThreshold}
+                                            onChange={(e) => setBulkOrderValueThreshold(Number(e.target.value) || 0)}
+                                            className="w-full pl-10 pr-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        Or an order subtotal at or above this amount — whichever triggers first.
+                                    </p>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Bulk Order Commission Rate (%)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={bulkOrderCommissionRate}
+                                        onChange={(e) => setBulkOrderCommissionRate(Number(e.target.value) || 0)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        0 = use the normally-resolved commission rate for bulk orders too. Set a value to override it specifically for bulk-flagged line items.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t border-dashed border-slate-100">
+                                <div className="space-y-3 max-w-md">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Replacement Price Tolerance (%)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={replacementPriceTolerancePercent}
+                                        onChange={(e) => setReplacementPriceTolerancePercent(Number(e.target.value) || 0)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        0 = a seller-proposed replacement item must match the original item's price exactly. Raise this to allow a small markup before the request is rejected — pricier substitutes should go through a price adjustment request instead.
+                                    </p>
+                                </div>
+                                <div className="space-y-3 max-w-md mt-6">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Offline-Store Alternatives Shown
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        value={alternativesDisplayLimit}
+                                        onChange={(e) => setAlternativesDisplayLimit(Number(e.target.value) || 6)}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-[10px] font-bold text-slate-400">
+                                        How many nearby stores to suggest to a customer when the store they opened is currently closed. Individual stores can be excluded from this list from their Shop Setup page.
                                     </p>
                                 </div>
                             </div>

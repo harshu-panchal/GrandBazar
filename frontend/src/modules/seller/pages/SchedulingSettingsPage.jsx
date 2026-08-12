@@ -11,7 +11,7 @@ const DEFAULT_WINDOWS = [
 export default function SchedulingSettingsPage() {
   const [settings, setSettings] = useState({
     enabled: false,
-    maxDaysAhead: 7,
+    maxDaysAhead: 30,
     rescheduleCutoffDays: 1,
     selfLogistics: false,
     deliveryWindows: DEFAULT_WINDOWS,

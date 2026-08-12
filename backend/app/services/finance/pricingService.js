@@ -16,6 +16,7 @@ import {
   DELIVERY_PRICING_MODE,
   HANDLING_FEE_STRATEGY,
   HANDLING_FEE_TYPE,
+  TAX_JURISDICTION,
 } from "../../constants/finance.js";
 import {
   addMoney,
@@ -315,6 +316,84 @@ export function resolveCategoryHierarchyPacking({
     }
   }
   return { category: null, level: null, categoryId: null };
+}
+
+/**
+ * Resolve the GST slab (%) for a line item: product-level override wins,
+ * otherwise the most specific category in the hierarchy (subcategory ->
+ * category -> header) supplies the rate. Unlike commission/handling there is
+ * no "off" state — 0% (exempt) is itself a valid real rate.
+ */
+export function resolveGstSlabForLineItem({
+  productGstSlabOverride = null,
+  headerCategory = null,
+  level2Category = null,
+  subcategory = null,
+} = {}) {
+  if (productGstSlabOverride !== null && productGstSlabOverride !== undefined) {
+    const override = Number(productGstSlabOverride);
+    if (Number.isFinite(override)) {
+      return { gstSlab: override, source: "product" };
+    }
+  }
+  const chain = [
+    { level: "subcategory", category: subcategory },
+    { level: "category", category: level2Category },
+    { level: "header", category: headerCategory },
+  ];
+  for (const entry of chain) {
+    if (entry.category && entry.category.gstSlab !== undefined && entry.category.gstSlab !== null) {
+      return { gstSlab: Number(entry.category.gstSlab) || 0, source: entry.level };
+    }
+  }
+  return { gstSlab: 0, source: "default" };
+}
+
+/**
+ * CGST+SGST (same state) vs IGST (different states), per Indian GST rules.
+ */
+export function resolveTaxJurisdiction(sellerState = "", customerState = "") {
+  const normalize = (s) => String(s || "").trim().toLowerCase();
+  const seller = normalize(sellerState);
+  const customer = normalize(customerState);
+  if (!seller || !customer) {
+    // Can't determine -> default to intra-state (CGST+SGST) so tax is never silently dropped.
+    return TAX_JURISDICTION.INTRA_STATE;
+  }
+  return seller === customer ? TAX_JURISDICTION.INTRA_STATE : TAX_JURISDICTION.INTER_STATE;
+}
+
+export function calculateLineItemGst(itemSubtotal, gstSlab, jurisdiction) {
+  const totalGst = percentOf(itemSubtotal, gstSlab);
+  if (jurisdiction === TAX_JURISDICTION.INTER_STATE) {
+    return { cgst: 0, sgst: 0, igst: totalGst, totalGst };
+  }
+  const half = roundCurrency(totalGst / 2);
+  const otherHalf = roundCurrency(totalGst - half);
+  return { cgst: half, sgst: otherHalf, igst: 0, totalGst };
+}
+
+/**
+ * True when `atDate`'s local time-of-day falls inside [windowStart, windowEnd),
+ * both "HH:mm" strings. Handles windows that wrap past midnight (e.g. 22:00-06:00).
+ */
+export function isWithinOddHourWindow(atDate, windowStart = "22:00", windowEnd = "06:00") {
+  if (!windowStart || !windowEnd) return false;
+  const date = atDate instanceof Date ? atDate : new Date(atDate);
+  if (Number.isNaN(date.getTime())) return false;
+  const minutesNow = date.getHours() * 60 + date.getMinutes();
+  const toMinutes = (hhmm) => {
+    const [h, m] = String(hhmm).split(":").map((n) => Number(n) || 0);
+    return h * 60 + m;
+  };
+  const start = toMinutes(windowStart);
+  const end = toMinutes(windowEnd);
+  if (start === end) return false;
+  if (start < end) {
+    return minutesNow >= start && minutesNow < end;
+  }
+  // Wraps past midnight, e.g. 22:00 -> 06:00
+  return minutesNow >= start || minutesNow < end;
 }
 
 function attachResolvedFeeCategories(cartItems = [], categoryById = new Map()) {
@@ -652,7 +731,7 @@ export async function hydrateOrderItems(
 
   const productQuery = Product.find({ _id: { $in: productIds } })
     .select(
-      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule gstSlabOverride isPreorderEligible",
     )
     .lean();
   if (session) productQuery.session(session);
@@ -720,13 +799,26 @@ export async function hydrateOrderItems(
       sellerId: String(product.sellerId),
       variantSku: rawVariantSku || "",
       variantName: resolvedVariant ? String(resolvedVariant?.name || "").trim() : "",
-      applyCommission: product.applyCommission === true,
-      adminCommissionType: product.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
-      adminCommissionValue: Number(
-        product.adminCommissionValue ?? product.adminCommission ?? 0,
-      ),
+      applyCommission: resolvedVariant?.applyCommission === true
+        ? true
+        : product.applyCommission === true,
+      adminCommissionType:
+        resolvedVariant?.applyCommission === true
+          ? resolvedVariant.adminCommissionType || COMMISSION_TYPE.PERCENTAGE
+          : product.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue:
+        resolvedVariant?.applyCommission === true
+          ? Number(resolvedVariant.adminCommissionValue ?? 0)
+          : Number(product.adminCommissionValue ?? product.adminCommission ?? 0),
       adminCommissionFixedRule:
-        product.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+        resolvedVariant?.applyCommission === true
+          ? resolvedVariant.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY
+          : product.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+      commissionSourceIsVariant: resolvedVariant?.applyCommission === true,
+      gstSlabOverride:
+        product.gstSlabOverride === null || product.gstSlabOverride === undefined
+          ? null
+          : Number(product.gstSlabOverride),
       isAddonLine,
       parentProductId: parentProductId || null,
     };
@@ -739,6 +831,8 @@ export async function generateOrderPaymentBreakdown({
   distanceKm = 0,
   discountTotal = 0,
   taxTotal = 0,
+  customerState = "",
+  orderPlacedAt = null,
   tipTotal = 0,
   deliverySettings,
   handlingFeeStrategy,
@@ -761,7 +855,7 @@ export async function generateOrderPaymentBreakdown({
   const storeId = sellerIds[0];
   const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
   const storePackagingQuery = Store.findById(storeId)
-    .select("packagingCharge packagingChargeEnabled shopName city applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
+    .select("packagingCharge packagingChargeEnabled shopName city state applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
     .lean();
   if (session) storePackagingQuery.session(session);
   const storeDoc = await storePackagingQuery;
@@ -796,6 +890,15 @@ export async function generateOrderPaymentBreakdown({
     commissionConfig: { scope: "category" },
   };
 
+  // Free-tier product cap (checklist 92-94): commission-model sellers past
+  // the configured published-product limit pay a commission surcharge —
+  // a soft nudge toward subscribing, not a publish block.
+  let freeTierStatus = { applicable: false, isOverLimit: false, surchargePercent: 0 };
+  if (effectiveOwner.businessModel === "commission") {
+    const { resolveFreeTierStatus } = await import("../subscriptionService.js");
+    freeTierStatus = await resolveFreeTierStatus(storeId);
+  }
+
   const categoryIds = Array.from(
     new Set(
       normalizedItems
@@ -810,7 +913,7 @@ export async function generateOrderPaymentBreakdown({
 
   const categoryQuery = Category.find({ _id: { $in: categoryIds } })
     .select(
-      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue packingFees packingFeeType packingFeeValue",
+      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule handlingFees handlingFeeType handlingFeeValue packingFees packingFeeType packingFeeValue gstSlab returnEligible refundWindowHours restockFeePercent",
     )
     .lean();
   if (session) categoryQuery.session(session);
@@ -841,8 +944,28 @@ export async function generateOrderPaymentBreakdown({
   let productSubtotal = 0;
   let sellerPayoutTotal = 0;
   let adminProductCommissionTotal = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+  let igstTotal = 0;
 
-  const lineItems = normalizedItems.map((item) => {
+  const taxJurisdiction = resolveTaxJurisdiction(storeDoc?.state, customerState);
+
+  // Bulk order detection (checklist 335-339): a pre-pass subtotal, since
+  // the value-threshold check needs the whole order's total, which isn't
+  // known until every line is processed otherwise.
+  const preOrderSubtotal = normalizedItems.reduce(
+    (sum, item) => addMoney(sum, roundCurrency(normalizeLinePrice(item.price) * normalizeLineQuantity(item.quantity))),
+    0,
+  );
+  const bulkOrderMeetsValueThreshold =
+    Number(effectiveSettings.bulkOrderValueThreshold || 0) > 0 &&
+    preOrderSubtotal >= Number(effectiveSettings.bulkOrderValueThreshold);
+  const bulkOrderQtyThreshold = Number(effectiveSettings.bulkOrderQtyThreshold || 0);
+  const bulkOrderCommissionRate = Number(effectiveSettings.bulkOrderCommissionRate || 0);
+  let isBulkOrder = bulkOrderMeetsValueThreshold;
+  const bulkOrderLineIndexes = [];
+
+  const lineItems = normalizedItems.map((item, itemIndex) => {
     const headerCategory = categoryById.get(String(item.headerCategoryId));
     const level2Category = item.categoryId
       ? categoryById.get(String(item.categoryId))
@@ -905,11 +1028,37 @@ export async function generateOrderPaymentBreakdown({
             fallbackTrail: [{ level: "legacy", reason: "feature_flag_disabled" }],
           };
         })();
-    const effectiveConfig = resolved.category || {
+    const baseConfig = resolved.category || {
       adminCommissionType: COMMISSION_TYPE.PERCENTAGE,
       adminCommissionValue: 0,
       adminCommissionFixedRule: COMMISSION_FIXED_RULE.PER_QTY,
     };
+
+    const lineMeetsQtyThreshold =
+      bulkOrderQtyThreshold > 0 && normalizeLineQuantity(item.quantity) >= bulkOrderQtyThreshold;
+    const lineIsBulk = bulkOrderMeetsValueThreshold || lineMeetsQtyThreshold;
+    if (lineIsBulk) {
+      isBulkOrder = true;
+      bulkOrderLineIndexes.push(itemIndex);
+    }
+    const bulkOverrideApplies =
+      lineIsBulk && bulkOrderCommissionRate > 0 && baseConfig.adminCommissionType === COMMISSION_TYPE.PERCENTAGE;
+
+    // Free-tier surcharge only makes sense as a percentage bump; fixed-amount
+    // commission configs are left alone rather than guessing an equivalent.
+    const applyFreeTierSurcharge =
+      freeTierStatus.isOverLimit && baseConfig.adminCommissionType === COMMISSION_TYPE.PERCENTAGE;
+
+    let effectiveConfig = baseConfig;
+    if (bulkOverrideApplies || applyFreeTierSurcharge) {
+      const startingValue = bulkOverrideApplies
+        ? bulkOrderCommissionRate
+        : Number(baseConfig.adminCommissionValue || 0);
+      effectiveConfig = {
+        ...baseConfig,
+        adminCommissionValue: startingValue + (applyFreeTierSurcharge ? freeTierStatus.surchargePercent : 0),
+      };
+    }
     const commission = calculateCategoryCommission(item, effectiveConfig);
     productSubtotal = addMoney(productSubtotal, commission.itemSubtotal);
     sellerPayoutTotal = addMoney(sellerPayoutTotal, commission.sellerPayout);
@@ -917,6 +1066,21 @@ export async function generateOrderPaymentBreakdown({
       adminProductCommissionTotal,
       commission.adminCommission,
     );
+
+    const gstResolution = resolveGstSlabForLineItem({
+      productGstSlabOverride: item.gstSlabOverride,
+      headerCategory,
+      level2Category,
+      subcategory,
+    });
+    const lineGst = calculateLineItemGst(
+      commission.itemSubtotal,
+      gstResolution.gstSlab,
+      taxJurisdiction,
+    );
+    cgstTotal = addMoney(cgstTotal, lineGst.cgst);
+    sgstTotal = addMoney(sgstTotal, lineGst.sgst);
+    igstTotal = addMoney(igstTotal, lineGst.igst);
 
     return {
       productId: item.productId,
@@ -936,16 +1100,34 @@ export async function generateOrderPaymentBreakdown({
       appliedCommissionType: commission.appliedCommissionType,
       appliedCommissionValue: commission.appliedCommissionValue,
       appliedCommissionFixedRule: commission.appliedFixedRule,
-      appliedCommissionSource: resolved.level || "none",
-      appliedCommissionSourceLevel: resolved.level || "none",
+      appliedCommissionSource:
+        item.commissionSourceIsVariant && resolved.level === "product" ? "variant" : (resolved.level || "none"),
+      appliedCommissionSourceLevel:
+        item.commissionSourceIsVariant && resolved.level === "product" ? "variant" : (resolved.level || "none"),
       appliedCommissionSourceId: resolved.level === "city"
         ? resolved.cityKey
         : (resolved.categoryId || null),
       commissionFallbackTrail: resolved.fallbackTrail || [],
       isAddonLine: item.isAddonLine === true,
       parentProductId: item.parentProductId || null,
+      gstSlab: gstResolution.gstSlab,
+      gstSlabSource: gstResolution.source,
+      cgst: lineGst.cgst,
+      sgst: lineGst.sgst,
+      igst: lineGst.igst,
+      lineTax: lineGst.totalGst,
+      freeTierSurchargeApplied: applyFreeTierSurcharge,
+      freeTierSurchargePercent: applyFreeTierSurcharge ? freeTierStatus.surchargePercent : 0,
+      isBulkLine: lineIsBulk,
+      bulkCommissionRateApplied: bulkOverrideApplies ? bulkOrderCommissionRate : null,
     };
   });
+
+  const bulkOrderReason = bulkOrderMeetsValueThreshold
+    ? "value_threshold"
+    : bulkOrderLineIndexes.length > 0
+      ? "qty_threshold"
+      : null;
 
   const handling = calculateHandlingFee(normalizedItems, {
     handlingFeeStrategy: effectiveHandlingStrategy,
@@ -969,9 +1151,30 @@ export async function generateOrderPaymentBreakdown({
     : calculateRiderPayout(distanceKm, effectiveSettings);
 
   const normalizedDiscount = roundCurrency(discountTotal || 0);
-  const normalizedTax = roundCurrency(taxTotal || 0);
+  // Real GST computed per line item above is authoritative; the legacy `taxTotal`
+  // param is kept only as a manual override escape hatch for callers that don't
+  // go through category/product GST slabs (none exist in-repo today).
+  const computedTax = addMoney(cgstTotal, sgstTotal, igstTotal);
+  const normalizedTax = taxTotal ? roundCurrency(taxTotal) : computedTax;
   const normalizedTip = roundCurrency(tipTotal || 0);
 
+  const oddHourWindow = effectiveSettings.oddHourSurcharge || {};
+  const oddHourActive =
+    includeCustomerSurcharge &&
+    oddHourWindow.enabled &&
+    Number(oddHourWindow.amount || 0) > 0 &&
+    isWithinOddHourWindow(orderPlacedAt || new Date(), oddHourWindow.windowStart, oddHourWindow.windowEnd);
+  const oddHourSurchargeAmount = oddHourActive ? roundCurrency(oddHourWindow.amount) : 0;
+
+  const weatherSurchargeConfig = effectiveSettings.weatherSurcharge || {};
+  const weatherSurchargeAmount =
+    includeCustomerSurcharge &&
+    weatherSurchargeConfig.enabled &&
+    Number(weatherSurchargeConfig.amount || 0) > 0
+      ? roundCurrency(weatherSurchargeConfig.amount)
+      : 0;
+
+  // Legacy single generic surcharge — kept for settings that haven't migrated yet.
   const customerSurchargeAmount =
     includeCustomerSurcharge &&
     effectiveSettings.customerSurchargeEnabled &&
@@ -983,6 +1186,12 @@ export async function generateOrderPaymentBreakdown({
       ? String(effectiveSettings.customerSurchargeReason || "Additional charge").trim()
       : "";
 
+  const totalSurcharges = addMoney(
+    oddHourSurchargeAmount,
+    weatherSurchargeAmount,
+    customerSurchargeAmount,
+  );
+
   const grandTotal = roundCurrency(
     productSubtotal +
       delivery.deliveryFeeCharged +
@@ -991,7 +1200,7 @@ export async function generateOrderPaymentBreakdown({
       normalizedDiscount +
       normalizedTax +
       normalizedTip +
-      customerSurchargeAmount +
+      totalSurcharges +
       packagingChargeAmount,
   );
 
@@ -1006,6 +1215,18 @@ export async function generateOrderPaymentBreakdown({
   // Packaging charge is paid to the seller
   sellerPayoutTotal = addMoney(sellerPayoutTotal, packagingChargeAmount);
 
+  // Odd-hour / weather surcharges use a configurable platform/seller revenue
+  // split (default 100% platform, matching the legacy single-surcharge behavior).
+  const oddHourSellerShare = oddHourActive
+    ? percentOf(oddHourSurchargeAmount, Number(oddHourWindow.revenueSplit?.seller ?? 0))
+    : 0;
+  const weatherSellerShare = weatherSurchargeAmount > 0
+    ? percentOf(weatherSurchargeAmount, Number(weatherSurchargeConfig.revenueSplit?.seller ?? 0))
+    : 0;
+  const surchargeSellerShare = addMoney(oddHourSellerShare, weatherSellerShare);
+  const surchargePlatformShare = roundCurrency(totalSurcharges - surchargeSellerShare);
+  sellerPayoutTotal = addMoney(sellerPayoutTotal, surchargeSellerShare);
+
   // Category packing + handling go to platform (same as logistics margin)
   const platformLogisticsMargin = roundCurrency(
     delivery.deliveryFeeCharged +
@@ -1013,9 +1234,9 @@ export async function generateOrderPaymentBreakdown({
       packing.packingFeeCharged -
       (rider.riderPayoutBase + rider.riderPayoutDistance + rider.riderPayoutBonus),
   );
-  // Customer surcharge goes to platform only — not seller or rider
+  // Surcharges go to platform except for whatever share is configured to the seller.
   const platformTotalEarning = roundCurrency(
-    adminProductCommissionTotal + platformLogisticsMargin + customerSurchargeAmount,
+    adminProductCommissionTotal + platformLogisticsMargin + surchargePlatformShare,
   );
   const rolloutVerification = {
     hierarchicalCommissionEnabled: ENABLE_HIERARCHICAL_COMMISSION,
@@ -1055,7 +1276,12 @@ export async function generateOrderPaymentBreakdown({
     packingCategoryUsed: packing.packingCategoryUsed,
     sellerBusinessModel: effectiveOwner.businessModel,
     sellerOwnerId: owner?._id ? String(owner._id) : null,
+    freeTierStatus,
+    bulkOrder: isBulkOrder
+      ? { isBulkOrder: true, reason: bulkOrderReason, lineIndexes: bulkOrderLineIndexes, commissionRateApplied: bulkOrderCommissionRate > 0 ? bulkOrderCommissionRate : null }
+      : { isBulkOrder: false },
     commissionResolutionOrder: [
+      "variant", // substituted transparently for "product" in hydrateOrderItems when set
       "addon",
       "product",
       "subcategory",
@@ -1095,14 +1321,26 @@ export async function generateOrderPaymentBreakdown({
     customerSurcharge: customerSurchargeAmount > 0
       ? { amount: customerSurchargeAmount, reason: customerSurchargeReason }
       : null,
+    oddHourSurcharge: oddHourSurchargeAmount > 0
+      ? { amount: oddHourSurchargeAmount, windowStart: oddHourWindow.windowStart, windowEnd: oddHourWindow.windowEnd }
+      : null,
+    weatherSurcharge: weatherSurchargeAmount > 0
+      ? { amount: weatherSurchargeAmount }
+      : null,
     packagingCharge: packagingChargeAmount > 0
       ? { amount: packagingChargeAmount, storeId: String(storeId) }
       : null,
+    taxJurisdiction,
+    sellerState: storeDoc?.state || "",
+    customerState: customerState || "",
   };
 
   return {
     sellerId: storeId,
     lineItems,
+    isBulkOrder,
+    bulkOrderReason,
+    bulkOrderLineIndexes,
     currency: "INR",
     productSubtotal,
     deliveryFeeCharged: delivery.deliveryFeeCharged,
@@ -1111,8 +1349,14 @@ export async function generateOrderPaymentBreakdown({
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,
+    cgstTotal,
+    sgstTotal,
+    igstTotal,
+    taxJurisdiction,
     customerSurchargeAmount,
     customerSurchargeReason,
+    oddHourSurchargeAmount,
+    weatherSurchargeAmount,
     packagingChargeAmount,
     grandTotal,
     sellerPayoutTotal,

@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     User, MapPin, Package, CreditCard, Wallet, ChevronRight,
-    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store
+    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store, Settings
 } from 'lucide-react';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
@@ -28,10 +28,26 @@ const ProfilePage = () => {
     const { settings } = useSettings();
     const appName = settings?.appName || 'App';
     const [isTestingPush, setIsTestingPush] = React.useState(false);
+    const [unreadNotificationCount, setUnreadNotificationCount] = React.useState(0);
 
     React.useEffect(() => {
         refreshUser({ forceRefresh: true });
     }, [refreshUser]);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        customerApi
+            .getNotifications({ unreadOnly: true, limit: 1 })
+            .then((res) => {
+                if (!cancelled && res.data.success) {
+                    setUnreadNotificationCount(res.data.result?.unreadCount || 0);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -109,6 +125,17 @@ const ProfilePage = () => {
                 </button>
                 <h1 className="text-xl font-semibold text-slate-900 tracking-tight">My Profile</h1>
                 <div className="ml-auto flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/notifications')}
+                        title="Notifications"
+                        className="relative w-10 h-10 flex items-center justify-center rounded-full transition-colors border border-slate-200 bg-white hover:bg-slate-100"
+                    >
+                        <Bell size={18} className="text-slate-700" />
+                        {unreadNotificationCount > 0 && (
+                            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 border-2 border-white rounded-full" />
+                        )}
+                    </button>
                     <button
                         type="button"
                         onClick={handleTestPush}
@@ -215,6 +242,14 @@ const ProfilePage = () => {
                             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Help & Settings</p>
                         </div>
                         <div className="divide-y divide-slate-100">
+                            <MenuItem
+                                icon={Settings}
+                                label="Settings"
+                                sub="Notifications, account & privacy"
+                                path="/settings"
+                                color="#64748b"
+                                bg="rgba(100,116,139,0.10)"
+                            />
                             <MenuItem
                                 icon={HelpCircle}
                                 label="Help & Support"

@@ -16,6 +16,7 @@ const RETURN_STEPS = [
   { id: "return_pickup_assigned", label: "Pickup Assigned", icon: Truck },
   { id: "return_in_transit", label: "In Transit", icon: Truck },
   { id: "returned", label: "Picked Up", icon: PackageCheck },
+  { id: "refund_initiated", label: "Refund Initiated", icon: Wallet },
   { id: "refund_completed", label: "Refund Completed", icon: Wallet },
 ];
 

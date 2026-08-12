@@ -38,6 +38,28 @@ const SearchPage = () => {
         return saved ? JSON.parse(saved) : [];
     });
 
+    const [trendingSearches, setTrendingSearches] = useState([]);
+    useEffect(() => {
+        customerApi.getTrendingSearches()
+            .then((res) => {
+                const items = res?.data?.result?.items;
+                setTrendingSearches(Array.isArray(items) ? items : []);
+            })
+            .catch(() => setTrendingSearches([]));
+    }, []);
+
+    // Category filter chips
+    const [categories, setCategories] = useState([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState('all');
+    useEffect(() => {
+        customerApi.getCategories()
+            .then((res) => {
+                const dbCats = res?.data?.results || res?.data?.result || [];
+                setCategories(Array.isArray(dbCats) ? dbCats.filter((c) => c.type === 'category') : []);
+            })
+            .catch(() => setCategories([]));
+    }, []);
+
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
     useEffect(() => {
@@ -153,7 +175,7 @@ const SearchPage = () => {
                         price: p.salePrice || p.price,
                         originalPrice: p.price,
                         weight: p.weight || '1 unit',
-                        deliveryTime: '8-15 mins',
+                        deliveryTime: p.deliveryEta?.label || '8-15 mins',
                         distance: p.distance ?? p.distanceKm,
                         distanceKm: p.distanceKm ?? p.distance,
                     }));
@@ -204,20 +226,25 @@ const SearchPage = () => {
     }, [debouncedQuery, allSellers]);
 
     // Real-time backend search fetch combined with local matches for instant response
+    // A category can be selected on its own (no text query) to browse that category.
     useEffect(() => {
         const fetchResults = async () => {
-            if (!debouncedQuery.trim()) {
+            if (!debouncedQuery.trim() && selectedCategoryId === 'all') {
                 setResults([]);
                 return;
             }
-            
+
             // First set results to local matches for instant feedback
-            const localMatches = allProducts.filter(p =>
-                p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-                p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase())
-            );
+            const localMatches = allProducts.filter(p => {
+                const matchesText = !debouncedQuery.trim() ||
+                    p.name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+                    p.categoryId?.name?.toLowerCase().includes(debouncedQuery.toLowerCase());
+                const matchesCategory = selectedCategoryId === 'all' ||
+                    String(p.categoryId?._id || p.categoryId || '') === selectedCategoryId;
+                return matchesText && matchesCategory;
+            });
             setResults(localMatches);
-            
+
             const hasValidLocation =
                 Number.isFinite(currentLocation?.latitude) &&
                 Number.isFinite(currentLocation?.longitude);
@@ -226,7 +253,8 @@ const SearchPage = () => {
             setIsLoading(true);
             try {
                 const prodRes = await customerApi.getProducts({
-                    search: debouncedQuery,
+                    ...(debouncedQuery.trim() ? { search: debouncedQuery } : {}),
+                    ...(selectedCategoryId !== 'all' ? { category: selectedCategoryId } : {}),
                     limit: 100,
                     lat: currentLocation.latitude,
                     lng: currentLocation.longitude,
@@ -251,7 +279,7 @@ const SearchPage = () => {
                         price: p.salePrice || p.price,
                         originalPrice: p.price,
                         weight: p.weight || '1 unit',
-                        deliveryTime: '8-15 mins',
+                        deliveryTime: p.deliveryEta?.label || '8-15 mins',
                         distance: p.distance ?? p.distanceKm,
                         distanceKm: p.distanceKm ?? p.distance,
                     }));
@@ -280,7 +308,7 @@ const SearchPage = () => {
         };
 
         fetchResults();
-    }, [debouncedQuery, allProducts, currentLocation?.latitude, currentLocation?.longitude]);
+    }, [debouncedQuery, selectedCategoryId, allProducts, currentLocation?.latitude, currentLocation?.longitude]);
 
     useEffect(() => {
         setSellerResults(filteredSellerResults);
@@ -368,9 +396,39 @@ const SearchPage = () => {
                     </div>
                 </div>
 
+                {categories.length > 0 && (
+                    <div className="px-5 pt-4 flex gap-2 overflow-x-auto no-scrollbar">
+                        <button
+                            onClick={() => setSelectedCategoryId('all')}
+                            className={cn(
+                                "px-3.5 py-1.5 rounded-full text-xs font-black whitespace-nowrap transition-all border",
+                                selectedCategoryId === 'all'
+                                    ? "bg-primary text-white border-primary"
+                                    : "bg-white text-slate-600 border-slate-200 hover:border-primary/40"
+                            )}
+                        >
+                            All
+                        </button>
+                        {categories.map((cat) => (
+                            <button
+                                key={cat._id}
+                                onClick={() => setSelectedCategoryId((prev) => (prev === cat._id ? 'all' : cat._id))}
+                                className={cn(
+                                    "px-3.5 py-1.5 rounded-full text-xs font-black whitespace-nowrap transition-all border",
+                                    selectedCategoryId === cat._id
+                                        ? "bg-primary text-white border-primary"
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-primary/40"
+                                )}
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <div className="p-5 space-y-10 pb-24">
                 {/* Search Results List */}
-                {query ? (
+                {(query || selectedCategoryId !== 'all') ? (
                     <div className="space-y-10">
                         {/* Sellers Results */}
                         {sellerResults.length > 0 && (
@@ -382,11 +440,27 @@ const SearchPage = () => {
                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sellerResults.length} found</span>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {sellerResults.map(s => (
-                                        <div key={s._id} onClick={() => { saveSearch(query); navigate(buildStorePath(s)); }} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md cursor-pointer transition-all">
-                                            <div className="h-14 w-14 rounded-xl bg-slate-100 flex items-center justify-center font-black text-xl text-slate-400">
-                                                {String(s.shopName || s.name || "S").charAt(0).toUpperCase()}
-                                            </div>
+                                    {sellerResults.map(s => {
+                                        const logoUrl = s.logoUrl || s.logo || s.shopLogo || s.avatarImage || s.avatar || "";
+                                        return (
+                                            <div key={s._id} onClick={() => { saveSearch(query); navigate(buildStorePath(s)); }} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md cursor-pointer transition-all">
+                                                <div className="h-14 w-14 rounded-xl bg-slate-100 flex items-center justify-center font-black text-xl text-slate-400 overflow-hidden shrink-0 border border-slate-100">
+                                                    {logoUrl ? (
+                                                        <img
+                                                            src={logoUrl}
+                                                            alt={s.shopName || s.name}
+                                                            className="w-full h-full object-cover bg-white"
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = "none";
+                                                                const fallback = e.currentTarget.nextElementSibling;
+                                                                if (fallback) fallback.style.display = "inline";
+                                                            }}
+                                                        />
+                                                    ) : null}
+                                                    <span style={{ display: logoUrl ? "none" : "inline" }}>
+                                                        {String(s.shopName || s.name || "S").charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
                                             <div className="flex-1">
                                                 <h3 className="font-bold text-slate-800 line-clamp-1">{s.shopName || s.name}</h3>
                                                 <p className="text-xs text-slate-500 line-clamp-1">
@@ -398,7 +472,8 @@ const SearchPage = () => {
                                             </div>
                                             <ChevronRight className="text-slate-300" size={20} />
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </section>
                         )}
@@ -432,7 +507,11 @@ const SearchPage = () => {
                                                 )}
                                             </div>
                                             <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">No items found</h3>
-                                            <p className="text-slate-500 font-medium max-w-xs">We couldn't find anything for "{query}". Try different keywords!</p>
+                                            <p className="text-slate-500 font-medium max-w-xs">
+                                                {query
+                                                    ? `We couldn't find anything for "${query}". Try different keywords!`
+                                                    : "No products found in this category nearby."}
+                                            </p>
                                         </div>
                                     )
                                 )}
@@ -462,6 +541,27 @@ const SearchPage = () => {
                                             >
                                                 <X size={12} className="text-slate-400 hover:text-red-500" />
                                             </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* 1b. Trending Searches Section */}
+                        {trendingSearches.length > 0 && (
+                            <section>
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Trending Searches</h3>
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                                    {trendingSearches.map((item) => (
+                                        <div
+                                            key={item.query}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 shadow-sm rounded-full whitespace-nowrap active:scale-95 transition-transform cursor-pointer"
+                                            onClick={() => setQuery(item.query)}
+                                        >
+                                            <div className="h-5 w-5 rounded flex items-center justify-center" style={{ backgroundColor: (settings?.primaryColor || 'var(--primary)') + '20' }}>
+                                                <TrendingUp size={12} style={{ color: settings?.primaryColor || 'var(--primary)' }} />
+                                            </div>
+                                            <span className="text-sm font-bold text-slate-700">{item.query}</span>
                                         </div>
                                     ))}
                                 </div>

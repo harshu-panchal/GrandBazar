@@ -38,7 +38,8 @@ describe("schedule date utils", () => {
   it("computes activation before slot start", () => {
     const deliveryDate = new Date("2026-07-10T00:00:00.000Z");
     const activation = computeActivationAt(deliveryDate, "09:00", 2 * 60 * 60 * 1000);
-    const slotStart = new Date("2026-07-10T09:00:00.000Z");
+    // "09:00" is store-local (IST, UTC+5:30) wall-clock time, i.e. 03:30 UTC.
+    const slotStart = new Date("2026-07-10T03:30:00.000Z");
     expect(activation.getTime()).toBe(slotStart.getTime() - 2 * 60 * 60 * 1000);
   });
 

@@ -73,7 +73,6 @@ import {
 import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommendedProducts";
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
-import DeliverySlotPicker from "../components/checkout/DeliverySlotPicker";
 import FulfillmentMethodPicker from "../components/checkout/FulfillmentMethodPicker";
 import {
   formatIndiaPhoneForDisplay,
@@ -159,6 +158,10 @@ const CheckoutPage = () => {
     updateQuantity,
     removeFromCart,
     clearCart,
+    primarySellerId,
+    fulfillmentType,
+    selectedTimeSlot,
+    schedulePayload,
   } = useCart();
   const { wishlist, addToWishlist, fetchFullWishlist, isFullDataFetched } =
     useWishlist();
@@ -207,21 +210,7 @@ const CheckoutPage = () => {
     isFetchingLocation,
     updateLocation,
   } = useAppLocation();
-  const primarySellerId = useMemo(() => {
-    const item = cart[0];
-    return item?.sellerId?._id || item?.sellerId || item?.storeId || null;
-  }, [cart]);
-
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState("now");
-  const [fulfillmentType, setFulfillmentType] = useState("instant");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("platform_logistics");
-  const [schedulePayload, setSchedulePayload] = useState(null);
-
-  const handleScheduleChange = (payload) => {
-    setSchedulePayload(payload);
-    setFulfillmentType(payload?.fulfillmentType || "instant");
-    setSelectedTimeSlot(payload?.timeSlot || "now");
-  };
   const [selectedPayment, setSelectedPayment] = useState("cash");
   const [selectedTip, setSelectedTip] = useState(0);
   const [showAllCartItems, setShowAllCartItems] = useState(false);
@@ -1315,34 +1304,23 @@ const CheckoutPage = () => {
               onChange={setFulfillmentMethod}
             />
 
-            <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Delivery mode</p>
-              <div className="flex gap-2">
-                {["instant", "scheduled"].map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => handleScheduleChange({
-                      fulfillmentType: mode,
-                      timeSlot: mode === "instant" ? "now" : selectedTimeSlot,
-                      deliveryDate: schedulePayload?.deliveryDate,
-                      windowLabel: schedulePayload?.windowLabel,
-                    })}
-                    className={`rounded-xl px-3 py-2 text-xs font-bold ${
-                      fulfillmentType === mode
-                        ? "bg-emerald-600 text-white"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {mode === "instant" ? "Deliver now" : "Schedule"}
-                  </button>
-                ))}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Delivery mode</p>
+                <p className="mt-1 text-sm font-black text-slate-900">
+                  {fulfillmentType === "instant"
+                    ? "Deliver now"
+                    : schedulePayload?.deliveryDate && schedulePayload?.windowLabel
+                      ? `${new Date(schedulePayload.deliveryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })} · ${schedulePayload.windowLabel}`
+                      : "Scheduled"}
+                </p>
               </div>
-              <DeliverySlotPicker
-                sellerId={primarySellerId}
-                fulfillmentType={fulfillmentType}
-                onChange={handleScheduleChange}
-              />
+              <Link
+                to="/cart"
+                className="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Change
+              </Link>
             </div>
 
             {/* Payment Selector */}
@@ -1366,7 +1344,7 @@ const CheckoutPage = () => {
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
               />
               <label htmlFor="policy-accept" className="text-xs text-slate-600 leading-snug cursor-pointer">
-                I agree to the <Link to="/terms" className="text-primary font-bold hover:underline">Return & Exchange Policy</Link> and understand that items can only be returned if they meet the criteria.
+                I agree to the <Link to="/return-policy" target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline">Return & Exchange Policy</Link> and understand that items can only be returned if they meet the criteria.
               </label>
             </div>
 

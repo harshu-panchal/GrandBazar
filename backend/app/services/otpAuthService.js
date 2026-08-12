@@ -92,10 +92,13 @@ export function normalizeAndValidatePhone(rawPhone) {
 export async function issueCustomerOtp({
   name = "",
   rawPhone,
+  email = "",
   flow,
   ipAddress = "unknown",
+  agreedToTerms = false,
 }) {
   const phone = normalizeAndValidatePhone(rawPhone);
+  const normalizedEmail = String(email || "").trim().toLowerCase();
   const now = new Date();
 
   const sendAllowed = await incrementWindowCounter(`otp:send:phone:${phone}`, {
@@ -136,11 +139,30 @@ export async function issueCustomerOtp({
   }
 
   if (!customer) {
-    customer = await Customer.create({
-      name: name || "Customer",
-      phone,
-      isVerified: false,
-    });
+    if (normalizedEmail) {
+      const emailTaken = await Customer.exists({ email: normalizedEmail });
+      if (emailTaken) {
+        const err = new Error("This email is already registered. Try logging in, or use a different email.");
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+    try {
+      customer = await Customer.create({
+        name: name || "Customer",
+        phone,
+        email: normalizedEmail || undefined,
+        isVerified: false,
+        termsAcceptedAt: flow === "signup" && agreedToTerms ? now : null,
+      });
+    } catch (createErr) {
+      if (createErr?.code === 11000 && createErr?.keyPattern?.email) {
+        const err = new Error("This email is already registered. Try logging in, or use a different email.");
+        err.statusCode = 409;
+        throw err;
+      }
+      throw createErr;
+    }
     customer = await Customer.findById(customer._id).select(
       "+otpHash +otpExpiresAt +otpFailedAttempts +otpLockedUntil +otpLastSentAt +otpSessionVersion +otp +otpExpiry",
     );
@@ -161,10 +183,7 @@ export async function issueCustomerOtp({
     throw err;
   }
 
-  let otp = generateOTP();
-  if (phone === "+916268423925" || phone === "+919111966732") {
-    otp = "1234";
-  }
+  const otp = generateOTP();
   customer.otpHash = hashOtp(phone, otp);
   customer.otpExpiresAt = new Date(now.getTime() + OTP_EXPIRY_MINUTES() * 60 * 1000);
   customer.otpFailedAttempts = 0;

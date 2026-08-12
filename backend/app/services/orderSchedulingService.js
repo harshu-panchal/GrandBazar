@@ -43,7 +43,7 @@ export function resolveStoreSchedulingSettings(store) {
       : true;
   return {
     enabled,
-    maxDaysAhead: Math.max(1, Number(settings.maxDaysAhead || 7)),
+    maxDaysAhead: Math.max(1, Number(settings.maxDaysAhead || 30)),
     rescheduleCutoffDays: Math.max(0, Number(settings.rescheduleCutoffDays ?? 1)),
     selfLogistics: settings.selfLogistics === true,
     deliveryWindows: windows,
@@ -141,8 +141,8 @@ export async function validateScheduleSelection({
     throw err;
   }
 
-  const slotStart = combineDateAndWindowStart(delivery, window.start);
-  const slotEnd = combineDateAndWindowEnd(delivery, window.end);
+  const slotStart = combineDateAndWindowStart(delivery, window.start, settings.timezone);
+  const slotEnd = combineDateAndWindowEnd(delivery, window.end, settings.timezone);
   // New bookings: allow any window that has not ended yet.
   if (
     fulfillmentType !== FULFILLMENT_TYPE.PREORDER &&
@@ -157,7 +157,7 @@ export async function validateScheduleSelection({
     campaign?.rescheduleCutoffDays != null
       ? campaign.rescheduleCutoffDays
       : settings.rescheduleCutoffDays;
-  const cutoffAt = computeCutoffAt(delivery, window.start, cutoffDays);
+  const cutoffAt = computeCutoffAt(delivery, window.start, cutoffDays, settings.timezone);
   // Reschedule/cancel cutoff applies only when changing an existing order.
   if (
     checkRescheduleCutoff &&
@@ -181,6 +181,7 @@ export async function validateScheduleSelection({
     delivery,
     window.start,
     DEFAULT_ACTIVATION_LEAD_MS(),
+    settings.timezone,
   );
 
   return {

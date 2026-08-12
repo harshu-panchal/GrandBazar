@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { 
-  ChevronLeft, MapPin, Clock, Search, Phone, 
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare
+import {
+  ChevronLeft, MapPin, Clock, Search, Phone,
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare, Building2
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
@@ -88,6 +88,7 @@ const StoreDetailPage = () => {
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [liveFavoriteCount, setLiveFavoriteCount] = useState(0);
+  const [storeAlternatives, setStoreAlternatives] = useState([]);
   const [storeReviews, setStoreReviews] = useState([]);
   const [reviewStats, setReviewStats] = useState({ avgRating: 0, reviewCount: 0 });
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -164,7 +165,12 @@ const StoreDetailPage = () => {
 
       // 1. Fetch public profile and products in parallel
       const [profileRes, productsRes] = await Promise.all([
-        customerApi.getSellerPublicProfile(sellerId),
+        customerApi.getSellerPublicProfile(
+          sellerId,
+          hasValidLocation
+            ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
+            : undefined,
+        ),
         hasValidLocation
           ? customerApi.getProducts({
               sellerId,
@@ -204,7 +210,7 @@ const StoreDetailPage = () => {
           price: p.salePrice || p.price,
           originalPrice: p.price,
           weight: p.weight || "1 unit",
-          deliveryTime: "10-15 mins"
+          deliveryTime: p.deliveryEta?.label || "10-15 mins"
         }));
 
         setProducts(formattedProds);
@@ -239,6 +245,24 @@ const StoreDetailPage = () => {
       fetchData();
     }
   }, [sellerId, currentLocation?.latitude, currentLocation?.longitude]);
+
+  useEffect(() => {
+    if (seller?.isOpen !== false || !sellerId) {
+      setStoreAlternatives([]);
+      return;
+    }
+    let cancelled = false;
+    customerApi.getStoreAlternatives(sellerId)
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.results || res.data?.result || [];
+        setStoreAlternatives(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setStoreAlternatives([]);
+      });
+    return () => { cancelled = true; };
+  }, [seller?.isOpen, sellerId]);
 
   // Dynamically compile categories matching active products
   const dynamicCategories = useMemo(() => {
@@ -501,6 +525,31 @@ const StoreDetailPage = () => {
                 </div>
               )}
 
+              {seller.isOpen === false && storeAlternatives.length > 0 && (
+                <div className="mb-4 rounded-2xl border border-slate-100 bg-white/80 px-4 py-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Other stores near you</p>
+                  <div className="flex overflow-x-auto gap-3 no-scrollbar pb-1">
+                    {storeAlternatives.map((alt) => (
+                      <div
+                        key={alt._id}
+                        onClick={() => navigate(buildStorePath(alt))}
+                        className="w-[150px] shrink-0 rounded-2xl border border-slate-100 bg-white shadow-sm cursor-pointer active:scale-95 transition-transform overflow-hidden"
+                      >
+                        <div className="h-14 w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                          <span className="text-xl font-black text-primary/70">
+                            {String(alt.shopName || "S").charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-[11px] font-bold text-slate-900 truncate">{alt.shopName}</p>
+                          <p className="text-[9px] font-semibold text-slate-400 truncate mt-0.5">{alt.category || "General Store"}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Ultra-Premium Floating Welcome Banner */}
               <div className="mb-6 -mx-6 md:-mx-8 -mt-6 md:-mt-8 px-6 md:px-8 py-4 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent border-b border-slate-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none relative overflow-hidden group hover:from-amber-500/15 hover:via-rose-500/15 hover:to-violet-500/15 transition-all duration-500">
                 {/* Glowing shimmer stroke line */}
@@ -547,14 +596,24 @@ const StoreDetailPage = () => {
                 {/* Logo & Info Group */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                   {/* Circular Avatar */}
-                  <div className={cn(
-                    "h-16 w-16 md:h-20 md:w-20 rounded-2xl flex items-center justify-center shrink-0 shadow-lg text-white font-black text-2xl md:text-3xl",
-                    theme.badge === "bg-amber-500" ? "bg-gradient-to-br from-amber-400 to-rose-400" : theme.badge
-                  )}>
-                    <span className="leading-none">
-                      {initialLetter}
-                    </span>
-                  </div>
+                  {seller.logoUrl ? (
+                    <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl shrink-0 shadow-lg overflow-hidden border border-slate-100 bg-white">
+                      <img
+                        src={seller.logoUrl}
+                        alt={`${seller.shopName || seller.name} logo`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "h-16 w-16 md:h-20 md:w-20 rounded-2xl flex items-center justify-center shrink-0 shadow-lg text-white font-black text-2xl md:text-3xl",
+                      theme.badge === "bg-amber-500" ? "bg-gradient-to-br from-amber-400 to-rose-400" : theme.badge
+                    )}>
+                      <span className="leading-none">
+                        {initialLetter}
+                      </span>
+                    </div>
+                  )}
                   
                   {/* Shop Text */}
                   <div className="flex flex-col gap-1.5 leading-none">
@@ -614,6 +673,19 @@ const StoreDetailPage = () => {
                 </div>
               </div>
             </div>
+
+            {/* About My Shop Section */}
+            {seller.description && (
+              <div className="w-full bg-white rounded-2xl md:rounded-3xl p-6 shadow-sm border border-slate-100 mt-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <Building2 size={18} className={theme.accentText} />
+                  <h3 className="text-lg md:text-xl font-[900] text-slate-900 uppercase tracking-widest">About My Shop</h3>
+                </div>
+                <p className="text-slate-600 text-sm font-medium leading-relaxed max-w-3xl whitespace-pre-line">
+                  {seller.description}
+                </p>
+              </div>
+            )}
 
             {/* Store Video Section */}
             {seller.storeVideo && (

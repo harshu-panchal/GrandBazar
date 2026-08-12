@@ -15,6 +15,7 @@ const getEmbedUrl = (url) => {
 };
 
 const Storefront = () => {
+  const [logoUrl, setLogoUrl] = useState("");
   const [banners, setBanners] = useState([]);
   const [storeVideo, setStoreVideo] = useState("");
   const [signatureProduct, setSignatureProduct] = useState("");
@@ -33,6 +34,7 @@ const Storefront = () => {
         sellerApi.getProducts()
       ]);
       const data = profileRes.data.result;
+      setLogoUrl(data.logoUrl || "");
       setBanners(data.banners || []);
       setStoreVideo(data.storeVideo || "");
     } catch (error) {
@@ -65,10 +67,25 @@ const Storefront = () => {
     setBanners((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 1 * 1024 * 1024) {
+        toast.error("Logo size must be less than 1MB");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await sellerApi.updateProfile({ banners, storeVideo });
+      await sellerApi.updateProfile({ logoUrl, banners, storeVideo });
       toast.success("Storefront updated successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update storefront");
@@ -91,6 +108,46 @@ const Storefront = () => {
         <h1 className="text-3xl font-black text-slate-900 mb-2">Store Design</h1>
         <p className="text-slate-500 font-medium">Manage how your shop appears to customers.</p>
       </div>
+
+      <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-2xl">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Store Logo</h3>
+            <p className="text-sm text-slate-500">Shown next to your shop name on your store page.</p>
+          </div>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="bg-slate-900 text-white hover:bg-black rounded-lg px-6 py-2 text-xs font-black tracking-[2px] flex items-center gap-2"
+          >
+            {isSaving ? "SAVING..." : <><Save size={16} /> SAVE CHANGES</>}
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="h-24 w-24 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Store logo" className="w-full h-full object-cover" />
+            ) : (
+              <ImageIcon size={28} className="text-slate-300" />
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="cursor-pointer bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2.5 text-xs font-black tracking-[1px] transition-colors">
+              {logoUrl ? "Change Logo" : "Upload Logo"}
+              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            </label>
+            {logoUrl && (
+              <button
+                onClick={() => setLogoUrl("")}
+                className="text-xs font-bold text-red-500 hover:text-red-600 px-3 py-2.5"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-2xl">
         <div className="flex justify-between items-center mb-6">

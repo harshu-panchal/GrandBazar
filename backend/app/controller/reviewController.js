@@ -1,9 +1,42 @@
 import Review from "../models/review.js";
 import Product from "../models/product.js";
 import Store from "../models/store.js";
+import Order from "../models/order.js";
 import handleResponse from "../utils/helper.js";
 import getPagination from "../utils/pagination.js";
 import { refreshReviewStatsForReview } from "../services/reviewStatsService.js";
+import { orderMatchQueryFlexible } from "../utils/orderLookup.js";
+
+/**
+ * Verifies orderId (if supplied) belongs to this customer, is delivered, and
+ * actually contains the product/store being reviewed — returns whether the
+ * review should be flagged verifiedPurchase. Never throws for a missing/bad
+ * orderId — order-linkage is optional, a review is still valid without it.
+ * Accepts either the Mongo _id or the customer-facing orderId string (the
+ * frontend order object is keyed by the latter).
+ */
+async function resolveVerifiedPurchase({ orderId, userId, productId, storeId }) {
+  if (!orderId) return { verifiedPurchase: false, orderRef: null };
+  const matchQuery = orderMatchQueryFlexible(orderId);
+  if (!matchQuery) return { verifiedPurchase: false, orderRef: null };
+  const order = await Order.findOne({ ...matchQuery, customer: userId })
+    .select("_id status workflowStatus seller items.product")
+    .lean();
+  if (!order) return { verifiedPurchase: false, orderRef: null };
+  const isDelivered = order.status === "delivered" || order.workflowStatus === "DELIVERED";
+  if (!isDelivered) return { verifiedPurchase: false, orderRef: null };
+
+  if (productId) {
+    const hasProduct = (order.items || []).some(
+      (item) => String(item.product) === String(productId),
+    );
+    if (!hasProduct) return { verifiedPurchase: false, orderRef: null };
+  } else if (storeId && String(order.seller) !== String(storeId)) {
+    return { verifiedPurchase: false, orderRef: null };
+  }
+
+  return { verifiedPurchase: true, orderRef: order._id };
+}
 
 function normalizeTargetType(body = {}) {
   const explicit = String(body.targetType || "").toLowerCase();
@@ -21,6 +54,7 @@ export const submitReview = async (req, res) => {
     const targetType = normalizeTargetType(req.body);
     const productId = req.body.productId || null;
     const storeId = req.body.storeId || null;
+    const orderId = req.body.orderId || null;
 
     if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
       return handleResponse(res, 400, "Rating must be between 1 and 5");
@@ -47,11 +81,19 @@ export const submitReview = async (req, res) => {
         return handleResponse(res, 400, "You have already reviewed this product");
       }
 
+      const { verifiedPurchase, orderRef } = await resolveVerifiedPurchase({
+        orderId,
+        userId,
+        productId,
+      });
+
       const newReview = await Review.create({
         userId,
         targetType: "product",
         productId,
         storeId: null,
+        orderId: orderRef,
+        verifiedPurchase,
         rating,
         comment,
         status: "approved",
@@ -91,11 +133,19 @@ export const submitReview = async (req, res) => {
       return handleResponse(res, 400, "You have already reviewed this store");
     }
 
+    const { verifiedPurchase, orderRef } = await resolveVerifiedPurchase({
+      orderId,
+      userId,
+      storeId,
+    });
+
     const newReview = await Review.create({
       userId,
       targetType: "store",
       storeId,
       productId: null,
+      orderId: orderRef,
+      verifiedPurchase,
       rating,
       comment,
       status: "approved",

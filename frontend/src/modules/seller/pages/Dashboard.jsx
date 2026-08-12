@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Download } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@shared/components/ui/PageHeader";
 import { exportToCSV } from "@/lib/exportUtils";
@@ -107,6 +108,7 @@ const buildReportRows = (data) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -189,6 +191,48 @@ const Dashboard = () => {
           </button>
         }
       />
+
+      {/* Free-tier product limit banner (commission-model sellers only) */}
+      {data?.freeTierStatus?.isOverLimit && (
+        <div
+          className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border px-5 py-4 ${
+            data.freeTierStatus.enforcementMode === "hard"
+              ? "border-rose-200 bg-rose-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <AlertTriangle
+            className={`h-5 w-5 shrink-0 ${
+              data.freeTierStatus.enforcementMode === "hard" ? "text-rose-600" : "text-amber-600"
+            }`}
+          />
+          {data.freeTierStatus.enforcementMode === "hard" ? (
+            <p className="text-sm font-medium text-rose-900 flex-1">
+              You've reached your free product limit ({data.freeTierStatus.limit} products). New
+              products can't be published until you choose a subscription plan.
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-amber-900 flex-1">
+              You have <strong>{data.freeTierStatus.publishedCount}</strong> products published
+              (free-plan limit: <strong>{data.freeTierStatus.limit}</strong>). Orders on products
+              above this limit incur an additional{" "}
+              <strong>{data.freeTierStatus.surchargePercent}%</strong> commission.
+            </p>
+          )}
+          <button
+            onClick={() => navigate("/seller/choose-model")}
+            className={`shrink-0 px-4 py-2 rounded-xl text-white text-xs font-bold transition-colors ${
+              data.freeTierStatus.enforcementMode === "hard"
+                ? "bg-rose-600 hover:bg-rose-700"
+                : "bg-amber-600 hover:bg-amber-700"
+            }`}
+          >
+            {data.freeTierStatus.enforcementMode === "hard"
+              ? "Choose a plan"
+              : "Upgrade to a subscription plan"}
+          </button>
+        </div>
+      )}
 
       {/* KPI cards */}
       <KpiCards kpis={data?.kpis} />

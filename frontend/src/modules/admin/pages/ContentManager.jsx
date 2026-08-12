@@ -62,7 +62,13 @@ const ContentManager = () => {
         productRows: 1,
         productColumns: 2,
         singleRowScrollable: false,
+        // super_ads
+        superAdItems: [{ sellerId: '', productId: '', title: '', imageUrl: '', linkType: 'store', linkValue: '', priority: 0, isUploading: false }],
+        // seller_highlights
+        sellerHighlightIds: [],
     });
+
+    const [sellers, setSellers] = useState([]);
 
     const bannerFileInputsRef = useRef([]);
 
@@ -119,6 +125,12 @@ const ContentManager = () => {
 
     useEffect(() => {
         loadHeaderCategories();
+        adminApi.getSellers()
+            .then((res) => {
+                const list = res.data.results || res.data.result || [];
+                setSellers(Array.isArray(list) ? list : []);
+            })
+            .catch(() => setSellers([]));
     }, []);
 
     // Apply deep-link from Hero & categories per page (?pageType=home | ?pageType=header&headerId=xxx)
@@ -156,6 +168,8 @@ const ContentManager = () => {
             productRows: 1,
             productColumns: 2,
             singleRowScrollable: false,
+            superAdItems: [{ sellerId: '', productId: '', title: '', imageUrl: '', linkType: 'store', linkValue: '', priority: 0, isUploading: false }],
+            sellerHighlightIds: [],
         });
         setActiveTab('banners');
     };
@@ -188,6 +202,22 @@ const ContentManager = () => {
             productRows: config.products?.rows || 1,
             productColumns: config.products?.columns || 2,
             singleRowScrollable: !!config.products?.singleRowScrollable,
+            superAdItems: config.superAds?.items?.length
+                ? config.superAds.items.map(a => ({
+                    _id: a._id || undefined,
+                    sellerId: a.sellerId?._id || a.sellerId || '',
+                    productId: a.productId?._id || a.productId || '',
+                    title: a.title || '',
+                    imageUrl: a.imageUrl || '',
+                    linkType: a.linkType || 'store',
+                    linkValue: a.linkValue || '',
+                    priority: a.priority || 0,
+                    impressions: a.impressions || 0,
+                    clicks: a.clicks || 0,
+                    isUploading: false,
+                }))
+                : [{ sellerId: '', productId: '', title: '', imageUrl: '', linkType: 'store', linkValue: '', priority: 0, isUploading: false }],
+            sellerHighlightIds: (config.sellerHighlights?.sellerIds || []).map(s => s?._id || s),
         };
         setFormData(next);
         setActiveTab(displayType);
@@ -209,7 +239,7 @@ const ContentManager = () => {
     const handleSaveSection = async () => {
         const { displayType, title, status } = formData;
 
-        if (['categories', 'subcategories', 'products'].includes(displayType)) {
+        if (['categories', 'subcategories', 'products', 'seller_highlights'].includes(displayType)) {
             if (!title || !title.trim()) {
                 showToast('Please enter a heading for this section', 'warning');
                 return;
@@ -274,6 +304,36 @@ const ContentManager = () => {
                 rows: formData.singleRowScrollable ? 1 : (Number(formData.productRows) || 1),
                 columns: Number(formData.productColumns) || 2,
                 singleRowScrollable: !!formData.singleRowScrollable,
+            };
+        } else if (displayType === 'super_ads') {
+            if ((formData.superAdItems || []).some(a => a.isUploading)) {
+                showToast('Please wait for all ad images to finish uploading', 'warning');
+                return;
+            }
+            const items = (formData.superAdItems || []).filter(a => a.sellerId && a.imageUrl);
+            if (!items.length) {
+                showToast('Please add at least one ad slot with a seller and image', 'warning');
+                return;
+            }
+            config = {
+                items: items.map(a => ({
+                    _id: a._id || undefined,
+                    sellerId: a.sellerId,
+                    productId: a.productId || null,
+                    title: a.title,
+                    imageUrl: a.imageUrl,
+                    linkType: a.linkType || 'store',
+                    linkValue: a.linkValue || '',
+                    priority: Number(a.priority) || 0,
+                })),
+            };
+        } else if (displayType === 'seller_highlights') {
+            if (!formData.sellerHighlightIds?.length) {
+                showToast('Please select at least one seller to feature', 'warning');
+                return;
+            }
+            config = {
+                sellerIds: formData.sellerHighlightIds,
             };
         }
 
@@ -363,6 +423,58 @@ const ContentManager = () => {
         setFormData(prev => ({
             ...prev,
             bannerItems: prev.bannerItems.filter((_, i) => i !== idx),
+        }));
+    };
+
+    const updateSuperAdItem = (idx, changes) => {
+        setFormData(prev => {
+            const items = [...prev.superAdItems];
+            items[idx] = { ...items[idx], ...changes };
+            return { ...prev, superAdItems: items };
+        });
+    };
+
+    const handleSuperAdFileChange = async (idx, file) => {
+        if (!file) return;
+        updateSuperAdItem(idx, { isUploading: true });
+        try {
+            const fd = new FormData();
+            fd.append('image', file);
+            const res = await adminApi.uploadExperienceBanner(fd);
+            const url = res.data?.result?.url || res.data?.url;
+            if (!url) throw new Error('Upload failed');
+            updateSuperAdItem(idx, { imageUrl: url, isUploading: false });
+            showToast('Ad image uploaded', 'success');
+        } catch (e) {
+            console.error(e);
+            updateSuperAdItem(idx, { isUploading: false });
+            showToast('Failed to upload ad image', 'error');
+        }
+    };
+
+    const addSuperAdItem = () => {
+        setFormData(prev => ({
+            ...prev,
+            superAdItems: [
+                ...prev.superAdItems,
+                { sellerId: '', productId: '', title: '', imageUrl: '', linkType: 'store', linkValue: '', priority: 0, isUploading: false },
+            ],
+        }));
+    };
+
+    const removeSuperAdItem = (idx) => {
+        setFormData(prev => ({
+            ...prev,
+            superAdItems: prev.superAdItems.filter((_, i) => i !== idx),
+        }));
+    };
+
+    const toggleSellerHighlight = (sellerId) => {
+        setFormData(prev => ({
+            ...prev,
+            sellerHighlightIds: prev.sellerHighlightIds.includes(sellerId)
+                ? prev.sellerHighlightIds.filter(id => id !== sellerId)
+                : [...prev.sellerHighlightIds, sellerId],
         }));
     };
 
@@ -465,6 +577,8 @@ const ContentManager = () => {
                                                 {section.displayType === 'categories' && <HiOutlineSparkles className="h-6 w-6" />}
                                                 {section.displayType === 'subcategories' && <HiOutlineSparkles className="h-6 w-6" />}
                                                 {section.displayType === 'products' && <HiOutlineDevicePhoneMobile className="h-6 w-6" />}
+                                                {section.displayType === 'super_ads' && <HiOutlineLink className="h-6 w-6" />}
+                                                {section.displayType === 'seller_highlights' && <HiOutlineSparkles className="h-6 w-6" />}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
@@ -486,6 +600,8 @@ const ContentManager = () => {
                                                     {section.displayType === 'categories' && `${section.config?.categories?.categoryIds?.length || 0} categories • ${section.config?.categories?.rows || 1} rows`}
                                                     {section.displayType === 'subcategories' && `${section.config?.subcategories?.subcategoryIds?.length || 0} subcategories • ${section.config?.subcategories?.rows || 1} rows`}
                                                     {section.displayType === 'products' && `${section.config?.products?.productIds?.length || 0} products • ${section.config?.products?.rows || 1}x${section.config?.products?.columns || 2}${section.config?.products?.singleRowScrollable ? ' • Single row scroll' : ''}`}
+                                                    {section.displayType === 'super_ads' && `${section.config?.superAds?.items?.length || 0} ad slot(s) configured`}
+                                                    {section.displayType === 'seller_highlights' && `${section.config?.sellerHighlights?.sellerIds?.length || 0} shop(s) featured`}
                                                 </p>
                                             </div>
                                             <div className="flex flex-col gap-2 items-end">
@@ -987,6 +1103,144 @@ const ContentManager = () => {
                                 <p className="text-[10px] text-slate-400">
                                     You can later extend this to select specific products.
                                 </p>
+                            </div>
+                        </div>
+                    )}
+                    {formData.displayType === 'super_ads' && (
+                        <div className="space-y-4">
+                            <p className="text-[11px] text-slate-500">
+                                Admin-curated paid placements. Each slot links to a seller's store (or a specific product / custom URL).
+                            </p>
+                            {formData.superAdItems.map((item, idx) => (
+                                <div key={idx} className="p-4 bg-slate-50 rounded-2xl space-y-3 relative">
+                                    {formData.superAdItems.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => removeSuperAdItem(idx)}
+                                            className="absolute top-3 right-3 text-slate-400 hover:text-rose-500"
+                                        >
+                                            <HiOutlineXMark className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    {item._id && (
+                                        <div className="flex gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                            <span>{item.impressions || 0} impressions</span>
+                                            <span>{item.clicks || 0} clicks</span>
+                                        </div>
+                                    )}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Seller</label>
+                                            <select
+                                                value={item.sellerId}
+                                                onChange={(e) => updateSuperAdItem(idx, { sellerId: e.target.value })}
+                                                className="w-full p-2.5 bg-white rounded-xl text-xs font-bold border border-slate-200 outline-none"
+                                            >
+                                                <option value="">Select seller…</option>
+                                                {sellers.map(s => (
+                                                    <option key={s._id} value={s._id}>{s.shopName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Title (optional)</label>
+                                            <input
+                                                value={item.title}
+                                                onChange={(e) => updateSuperAdItem(idx, { title: e.target.value })}
+                                                className="w-full p-2.5 bg-white rounded-xl text-xs font-bold border border-slate-200 outline-none"
+                                                placeholder="e.g. Weekend Special"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Link type</label>
+                                            <select
+                                                value={item.linkType}
+                                                onChange={(e) => updateSuperAdItem(idx, { linkType: e.target.value })}
+                                                className="w-full p-2.5 bg-white rounded-xl text-xs font-bold border border-slate-200 outline-none"
+                                            >
+                                                <option value="store">Seller's store page</option>
+                                                <option value="url">Custom URL</option>
+                                                <option value="none">No link</option>
+                                            </select>
+                                        </div>
+                                        {item.linkType === 'url' && (
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">URL</label>
+                                                <input
+                                                    value={item.linkValue}
+                                                    onChange={(e) => updateSuperAdItem(idx, { linkValue: e.target.value })}
+                                                    className="w-full p-2.5 bg-white rounded-xl text-xs font-bold border border-slate-200 outline-none"
+                                                    placeholder="https://…"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ad Image</label>
+                                        {item.imageUrl ? (
+                                            <div className="relative w-40 h-24 rounded-xl overflow-hidden bg-slate-200">
+                                                <img src={item.imageUrl} alt="Ad" className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateSuperAdItem(idx, { imageUrl: '' })}
+                                                    className="absolute top-1 right-1 h-6 w-6 bg-black/60 text-white rounded-full flex items-center justify-center"
+                                                >
+                                                    <HiOutlineXMark className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <label className="w-40 h-24 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer bg-white text-slate-400 hover:border-primary/50">
+                                                {item.isUploading ? 'Uploading…' : <HiOutlinePhoto className="h-6 w-6" />}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    disabled={item.isUploading}
+                                                    onChange={(e) => handleSuperAdFileChange(idx, e.target.files?.[0])}
+                                                />
+                                            </label>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={addSuperAdItem}
+                                className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-[11px] font-bold text-slate-500 hover:border-primary/50 hover:text-primary transition-all flex items-center justify-center gap-2"
+                            >
+                                <HiOutlinePlus className="h-4 w-4" /> Add Ad Slot
+                            </button>
+                        </div>
+                    )}
+                    {formData.displayType === 'seller_highlights' && (
+                        <div className="space-y-4">
+                            <p className="text-[11px] text-slate-500">
+                                Pick which shops appear in this featured row.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {sellers.map(s => {
+                                    const isSelected = formData.sellerHighlightIds.includes(s._id);
+                                    return (
+                                        <button
+                                            key={s._id}
+                                            type="button"
+                                            onClick={() => toggleSellerHighlight(s._id)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all",
+                                                isSelected
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-white"
+                                            )}
+                                        >
+                                            {s.shopName}
+                                        </button>
+                                    );
+                                })}
+                                {sellers.length === 0 && (
+                                    <p className="text-[11px] text-slate-400">No sellers available.</p>
+                                )}
                             </div>
                         </div>
                     )}

@@ -64,6 +64,11 @@ export function emitOrderStatusUpdate(orderId, payload, customerId) {
   if (cid) {
     s.to(`customer:${cid}`).emit("order:status:update", body);
   }
+  // Every admin socket auto-joins "admin:orders" on connect (see
+  // socketManager.js) — admins need live visibility across ALL orders, not
+  // just ones they've opened (unlike customer/seller, who only care about
+  // their own order/room).
+  s.to("admin:orders").emit("order:status:update", body);
 }
 
 export function emitToSeller(sellerId, { event, payload }) {

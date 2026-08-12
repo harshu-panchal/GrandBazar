@@ -23,10 +23,24 @@ import {
     isOwnerAccountApproved,
 } from "../services/sellerAccountService.js";
 import { formatBusinessModelPayload } from "../services/sellerBusinessModelService.js";
+import {
+    validateSellerInviteToken,
+    markSellerInviteUsed,
+} from "../services/admin/sellerApplicationService.js";
 
 /* ===============================
    SELLER ADMIN SIGNUP (account only — shops added later)
 ================================ */
+/** Public - lets the signup page pre-fill/lock the email for a valid invite. */
+export const validateSellerInvite = async (req, res) => {
+    try {
+        const result = await validateSellerInviteToken(req.params.token);
+        return handleResponse(res, 200, "Invite checked", result);
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
 export const signupSeller = async (req, res) => {
     try {
         const {
@@ -36,6 +50,7 @@ export const signupSeller = async (req, res) => {
             password,
             emailVerificationToken,
             phoneVerificationToken,
+            invite,
         } = req.body || {};
 
         if (!name || !email || !phone || !password) {
@@ -71,6 +86,16 @@ export const signupSeller = async (req, res) => {
             applicationStatus: "pending",
             isActive: true,
         });
+
+        // Best-effort — an invalid/expired/already-used invite token should
+        // never block signup itself, it just loses the traceability link.
+        if (invite) {
+            try {
+                await markSellerInviteUsed(invite, account._id);
+            } catch {
+                /* non-fatal */
+            }
+        }
 
         const token = generateSellerToken({
             accountId: account._id,

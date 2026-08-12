@@ -27,9 +27,6 @@ import {
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
 const SessionMonitor = React.lazy(() => import("../pages/SessionMonitor"));
-const CategoryManagement = React.lazy(
-  () => import("../pages/CategoryManagement"),
-);
 const HeaderCategories = React.lazy(
   () => import("../pages/categories/HeaderCategories"),
 );

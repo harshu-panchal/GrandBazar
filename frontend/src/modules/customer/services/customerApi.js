@@ -12,16 +12,23 @@ export const customerApi = {
     invalidateCache("/customer/profile");
     return axiosInstance.put("/customer/profile", data);
   },
+  deleteAccount: () => {
+    invalidateCache("/customer/profile");
+    return axiosInstance.delete("/customer/account");
+  },
   getWalletTransactions: (params) =>
     getWithDedupe("/customer/transactions", params),
   getCategories: (params) =>
     getWithDedupe("/categories", params, { ttl: 60 * 1000 }), // 1 min for categories
   getProducts: (params) => getWithDedupe("/products", params),
+  getTrendingSearches: () => getWithDedupe("/products/search/trending"),
+  getTrendingProducts: (limit = 10) => getWithDedupe("/products/trending", { limit }),
   getProductById: (id, params) => getWithDedupe(`/products/${id}`, params),
+  getSimilarProducts: (id, params) => getWithDedupe(`/products/${id}/similar`, params),
 
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),
-  getSellerPublicProfile: (id) => getWithDedupe(`/seller/public/${id}`),
+  getSellerPublicProfile: (id, params) => getWithDedupe(`/seller/public/${id}`, params),
   getRecommendedStores: () => getWithDedupe("/experience/recommended-stores", {}, { ttl: 10000 }),
   getStoreAlternatives: (id) => getWithDedupe(`/seller/public/${id}/alternatives`),
   getDiscoverCityData: (citySlug) => getWithDedupe(`/public/discover/${encodeURIComponent(citySlug)}`),
@@ -96,6 +103,7 @@ export const customerApi = {
   placeOrder: (data) =>
     axiosInstance.post("/orders/place", data, { timeout: 120000 }),
   getMyOrders: () => getWithDedupe("/orders/my-orders"),
+  reorderOrder: (orderId) => axiosInstance.post(`/orders/${orderId}/reorder`),
   /**
    * Order details must reflect live workflow, but we still dedupe in-flight requests to avoid
    * network spam when multiple effects/events trigger refresh simultaneously.
@@ -125,6 +133,7 @@ export const customerApi = {
     axiosInstance.get(`/orders/${orderId}/modifications`),
   raiseDispute: (orderId, data) => axiosInstance.post(`/orders/${orderId}/dispute`, data),
   getOrderDispute: (orderId) => axiosInstance.get(`/orders/${orderId}/dispute`),
+  getOrderInvoice: (orderId) => axiosInstance.get(`/orders/${orderId}/invoice/customer`),
   getOrderRoute: (orderId, params) =>
     axiosInstance.get(`/orders/workflow/${orderId}/route`, { params }),
   cancelOrder: (orderId, data) => {
@@ -167,6 +176,8 @@ export const customerApi = {
 
   // Experience sections (home / header pages)
   getExperienceSections: (params) => getWithDedupe("/experience", params),
+  trackSuperAdEvent: (sectionId, itemId, event) =>
+    axiosInstance.post(`/experience/super-ads/${sectionId}/${itemId}/track`, { event }),
 
   // Hero config (separate hero banners + categories per page; fallback to home)
   getHeroConfig: (params) =>
@@ -198,6 +209,17 @@ export const customerApi = {
     axiosInstance.get("/maps/geocode", { params: { address, ...params } }),
   geocodePlaceId: (placeId, params = {}) =>
     axiosInstance.get("/maps/geocode", { params: { placeId, ...params } }),
+
+  // General notifications (order lifecycle, returns, refunds, etc.)
+  getNotifications: (params) => getWithDedupe("/notifications", params, { ttl: 3000 }),
+  markNotificationRead: (notificationId) => {
+    invalidateCache("/notifications");
+    return axiosInstance.patch("/notifications/read", { notificationId });
+  },
+  markAllNotificationsRead: () => {
+    invalidateCache("/notifications");
+    return axiosInstance.patch("/notifications/read", { markAll: true });
+  },
 
   // Push (FCM) test
   testPushNotification: () => axiosInstance.post("/push/test"),

@@ -34,6 +34,12 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
   const packingFee = pricingPreview?.packingFeeCharged || 0;
   const tipAmount = pricingPreview?.tipTotal || selectedTip || 0;
   const taxAmount = pricingPreview?.taxTotal || 0;
+  const cgstAmount = pricingPreview?.cgstTotal || 0;
+  const sgstAmount = pricingPreview?.sgstTotal || 0;
+  const igstAmount = pricingPreview?.igstTotal || 0;
+  const isInterState = pricingPreview?.taxJurisdiction === "inter_state";
+  const oddHourSurchargeAmount = pricingPreview?.oddHourSurchargeAmount || 0;
+  const weatherSurchargeAmount = pricingPreview?.weatherSurchargeAmount || 0;
 
   return (
     <>
@@ -123,12 +129,52 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
               </span>
             </div>
           )}
-          <div className="flex justify-between items-center px-2">
-            <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Tax
-            </span>
-            <span className="font-black text-slate-800">₹{taxAmount}</span>
-          </div>
+          {oddHourSurchargeAmount > 0 && (
+            <div className="flex justify-between items-start px-3 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
+              <span className="text-indigo-700 font-black text-xs uppercase tracking-wider">
+                Odd-Hour Delivery Charge
+              </span>
+              <span className="font-black text-indigo-700">₹{oddHourSurchargeAmount}</span>
+            </div>
+          )}
+          {weatherSurchargeAmount > 0 && (
+            <div className="flex justify-between items-start px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
+              <span className="text-amber-700 font-black text-xs uppercase tracking-wider">
+                Weather Surcharge
+              </span>
+              <span className="font-black text-amber-700">₹{weatherSurchargeAmount}</span>
+            </div>
+          )}
+          {isInterState ? (
+            <div className="flex justify-between items-center px-2">
+              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+                IGST
+              </span>
+              <span className="font-black text-slate-800">₹{igstAmount}</span>
+            </div>
+          ) : cgstAmount > 0 || sgstAmount > 0 ? (
+            <>
+              <div className="flex justify-between items-center px-2">
+                <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+                  CGST
+                </span>
+                <span className="font-black text-slate-800">₹{cgstAmount}</span>
+              </div>
+              <div className="flex justify-between items-center px-2">
+                <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+                  SGST
+                </span>
+                <span className="font-black text-slate-800">₹{sgstAmount}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between items-center px-2">
+              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
+                Tax
+              </span>
+              <span className="font-black text-slate-800">₹{taxAmount}</span>
+            </div>
+          )}
 
           {selectedCoupon && (
             <motion.div

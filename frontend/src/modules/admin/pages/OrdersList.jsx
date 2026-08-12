@@ -31,6 +31,7 @@ import {
     getOrderStoreReassignment,
 } from '@/shared/utils/orderStatus';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
+import { onOrderStatusUpdate } from '@core/services/orderSocket';
 
 const OrdersList = () => {
     const { status = 'all' } = useParams();
@@ -160,7 +161,7 @@ const OrdersList = () => {
         try {
             await adminApi.updateOrderStatus(orderId, { status: newStatus });
             showToast(`Order status updated to ${newStatus}`, "success");
-            fetchOrders(); // Refresh table
+            fetchOrders(page); // Refresh in place — don't jump back to page 1
         } catch (error) {
             console.error("Failed to update status:", error);
             showToast("Failed to update status", "error");
@@ -202,6 +203,25 @@ const OrdersList = () => {
         }, 500);
         return () => clearTimeout(timer);
     }, [pageSize, status, searchTerm, dateRange]);
+
+    // Live updates — every admin socket auto-joins "admin:orders" (see
+    // backend/app/socket/socketManager.js) and every workflow transition now
+    // broadcasts into it (see orderSocketEmitter.js). Debounced so a burst of
+    // updates across many orders coalesces into one refetch instead of one
+    // per event.
+    useEffect(() => {
+        const getToken = () => localStorage.getItem('auth_admin');
+        let debounceTimer = null;
+        const unsubscribe = onOrderStatusUpdate(getToken, () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => fetchOrders(page), 800);
+        });
+        return () => {
+            clearTimeout(debounceTimer);
+            unsubscribe();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page]);
 
     const safeOrders = useMemo(
         () => (Array.isArray(orders) ? orders : []),
@@ -294,6 +314,13 @@ const OrdersList = () => {
                         <div className="p-2 bg-fuchsia-100 rounded-xl">
                             <ShoppingBag className="h-5 w-5 text-fuchsia-600" />
                         </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                            <span className="relative flex h-1.5 w-1.5">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            </span>
+                            Live
+                        </span>
                     </h1>
                     <p className="ds-description mt-1">View and manage all orders.</p>
                 </div>

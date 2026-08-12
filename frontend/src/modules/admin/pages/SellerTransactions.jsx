@@ -79,7 +79,7 @@ const SellerTransactions = () => {
                         hour: '2-digit',
                         minute: '2-digit'
                     }),
-                    seller: t.user?.shopName || t.user?.name || 'Unknown',
+                    seller: t.user?.shopName || t.user?.ownerId?.name || 'Unknown',
                     type: t.type === 'Seller Earning' ? 'sale' :
                         (t.type === 'Withdrawal' || t.type === 'Payout') ? 'payout' :
                             t.type.toLowerCase(),
@@ -93,11 +93,17 @@ const SellerTransactions = () => {
                           0,
                         )
                         || 0,
-                    taxAmount: t.order?.pricing?.tax || 0,
+                    // NOTE: was reading `pricing.tax`, a field that doesn't exist on Order
+                    // (the legacy mirror field is `pricing.gst`) — always evaluated to 0.
+                    taxAmount: t.order?.paymentBreakdown?.taxTotal || t.order?.pricing?.gst || 0,
+                    packagingAmount: t.order?.paymentBreakdown?.packagingChargeAmount || 0,
+                    isBulkOrder: Boolean(t.order?.isBulkOrder || t.order?.paymentBreakdown?.isBulkOrder),
                     netPayable: t.amount,
                     status: t.status.toLowerCase(),
                     paymentMethod: t.paymentMethod || 'Wallet',
-                    bankDetails: t.bankDetails || t.user?.bankDetails || 'N/A',
+                    bankDetails: t.user?.accountNumber
+                        ? `${t.user.bankName || 'Bank'} · ${t.user.accountNumber} (${t.user.ifsc || 'IFSC N/A'})`
+                        : 'N/A',
                     items: t.order?.items?.map(item => ({
                         name: item.product?.name || 'Unknown Item',
                         qty: item.quantity,
@@ -318,6 +324,9 @@ const SellerTransactions = () => {
                                         <div className="flex flex-col gap-0.5">
                                             <span className="text-[10px] font-black text-slate-400 uppercase">{txn.type}</span>
                                             {txn.orderId && <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">{txn.orderId}</span>}
+                                            {txn.isBulkOrder && (
+                                                <Badge variant="info" className="mt-0.5 w-fit uppercase">Bulk</Badge>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-5 text-center">
@@ -438,7 +447,12 @@ const SellerTransactions = () => {
 
                             {selectedTxn.type === 'sale' && (
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest px-4">Financial Drill-Down</h4>
+                                    <div className="flex items-center justify-between px-4">
+                                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Financial Drill-Down</h4>
+                                        {selectedTxn.isBulkOrder && (
+                                            <Badge variant="info" className="uppercase">Bulk Order</Badge>
+                                        )}
+                                    </div>
                                     <div className="bg-slate-900 rounded-xl p-6 text-white space-y-4">
                                         <div className="flex justify-between items-center text-sm font-medium">
                                             <span className="opacity-60">Base Subtotal</span>
@@ -448,6 +462,12 @@ const SellerTransactions = () => {
                                             <span className="opacity-60">Admin Fee ({selectedTxn.commissionRate}%)</span>
                                             <span className="text-orange-400">-₹{selectedTxn.commissionAmount}</span>
                                         </div>
+                                        {selectedTxn.packagingAmount > 0 && (
+                                            <div className="flex justify-between items-center text-sm font-medium">
+                                                <span className="opacity-60">Packaging Charge (paid to seller)</span>
+                                                <span className="text-emerald-400">+₹{selectedTxn.packagingAmount}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-center text-sm font-medium">
                                             <span className="opacity-60">Tax & Surcharge</span>
                                             <span className="text-orange-400">-₹{selectedTxn.taxAmount}</span>

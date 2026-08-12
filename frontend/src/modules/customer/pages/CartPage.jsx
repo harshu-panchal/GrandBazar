@@ -10,16 +10,49 @@ import {
     Sparkles,
     ShieldCheck,
     Truck,
+    Clock,
+    Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@shared/components/ui/Toast';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
+import DeliverySlotPicker from '../components/checkout/DeliverySlotPicker';
+import { PackageCheck } from 'lucide-react';
+
+const formatDisplayDate = (value) => {
+    if (!value) return '';
+    try {
+        return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    } catch {
+        return '';
+    }
+};
 
 const CartPage = () => {
-    const { cart, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
+    const {
+        cart,
+        removeFromCart,
+        updateQuantity,
+        cartTotal,
+        clearCart,
+        primarySellerId,
+        fulfillmentType,
+        schedulePayload,
+        setSchedule,
+    } = useCart();
     const { showToast } = useToast();
     const itemCount = cart.reduce((count, item) => count + item.quantity, 0);
     const [emptyBoxData, setEmptyBoxData] = useState(null);
+
+    // A pre-order/future-order product carries a campaignId, resolved and
+    // persisted server-side the moment it's added to cart (see
+    // backend/app/controller/cartController.js). When present, the whole
+    // cart is treated as a scheduled pre-order — the backend already
+    // enforces that a cart can't mix pre-order and regular lines, or lines
+    // from two different campaigns, so it's safe to key off the first match.
+    const preorderItem = cart.find((item) => item.campaignId);
+    const isPreorderCart = Boolean(preorderItem);
+    const preorderMeta = preorderItem?.advanceBooking || null;
 
     // Dynamically load empty-box Lottie when cart is empty
     useEffect(() => {
@@ -75,9 +108,17 @@ const CartPage = () => {
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
-                                                        <span className="inline-flex rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-brand-700">
-                                                            {item.category}
-                                                        </span>
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <span className="inline-flex rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-brand-700">
+                                                                {item.category}
+                                                            </span>
+                                                            {item.campaignId ? (
+                                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                                                                    <PackageCheck size={10} />
+                                                                    Pre-order
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
                                                         <h3 className="mt-2 truncate text-lg md:text-xl font-black tracking-tight text-slate-900">
                                                             {item.name}
                                                         </h3>
@@ -176,6 +217,72 @@ const CartPage = () => {
                                             <span className="text-base font-bold text-white/85">Total Amount</span>
                                             <span className="text-3xl font-black tracking-tight text-brand-300">₹{cartTotal}</span>
                                         </div>
+                                    </div>
+
+                                    <div className="rounded-[1.5rem] bg-white/5 p-4 backdrop-blur-sm space-y-3">
+                                        {isPreorderCart ? (
+                                            <>
+                                                <div className="flex items-start gap-2.5 rounded-xl border border-brand-400/30 bg-brand-400/10 px-3 py-2.5">
+                                                    <PackageCheck size={16} className="mt-0.5 flex-shrink-0 text-brand-300" />
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-black uppercase tracking-wider text-brand-300">
+                                                            Advance booking
+                                                        </p>
+                                                        <p className="mt-0.5 text-xs leading-relaxed text-white/70">
+                                                            {preorderMeta?.title
+                                                                ? `“${preorderMeta.title}” — `
+                                                                : ""}
+                                                            this cart is a pre-order. Pick one of the seller's delivery dates below
+                                                            {preorderMeta?.deliveryStartDate && preorderMeta?.deliveryEndDate
+                                                                ? ` (available ${formatDisplayDate(preorderMeta.deliveryStartDate)} – ${formatDisplayDate(preorderMeta.deliveryEndDate)})`
+                                                                : ""}
+                                                            .
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {primarySellerId ? (
+                                                    <DeliverySlotPicker
+                                                        sellerId={primarySellerId}
+                                                        fulfillmentType="preorder"
+                                                        campaignId={preorderItem.campaignId}
+                                                        onChange={setSchedule}
+                                                    />
+                                                ) : null}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-xs font-bold uppercase tracking-wider text-white/60">Delivery mode</p>
+                                                <div className="flex gap-2">
+                                                    {["instant", "scheduled"].map((mode) => (
+                                                        <button
+                                                            key={mode}
+                                                            type="button"
+                                                            onClick={() => setSchedule({
+                                                                fulfillmentType: mode,
+                                                                timeSlot: mode === "instant" ? "now" : schedulePayload?.timeSlot,
+                                                                deliveryDate: schedulePayload?.deliveryDate,
+                                                                windowLabel: schedulePayload?.windowLabel,
+                                                            })}
+                                                            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
+                                                                fulfillmentType === mode
+                                                                    ? "bg-brand-400 text-slate-950"
+                                                                    : "bg-white/10 text-white/70 hover:bg-white/15"
+                                                            }`}
+                                                        >
+                                                            {mode === "instant" ? <Clock size={14} /> : <Calendar size={14} />}
+                                                            {mode === "instant" ? "Deliver now" : "Schedule"}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {primarySellerId ? (
+                                                    <DeliverySlotPicker
+                                                        sellerId={primarySellerId}
+                                                        fulfillmentType={fulfillmentType}
+                                                        onChange={setSchedule}
+                                                    />
+                                                ) : null}
+                                            </>
+                                        )}
                                     </div>
 
                                     <Link to="/checkout" className="block">

@@ -130,6 +130,25 @@ const productSchema = new mongoose.Schema(
                 salePrice: Number,
                 stock: Number,
                 sku: String,
+                applyCommission: {
+                    type: Boolean,
+                    default: false,
+                },
+                adminCommissionType: {
+                    type: String,
+                    enum: ["percentage", "fixed"],
+                    default: "percentage",
+                },
+                adminCommissionValue: {
+                    type: Number,
+                    default: 0,
+                    min: 0,
+                },
+                adminCommissionFixedRule: {
+                    type: String,
+                    enum: ["per_qty", "per_item"],
+                    default: "per_qty",
+                },
             }
         ],
         isFeatured: {
@@ -192,6 +211,15 @@ const productSchema = new mongoose.Schema(
             type: Number,
             default: 0,
             min: 0,
+        },
+        gstSlabOverride: {
+            type: Number,
+            enum: [0, 5, 12, 18, 28, null],
+            default: null, // null = inherit gstSlab from category
+        },
+        isPreorderEligible: {
+            type: Boolean,
+            default: false,
         },
     },
     { timestamps: true }

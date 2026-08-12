@@ -29,7 +29,7 @@ export default function DeliveryPolicyPage() {
   });
   const [schedulingSettings, setSchedulingSettings] = useState({
     enabled: false,
-    maxDaysAhead: 7,
+    maxDaysAhead: 30,
     rescheduleCutoffDays: 1,
     deliveryWindows: DEFAULT_WINDOWS,
   });

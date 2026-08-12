@@ -97,7 +97,7 @@ const Dashboard = () => {
         toast.info("You are now OFFLINE. No new orders.");
       }
     } catch (error) {
-      toast.error("Failed to update status");
+      toast.error(error.response?.data?.message || "Failed to update status");
     }
   };
 
@@ -170,6 +170,15 @@ const Dashboard = () => {
           )}
         </div>
       </header>
+
+      {user && !user.isVerified && (
+        <div className="mx-6 mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">Account pending verification</p>
+          <p className="mt-0.5 text-amber-700">
+            An admin is reviewing your documents. You can browse the app, but you can't go online or receive orders until your account is approved.
+          </p>
+        </div>
+      )}
 
       {/* Online/Offline Toggle */}
       <div className="px-6 py-6">

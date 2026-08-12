@@ -241,6 +241,17 @@ const DashboardLayout = ({ children, navItems, title }) => {
                     shownOrderIdsRef.current = existingIds;
                     isFirstLoadRef.current = false;
                     setShownOrderIds(existingIds);
+
+                    // Catch the seller up on anything still waiting from before this
+                    // session started (e.g. they were logged out or away when it came
+                    // in) — don't silently mark it "already seen" without ever alerting.
+                    if (pendingOrders.length > 0) {
+                        const mostUrgent = [...pendingOrders].sort(
+                            (a, b) => resolveAcceptSecondsLeft(a) - resolveAcceptSecondsLeft(b),
+                        )[0];
+                        setNewOrderAlert(mostUrgent);
+                        newOrderAlertRef.current = mostUrgent;
+                    }
                     return;
                 }
 
@@ -350,6 +361,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
                         balances: raw.balances ?? {},
                         ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
                         monthlyChart: Array.isArray(raw.monthlyChart) ? raw.monthlyChart : [],
+                        moduleEnabled: raw.moduleEnabled !== false,
                     });
                 }
             })
@@ -372,6 +384,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
                         balances: raw.balances ?? {},
                         ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
                         monthlyChart: Array.isArray(raw.monthlyChart) ? raw.monthlyChart : [],
+                        moduleEnabled: raw.moduleEnabled !== false,
                     });
                 }
             })

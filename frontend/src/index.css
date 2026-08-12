@@ -421,3 +421,14 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Ensure native select and option dropdown text is crisp, dark, and visible across all browsers & themes */
+select option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+select option:disabled {
+  color: #94a3b8 !important;
+}
+

@@ -27,7 +27,7 @@ const validateBasePayload = async (body) => {
     throw new Error("Invalid pageType");
   }
 
-  if (!["banners", "categories", "subcategories", "products"].includes(displayType)) {
+  if (!["banners", "categories", "subcategories", "products", "super_ads", "seller_highlights"].includes(displayType)) {
     throw new Error("Invalid displayType");
   }
 
@@ -41,7 +41,7 @@ const validateBasePayload = async (body) => {
     }
   }
 
-  if (["categories", "subcategories", "products"].includes(displayType)) {
+  if (["categories", "subcategories", "products", "seller_highlights"].includes(displayType)) {
     if (!title || !title.trim()) {
       throw new Error("Title is required for this displayType");
     }
@@ -198,6 +198,62 @@ const validateAndNormalizeConfig = async (displayType, config = {}) => {
     return normalized;
   }
 
+  if (displayType === "super_ads") {
+    const items = Array.isArray(config.items) ? config.items : [];
+    const validItems = items.filter((a) => a && a.sellerId && a.imageUrl);
+    if (!validItems.length) {
+      throw new Error("At least one ad slot (seller + image) is required");
+    }
+
+    const sellerIds = [...new Set(validItems.map((a) => String(a.sellerId)))];
+    const productIds = [...new Set(validItems.filter((a) => a.productId).map((a) => String(a.productId)))];
+
+    const [sellers, products] = await Promise.all([
+      Store.find({ _id: { $in: sellerIds } }).select("_id"),
+      productIds.length ? Product.find({ _id: { $in: productIds } }).select("_id") : [],
+    ]);
+    const validSellerIds = new Set(sellers.map((s) => String(s._id)));
+    const validProductIds = new Set(products.map((p) => String(p._id)));
+
+    const finalItems = validItems
+      .filter((a) => validSellerIds.has(String(a.sellerId)))
+      .map((a) => ({
+        // Preserved (if present) so updateExperienceSection can carry
+        // impressions/clicks forward for items the admin is editing, not
+        // adding fresh — a brand-new item simply won't have an _id yet.
+        _id: a._id || undefined,
+        sellerId: a.sellerId,
+        productId: a.productId && validProductIds.has(String(a.productId)) ? a.productId : null,
+        title: a.title || "",
+        imageUrl: a.imageUrl,
+        linkType: a.linkType || "store",
+        linkValue: a.linkValue || "",
+        priority: Number(a.priority) || 0,
+      }));
+
+    if (!finalItems.length) {
+      throw new Error("Provided sellerId(s) are invalid");
+    }
+
+    normalized.superAds = { items: finalItems.sort((a, b) => b.priority - a.priority) };
+    return normalized;
+  }
+
+  if (displayType === "seller_highlights") {
+    const sellerIds = Array.isArray(config.sellerIds) ? config.sellerIds.filter(Boolean) : [];
+    if (!sellerIds.length) {
+      throw new Error("At least one sellerId is required");
+    }
+
+    const sellers = await Store.find({ _id: { $in: sellerIds } }).select("_id");
+    if (!sellers.length) {
+      throw new Error("Provided sellerIds are invalid");
+    }
+
+    normalized.sellerHighlights = { sellerIds: sellers.map((s) => s._id) };
+    return normalized;
+  }
+
   return normalized;
 };
 
@@ -267,6 +323,25 @@ export const updateExperienceSection = async (req, res) => {
 
     const base = await validateBasePayload(merged);
     const config = await validateAndNormalizeConfig(base.displayType, base.config);
+
+    // super_ads: carry impressions/clicks forward for items being edited
+    // (matched by _id) — validateBasePayload rebuilds the array fresh each
+    // save and has no counters to preserve on its own.
+    if (base.displayType === "super_ads" && config?.superAds?.items?.length) {
+      const existingById = new Map(
+        (existing.config?.superAds?.items || [])
+          .filter((item) => item._id)
+          .map((item) => [String(item._id), item]),
+      );
+      config.superAds.items = config.superAds.items.map((item) => {
+        const prior = item._id ? existingById.get(String(item._id)) : null;
+        return {
+          ...item,
+          impressions: prior?.impressions || 0,
+          clicks: prior?.clicks || 0,
+        };
+      });
+    }
 
     existing.pageType = base.pageType;
     existing.headerId = base.headerId;
@@ -371,6 +446,9 @@ export const getPublicExperienceSections = async (req, res) => {
       async () =>
         ExperienceSection.find(query)
           .sort({ order: 1, createdAt: 1, _id: 1 })
+          .populate("config.superAds.items.sellerId", "shopName slug")
+          .populate("config.superAds.items.productId", "name slug mainImage")
+          .populate("config.sellerHighlights.sellerIds", "shopName slug avgRating category")
           .lean(),
       getTTL("homepage"),
     );
@@ -599,5 +677,33 @@ export const getRecommendedStoresForUser = async (req, res) => {
     return handleResponse(res, 200, "Recommended stores fetched successfully", recommendedStores);
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   PUBLIC: Track a Super AD impression/click
+================================ */
+export const trackSuperAdEvent = async (req, res) => {
+  try {
+    const { sectionId, itemId } = req.params;
+    const { event } = req.body || {};
+
+    if (!["impression", "click"].includes(event)) {
+      return handleResponse(res, 400, "event must be 'impression' or 'click'");
+    }
+    if (!mongoose.Types.ObjectId.isValid(sectionId) || !mongoose.Types.ObjectId.isValid(itemId)) {
+      return handleResponse(res, 400, "Invalid sectionId or itemId");
+    }
+
+    const field = event === "impression" ? "impressions" : "clicks";
+    await ExperienceSection.updateOne(
+      { _id: sectionId, "config.superAds.items._id": itemId },
+      { $inc: { [`config.superAds.items.$.${field}`]: 1 } },
+    );
+
+    return handleResponse(res, 200, "Tracked");
+  } catch (error) {
+    // Passive tracking — never let a tracking failure surface as a user-facing error.
+    return handleResponse(res, 200, "Tracked");
   }
 };

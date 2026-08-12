@@ -19,6 +19,23 @@ const DEFAULT_FINANCE_SETTINGS = {
   customerSurchargeEnabled: false,
   customerSurchargeAmount: 0,
   customerSurchargeReason: "",
+  oddHourSurcharge: {
+    enabled: false,
+    amount: 0,
+    windowStart: "22:00",
+    windowEnd: "06:00",
+    revenueSplit: { platform: 100, seller: 0 },
+  },
+  weatherSurcharge: {
+    enabled: false,
+    amount: 0,
+    revenueSplit: { platform: 100, seller: 0 },
+  },
+  bulkOrderQtyThreshold: 20,
+  bulkOrderValueThreshold: 15000,
+  bulkOrderCommissionRate: 0,
+  platformFee: 0,
+  freeDeliveryThreshold: 0,
 };
 
 export function normalizeFinanceSettings(raw = {}) {
@@ -66,6 +83,48 @@ export function normalizeFinanceSettings(raw = {}) {
     raw.customerSurchargeReason ?? DEFAULT_FINANCE_SETTINGS.customerSurchargeReason,
   ).trim();
 
+  const rawOddHour = raw.oddHourSurcharge || {};
+  const oddHourSurcharge = {
+    enabled: Boolean(rawOddHour.enabled ?? DEFAULT_FINANCE_SETTINGS.oddHourSurcharge.enabled),
+    amount: roundCurrency(Math.max(0, Number(rawOddHour.amount ?? 0) || 0)),
+    windowStart: String(rawOddHour.windowStart || DEFAULT_FINANCE_SETTINGS.oddHourSurcharge.windowStart),
+    windowEnd: String(rawOddHour.windowEnd || DEFAULT_FINANCE_SETTINGS.oddHourSurcharge.windowEnd),
+    revenueSplit: {
+      platform: Number(rawOddHour.revenueSplit?.platform ?? 100),
+      seller: Number(rawOddHour.revenueSplit?.seller ?? 0),
+    },
+  };
+
+  const rawWeather = raw.weatherSurcharge || {};
+  const weatherSurcharge = {
+    enabled: Boolean(rawWeather.enabled ?? DEFAULT_FINANCE_SETTINGS.weatherSurcharge.enabled),
+    amount: roundCurrency(Math.max(0, Number(rawWeather.amount ?? 0) || 0)),
+    revenueSplit: {
+      platform: Number(rawWeather.revenueSplit?.platform ?? 100),
+      seller: Number(rawWeather.revenueSplit?.seller ?? 0),
+    },
+  };
+
+  const bulkOrderQtyThreshold = Math.max(
+    1,
+    Number(raw.bulkOrderQtyThreshold ?? DEFAULT_FINANCE_SETTINGS.bulkOrderQtyThreshold) || DEFAULT_FINANCE_SETTINGS.bulkOrderQtyThreshold,
+  );
+  const bulkOrderValueThreshold = Math.max(
+    0,
+    Number(raw.bulkOrderValueThreshold ?? DEFAULT_FINANCE_SETTINGS.bulkOrderValueThreshold) || 0,
+  );
+  const bulkOrderCommissionRate = Math.max(
+    0,
+    Number(raw.bulkOrderCommissionRate ?? DEFAULT_FINANCE_SETTINGS.bulkOrderCommissionRate) || 0,
+  );
+
+  const platformFee = roundCurrency(
+    Math.max(0, Number(raw.platformFee ?? DEFAULT_FINANCE_SETTINGS.platformFee) || 0),
+  );
+  const freeDeliveryThreshold = roundCurrency(
+    Math.max(0, Number(raw.freeDeliveryThreshold ?? DEFAULT_FINANCE_SETTINGS.freeDeliveryThreshold) || 0),
+  );
+
   return {
     deliveryPricingMode,
     pricingMode: deliveryPricingMode,
@@ -85,6 +144,13 @@ export function normalizeFinanceSettings(raw = {}) {
     customerSurchargeEnabled,
     customerSurchargeAmount: customerSurchargeEnabled ? customerSurchargeAmount : 0,
     customerSurchargeReason: customerSurchargeEnabled ? customerSurchargeReason : "",
+    oddHourSurcharge,
+    weatherSurcharge,
+    bulkOrderQtyThreshold,
+    bulkOrderValueThreshold,
+    bulkOrderCommissionRate,
+    platformFee,
+    freeDeliveryThreshold,
   };
 }
 

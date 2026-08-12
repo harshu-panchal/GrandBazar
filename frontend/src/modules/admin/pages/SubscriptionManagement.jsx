@@ -47,7 +47,17 @@ const TABS = [
   { key: "plans", label: "Plans" },
   { key: "free", label: "Free Assign" },
   { key: "requests", label: "Requests" },
+  { key: "payment-settings", label: "Payment Settings" },
 ];
+
+const emptyPaymentSettings = {
+  bankName: "",
+  accountHolder: "",
+  accountNumber: "",
+  ifsc: "",
+  upiId: "",
+  paymentInstructions: "",
+};
 
 const REQUEST_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -329,6 +339,9 @@ const SubscriptionManagement = () => {
   const [phonePeStatusFilter, setPhonePeStatusFilter] = useState("all");
   const [rejectReasons, setRejectReasons] = useState({});
 
+  const [paymentSettingsForm, setPaymentSettingsForm] = useState(emptyPaymentSettings);
+  const [isSavingPaymentSettings, setIsSavingPaymentSettings] = useState(false);
+
   const activePlans = useMemo(() => plans.filter(isPlanActive), [plans]);
   const inactivePlans = useMemo(() => plans.filter((p) => !isPlanActive(p)), [plans]);
 
@@ -344,6 +357,7 @@ const SubscriptionManagement = () => {
         phonePeRes,
         modelSwitchRes,
         complimentaryRes,
+        paymentSettingsRes,
       ] = await Promise.all([
         adminApi.getSubscriptionOverview(),
         adminApi.getSubscriptionPlans(),
@@ -351,6 +365,7 @@ const SubscriptionManagement = () => {
         adminApi.getSubscriptionPayments({ status: phonePeStatusFilter }),
         adminApi.getModelSwitchRequests({ status: "pending" }),
         adminApi.getComplimentarySubscriptions(),
+        adminApi.getSubscriptionPaymentSettings(),
       ]);
 
       setOverview(overviewRes.data.result || {});
@@ -358,6 +373,15 @@ const SubscriptionManagement = () => {
       setRequests(unwrapList(requestsRes));
       setPhonePePayments(unwrapList(phonePeRes));
       setModelSwitchRequests(unwrapList(modelSwitchRes));
+      const paymentSettingsPayload = paymentSettingsRes.data?.result || {};
+      setPaymentSettingsForm({
+        bankName: paymentSettingsPayload.bankName || "",
+        accountHolder: paymentSettingsPayload.accountHolder || "",
+        accountNumber: paymentSettingsPayload.accountNumber || "",
+        ifsc: paymentSettingsPayload.ifsc || "",
+        upiId: paymentSettingsPayload.upiId || "",
+        paymentInstructions: paymentSettingsPayload.paymentInstructions || "",
+      });
       const complimentaryPayload = complimentaryRes.data?.result || {};
       setComplimentaryItems(
         Array.isArray(complimentaryPayload.items)
@@ -515,6 +539,28 @@ const SubscriptionManagement = () => {
       toast.error(error.response?.data?.message || "Failed to assign free subscription");
     } finally {
       setIsAssigningFree(false);
+    }
+  };
+
+  const handleSavePaymentSettings = async (e) => {
+    e.preventDefault();
+    setIsSavingPaymentSettings(true);
+    try {
+      const res = await adminApi.updateSubscriptionPaymentSettings(paymentSettingsForm);
+      const saved = res.data?.result || paymentSettingsForm;
+      setPaymentSettingsForm({
+        bankName: saved.bankName || "",
+        accountHolder: saved.accountHolder || "",
+        accountNumber: saved.accountNumber || "",
+        ifsc: saved.ifsc || "",
+        upiId: saved.upiId || "",
+        paymentInstructions: saved.paymentInstructions || "",
+      });
+      toast.success("Subscription payment settings updated");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update payment settings");
+    } finally {
+      setIsSavingPaymentSettings(false);
     }
   };
 
@@ -1120,6 +1166,104 @@ const SubscriptionManagement = () => {
             </Card>
           )}
         </div>
+      )}
+
+      {tab === "payment-settings" && (
+        <Card className="p-5 max-w-2xl">
+          <div className="mb-4">
+            <h2 className="font-bold text-slate-900">Subscription payment settings</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Bank and UPI details shown to sellers when they submit a manual subscription payment.
+            </p>
+          </div>
+
+          <form onSubmit={handleSavePaymentSettings} className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <FieldLabel>Bank name</FieldLabel>
+                <TextInput
+                  placeholder="e.g. HDFC Bank"
+                  value={paymentSettingsForm.bankName}
+                  onChange={(e) =>
+                    setPaymentSettingsForm((prev) => ({ ...prev, bankName: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <FieldLabel>Account holder</FieldLabel>
+                <TextInput
+                  placeholder="e.g. Zinto Technologies Pvt Ltd"
+                  value={paymentSettingsForm.accountHolder}
+                  onChange={(e) =>
+                    setPaymentSettingsForm((prev) => ({ ...prev, accountHolder: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <FieldLabel>Account number</FieldLabel>
+                <TextInput
+                  placeholder="e.g. 000123456789"
+                  value={paymentSettingsForm.accountNumber}
+                  onChange={(e) =>
+                    setPaymentSettingsForm((prev) => ({ ...prev, accountNumber: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <FieldLabel>IFSC code</FieldLabel>
+                <TextInput
+                  placeholder="e.g. HDFC0001234"
+                  value={paymentSettingsForm.ifsc}
+                  onChange={(e) =>
+                    setPaymentSettingsForm((prev) => ({ ...prev, ifsc: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <FieldLabel>UPI ID</FieldLabel>
+                <TextInput
+                  placeholder="e.g. zinto@hdfcbank"
+                  value={paymentSettingsForm.upiId}
+                  onChange={(e) =>
+                    setPaymentSettingsForm((prev) => ({ ...prev, upiId: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel hint="Shown alongside the bank/UPI details to guide sellers submitting manual payments">
+                Payment instructions
+              </FieldLabel>
+              <textarea
+                className={cn(
+                  "w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm",
+                  "focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400",
+                  "placeholder:text-slate-400",
+                )}
+                rows={4}
+                placeholder="e.g. Please include your shop name in the payment reference and upload the receipt after payment."
+                value={paymentSettingsForm.paymentInstructions}
+                onChange={(e) =>
+                  setPaymentSettingsForm((prev) => ({ ...prev, paymentInstructions: e.target.value }))
+                }
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={isSavingPaymentSettings}>
+                {isSavingPaymentSettings ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save payment settings"
+                )}
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
 
       <Modal

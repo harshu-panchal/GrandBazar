@@ -197,6 +197,72 @@ export async function assertCanPublishProduct(storeId, additionalCount = 1) {
   }
 }
 
+/**
+ * Free-tier product cap for commission-model sellers (checklist items 92-94).
+ * Unlike `assertCanPublishProduct` (subscription-tier, hard block), this
+ * limit's enforcement is itself admin-configurable via
+ * Setting.freeTierEnforcementMode:
+ *  - "soft" (default): publishing past it is always allowed, but line items
+ *    sold by an over-limit commission-model store pay an admin-configurable
+ *    commission surcharge on top of their normally-resolved rate.
+ *  - "hard": creating further products is blocked once the limit is
+ *    reached — see assertCanCreateFreeTierProduct below.
+ * Computed live (not a stored flag) so it can never drift out of sync with
+ * the seller's actual published-product count.
+ */
+export async function resolveFreeTierStatus(storeId) {
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store?.ownerId) {
+    return { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" };
+  }
+
+  const seller = await Seller.findById(store.ownerId).select("businessModel").lean();
+  if (seller?.businessModel !== BUSINESS_MODEL.COMMISSION) {
+    return { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" };
+  }
+
+  const settings = await Setting.findOne({})
+    .select("freeTierProductLimit overLimitCommissionSurchargePercent freeTierEnforcementMode")
+    .lean();
+  const limit = Number(settings?.freeTierProductLimit ?? 30);
+  const surchargePercent = Number(settings?.overLimitCommissionSurchargePercent ?? 5);
+  const enforcementMode = settings?.freeTierEnforcementMode === "hard" ? "hard" : "soft";
+
+  const publishedCount = await Product.countDocuments({
+    sellerId: storeId,
+    status: "active",
+    isPublished: { $ne: false },
+  });
+
+  return {
+    applicable: true,
+    isOverLimit: limit > 0 && publishedCount > limit,
+    publishedCount,
+    limit,
+    surchargePercent,
+    enforcementMode,
+  };
+}
+
+/**
+ * Called from productController.createProduct. A no-op unless the admin has
+ * switched freeTierEnforcementMode to "hard" — in soft mode (the default)
+ * creation is never blocked, only surcharged at checkout (see
+ * resolveFreeTierStatus above).
+ */
+export async function assertCanCreateFreeTierProduct(storeId) {
+  const status = await resolveFreeTierStatus(storeId);
+  if (!status.applicable || status.enforcementMode !== "hard") return status;
+  if (status.limit > 0 && status.publishedCount >= status.limit) {
+    const err = new Error(
+      `Free product limit reached (${status.limit}). Choose a subscription plan to publish more products.`,
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+  return status;
+}
+
 export async function createSubscriptionPaymentRequest({
   sellerId,
   planId,
@@ -437,6 +503,54 @@ export async function activateSubscriptionFromPhonePePayment({
     transactionRef: String(gatewayOrderId || ""),
     proofDocumentUrl: "",
     sellerNote: "Auto-approved via PhonePe",
+    planSnapshot: buildPlanSnapshot(plan),
+    status: PAYMENT_REQUEST_STATUS.APPROVED,
+    reviewedAt: new Date(),
+  });
+
+  const subscription = await activateSubscriptionFromPaymentRequest(request);
+  return { request, subscription };
+}
+
+/**
+ * A ₹0 plan has nothing to pay — routing it through PhonePe checkout throws
+ * ("Invalid plan price for payment", PhonePe rejects sub-₹1 amounts) since
+ * that path assumes a real payment. Activates immediately instead, the same
+ * way an approved manual/PhonePe payment does, just with no money involved.
+ */
+export async function activateFreeSubscriptionPlan({
+  sellerId,
+  planId,
+  requestType = PAYMENT_REQUEST_TYPE.NEW,
+}) {
+  const plan = await SubscriptionPlan.findById(planId).lean();
+  if (!plan) {
+    const err = new Error("Subscription plan not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (Number(plan.price) > 0) {
+    const err = new Error("This plan requires payment");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const active = await getActiveSubscriptionForSeller(sellerId);
+  const resolvedType = resolveSubscriptionRequestType({
+    activeSubscription: active,
+    selectedPlan: plan,
+    explicitType: requestType,
+  });
+
+  const request = await SubscriptionPaymentRequest.create({
+    sellerId,
+    planId: plan._id,
+    requestType: resolvedType,
+    amount: 0,
+    paymentMethod: "free_plan",
+    transactionRef: "",
+    proofDocumentUrl: "",
+    sellerNote: "Auto-approved — free plan, no payment required",
     planSnapshot: buildPlanSnapshot(plan),
     status: PAYMENT_REQUEST_STATUS.APPROVED,
     reviewedAt: new Date(),

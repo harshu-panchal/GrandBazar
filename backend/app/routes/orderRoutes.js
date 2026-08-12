@@ -3,6 +3,7 @@ import {
   placeOrder,
   getMyOrders,
   getOrderDetails,
+  reorderOrder,
   cancelOrder,
   approveCancelOrderRequest,
   rejectCancelOrderRequest,
@@ -22,6 +23,7 @@ import {
   rejectReturnPickup,
   updateReturnStatus,
   uploadReturnPickupProof,
+  getOrderInvoice,
 } from "../controller/orderController.js";
 import {
   createOrderWithFinancialSnapshot,
@@ -64,12 +66,14 @@ import {
   approveReschedule,
   rejectReschedule,
   adminRescheduleOrder,
+  sellerRescheduleOrder,
   adjustOrder,
   partialCancelOrder,
   payOrderDifference,
   requestProductReplacement,
   reviewProductReplacement,
   splitOrderDelivery,
+  updateSplitDeliveryStatus,
   getOrderModificationHistory,
   createDispute,
   resolveDisputeHandler,
@@ -99,6 +103,7 @@ import {
   customerVerifyPickup,
   sellerVerifyPickup,
   getPickupStatus,
+  adminGetStoreDeliveryPolicy,
   adminUpdateStoreDeliveryPolicy,
 } from "../controller/deliveryPolicyController.js";
 
@@ -163,6 +168,8 @@ router.post(
 );
 router.get("/my-orders", verifyToken, getMyOrders);
 router.get("/details/:orderId", verifyToken, getOrderDetails);
+router.post("/:orderId/reorder", verifyToken, allowRoles("customer", "user"), reorderOrder);
+router.get("/:orderId/invoice/:type", verifyToken, getOrderInvoice);
 router.put("/cancel/:orderId", verifyToken, cancelOrder);
 router.put(
   "/cancel/:orderId/approve",
@@ -385,6 +392,11 @@ router.put(
   checkAdminPermission("scheduling:write"),
   adminRescheduleOrder,
 );
+router.put(
+  "/reschedule/:orderId/seller",
+  ...sellerSchedulingWriteChain,
+  sellerRescheduleOrder,
+);
 
 // Price adjustments
 router.put(
@@ -430,6 +442,14 @@ router.post(
   requireApprovedSeller,
   checkSubSellerPermission("adjustments", "write"),
   splitOrderDelivery,
+);
+router.put(
+  "/:orderId/split-delivery/:splitId/status",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  updateSplitDeliveryStatus,
 );
 router.get(
   "/:orderId/modifications",
@@ -572,6 +592,12 @@ router.get(
   verifyToken,
   allowRoles("customer", "user"),
   getPickupStatus,
+);
+router.get(
+  "/stores/:storeId/delivery-policy",
+  verifyToken,
+  allowRoles("admin"),
+  adminGetStoreDeliveryPolicy,
 );
 router.put(
   "/stores/:storeId/delivery-policy",

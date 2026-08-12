@@ -38,7 +38,10 @@ import {
 import PromoMarquee from "../components/home/PromoMarquee";
 import QuickCategorySlider from "../components/home/QuickCategorySlider";
 import LowestPriceSection from "../components/home/LowestPriceSection";
+import TrendingProductsSection from "../components/home/TrendingProductsSection";
+import NearbyStoresMapTeaser from "../components/home/NearbyStoresMapTeaser";
 import OfferSections from "../components/home/OfferSections";
+import RecommendedStoresSection from "../components/home/RecommendedStoresSection";
 import AdvanceBookingSection from "../components/home/AdvanceBookingSection";
 import BecomeSellerButton from "../components/shared/BecomeSellerButton";
 
@@ -230,6 +233,7 @@ const Home = () => {
   const [subcategoryMap, setSubcategoryMap] = useState(() => cachedHomePageData?.subcategoryMap || {});
   const [pendingReturn, setPendingReturn] = useState(null);
   const [offerSections, setOfferSections] = useState(() => cachedHomePageData?.offerSections || []);
+  const [recommendedStores, setRecommendedStores] = useState(() => cachedHomePageData?.recommendedStores || []);
   const [noServiceData, setNoServiceData] = useState(null);
 
   useEffect(() => {
@@ -251,6 +255,7 @@ const Home = () => {
     setProducts(data.products || []);
     setExperienceSections(data.experienceSections || []);
     setOfferSections(data.offerSections || []);
+    setRecommendedStores(data.recommendedStores || []);
     if (data.heroConfig) setHeroConfig(data.heroConfig);
     setActiveCategory((prev) => {
       const stored = window.sessionStorage.getItem("experienceReturn");
@@ -287,11 +292,12 @@ const Home = () => {
         productParams.lat = currentLocation.latitude;
         productParams.lng = currentLocation.longitude;
       }
-      const [catRes, prodRes, expRes, sectionsRes] = await Promise.all([
+      const [catRes, prodRes, expRes, sectionsRes, recommendedStoresRes] = await Promise.all([
         customerApi.getCategories(),
         hasValidLocation ? customerApi.getProducts(productParams) : Promise.resolve({ data: { success: true, result: { items: [] } } }),
         customerApi.getExperienceSections({ pageType: "home" }).catch(() => null),
         hasValidLocation ? customerApi.getOfferSections({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} })) : Promise.resolve({ data: { results: [] } }),
+        customerApi.getRecommendedStores().catch(() => ({ data: {} })),
       ]);
       const nextHomeData = {
         categories: [ALL_CATEGORY],
@@ -300,6 +306,7 @@ const Home = () => {
         quickCategories: [],
         experienceSections: [],
         offerSections: [],
+        recommendedStores: [],
         categoryMap: {},
         subcategoryMap: {},
         formattedHeaders: [],
@@ -328,11 +335,13 @@ const Home = () => {
       if (prodRes.data.success) {
         const rawResult = prodRes.data.result;
         const dbProds = Array.isArray(prodRes.data.results) ? prodRes.data.results : Array.isArray(rawResult?.items) ? rawResult.items : Array.isArray(rawResult) ? rawResult : [];
-        nextHomeData.products = dbProds.map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400", price: p.salePrice || p.price, originalPrice: p.price, weight: p.weight || "1 unit", deliveryTime: "8-15 mins" }));
+        nextHomeData.products = dbProds.map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400", price: p.salePrice || p.price, originalPrice: p.price, weight: p.weight || "1 unit", deliveryTime: p.deliveryEta?.label || "8-15 mins" }));
       }
       if (expRes?.data?.success) nextHomeData.experienceSections = Array.isArray(expRes.data.result || expRes.data.results) ? (expRes.data.result || expRes.data.results) : [];
       const sectionsList = sectionsRes?.data?.results || sectionsRes?.data?.result || sectionsRes?.data;
       nextHomeData.offerSections = Array.isArray(sectionsList) ? sectionsList : [];
+      const recommendedStoresList = recommendedStoresRes?.data?.results || recommendedStoresRes?.data?.result;
+      nextHomeData.recommendedStores = Array.isArray(recommendedStoresList) ? recommendedStoresList : [];
       applyHomePageData(nextHomeData, { cacheKey });
     } catch (error) { console.error("Error:", error); } finally { setIsLoading(false); }
   };
@@ -346,7 +355,7 @@ const Home = () => {
     try {
       const locationParams = Number.isFinite(currentLocation?.latitude) ? { lat: currentLocation.latitude, lng: currentLocation.longitude } : undefined;
       const missingResults = await Promise.allSettled(missingIds.map((id) => customerApi.getProductById(id, locationParams)));
-      const fetchedMissing = missingResults.filter((r) => r.status === "fulfilled").flatMap((r) => { const p = r.value?.data?.result || r.value?.data?.results; return Array.isArray(p) ? p : (p ? [p] : []); }).map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400", price: p.salePrice || p.price, originalPrice: p.price, weight: p.weight || "1 unit", deliveryTime: "8-15 mins" }));
+      const fetchedMissing = missingResults.filter((r) => r.status === "fulfilled").flatMap((r) => { const p = r.value?.data?.result || r.value?.data?.results; return Array.isArray(p) ? p : (p ? [p] : []); }).map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400", price: p.salePrice || p.price, originalPrice: p.price, weight: p.weight || "1 unit", deliveryTime: p.deliveryEta?.label || "8-15 mins" }));
       if (fetchedMissing.length) setProducts((prev) => { const merged = [...prev]; const mergedIds = new Set(merged.map((p) => String(p?._id || p?.id || "").trim())); fetchedMissing.forEach((p) => { const key = String(p?._id || p?.id || "").trim(); if (!mergedIds.has(key)) { merged.push(p); mergedIds.add(key); } }); return merged; });
     } catch (e) {}
   };
@@ -531,8 +540,11 @@ const Home = () => {
             <BecomeSellerButton />
           </div>
           <LowestPriceSection products={products} onSeeAll={() => navigate("/category/all")} />
+          <TrendingProductsSection />
           <AdvanceBookingSection />
           <OfferSections sections={offerSections} noServiceData={noServiceData} />
+          <RecommendedStoresSection stores={recommendedStores} />
+          <NearbyStoresMapTeaser />
 
           {sectionsForRenderer.length > 0 && (
             <div className="container mx-auto px-4 md:px-8 lg:px-[50px] py-10 md:py-16">

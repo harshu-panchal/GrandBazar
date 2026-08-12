@@ -327,4 +327,31 @@ export async function adminRescheduleOnBehalf(adminId, orderId, { deliveryDate, 
   return applyReschedule(order, buildSchedulePayload(scheduleMeta), "admin", note || "");
 }
 
+export async function sellerRescheduleOnBehalf(sellerId, orderId, { deliveryDate, windowLabel, note }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId, seller: sellerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  const gate = canReschedule(order);
+  if (!gate.allowed) {
+    const err = new Error(gate.reason);
+    err.statusCode = 400;
+    throw err;
+  }
+  const scheduleMeta = await validateScheduleSelection({
+    sellerId: order.seller,
+    deliveryDate,
+    windowLabel,
+    fulfillmentType: order.fulfillmentType,
+    checkRescheduleCutoff: true,
+  });
+  if (order.schedule?.activationJobId) {
+    await removeOrderActivationJob(orderId);
+  }
+  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "seller", note || "");
+}
+
 export { canReschedule, requiresApproval };

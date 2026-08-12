@@ -13,6 +13,7 @@ import { useSettings } from '@core/context/SettingsContext';
 import Lottie from 'lottie-react';
 import { buildProductPath, extractObjectIdFromSlugAndId } from '@core/seo/url';
 import { useSeoMeta } from '@core/seo/useSeoMeta';
+import SimilarProductsSection from '../components/product/SimilarProductsSection';
 
 const ProductDetailPage = () => {
     const { slugAndId } = useParams();
@@ -110,7 +111,7 @@ const ProductDetailPage = () => {
     const fetchReviews = async () => {
         try {
             setReviewLoading(true);
-            const res = await customerApi.getProductReviews(id);
+            const res = await customerApi.getProductReviews(productId);
             if (res.data.success) {
                 setReviews(res.data.results || []);
             }
@@ -155,6 +156,15 @@ const ProductDetailPage = () => {
         } finally {
             setIsSubmittingReview(false);
         }
+    };
+
+    const handleAddToCart = (addon) => {
+        addToCart({
+            ...addon,
+            id: addon._id,
+            price: addon.effectivePrice ?? addon.salePrice ?? addon.price,
+        });
+        showToast(`${addon.name} added to cart`, 'success');
     };
 
     const handleToggleWishlist = () => {
@@ -252,6 +262,7 @@ const ProductDetailPage = () => {
     const cartItem = cart.find(item => item.id === product.id);
     const quantity = cartItem ? cartItem.quantity : 0;
     const isWishlisted = isInWishlist(product.id);
+    const isOutOfStock = !(Number(product.stock) > 0);
 
     return (
         <div className="relative z-10 py-8 w-full max-w-[1920px] mx-auto px-4 md:px-[50px] animate-in fade-in duration-700 mt-24">
@@ -355,12 +366,14 @@ const ProductDetailPage = () => {
                         ) : (
                             <Button
                                 onClick={() => {
+                                    if (isOutOfStock) return;
                                     addToCart(product);
                                     showToast(`${product.name} added to cart`, 'success');
                                 }}
-                                className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1"
+                                disabled={isOutOfStock}
+                                className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             >
-                                <Plus className="mr-2" size={24} strokeWidth={3} /> ADD TO CART
+                                <Plus className="mr-2" size={24} strokeWidth={3} /> {isOutOfStock ? "OUT OF STOCK" : "ADD TO CART"}
                             </Button>
                         )}
 
@@ -471,7 +484,7 @@ const ProductDetailPage = () => {
                             <h3 className="text-3xl font-black text-slate-800">Customer Reviews</h3>
                             <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
                                 <MessageSquare size={18} className="text-primary" />
-                                <span className="font-black text-primary">{reviews.length} Verified</span>
+                                <span className="font-black text-primary">{reviews.length} Review{reviews.length === 1 ? "" : "s"}</span>
                             </div>
                         </div>
 
@@ -489,7 +502,14 @@ const ProductDetailPage = () => {
                                                     {review.userId?.name?.[0] || "?"}
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-black text-slate-800">{review.userId?.name || "Anonymous"}</h4>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-black text-slate-800">{review.userId?.name || "Anonymous"}</h4>
+                                                        {review.verifiedPurchase && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-wider">
+                                                                Verified Purchase
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="flex items-center gap-1">
                                                         {[...Array(5)].map((_, i) => (
                                                             <Star
@@ -515,6 +535,12 @@ const ProductDetailPage = () => {
                     </div>
                 </div>
             </div>
+
+            <SimilarProductsSection
+                productId={productId}
+                lat={currentLocation?.latitude}
+                lng={currentLocation?.longitude}
+            />
         </div>
     );
 };

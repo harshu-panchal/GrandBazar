@@ -21,20 +21,48 @@ export default function DeliverySlotPicker({
   const [loading, setLoading] = useState(false);
   const [schedulingEnabled, setSchedulingEnabled] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [campaignDeliveryWindow, setCampaignDeliveryWindow] = useState(null);
+  // Store-configurable "how many days ahead can a regular scheduled order be
+  // placed" (backend default: 30). Starts at that same default and is
+  // corrected once the store's actual setting comes back from the API, so
+  // there's no hardcoded cap here regardless of what a given store configures.
+  const [maxDaysAhead, setMaxDaysAhead] = useState(30);
 
   const isScheduled = fulfillmentType === "scheduled" || fulfillmentType === "preorder";
 
   const dateOptions = useMemo(() => {
     const options = [];
+    if (campaignId && campaignDeliveryWindow?.startDate && campaignDeliveryWindow?.endDate) {
+      const start = new Date(campaignDeliveryWindow.startDate);
+      const end = new Date(campaignDeliveryWindow.endDate);
+      start.setHours(12, 0, 0, 0);
+      end.setHours(12, 0, 0, 0);
+      const maxSpanDays = 60; // defensive cap against a misconfigured huge campaign window
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        options.push(formatLocalDate(d));
+        if (options.length >= maxSpanDays) break;
+      }
+      return options;
+    }
     const base = new Date();
     base.setHours(12, 0, 0, 0);
-    for (let i = 0; i < 7; i += 1) {
+    const span = Math.max(1, Number(maxDaysAhead) || 30);
+    for (let i = 0; i < span; i += 1) {
       const d = new Date(base);
       d.setDate(base.getDate() + i);
       options.push(formatLocalDate(d));
     }
     return options;
-  }, []);
+  }, [campaignId, campaignDeliveryWindow, maxDaysAhead]);
+
+  // Once the campaign's delivery window is known, snap the selected date into range.
+  useEffect(() => {
+    if (!campaignId || !dateOptions.length) return;
+    if (!dateOptions.includes(deliveryDate)) {
+      setDeliveryDate(dateOptions[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateOptions.join(","), campaignId]);
 
   useEffect(() => {
     if (!isScheduled || !sellerId) {
@@ -47,12 +75,23 @@ export default function DeliverySlotPicker({
       setLoading(true);
       setErrorMessage("");
       try {
-        const res = await customerApi.getDeliverySlots({ sellerId, deliveryDate });
+        const res = await customerApi.getDeliverySlots({
+          sellerId,
+          deliveryDate,
+          fulfillmentType,
+          ...(campaignId ? { campaignId } : {}),
+        });
         const result = res.data?.result || res.data?.results || {};
         const list = Array.isArray(result.windows) ? result.windows : [];
         if (cancelled) return;
         setSchedulingEnabled(result.schedulingEnabled !== false);
         setWindows(list);
+        if (campaignId && result.campaignDeliveryWindow) {
+          setCampaignDeliveryWindow(result.campaignDeliveryWindow);
+        }
+        if (Number.isFinite(Number(result.maxDaysAhead)) && Number(result.maxDaysAhead) > 0) {
+          setMaxDaysAhead(Number(result.maxDaysAhead));
+        }
         const firstAvailable = list.find((w) => w.available !== false);
         const label = firstAvailable?.label || "";
         setWindowLabel(label);
@@ -126,12 +165,14 @@ export default function DeliverySlotPicker({
         Choose delivery date & window
       </div>
       <select
-        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-900 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none cursor-pointer"
         value={deliveryDate}
         onChange={(e) => setDeliveryDate(e.target.value)}
       >
         {dateOptions.map((d) => (
-          <option key={d} value={d}>{d}</option>
+          <option key={d} value={d} className="bg-white text-slate-900 font-bold py-1.5" style={{ color: '#0f172a', backgroundColor: '#ffffff' }}>
+            {d}
+          </option>
         ))}
       </select>
       {loading ? (

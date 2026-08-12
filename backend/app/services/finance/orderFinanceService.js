@@ -153,6 +153,10 @@ export function freezeFinancialSnapshot(order, breakdown) {
   };
   ensurePaymentBreakdownSnapshots(order);
 
+  // Mirror to top level for easy querying (Order.find({ isBulkOrder: true })).
+  order.isBulkOrder = Boolean(sanitized.isBulkOrder);
+  order.bulkOrderReason = sanitized.bulkOrderReason || null;
+
   order.distanceSnapshot = {
     distanceKmActual: roundCurrency(sanitized.distanceKmActual || 0),
     distanceKmRounded: roundCurrency(sanitized.distanceKmRounded || 0),
@@ -639,6 +643,16 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
 
     await order.save({ session });
     await session.commitTransaction();
+
+    // PDF generation + Cloudinary upload are slow I/O — never do them inside
+    // the DB transaction. Fire-and-forget after commit; failures are logged
+    // but never block order delivery or the caller's response.
+    import("./invoiceService.js")
+      .then(({ generateOrderInvoices }) => generateOrderInvoices(order))
+      .catch((error) => {
+        console.error(`[invoiceService] Failed to generate invoices for order ${order.orderId}:`, error);
+      });
+
     return order;
   } catch (error) {
     await session.abortTransaction();

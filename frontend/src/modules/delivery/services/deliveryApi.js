@@ -8,7 +8,7 @@ export const deliveryApi = {
   getProfile: () => axiosInstance.get("/delivery/profile"),
   updateProfile: (data) => axiosInstance.put("/delivery/profile", data),
   getStats: () => axiosInstance.get("/delivery/stats"),
-  getEarnings: () => axiosInstance.get("/delivery/earnings"),
+  getEarnings: (params = {}) => axiosInstance.get("/delivery/earnings", { params }),
   getCodCashSummary: () => axiosInstance.get("/delivery/cod/summary"),
   payCodCashToAdmin: (data) => axiosInstance.post("/delivery/cod/pay", data),
   getWalletSummary: () => axiosInstance.get("/delivery/wallet/summary"),
@@ -74,5 +74,6 @@ export const deliveryApi = {
     axiosInstance.post(`/orders/workflow/${orderId}/return-drop-otp/verify`, body),
   uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  }),
+  createSupportTicket: (data) => axiosInstance.post("/tickets/create", data),
 };

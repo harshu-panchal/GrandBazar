@@ -16,7 +16,9 @@ import {
     ShoppingBasket,
     Heart,
     Star,
-    ChevronLeft
+    ChevronLeft,
+    Mail,
+    Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
@@ -75,6 +77,8 @@ const CustomerAuth = () => {
     const { settings } = useSettings();
     const appName = settings?.appName || 'App';
     const logoUrl = settings?.logoUrl || '';
+    const faviconUrl = settings?.faviconUrl || '';
+    const displayFavicon = faviconUrl || logoUrl || '';
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const referralCode = searchParams.get('ref') || '';
@@ -82,8 +86,13 @@ const CustomerAuth = () => {
     const [formData, setFormData] = useState({
         phone: '',
         otp: '',
-        name: ''
+        name: '',
+        email: ''
     });
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [authMode, setAuthMode] = useState('phone'); // 'phone' | 'email' (email login only, no signup)
+    const [emailLoginData, setEmailLoginData] = useState({ email: '', password: '' });
+    const [isEmailLoading, setIsEmailLoading] = useState(false);
 
     const activeCategory = CATEGORIES[carouselIndex];
 
@@ -108,20 +117,55 @@ const CustomerAuth = () => {
             toast.error('Enter valid 10-digit number');
             return;
         }
+        if (!isLogin && !agreedToTerms) {
+            toast.error('Please agree to the Terms & Conditions and Privacy Policy to continue');
+            return;
+        }
+        if (!isLogin && formData.email && !/^\S+@\S+\.\S+$/.test(formData.email)) {
+            toast.error('Enter a valid email address, or leave it blank');
+            return;
+        }
         setIsLoading(true);
         try {
             if (isLogin) {
                 await customerApi.sendLoginOtp({ phone: formData.phone });
             } else {
-                await customerApi.sendSignupOtp({ name: formData.name, phone: formData.phone });
+                await customerApi.sendSignupOtp({
+                    name: formData.name,
+                    phone: formData.phone,
+                    email: formData.email.trim(),
+                    agreedToTerms,
+                });
             }
             setShowOtp(true);
             setTimer(30);
             toast.success('OTP sent!');
         } catch (error) {
-            toast.error('Failed to send OTP');
+            const apiMessage = error?.response?.data?.message;
+            toast.error(apiMessage || 'Failed to send OTP');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleEmailLogin = async (e) => {
+        e?.preventDefault();
+        if (!emailLoginData.email || !emailLoginData.password) {
+            toast.error('Enter both email and password');
+            return;
+        }
+        setIsEmailLoading(true);
+        try {
+            const response = await customerApi.loginWithEmail(emailLoginData);
+            const { token, customer } = response.data.result;
+            login({ ...customer, token, role: 'customer' });
+            toast.success('Successfully Logged In!');
+            navigate('/');
+        } catch (error) {
+            const apiMessage = error?.response?.data?.message;
+            toast.error(apiMessage || 'Invalid email or password');
+        } finally {
+            setIsEmailLoading(false);
         }
     };
 
@@ -233,8 +277,19 @@ const CustomerAuth = () => {
                         {/* Top Branding Bar */}
                         <div className="absolute top-8 left-0 w-full px-6 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center border border-white/30">
-                                    <ShoppingBag size={20} className="text-white" />
+                                <div className="w-10 h-10 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center border border-white/30 overflow-hidden p-1.5 shadow-sm">
+                                    {faviconUrl ? (
+                                        <img
+                                            src={faviconUrl}
+                                            alt={`${appName} favicon`}
+                                            className="w-full h-full object-contain rounded-lg"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <ShoppingBag size={20} className="text-white" />
+                                    )}
                                 </div>
                                 <span className="text-white font-black tracking-tighter text-xl">{appName.toUpperCase()}</span>
                             </div>
@@ -273,18 +328,28 @@ const CustomerAuth = () => {
                                         initial={{ opacity: 0, scale: 0.5, rotate: -20 }}
                                         animate={{ opacity: 1, scale: 1, rotate: 0 }}
                                         exit={{ opacity: 0, scale: 1.5, rotate: 20 }}
-                                        className="w-full h-full"
+                                        className="w-full h-full flex items-center justify-center p-3"
                                         style={{ color: activeCategory.text }}
                                     >
-                                        {logoUrl ? (
+                                        {faviconUrl ? (
+                                            <img
+                                                src={faviconUrl}
+                                                alt={`${appName} favicon`}
+                                                loading="lazy"
+                                                className="w-full h-full object-contain rounded-xl"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                }}
+                                            />
+                                        ) : logoUrl ? (
                                             <img
                                                 src={logoUrl}
                                                 alt={`${appName} logo`}
                                                 loading="lazy"
-                                                className="w-full h-full object-cover"
+                                                className="w-full h-full object-contain"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: activeCategory.color }}>
+                                            <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: activeCategory.color }}>
                                                 {activeCategory.icon}
                                             </div>
                                         )}
@@ -315,7 +380,7 @@ const CustomerAuth = () => {
                                             Login
                                         </button>
                                         <button
-                                            onClick={() => setIsLogin(false)}
+                                            onClick={() => { setIsLogin(false); setAuthMode('phone'); }}
                                             className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${!isLogin ? 'bg-white shadow-sm' : 'text-gray-400'}`}
                                             style={{ color: !isLogin ? activeCategory.theme : undefined }}
                                         >
@@ -328,10 +393,66 @@ const CustomerAuth = () => {
                                             {isLogin ? 'Welcome Back!' : 'Create Account'}
                                         </h3>
                                         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                                            OTP will be sent for verification
+                                            {authMode === 'email' ? 'Login with your email & password' : 'OTP will be sent for verification'}
                                         </p>
                                     </div>
 
+                                    {isLogin && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setAuthMode(authMode === 'phone' ? 'email' : 'phone')}
+                                            className="w-full text-center text-[11px] font-black uppercase tracking-widest hover:underline"
+                                            style={{ color: activeCategory.theme }}
+                                        >
+                                            {authMode === 'phone' ? 'Login with Email instead' : 'Login with Mobile OTP instead'}
+                                        </button>
+                                    )}
+
+                                    {isLogin && authMode === 'email' ? (
+                                        <form onSubmit={handleEmailLogin} className="space-y-4">
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                    <Mail size={18} />
+                                                </div>
+                                                <input
+                                                    required
+                                                    type="email"
+                                                    name="email"
+                                                    placeholder="Email address"
+                                                    value={emailLoginData.email}
+                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                    onChange={(e) => setEmailLoginData({ ...emailLoginData, email: e.target.value })}
+                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                    onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                />
+                                            </div>
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                    <Lock size={18} />
+                                                </div>
+                                                <input
+                                                    required
+                                                    type="password"
+                                                    name="password"
+                                                    placeholder="Password"
+                                                    value={emailLoginData.password}
+                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                    onChange={(e) => setEmailLoginData({ ...emailLoginData, password: e.target.value })}
+                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                    onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isEmailLoading}
+                                                className="w-full text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] flex items-center justify-center gap-3 active:scale-95 transition-all uppercase disabled:opacity-50"
+                                                style={{ backgroundColor: activeCategory.theme, boxShadow: `0 20px 40px ${activeCategory.shadow}` }}
+                                            >
+                                                {isEmailLoading ? 'Logging in...' : 'Login'}
+                                                <ChevronRight size={18} />
+                                            </button>
+                                        </form>
+                                    ) : (
                                     <form onSubmit={handleSendOtp} className="space-y-4">
                                         {!isLogin && (
                                             <div className="relative group">
@@ -369,16 +490,61 @@ const CustomerAuth = () => {
                                             />
                                         </div>
 
+                                        {!isLogin && (
+                                            <div className="space-y-1.5">
+                                                <div className="relative group">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                        <Mail size={18} />
+                                                    </div>
+                                                    <input
+                                                        type="email"
+                                                        name="email"
+                                                        placeholder="Email (optional)"
+                                                        value={formData.email}
+                                                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                        onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                        onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] font-bold text-gray-400 px-1">For order receipts and updates.</p>
+                                            </div>
+                                        )}
+
+                                        {!isLogin && (
+                                            <div className="flex items-start gap-2.5 px-1">
+                                                <input
+                                                    type="checkbox"
+                                                    id="agree-terms"
+                                                    checked={agreedToTerms}
+                                                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 focus:ring-0 cursor-pointer"
+                                                    style={{ accentColor: activeCategory.theme }}
+                                                />
+                                                <label htmlFor="agree-terms" className="text-[11px] text-gray-500 font-semibold leading-snug cursor-pointer">
+                                                    I agree to the{' '}
+                                                    <button type="button" onClick={() => navigate('/terms')} className="font-black hover:underline" style={{ color: activeCategory.theme }}>
+                                                        Terms & Conditions
+                                                    </button>{' '}
+                                                    and{' '}
+                                                    <button type="button" onClick={() => navigate('/privacy-policy')} className="font-black hover:underline" style={{ color: activeCategory.theme }}>
+                                                        Privacy Policy
+                                                    </button>
+                                                </label>
+                                            </div>
+                                        )}
+
                                         <button
                                             type="submit"
-                                            disabled={isLoading}
-                                            className="w-full text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] flex items-center justify-center gap-3 active:scale-95 transition-all uppercase"
+                                            disabled={isLoading || (!isLogin && !agreedToTerms)}
+                                            className="w-full text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] flex items-center justify-center gap-3 active:scale-95 transition-all uppercase disabled:opacity-50"
                                             style={{ backgroundColor: activeCategory.theme, boxShadow: `0 20px 40px ${activeCategory.shadow}` }}
                                         >
                                             {isLoading ? 'Verifying...' : 'Continue'}
                                             <ChevronRight size={18} />
                                         </button>
                                     </form>
+                                    )}
 
                                     {/* Legal Agreement Footer */}
                                     <div className="pt-2 flex flex-col items-center gap-1">

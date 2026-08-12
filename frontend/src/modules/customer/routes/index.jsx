@@ -15,6 +15,7 @@ import SupportPage from '../pages/SupportPage';
 import ChatPage from '../pages/ChatPage';
 import TermsPage from '../pages/TermsPage';
 import PrivacyPage from '../pages/PrivacyPage';
+import ReturnPolicyPage from '../pages/ReturnPolicyPage';
 import AboutPage from '../pages/AboutPage';
 import EditProfilePage from '../pages/EditProfilePage';
 import OrderDetailPage from '../pages/OrderDetailPage';
@@ -47,6 +48,9 @@ const CustomerRoutes = () => {
                             <Route path="product/:slugAndId" element={<ProductDetailPage />} />
                             <Route path="terms" element={<TermsPage />} />
                             <Route path="privacy" element={<PrivacyPage />} />
+                            <Route path="privacy-policy" element={<PrivacyPage />} />
+                            <Route path="return-policy" element={<ReturnPolicyPage />} />
+                            <Route path="returns" element={<ReturnPolicyPage />} />
                             <Route path="about" element={<AboutPage />} />
                             <Route path="offers" element={<OffersPage />} />
                             <Route path="preorder" element={<PreOrderBrowsePage />} />

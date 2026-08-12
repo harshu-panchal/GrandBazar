@@ -100,7 +100,38 @@ export const getDeliveryStats = async (req, res) => {
 export const getDeliveryEarnings = async (req, res) => {
     try {
         const deliveryBoyId = new mongoose.Types.ObjectId(req.user.id);
-        const transactions = await Transaction.find({ user: deliveryBoyId, userModel: 'Delivery' })
+
+        // Optional range/period filter for the Today/Weekly/Monthly tabs. When
+        // omitted, preserve legacy behaviour (totals over the most recent 200
+        // transactions, unfiltered by date) so existing callers (e.g. the
+        // Withdrawals page) that just want "current balance" keep working.
+        const rawRange = String(req.query.range || req.query.period || "")
+            .trim()
+            .toLowerCase();
+        let range = null;
+        if (rawRange === "today" || rawRange === "daily") range = "today";
+        else if (rawRange === "monthly" || rawRange === "month") range = "monthly";
+        else if (rawRange === "weekly" || rawRange === "week") range = "weekly";
+
+        const now = new Date();
+        let periodStart = null;
+        if (range === "today") {
+            periodStart = new Date(now);
+            periodStart.setHours(0, 0, 0, 0);
+        } else if (range === "monthly") {
+            periodStart = new Date(now);
+            periodStart.setDate(periodStart.getDate() - 30);
+        } else if (range === "weekly") {
+            periodStart = new Date(now);
+            periodStart.setDate(periodStart.getDate() - 7);
+        }
+
+        const txQuery = { user: deliveryBoyId, userModel: 'Delivery' };
+        if (periodStart) {
+            txQuery.createdAt = { $gte: periodStart };
+        }
+
+        const transactions = await Transaction.find(txQuery)
             .sort({ createdAt: -1 })
             .limit(200)
             .populate("order", "orderId pricing paymentBreakdown");
@@ -139,9 +170,17 @@ export const getDeliveryEarnings = async (req, res) => {
 
         const cashCollected = roundCurrency(wallet?.cashInHand || 0);
 
-        // Last 7 days aggregation for chart
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        // Chart aggregation — granularity follows the selected range.
+        // Defaults to the last 7 days (legacy behaviour) when no range is given.
+        const chartRange = range || "weekly";
+        const chartPeriodStart =
+            periodStart ||
+            (() => {
+                const d = new Date();
+                d.setDate(d.getDate() - 7);
+                return d;
+            })();
+        const groupFormat = chartRange === "today" ? "%H" : "%Y-%m-%d";
 
         const dailyAggregation = await Transaction.aggregate([
             {
@@ -149,13 +188,13 @@ export const getDeliveryEarnings = async (req, res) => {
                     user: deliveryBoyId,
                     userModel: 'Delivery',
                     status: 'Settled',
-                    createdAt: { $gte: sevenDaysAgo },
+                    createdAt: { $gte: chartPeriodStart },
                     type: { $in: ['Delivery Earning', 'Incentive', 'Bonus'] }
                 }
             },
             {
                 $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    _id: { $dateToString: { format: groupFormat, date: "$createdAt" } },
                     amount: { $sum: "$amount" }
                 }
             },
@@ -164,19 +203,33 @@ export const getDeliveryEarnings = async (req, res) => {
 
         const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         const chartData = [];
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-            const foundAt = dailyAggregation.find(a => a._id === dateStr);
-            chartData.push({
-                name: dayNames[d.getDay()],
-                earnings: foundAt ? foundAt.amount : 0,
-                incentives: 0 // Could be further aggregated if needed
-            });
+        if (chartRange === "today") {
+            for (let h = 0; h <= now.getHours(); h++) {
+                const hourKey = String(h).padStart(2, "0");
+                const foundAt = dailyAggregation.find((a) => a._id === hourKey);
+                chartData.push({
+                    name: `${h}:00`,
+                    earnings: foundAt ? foundAt.amount : 0,
+                    incentives: 0,
+                });
+            }
+        } else {
+            const daysCount = chartRange === "monthly" ? 30 : 7;
+            for (let i = daysCount - 1; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split('T')[0];
+                const foundAt = dailyAggregation.find((a) => a._id === dateStr);
+                chartData.push({
+                    name: chartRange === "monthly" ? `${d.getDate()}/${d.getMonth() + 1}` : dayNames[d.getDay()],
+                    earnings: foundAt ? foundAt.amount : 0,
+                    incentives: 0, // Could be further aggregated if needed
+                });
+            }
         }
 
         return handleResponse(res, 200, "Earnings fetched", {
+            range: chartRange,
             totalEarnings,
             onlinePay,
             incentives,

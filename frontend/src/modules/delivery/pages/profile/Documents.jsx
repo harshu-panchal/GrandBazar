@@ -1,15 +1,19 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FileCheck, UploadCloud, Clock } from "lucide-react";
+import { ArrowLeft, FileCheck, UploadCloud, Clock, RotateCw } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
 import Card from "@/shared/components/ui/Card";
 import { toast } from "sonner";
 import { useAuth } from "@core/context/AuthContext";
+import { deliveryApi } from "../../services/deliveryApi";
 
 const Documents = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const docsData = user?.documents || {};
+  const fileInputRef = useRef(null);
+  const pendingDocIdRef = useRef(null);
+  const [uploadingId, setUploadingId] = useState(null);
 
   const docs = useMemo(
     () => [
@@ -61,8 +65,51 @@ const Documents = () => {
     }
   };
 
+  const triggerUpload = (docId) => {
+    if (uploadingId) return;
+    pendingDocIdRef.current = docId;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    const docId = pendingDocIdRef.current;
+    e.target.value = "";
+    if (!file || !docId) return;
+
+    setUploadingId(docId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await deliveryApi.uploadMedia(formData);
+      const url = uploadRes.data?.result?.url || uploadRes.data?.url;
+      if (!url) {
+        throw new Error("Upload did not return a file URL");
+      }
+      await deliveryApi.updateProfile({ documents: { [docId]: url } });
+      await refreshUser({ forceRefresh: true });
+      toast.success("Document uploaded successfully");
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to upload document",
+      );
+    } finally {
+      setUploadingId(null);
+      pendingDocIdRef.current = null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="flex items-center p-4">
@@ -79,6 +126,7 @@ const Documents = () => {
       <div className="p-4 max-w-lg mx-auto space-y-4">
         {docs.map((doc) => {
           const status = getStatus(doc.url);
+          const isUploading = uploadingId === doc.id;
           return (
             <Card key={doc.id} className="p-4 border border-gray-100">
               <div className="flex justify-between items-start mb-2">
@@ -101,12 +149,19 @@ const Documents = () => {
                   <Button
                     size="sm"
                     className="w-full text-xs h-8"
-                    onClick={() =>
-                      toast.info("Document upload will open file picker here")
-                    }
+                    disabled={isUploading}
+                    onClick={() => triggerUpload(doc.id)}
                   >
-                    <UploadCloud size={14} className="mr-1" />
-                    {doc.url ? "Update" : "Upload"}
+                    {isUploading ? (
+                      <RotateCw size={14} className="mr-1 animate-spin" />
+                    ) : (
+                      <UploadCloud size={14} className="mr-1" />
+                    )}
+                    {isUploading
+                      ? "Uploading..."
+                      : doc.url
+                        ? "Update"
+                        : "Upload"}
                   </Button>
                 )}
                 {doc.url && (

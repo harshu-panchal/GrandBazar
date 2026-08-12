@@ -98,6 +98,59 @@ async function validateDependencies() {
     }
   }
   
+  // Validate that every schema `ref:` (and each entry of a `refPath` array,
+  // where used) points at a model name that is actually registered. A
+  // mismatch here doesn't throw at query time — it just makes populate()
+  // silently return null — so it's cheap to catch here and expensive to
+  // debug later. (Caught one real instance of this: several schemas used
+  // ref: "Customer" when the model is registered as "User".)
+  try {
+    const registeredNames = new Set(mongoose.modelNames());
+    const brokenRefs = [];
+
+    // Walks a schema's paths looking for `ref:` (direct or on an array's
+    // caster), recursing into nested subdocument/array-of-subdocument
+    // schemas so a broken ref buried inside e.g. `items: [{ product: {
+    // ref: "..." } }]` is still caught, not just top-level fields.
+    const seen = new Set();
+    const walkSchema = (schema, modelName, prefix) => {
+      if (!schema || seen.has(schema)) return;
+      seen.add(schema);
+      schema.eachPath((pathName, schemaType) => {
+        const fullPath = prefix ? `${prefix}.${pathName}` : pathName;
+        const directRef = schemaType.options?.ref;
+        const casterRef = schemaType.caster?.options?.ref;
+        for (const ref of [directRef, casterRef]) {
+          if (ref && typeof ref === 'string' && !registeredNames.has(ref)) {
+            brokenRefs.push(`${modelName}.${fullPath} -> ref: "${ref}" (no such model)`);
+          }
+        }
+        const nestedSchema = schemaType.schema || schemaType.caster?.schema;
+        if (nestedSchema) {
+          walkSchema(nestedSchema, modelName, fullPath);
+        }
+      });
+    };
+
+    for (const modelName of registeredNames) {
+      walkSchema(mongoose.model(modelName).schema, modelName, '');
+    }
+    if (brokenRefs.length) {
+      result.checks.modelRefs = { status: 'DOWN', message: brokenRefs.join('; ') };
+      if (!isProduction) {
+        result.valid = false;
+        brokenRefs.forEach((msg) => result.errors.push(`Broken schema ref: ${msg}`));
+      } else {
+        // Don't take production down for this; log loudly instead.
+        console.error('[Startup] WARNING: broken schema ref(s) detected:', brokenRefs);
+      }
+    } else {
+      result.checks.modelRefs = { status: 'UP', message: `${registeredNames.size} models, all refs resolve` };
+    }
+  } catch (error) {
+    result.checks.modelRefs = { status: 'ERROR', message: error.message };
+  }
+
   // Validate required environment variables
   const requiredVars = [];
   const hasMongoUri = Boolean(

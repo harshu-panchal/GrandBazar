@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import {
   ALL_COMMISSION_FIXED_RULES,
   ALL_COMMISSION_TYPES,
+  ALL_GST_SLABS,
   ALL_HANDLING_FEE_TYPES,
 } from "../constants/finance.js";
 
@@ -117,6 +118,16 @@ const categorySchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: null, // format "HH:mm"
+    },
+    gstSlab: {
+      type: Number,
+      enum: ALL_GST_SLABS,
+      default: 0, // Percent GST rate applied to products in this category unless overridden
+    },
+    packagingType: {
+      type: String,
+      enum: ["standard", "fragile", "liquid", "perishable"],
+      default: "standard",
     },
     returnEligible: {
       type: Boolean,

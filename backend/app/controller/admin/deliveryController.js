@@ -2,6 +2,7 @@ import Delivery from "../../models/delivery.js";
 import Order from "../../models/order.js";
 import handleResponse from "../../utils/helper.js";
 import getPagination from "../../utils/pagination.js";
+import { adminAssignRiderAtomic } from "../../services/orderWorkflowService.js";
 
 export const getDeliveryPartners = async (req, res) => {
   try {
@@ -84,6 +85,48 @@ export const rejectDeliveryPartner = async (req, res) => {
   }
 };
 
+export const updateDeliveryPartner = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      phone,
+      email,
+      address,
+      vehicleType,
+      vehicleNumber,
+      drivingLicenseNumber,
+      accountHolder,
+      accountNumber,
+      ifsc,
+      currentArea,
+    } = req.body;
+
+    const updateFields = {};
+    if (name !== undefined) updateFields.name = name;
+    if (phone !== undefined) updateFields.phone = phone;
+    if (email !== undefined) updateFields.email = email;
+    if (address !== undefined) updateFields.address = address;
+    if (vehicleType !== undefined) updateFields.vehicleType = vehicleType;
+    if (vehicleNumber !== undefined) updateFields.vehicleNumber = vehicleNumber;
+    if (drivingLicenseNumber !== undefined) updateFields.drivingLicenseNumber = drivingLicenseNumber;
+    if (accountHolder !== undefined) updateFields.accountHolder = accountHolder;
+    if (accountNumber !== undefined) updateFields.accountNumber = accountNumber;
+    if (ifsc !== undefined) updateFields.ifsc = ifsc;
+    if (currentArea !== undefined) updateFields.currentArea = currentArea;
+
+    const rider = await Delivery.findByIdAndUpdate(id, updateFields, { new: true });
+
+    if (!rider) {
+      return handleResponse(res, 404, "Rider not found");
+    }
+
+    return handleResponse(res, 200, "Rider details updated successfully", rider);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 export const getActiveFleet = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req, {
@@ -148,5 +191,77 @@ export const getActiveFleet = async (req, res) => {
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const getUnassignedOrders = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req, {
+      defaultLimit: 25,
+      maxLimit: 200,
+    });
+
+    const query = {
+      workflowStatus: "DELIVERY_SEARCH",
+      deliveryBoy: null,
+    };
+
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("seller", "shopName address location")
+        .populate("customer", "name phone")
+        .lean(),
+      Order.countDocuments(query),
+    ]);
+
+    const items = orders.map((order) => ({
+      id: order.orderId,
+      _id: order._id,
+      createdAt: order.createdAt,
+      seller: {
+        name: order.seller?.shopName || "Unknown",
+        address: order.seller?.address || "",
+        location: order.seller?.location || null,
+      },
+      customer: {
+        name: order.customer?.name || "Guest",
+        phone: order.customer?.phone || "N/A",
+      },
+    }));
+
+    return handleResponse(res, 200, "Unassigned orders fetched successfully", {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const assignOrderToRider = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { riderId } = req.body;
+    if (!riderId) {
+      return handleResponse(res, 400, "riderId is required");
+    }
+    const { order, rider, distanceKm } = await adminAssignRiderAtomic(
+      req.user?.id,
+      orderId,
+      riderId,
+    );
+    return handleResponse(res, 200, "Delivery partner assigned successfully", {
+      order,
+      rider: { id: rider._id, name: rider.name },
+      distanceKm,
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };

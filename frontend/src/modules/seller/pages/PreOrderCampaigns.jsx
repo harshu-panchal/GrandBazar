@@ -25,6 +25,7 @@ const emptyForm = () => ({
   deliveryEndDate: "",
   timezone: "Asia/Kolkata",
   products: [],
+  deliveryWindows: [],
 });
 
 const PreOrderCampaigns = () => {
@@ -67,7 +68,7 @@ const PreOrderCampaigns = () => {
   const loadProducts = async () => {
     try {
       const res = await sellerApi.getProducts({ limit: 200 });
-      setProducts(extractArray(res));
+      setProducts(extractArray(res).filter((p) => p.isPreorderEligible === true));
     } catch (e) {
       setProducts([]);
     }
@@ -99,6 +100,28 @@ const PreOrderCampaigns = () => {
     setForm((prev) => ({ ...prev, products: prev.products.filter((_, i) => i !== idx) }));
   };
 
+  const addSlotRow = () => {
+    setForm((prev) => ({
+      ...prev,
+      deliveryWindows: [
+        ...prev.deliveryWindows,
+        { label: "", start: "09:00", end: "12:00", capacityPerDay: 50 },
+      ],
+    }));
+  };
+
+  const updateSlotRow = (idx, key, value) => {
+    setForm((prev) => {
+      const next = [...prev.deliveryWindows];
+      next[idx] = { ...next[idx], [key]: value };
+      return { ...prev, deliveryWindows: next };
+    });
+  };
+
+  const removeSlotRow = (idx) => {
+    setForm((prev) => ({ ...prev, deliveryWindows: prev.deliveryWindows.filter((_, i) => i !== idx) }));
+  };
+
   const resetForm = () => {
     setForm(emptyForm());
     setShowForm(false);
@@ -115,6 +138,11 @@ const PreOrderCampaigns = () => {
     for (const p of form.products) {
       if (!p.product) return "Select a product for every row";
       if (!p.allocationCap || Number(p.allocationCap) < 1) return "Allocation cap must be at least 1";
+    }
+    for (const w of form.deliveryWindows) {
+      if (!w.label.trim()) return "Every delivery slot needs a label";
+      if (!w.start || !w.end) return "Every delivery slot needs a start and end time";
+      if (!w.capacityPerDay || Number(w.capacityPerDay) < 1) return "Slot capacity must be at least 1";
     }
     return null;
   };
@@ -138,6 +166,12 @@ const PreOrderCampaigns = () => {
         endDate: new Date(form.deliveryEndDate).toISOString(),
       },
       timezone: form.timezone,
+      deliveryWindows: form.deliveryWindows.map((w) => ({
+        label: w.label.trim(),
+        start: w.start,
+        end: w.end,
+        capacityPerDay: Number(w.capacityPerDay),
+      })),
       products: form.products.map((p) => ({
         product: p.product,
         allocationCap: Number(p.allocationCap),
@@ -286,6 +320,65 @@ const PreOrderCampaigns = () => {
               ))}
               {!form.products.length && (
                 <p className="text-sm text-gray-400">No products added yet.</p>
+              )}
+              {!products.length && (
+                <p className="text-xs text-amber-600 font-medium">
+                  No products are marked "Available for future/pre-order" yet. Enable that toggle on a product in Product Management before adding it here.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium">Delivery Time Slots (optional)</label>
+              <Button variant="secondary" size="sm" onClick={addSlotRow} className="flex items-center gap-1">
+                <HiOutlinePlus className="w-4 h-4" /> Add Slot
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400 mb-2">
+              Define same-day delivery windows within the campaign's delivery date range. Leave empty to let customers pick any date in that range with no time-of-day slots.
+            </p>
+            <div className="space-y-2">
+              {form.deliveryWindows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  <Input
+                    className="col-span-4"
+                    placeholder="Label (e.g. 9 AM - 12 PM)"
+                    value={row.label}
+                    onChange={(e) => updateSlotRow(idx, "label", e.target.value)}
+                  />
+                  <Input
+                    className="col-span-3"
+                    type="time"
+                    value={row.start}
+                    onChange={(e) => updateSlotRow(idx, "start", e.target.value)}
+                  />
+                  <Input
+                    className="col-span-3"
+                    type="time"
+                    value={row.end}
+                    onChange={(e) => updateSlotRow(idx, "end", e.target.value)}
+                  />
+                  <Input
+                    className="col-span-1"
+                    type="number"
+                    min="1"
+                    placeholder="Cap/day"
+                    value={row.capacityPerDay}
+                    onChange={(e) => updateSlotRow(idx, "capacityPerDay", e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="col-span-1 flex justify-center text-red-500 hover:text-red-700"
+                    onClick={() => removeSlotRow(idx)}
+                  >
+                    <HiOutlineTrash className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+              {!form.deliveryWindows.length && (
+                <p className="text-sm text-gray-400">No delivery slots configured — customers will just pick a date.</p>
               )}
             </div>
           </div>

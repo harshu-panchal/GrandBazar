@@ -9,6 +9,7 @@ import {
   hydrateOrderItems,
 } from "./finance/pricingService.js";
 import { getOrCreateFinanceSettings } from "./finance/financeSettingsService.js";
+import { isWithinOddHourWindow } from "./finance/pricingService.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 
 function normalizeLocation(location = null) {
@@ -98,10 +99,16 @@ function buildAggregateBreakdown(sellerBreakdowns = []) {
     tipTotal: sumField(sellerBreakdowns, "tipTotal"),
     discountTotal: sumField(sellerBreakdowns, "discountTotal"),
     taxTotal: sumField(sellerBreakdowns, "taxTotal"),
+    cgstTotal: sumField(sellerBreakdowns, "cgstTotal"),
+    sgstTotal: sumField(sellerBreakdowns, "sgstTotal"),
+    igstTotal: sumField(sellerBreakdowns, "igstTotal"),
+    taxJurisdiction: sellerBreakdowns[0]?.taxJurisdiction || null,
     customerSurchargeAmount: sumField(sellerBreakdowns, "customerSurchargeAmount"),
     customerSurchargeReason:
       sellerBreakdowns.find((row) => row?.customerSurchargeReason)?.customerSurchargeReason ||
       "",
+    oddHourSurchargeAmount: sumField(sellerBreakdowns, "oddHourSurchargeAmount"),
+    weatherSurchargeAmount: sumField(sellerBreakdowns, "weatherSurchargeAmount"),
     packagingChargeAmount: sumField(sellerBreakdowns, "packagingChargeAmount"),
     grandTotal: sumField(sellerBreakdowns, "grandTotal"),
     sellerPayoutTotal: sumField(sellerBreakdowns, "sellerPayoutTotal"),
@@ -385,6 +392,51 @@ function applyCustomerSurchargeToSellerBreakdowns(
   });
 }
 
+/**
+ * Odd-hour (time-window) and weather surcharges — like the legacy generic
+ * surcharge, charged once across a multi-seller checkout (on the first
+ * seller order), each with its own configurable platform/seller revenue split.
+ */
+function applyDistinctSurchargesToSellerBreakdowns(
+  sellerBreakdownEntries = [],
+  { oddHour, weather } = {},
+) {
+  const oddHourAmount = round2(oddHour?.amount || 0);
+  const weatherAmount = round2(weather?.amount || 0);
+  const oddHourSellerShare = oddHourAmount > 0
+    ? round2((oddHourAmount * Number(oddHour?.revenueSplit?.seller ?? 0)) / 100)
+    : 0;
+  const weatherSellerShare = weatherAmount > 0
+    ? round2((weatherAmount * Number(weather?.revenueSplit?.seller ?? 0)) / 100)
+    : 0;
+  const total = round2(oddHourAmount + weatherAmount);
+
+  sellerBreakdownEntries.forEach((entry, index) => {
+    const breakdown = entry?.breakdown;
+    if (!breakdown) return;
+
+    if (index === 0 && total > 0) {
+      breakdown.oddHourSurchargeAmount = oddHourAmount;
+      breakdown.weatherSurchargeAmount = weatherAmount;
+      breakdown.grandTotal = round2(Number(breakdown.grandTotal || 0) + total);
+      const sellerShare = round2(oddHourSellerShare + weatherSellerShare);
+      const platformShare = round2(total - sellerShare);
+      breakdown.sellerPayoutTotal = round2(Number(breakdown.sellerPayoutTotal || 0) + sellerShare);
+      breakdown.platformTotalEarning = round2(
+        Number(breakdown.platformTotalEarning || 0) + platformShare,
+      );
+      breakdown.snapshots = {
+        ...(breakdown.snapshots || {}),
+        oddHourSurcharge: oddHourAmount > 0 ? { amount: oddHourAmount, windowStart: oddHour.windowStart, windowEnd: oddHour.windowEnd } : null,
+        weatherSurcharge: weatherAmount > 0 ? { amount: weatherAmount } : null,
+      };
+    } else {
+      breakdown.oddHourSurchargeAmount = 0;
+      breakdown.weatherSurchargeAmount = 0;
+    }
+  });
+}
+
 export async function buildCheckoutPricingSnapshot({
   orderItems = [],
   address = {},
@@ -394,6 +446,7 @@ export async function buildCheckoutPricingSnapshot({
   session = null,
   fulfillmentMethod = null,
   fulfillmentMethodBySeller = null,
+  orderPlacedAt = new Date(),
 }) {
   const hydratedItems = await hydrateOrderItems(orderItems, {
     session,
@@ -454,9 +507,14 @@ export async function buildCheckoutPricingSnapshot({
       preHydratedItems: sellerItems,
       distanceKm: isCustomerPickup ? 0 : distanceKm,
       discountTotal: sellerDiscount,
-      taxTotal: 0,
+      customerState: address?.state || "",
+      orderPlacedAt,
       session,
-      skipDeliveryFee: isCustomerPickup || Boolean(freeDelivery),
+      skipDeliveryFee:
+        isCustomerPickup ||
+        Boolean(freeDelivery) ||
+        (Number(financeSettings.freeDeliveryThreshold) > 0 &&
+          totalSubtotal >= Number(financeSettings.freeDeliveryThreshold)),
       includeCustomerSurcharge: false,
     });
     sellerBreakdownEntries.push({
@@ -473,12 +531,46 @@ export async function buildCheckoutPricingSnapshot({
 
   applyGlobalCategoryFeesToSellerBreakdowns(sellerBreakdownEntries, globalCategoryFees);
   allocateCheckoutTipToSellerBreakdowns(sellerBreakdownEntries, tipAmount);
-  applyCustomerSurchargeToSellerBreakdowns(sellerBreakdownEntries, {
-    amount:
-      financeSettings.customerSurchargeEnabled
-        ? Number(financeSettings.customerSurchargeAmount || 0)
+  {
+    // The admin-configured flat platform fee (always-on) and the optional
+    // toggled customer surcharge both land on the customer as one combined,
+    // non-seller-paid line — they share the same breakdown fields/reason so
+    // invoices and order screens don't need a second charge type to display.
+    const flatPlatformFee = Number(financeSettings.platformFee || 0);
+    const toggledSurcharge = financeSettings.customerSurchargeEnabled
+      ? Number(financeSettings.customerSurchargeAmount || 0)
+      : 0;
+    const reasonParts = [];
+    if (flatPlatformFee > 0) reasonParts.push("Platform fee");
+    if (toggledSurcharge > 0 && financeSettings.customerSurchargeReason) {
+      reasonParts.push(financeSettings.customerSurchargeReason);
+    }
+    applyCustomerSurchargeToSellerBreakdowns(sellerBreakdownEntries, {
+      amount: flatPlatformFee + toggledSurcharge,
+      reason: reasonParts.join(" + "),
+    });
+  }
+  const oddHourActive =
+    financeSettings.oddHourSurcharge?.enabled &&
+    Number(financeSettings.oddHourSurcharge?.amount || 0) > 0 &&
+    isWithinOddHourWindow(
+      orderPlacedAt,
+      financeSettings.oddHourSurcharge?.windowStart,
+      financeSettings.oddHourSurcharge?.windowEnd,
+    );
+  applyDistinctSurchargesToSellerBreakdowns(sellerBreakdownEntries, {
+    oddHour: {
+      amount: oddHourActive ? financeSettings.oddHourSurcharge.amount : 0,
+      windowStart: financeSettings.oddHourSurcharge?.windowStart,
+      windowEnd: financeSettings.oddHourSurcharge?.windowEnd,
+      revenueSplit: financeSettings.oddHourSurcharge?.revenueSplit,
+    },
+    weather: {
+      amount: financeSettings.weatherSurcharge?.enabled
+        ? Number(financeSettings.weatherSurcharge?.amount || 0)
         : 0,
-    reason: financeSettings.customerSurchargeReason || "",
+      revenueSplit: financeSettings.weatherSurcharge?.revenueSplit,
+    },
   });
 
   const aggregateBreakdown = buildAggregateBreakdown(

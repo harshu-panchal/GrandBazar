@@ -645,6 +645,10 @@ export async function getActiveSellerByIdData(id) {
     deliveryPolicy: store.deliveryPolicy || {},
     packagingCharge: store.packagingCharge || 0,
     packagingChargeEnabled: store.packagingChargeEnabled || false,
+    logoUrl: store.logoUrl || "",
+    banners: Array.isArray(store.banners) ? store.banners : [],
+    storeVideo: store.storeVideo || "",
+    excludeFromAlternatives: Boolean(store.excludeFromAlternatives),
     bankInfo: {
       bankName: store.bankName || "",
       accountNo: store.accountNumber || "",

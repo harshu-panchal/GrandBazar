@@ -7,6 +7,7 @@ import Store from "../../models/store.js";
 import Seller from "../../models/seller.js";
 import User from "../../models/customer.js";
 import RewardGrant from "../../modules/rewards/models/rewardGrant.model.js";
+import { resolveFreeTierStatus } from "../../services/subscriptionService.js";
 import handleResponse from "../../utils/helper.js";
 import {
   WORKFLOW_STATUS,
@@ -739,6 +740,7 @@ export const getSellerDashboard = async (req, res) => {
       staff,
       lowStockProducts,
       ownerDoc,
+      freeTierStatus,
     ] = await Promise.all([
       fetchOrderFacets(storeOid, windows),
       safe(fetchInventory(storeOid, now), {
@@ -770,6 +772,7 @@ export const getSellerDashboard = async (req, res) => {
       isOwner && ownerId
         ? safe(Seller.findById(ownerId).select("businessModel").lean())
         : Promise.resolve(null),
+      safe(resolveFreeTierStatus(storeId), { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" }),
     ]);
 
     /* ---------- KPIs ---------- */
@@ -997,6 +1000,7 @@ export const getSellerDashboard = async (req, res) => {
       healthScore,
       recommendations,
       subscriptionDaysRemaining,
+      freeTierStatus,
       generatedAt: now.toISOString(),
     });
   } catch (error) {

@@ -104,10 +104,25 @@ const ProductCard = React.memo(
     const advanceBooking = product?.advanceBooking || null;
     const bookingLocked = Boolean(advanceBooking && advanceBooking.bookingOpen === false);
 
+    const variantStock = defaultVariant
+      ? Number(
+          (Array.isArray(product?.variants) ? product.variants : []).find(
+            (v) => String(v?.sku || v?.name || "").trim() === variantKey,
+          )?.stock ?? 0,
+        )
+      : null;
+    const isOutOfStock = defaultVariant
+      ? !(variantStock > 0)
+      : !(Number(product?.stock) > 0);
+
     const handleAddToCart = React.useCallback(
       (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (isOutOfStock) {
+          showToast("This product is out of stock", "error");
+          return;
+        }
         if (bookingLocked) {
           const opensAt = advanceBooking?.bookingStartAt
             ? new Date(advanceBooking.bookingStartAt).toLocaleString("en-IN")
@@ -143,6 +158,7 @@ const ProductCard = React.memo(
         bookingLocked,
         advanceBooking,
         showToast,
+        isOutOfStock,
       ],
     );
 
@@ -414,14 +430,14 @@ const ProductCard = React.memo(
               ) : (
                 <button
                   onClick={handleAddToCart}
-                  disabled={bookingLocked}
+                  disabled={bookingLocked || isOutOfStock}
                   className={cn(
                     "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400",
                     compact
                       ? "px-2.5 py-1 text-[10px]"
                       : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
                   )}>
-                  {bookingLocked ? "SOON" : "ADD"}
+                  {isOutOfStock ? "OUT OF STOCK" : bookingLocked ? "SOON" : "ADD"}
                 </button>
               )}
             </div>

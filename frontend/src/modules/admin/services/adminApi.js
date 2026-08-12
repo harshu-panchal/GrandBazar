@@ -17,6 +17,8 @@ export const adminApi = {
     createVendorAccount: (data) => axiosInstance.post('/admin/sellers/create', data),
     updateSellerStoreSetup: (id, data) => axiosInstance.put(`/admin/sellers/${id}/store-setup`, data),
     resendSellerCredentials: (id) => axiosInstance.post(`/admin/sellers/${id}/resend-credentials`),
+    inviteSeller: (data) => axiosInstance.post('/admin/sellers/invite', data),
+    listSellerInvites: (params) => axiosInstance.get('/admin/sellers/invites', { params }),
     approveSeller: (id, data) => axiosInstance.patch(`/admin/sellers/approve/${id}`, data),
     reactivateSellerAccount: (id) => axiosInstance.patch(`/admin/sellers/approve/${id}`),
     rejectSeller: (id, data) => axiosInstance.delete(`/admin/sellers/reject/${id}`, { data }),
@@ -62,6 +64,9 @@ export const adminApi = {
     getFinanceLedger: (params) => axiosInstance.get('/admin/finance/ledger', { params }),
     getFinancePayouts: (params) => axiosInstance.get('/admin/finance/payouts', { params }),
     processFinancePayouts: (data) => axiosInstance.post('/admin/finance/payouts/process', data),
+    adjustPayout: (payoutId, data) => axiosInstance.post(`/admin/finance/payouts/${payoutId}/adjust`, data),
+    holdSellerPayout: (orderId, data) => axiosInstance.post(`/admin/finance/orders/${orderId}/hold`, data),
+    releaseSellerPayout: (orderId) => axiosInstance.post(`/admin/finance/orders/${orderId}/release`),
     exportFinanceStatement: (params) =>
         axiosInstance.get('/admin/finance/export-statement', { params, responseType: 'blob' }),
     // Centralized settings (public GET, admin PUT)
@@ -86,6 +91,7 @@ export const adminApi = {
     rejectProductModeration: (id, data = {}) => axiosInstance.patch(`/products/moderation/${id}/reject`, data),
     createProduct: (formData) => axiosInstance.post('/products', formData),
     updateProduct: (id, formData) => axiosInstance.put(`/products/${id}`, formData),
+    getProductById: (id) => axiosInstance.get(`/products/${id}`),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
 
     // Catalog Management
@@ -113,6 +119,7 @@ export const adminApi = {
         axiosInstance.put(`/orders/cancel/${orderId}/approve`, data),
     rejectOrderCancellationRequest: (orderId, data = {}) =>
         axiosInstance.put(`/orders/cancel/${orderId}/reject`, data),
+    partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
     // Returns
     getReturns: (params) => axiosInstance.get('/orders/seller-returns', { params }),
     getReturnDetails: (orderId) => axiosInstance.get(`/orders/${orderId}/returns`),
@@ -142,7 +149,10 @@ export const adminApi = {
     getDeliveryPartners: (params) => axiosInstance.get('/admin/delivery-partners', { params }),
     approveDeliveryPartner: (id) => axiosInstance.patch(`/admin/delivery-partners/approve/${id}`),
     rejectDeliveryPartner: (id) => axiosInstance.delete(`/admin/delivery-partners/reject/${id}`),
+    updateDeliveryPartner: (id, data) => axiosInstance.put(`/admin/delivery-partners/${id}`, data),
     getActiveFleet: (params) => axiosInstance.get('/admin/active-fleet', { params }),
+    getUnassignedOrders: (params) => axiosInstance.get('/admin/unassigned-orders', { params }),
+    assignOrderToRider: (orderId, riderId) => axiosInstance.post(`/admin/orders/${orderId}/assign-rider`, { riderId }),
 
     // Delivery Payouts / Funds
     getDeliveryTransactions: (params) => axiosInstance.get('/admin/delivery-transactions', { params }),
@@ -224,6 +234,8 @@ export const adminApi = {
     resolveDispute: (disputeId, data) => axiosInstance.put(`/orders/disputes/${disputeId}/resolve`, data),
     adminRescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/admin`, data),
     logisticsOverride: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/override`, data),
+    getStoreDeliveryPolicy: (storeId) =>
+        axiosInstance.get(`/orders/stores/${storeId}/delivery-policy`),
     updateStoreDeliveryPolicy: (storeId, data) =>
         axiosInstance.put(`/orders/stores/${storeId}/delivery-policy`, data),
 

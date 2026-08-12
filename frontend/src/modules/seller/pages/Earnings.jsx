@@ -18,9 +18,10 @@ import { cn } from "@/lib/utils";
 import { BlurFade } from "@/components/ui/blur-fade";
 import ShimmerButton from "@/components/ui/shimmer-button";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import { exportToCSV } from "@/lib/exportUtils";
 import { useSellerEarnings } from "../context/SellerEarningsContext";
+import { useStoreContext } from "../context/StoreContext";
+import { sellerApi } from "../services/sellerApi";
 import Pagination from "@shared/components/ui/Pagination";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
@@ -34,8 +35,8 @@ const statusVariant = (status) => {
 };
 
 const Earnings = () => {
-  const navigate = useNavigate();
-  const { earningsData: data, earningsLoading: loading } = useSellerEarnings();
+  const { earningsData: data, earningsLoading: loading, refreshEarnings } = useSellerEarnings();
+  const { activeStore } = useStoreContext();
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -97,29 +98,52 @@ const Earnings = () => {
     return ["All", ...Array.from(set)];
   }, [ledger]);
 
-  const handleWithdraw = () => {
-    const totalBalance = Number(data?.balances?.settledBalance ?? 0);
+  const handleWithdraw = async () => {
+    const settled = Number(data?.balances?.settledBalance ?? 0);
+    const pending = Math.abs(Number(data?.balances?.pendingPayouts ?? 0));
+    const availableBalance = Math.max(0, settled - pending);
     const amount = parseFloat(withdrawAmount);
-    if (isNaN(amount) || amount <= 0 || amount > totalBalance) {
-      alert(
-        "Please enter a valid amount between ₹0.01 and ₹" +
-          totalBalance.toLocaleString(),
+    if (isNaN(amount) || amount <= 0 || amount > availableBalance) {
+      toast.error(
+        `Please enter a valid amount between ₹0.01 and ₹${availableBalance.toLocaleString()}.`,
       );
       return;
     }
 
-    setIsWithdrawing(true);
-    setTimeout(() => {
+    try {
+      setIsWithdrawing(true);
+      const response = await sellerApi.requestWithdrawal({ amount });
+      if (response.data.success) {
+        toast.success(`Withdrawal request of ₹${amount.toLocaleString()} submitted successfully!`);
+        setIsWithdrawModalOpen(false);
+        setWithdrawAmount("");
+        refreshEarnings();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to submit withdrawal request");
+    } finally {
       setIsWithdrawing(false);
-      setIsWithdrawModalOpen(false);
-      alert(`Withdrawal request of ₹${amount.toLocaleString()} submitted successfully!`);
-    }, 1500);
+    }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen font-black text-slate-600">
         LOADING EARNINGS...
+      </div>
+    );
+  }
+
+  if (data?.moduleEnabled === false) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-slate-100 flex items-center justify-center">
+          <Receipt className="h-7 w-7 text-slate-400" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-800">Settlement details unavailable</h3>
+        <p className="text-sm text-slate-500 max-w-sm">
+          Settlement details are currently managed by the platform admin. Contact support if you need earnings information.
+        </p>
       </div>
     );
   }
@@ -150,8 +174,12 @@ const Earnings = () => {
                   email: txn.customerEmail || "",
                   items: txn.itemsSummary || "",
                   orderTotal: Number(txn.orderTotal ?? 0),
+                  commissionAmount: Number(txn.commissionAmount ?? 0),
+                  packagingAmount: Number(txn.packagingAmount ?? 0),
+                  taxAmount: Number(txn.taxAmount ?? 0),
                   earning: Number(txn.amount ?? 0),
                   sellerPayout: Number(txn.sellerPayout ?? 0),
+                  isBulkOrder: txn.isBulkOrder ? "Yes" : "No",
                   type: txn.type ?? "",
                   status: txn.status ?? "",
                   paymentMethod: txn.paymentMethod ?? "",
@@ -166,8 +194,12 @@ const Earnings = () => {
                   email: "Customer Email",
                   items: "Items",
                   orderTotal: "Order Total",
+                  commissionAmount: "Commission Deducted",
+                  packagingAmount: "Packaging Charge",
+                  taxAmount: "Tax (GST)",
                   earning: "Earning Amount",
                   sellerPayout: "Seller Payout",
+                  isBulkOrder: "Bulk Order",
                   type: "Type",
                   status: "Payout Status",
                   paymentMethod: "Payment Method",
@@ -182,7 +214,7 @@ const Earnings = () => {
               Download Report
             </Button>
             <ShimmerButton
-              onClick={() => navigate("/seller/withdrawals")}
+              onClick={() => setIsWithdrawModalOpen(true)}
               className="px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg"
             >
               <span className="text-white">Withdraw Funds</span>
@@ -292,6 +324,7 @@ const Earnings = () => {
                   <th className="px-4 py-3 whitespace-nowrap">Customer</th>
                   <th className="px-4 py-3 whitespace-nowrap">Items</th>
                   <th className="px-4 py-3 whitespace-nowrap">Order Total</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Deductions</th>
                   <th className="px-4 py-3 whitespace-nowrap">Your Earning</th>
                   <th className="px-4 py-3 whitespace-nowrap">Payment</th>
                   <th className="px-4 py-3 whitespace-nowrap">Status</th>
@@ -300,7 +333,7 @@ const Earnings = () => {
               <tbody className="divide-y divide-slate-100">
                 {paginatedLedger.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center text-slate-500">
+                    <td colSpan={9} className="px-4 py-16 text-center text-slate-500">
                       No earnings records found yet.
                     </td>
                   </tr>
@@ -315,11 +348,18 @@ const Earnings = () => {
                         <p className="text-sm font-black text-slate-900">
                           {row.orderId ? `#${row.orderId}` : row.ref || "—"}
                         </p>
-                        {row.orderStatus && (
-                          <Badge variant={statusVariant(row.orderStatus)} className="mt-1 uppercase">
-                            {row.orderStatus}
-                          </Badge>
-                        )}
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {row.orderStatus && (
+                            <Badge variant={statusVariant(row.orderStatus)} className="uppercase">
+                              {row.orderStatus}
+                            </Badge>
+                          )}
+                          {row.isBulkOrder && (
+                            <Badge variant="info" className="uppercase">
+                              Bulk
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-4 align-top min-w-[180px]">
                         <p className="text-sm font-bold text-slate-900">
@@ -346,6 +386,17 @@ const Earnings = () => {
                         <p className="text-sm font-bold text-slate-900">
                           {row.orderId ? formatMoney(row.orderTotal) : "—"}
                         </p>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                        {row.orderId && (row.commissionAmount || row.packagingAmount || row.taxAmount) ? (
+                          <div className="space-y-0.5 text-[11px] text-slate-500">
+                            {row.commissionAmount > 0 && <p>Commission: -{formatMoney(row.commissionAmount)}</p>}
+                            {row.packagingAmount > 0 && <p>Packaging: +{formatMoney(row.packagingAmount)}</p>}
+                            {row.taxAmount > 0 && <p>Tax: {formatMoney(row.taxAmount)}</p>}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap align-top">
                         <p
@@ -419,7 +470,13 @@ const Earnings = () => {
               <p className="text-sm text-slate-600 font-medium mb-8">
                 Available Balance:{" "}
                 <span className="text-brand-600 font-bold">
-                  {formatMoney(data?.balances?.settledBalance)}
+                  {formatMoney(
+                    Math.max(
+                      0,
+                      Number(data?.balances?.settledBalance ?? 0) -
+                        Math.abs(Number(data?.balances?.pendingPayouts ?? 0)),
+                    ),
+                  )}
                 </span>
               </p>
 
@@ -444,18 +501,28 @@ const Earnings = () => {
 
                 <div>
                   <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 block">
-                    Select Bank Account
+                    Bank Account
                   </label>
-                  <div className="p-4 border border-slate-200 rounded-lg flex items-center gap-4 cursor-pointer hover:border-brand-500 hover:bg-brand-50/10 transition-all group">
-                    <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-600 transition-colors">
-                      <Building2 className="h-5 w-5" />
+                  {activeStore?.accountNumber ? (
+                    <div className="p-4 border border-slate-200 rounded-lg flex items-center gap-4">
+                      <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-black text-slate-900">
+                          {activeStore.bankName || "Bank"} **** {String(activeStore.accountNumber).slice(-4)}
+                        </p>
+                        <p className="text-xs text-slate-600 font-bold">
+                          {activeStore.accountHolder || "Primary Account"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-black text-slate-900">HDFC Bank **** 4589</p>
-                      <p className="text-xs text-slate-600 font-bold">Primary Account</p>
+                  ) : (
+                    <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg text-xs font-bold text-amber-700">
+                      No bank account on file. Add your bank details from My Stores &gt; KYC to
+                      receive withdrawals.
                     </div>
-                    <div className="h-5 w-5 rounded-full border-2 border-slate-200 group-hover:border-brand-500 group-hover:bg-brand-500 transition-all" />
-                  </div>
+                  )}
                 </div>
               </div>
 

@@ -20,11 +20,40 @@ const bannerItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const superAdItemSchema = new mongoose.Schema(
+  {
+    sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "Store", required: true },
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
+    title: { type: String, trim: true },
+    imageUrl: { type: String, required: true },
+    linkType: {
+      type: String,
+      enum: ["none", "header", "category", "subcategory", "product", "url", "store"],
+      default: "store",
+    },
+    linkValue: { type: String, trim: true },
+    priority: { type: Number, default: 0 },
+    // Kept a stable _id (removed the old `_id: false`) so impressions/clicks
+    // survive an admin re-saving the section — see updateExperienceSection's
+    // preserve-by-id merge step.
+    impressions: { type: Number, default: 0 },
+    clicks: { type: Number, default: 0 },
+  },
+);
+
 const configSchema = new mongoose.Schema(
   {
     // Banners configuration
     banners: {
       items: [bannerItemSchema],
+    },
+    // Admin-curated paid-placement ads (Super AD module)
+    superAds: {
+      items: [superAdItemSchema],
+    },
+    // Admin-curated shop-card row (section heading uses the top-level `title` field)
+    sellerHighlights: {
+      sellerIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Store" }],
     },
     // Category sections
     categories: {
@@ -69,7 +98,7 @@ const experienceSectionSchema = new mongoose.Schema(
     },
     displayType: {
       type: String,
-      enum: ["banners", "categories", "subcategories", "products"],
+      enum: ["banners", "categories", "subcategories", "products", "super_ads", "seller_highlights"],
       required: true,
     },
     title: {

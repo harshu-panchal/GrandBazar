@@ -4,7 +4,11 @@ import Store from "../models/store.js";
 import handleResponse from "../utils/helper.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 import { isStoreOperationallyOpen } from "../services/deliveryOptionResolver.js";
-import { assertProductBookableForCart } from "../services/preOrderCampaignService.js";
+import {
+  assertProductBookableForCart,
+  assertCartPreorderRules,
+  getAdvanceBookingMapForProductIds,
+} from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
@@ -27,7 +31,7 @@ async function getCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id sellerId")
+    .select("_id name sellerId price salePrice stock variants")
     .lean();
 }
 
@@ -57,6 +61,32 @@ async function keepOnlySellerItems(cart, sellerId) {
   return { removed: before - cart.items.length };
 }
 
+/**
+ * When any cart line carries a campaignId (see cart.js model), attach the
+ * live advance-booking meta (sale/delivery window, remaining allocation) so
+ * the Cart page can render Scheduling-Page mode from this one response,
+ * without a second round trip. Live-resolved by productId, not trusted from
+ * the stored campaignId, so a campaign that has since ended/changed shows
+ * up-to-date state (or none, if it's no longer bookable).
+ */
+async function attachPreorderMetaToCartItems(cart) {
+  if (!cart || !Array.isArray(cart.items) || !cart.items.length) return cart;
+  const preorderItems = cart.items.filter((item) => item?.campaignId);
+  if (!preorderItems.length) return cart;
+
+  const productIds = preorderItems
+    .map((item) => item.productId?._id || item.productId)
+    .filter(Boolean);
+  const bookingMap = await getAdvanceBookingMapForProductIds(productIds);
+
+  cart.items = cart.items.map((item) => {
+    if (!item?.campaignId) return item;
+    const pid = String(item.productId?._id || item.productId || "");
+    return { ...item, advanceBooking: bookingMap.get(pid) || null };
+  });
+  return cart;
+}
+
 async function fetchPopulatedCart(cartId) {
   const cart = await Cart.findById(cartId)
     .populate({
@@ -66,6 +96,7 @@ async function fetchPopulatedCart(cartId) {
     })
     .lean();
 
+  await attachPreorderMetaToCartItems(cart);
   return sanitizeCartItems(cart);
 }
 
@@ -107,8 +138,38 @@ export const addToCart = async (req, res) => {
       return handleResponse(res, 404, "Product is not available for purchase");
     }
 
+    // Reject out-of-stock adds server-side (client-side guard alone can be bypassed).
+    const requestedQuantity = Math.max(1, Number(quantity) || 1);
+    if (normalizedVariantSku) {
+      const matchedVariant = Array.isArray(customerVisibleProduct.variants)
+        ? customerVisibleProduct.variants.find(
+            (variant) => String(variant?.sku || variant?.name || "").trim() === normalizedVariantSku,
+          )
+        : null;
+      if (!matchedVariant) {
+        return handleResponse(res, 404, "Selected variant is not available");
+      }
+      if (Number(matchedVariant.stock || 0) < requestedQuantity) {
+        return handleResponse(
+          res,
+          400,
+          `${customerVisibleProduct.name}${matchedVariant.name ? ` (${matchedVariant.name})` : ""} is out of stock`,
+        );
+      }
+    } else if (Number(customerVisibleProduct.stock || 0) < requestedQuantity) {
+      return handleResponse(
+        res,
+        400,
+        `${customerVisibleProduct.name} is out of stock`,
+      );
+    }
+
+    // Resolve the product's active pre-order campaign (if any) server-side —
+    // never trust a client-supplied campaignId. `booking.advanceBooking` is
+    // null for a normal (non pre-order) product.
+    let booking;
     try {
-      await assertProductBookableForCart(productId);
+      booking = await assertProductBookableForCart(productId);
     } catch (bookingError) {
       return handleResponse(
         res,
@@ -119,6 +180,9 @@ export const addToCart = async (req, res) => {
           : undefined,
       );
     }
+    const incomingCampaignId = booking?.advanceBooking?.campaignId || null;
+    const incomingPriceSnapshot =
+      customerVisibleProduct.salePrice || customerVisibleProduct.price || null;
 
     const incomingSellerId = toSellerIdString(customerVisibleProduct.sellerId);
     if (!incomingSellerId) {
@@ -154,8 +218,31 @@ export const addToCart = async (req, res) => {
 
     if (itemIndex > -1) {
       cart.items[itemIndex].quantity += quantity;
+      cart.items[itemIndex].campaignId = incomingCampaignId;
+      cart.items[itemIndex].priceSnapshot = incomingPriceSnapshot;
+      cart.items[itemIndex].sellerId = incomingSellerId;
     } else {
-      cart.items.push({ productId, variantSku: normalizedVariantSku, quantity });
+      cart.items.push({
+        productId,
+        variantSku: normalizedVariantSku,
+        quantity,
+        campaignId: incomingCampaignId,
+        priceSnapshot: incomingPriceSnapshot,
+        sellerId: incomingSellerId,
+      });
+    }
+
+    // A cart may not mix a pre-order line with a regular line, nor mix lines
+    // from two different pre-order campaigns — give the customer instant
+    // feedback here instead of only failing at final checkout.
+    try {
+      await assertCartPreorderRules(cart.items);
+    } catch (preorderRuleError) {
+      return handleResponse(
+        res,
+        preorderRuleError.statusCode || 400,
+        preorderRuleError.message,
+      );
     }
 
     await cart.save();

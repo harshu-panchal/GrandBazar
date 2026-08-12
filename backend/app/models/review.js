@@ -4,7 +4,7 @@ const reviewSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
+      ref: "User",
       required: true,
       index: true,
     },
@@ -25,6 +25,20 @@ const reviewSchema = new mongoose.Schema(
       ref: "Store",
       default: null,
       index: true,
+    },
+    // Set when the review was submitted from a specific delivered order
+    // (see OrderDetailPage.jsx "Rate your order" prompt) rather than the
+    // generic product/store review form. Optional — a review with no
+    // orderId is still valid, just not order-linked/verified.
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+      index: true,
+    },
+    verifiedPurchase: {
+      type: Boolean,
+      default: false,
     },
     rating: {
       type: Number,

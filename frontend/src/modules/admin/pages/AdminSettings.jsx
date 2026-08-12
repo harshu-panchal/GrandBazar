@@ -85,6 +85,11 @@ const AdminSettings = () => {
             cutoffMessage: 'Orders are currently closed. We accept orders between 6:00 AM and 10:00 PM.',
         },
         refundWindowHours: 24,
+        deliveryEta: {
+            basePrepTimeMinutes: 8,
+            minutesPerKm: 4,
+            rangeSpreadMinutes: 7,
+        },
     });
 
     useEffect(() => {
@@ -498,6 +503,61 @@ const AdminSettings = () => {
                                         Customers can raise return/refund complaints within this number of hours after order delivery (Default: 24 hours).
                                     </p>
                                 </div>
+                            </div>
+                        </Card>
+
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden mt-6">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    Delivery Time Estimate
+                                </h3>
+                                <p className="text-xs font-bold text-slate-500 mt-2">
+                                    Computes the "X-Y mins" estimate shown on store cards, store detail, and checkout — one formula everywhere instead of hardcoded guesses per screen.
+                                </p>
+                            </div>
+                            <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Prep Time (mins)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={settings.deliveryEta?.basePrepTimeMinutes ?? 8}
+                                        onChange={(e) => handleInputChange('deliveryEta', {
+                                            ...settings.deliveryEta,
+                                            basePrepTimeMinutes: Number(e.target.value),
+                                        })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Minutes per KM</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={settings.deliveryEta?.minutesPerKm ?? 4}
+                                        onChange={(e) => handleInputChange('deliveryEta', {
+                                            ...settings.deliveryEta,
+                                            minutesPerKm: Number(e.target.value),
+                                        })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Range Spread (mins)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={settings.deliveryEta?.rangeSpreadMinutes ?? 7}
+                                        onChange={(e) => handleInputChange('deliveryEta', {
+                                            ...settings.deliveryEta,
+                                            rangeSpreadMinutes: Number(e.target.value),
+                                        })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <p className="md:col-span-3 text-xs font-bold text-slate-500">
+                                    Estimate shown = base prep time + (distance in km × minutes/km), then + range spread for the upper bound. E.g. defaults show "8-15 mins" for a customer 0km away.
+                                </p>
                             </div>
                         </Card>
                         </div>

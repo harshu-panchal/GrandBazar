@@ -1,14 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Package, ChevronRight, Clock, CheckCircle, Loader2, ChevronLeft } from 'lucide-react';
+import { Package, ChevronRight, Clock, CheckCircle, Loader2, ChevronLeft, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
+import { useCart } from '../context/CartContext';
 import { getOrderStatusLabel, getLegacyStatusFromOrder } from '@/shared/utils/orderStatus';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 
 const OrdersPage = () => {
     const navigate = useNavigate();
+    const { addToCart } = useCart();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [reorderingId, setReorderingId] = useState('');
+
+    const handleReorder = async (e, order) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setReorderingId(order._id);
+        try {
+            const res = await customerApi.reorderOrder(order.orderId);
+            const { addable = [], unavailable = [] } = res.data?.result || {};
+            for (const item of addable) {
+                await addToCart({
+                    id: item.productId,
+                    _id: item.productId,
+                    sellerId: item.sellerId,
+                    variantSku: item.variantSku,
+                    variantName: item.variantName,
+                    name: item.name,
+                    image: item.image,
+                    price: item.price,
+                    salePrice: item.price,
+                });
+            }
+            if (addable.length > 0) {
+                toast.success(`${addable.length} item${addable.length === 1 ? '' : 's'} added to cart`);
+                navigate('/cart');
+            }
+            if (unavailable.length > 0) {
+                toast.message(`${unavailable.length} item${unavailable.length === 1 ? '' : 's'} couldn't be added`, {
+                    description: unavailable.map((u) => `${u.name} — ${u.reason}`).join(', '),
+                });
+            }
+        } catch (error) {
+            toast.error(error?.response?.data?.message || 'Failed to reorder');
+        } finally {
+            setReorderingId('');
+        }
+    };
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -77,8 +117,11 @@ const OrdersPage = () => {
                     orders.map((order) => {
                         const legacy = getLegacyStatusFromOrder(order);
                         return (
-                        <Link
-                            to={`/orders/${order.orderId}`}
+                        <div
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => navigate(`/orders/${order.orderId}`)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/orders/${order.orderId}`); }}
                             key={order._id}
                             className="block bg-white rounded-2xl px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] border border-slate-100/80 active:scale-[0.985] transition-transform cursor-pointer hover:shadow-[0_10px_30px_rgba(15,23,42,0.08)]"
                         >
@@ -156,7 +199,25 @@ const OrdersPage = () => {
                                     <ChevronRight size={16} className="text-slate-300" />
                                 </div>
                             </div>
-                        </Link>
+
+                            {legacy === 'delivered' && (
+                                <button
+                                    onClick={(e) => handleReorder(e, order)}
+                                    disabled={reorderingId === order._id}
+                                    className="mt-3 w-full py-2.5 rounded-xl bg-brand-50 text-brand-700 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-brand-100 transition-colors disabled:opacity-60"
+                                >
+                                    {reorderingId === order._id ? (
+                                        <>
+                                            <Loader2 size={14} className="animate-spin" /> Adding…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RotateCcw size={14} /> Buy Again
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     );
                     })
                 )}

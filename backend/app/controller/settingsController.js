@@ -51,6 +51,9 @@ const ALLOWED_KEYS = [
   "lowStockAlertsEnabled",
   "productApproval",
   "defaultDeliveryProvider",
+  "refundWindowHours",
+  "deliveryEta",
+  "operatingHours",
 ];
 
 function flattenForMongoSet(prefix, value, target) {
@@ -129,6 +132,18 @@ const updateSettingsSchema = Joi.object({
     sellerEditRequiresApproval: Joi.boolean(),
   }).unknown(false),
   defaultDeliveryProvider: Joi.string().valid("zinto", "external"),
+  refundWindowHours: Joi.number().min(0).max(720),
+  deliveryEta: Joi.object({
+    basePrepTimeMinutes: Joi.number().min(0),
+    minutesPerKm: Joi.number().min(0),
+    rangeSpreadMinutes: Joi.number().min(0),
+  }).unknown(false),
+  operatingHours: Joi.object({
+    enabled: Joi.boolean(),
+    startHour: Joi.string().allow("", null),
+    endHour: Joi.string().allow("", null),
+    cutoffMessage: Joi.string().allow("", null).max(500),
+  }).unknown(false),
 }).unknown(false);
 
 /**
@@ -149,7 +164,7 @@ export const getPublicSettings = async (req, res) => {
       async () => {
         const existing = await Setting.findOne(filter)
           .select(
-            "appName supportEmail supportPhone currencySymbol currencyCode timezone logoUrl faviconUrl primaryColor secondaryColor returnDeliveryCommission deliveryPricingMode pricingMode customerBaseDeliveryFee riderBasePayout baseDeliveryCharge baseDistanceCapacityKm incrementalKmSurcharge deliveryPartnerRatePerKm fleetCommissionRatePerKm fixedDeliveryFee handlingFeeStrategy codEnabled onlineEnabled lowStockAlertsEnabled productApproval defaultDeliveryProvider createdAt",
+            "appName supportEmail supportPhone currencySymbol currencyCode timezone logoUrl faviconUrl primaryColor secondaryColor returnDeliveryCommission deliveryPricingMode pricingMode customerBaseDeliveryFee riderBasePayout baseDeliveryCharge baseDistanceCapacityKm incrementalKmSurcharge deliveryPartnerRatePerKm fleetCommissionRatePerKm fixedDeliveryFee handlingFeeStrategy codEnabled onlineEnabled lowStockAlertsEnabled productApproval defaultDeliveryProvider refundWindowHours deliveryEta operatingHours createdAt",
           )
           .lean();
         return existing || null;

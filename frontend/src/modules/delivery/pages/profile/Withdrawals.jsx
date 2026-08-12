@@ -22,6 +22,7 @@ const Withdrawals = () => {
     const [amount, setAmount] = useState("");
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(true);
+    const [error, setError] = useState(null);
     const [stats, setStats] = useState({
         availableBalance: 0,
         pendingWithdrawals: 0,
@@ -41,18 +42,16 @@ const Withdrawals = () => {
                     history: (res.data.result.recentTransactions || [])
                         .filter(t => t.type.includes('Withdrawal'))
                 });
+                setError(null);
+            } else {
+                setError(res.data.message || "Couldn't load your balance");
             }
-        } catch (error) {
-            console.error("Fetch Error:", error);
-            // Fallback with mock data for frontend demo if API fails
-            setStats({
-                availableBalance: 1250,
-                pendingWithdrawals: 0,
-                history: [
-                    { id: 'WDR123', amount: 500, status: 'Settled', date: '2024-03-20', type: 'Withdrawal' },
-                    { id: 'WDR124', amount: 300, status: 'Pending', date: '2024-03-21', type: 'Withdrawal' }
-                ]
-            });
+        } catch (err) {
+            console.error("Fetch Error:", err);
+            setError(
+                err.response?.data?.message ||
+                "Couldn't load your balance — pull to refresh or try again",
+            );
         } finally {
             setFetching(false);
         }
@@ -102,26 +101,48 @@ const Withdrawals = () => {
 
             <div className="p-6 space-y-6 max-w-lg mx-auto">
                 {/* Balance Card */}
-                <div className="bg-[#0066FF] p-6 rounded-2xl text-white shadow-xl shadow-brand-500/20 relative overflow-hidden border border-brand-400/20">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/5 rounded-full -ml-12 -mb-12 blur-2xl"></div>
+                {error ? (
+                    <div className="bg-white border border-red-100 rounded-2xl p-6 text-center shadow-sm">
+                        <AlertCircle className="mx-auto text-red-400 mb-3" size={32} />
+                        <p className="text-sm font-bold text-gray-800 mb-1">
+                            Couldn't load your balance
+                        </p>
+                        <p className="text-xs text-gray-500 mb-4">
+                            {error || "Pull to refresh or try again"}
+                        </p>
+                        <Button
+                            onClick={fetchData}
+                            disabled={fetching}
+                            className="mx-auto"
+                        >
+                            {fetching ? (
+                                <RotateCw className="animate-spin mr-2" size={16} />
+                            ) : null}
+                            {fetching ? "Retrying..." : "Try Again"}
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="bg-[#0066FF] p-6 rounded-2xl text-white shadow-xl shadow-brand-500/20 relative overflow-hidden border border-brand-400/20">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/5 rounded-full -ml-12 -mb-12 blur-2xl"></div>
 
-                    <div className="relative z-10">
-                        <p className="text-brand-100 text-xs font-bold uppercase tracking-wider mb-2 opacity-90">Available for Withdrawal</p>
-                        <h2 className="text-4xl font-extrabold flex items-baseline leading-none tracking-tight">
-                            <span className="text-2xl mr-1 font-bold">₹</span>
-                            {stats.availableBalance.toLocaleString()}
-                        </h2>
+                        <div className="relative z-10">
+                            <p className="text-brand-100 text-xs font-bold uppercase tracking-wider mb-2 opacity-90">Available for Withdrawal</p>
+                            <h2 className="text-4xl font-extrabold flex items-baseline leading-none tracking-tight">
+                                <span className="text-2xl mr-1 font-bold">₹</span>
+                                {stats.availableBalance.toLocaleString()}
+                            </h2>
 
-                        <div className="mt-6 flex items-center justify-between text-white bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/10">
-                            <div className="flex items-center">
-                                <Clock size={16} className="mr-2 opacity-80" />
-                                <span className="text-[11px] font-bold">Pending: ₹{stats.pendingWithdrawals.toLocaleString()}</span>
+                            <div className="mt-6 flex items-center justify-between text-white bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/10">
+                                <div className="flex items-center">
+                                    <Clock size={16} className="mr-2 opacity-80" />
+                                    <span className="text-[11px] font-bold">Pending: ₹{stats.pendingWithdrawals.toLocaleString()}</span>
+                                </div>
+                                <ArrowUpRight size={16} className="opacity-80" />
                             </div>
-                            <ArrowUpRight size={16} className="opacity-80" />
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Withdrawal Form */}
                 <Card className="p-6">
@@ -158,7 +179,7 @@ const Withdrawals = () => {
 
                         <Button
                             onClick={handleRequest}
-                            disabled={loading || !amount || Number(amount) <= 0}
+                            disabled={loading || !amount || Number(amount) <= 0 || Boolean(error)}
                             className="w-full py-4 rounded-2xl font-bold text-sm shadow-lg shadow-primary/20"
                         >
                             {loading ? (
@@ -166,6 +187,11 @@ const Withdrawals = () => {
                             ) : null}
                             {loading ? "PROCESSING..." : "SUBMIT REQUEST"}
                         </Button>
+                        {error && (
+                            <p className="text-xs text-center text-gray-400">
+                                Reload your balance above before requesting a withdrawal.
+                            </p>
+                        )}
                     </div>
                 </Card>
 

@@ -1,6 +1,7 @@
 import Order from "../models/order.js";
 import Transaction from "../models/transaction.js";
 import Product from "../models/product.js";
+import Setting from "../models/setting.js";
 import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import Wallet from "../models/wallet.js";
@@ -415,6 +416,17 @@ export const getSellerEarnings = async (req, res) => {
         const sellerId = req.user.id;
         const sellerOid = new mongoose.Types.ObjectId(sellerId);
 
+        const platformSettings = await Setting.findOne({}).select("sellerSettlementModuleEnabled").lean();
+        const moduleEnabled = platformSettings?.sellerSettlementModuleEnabled !== false;
+        if (!moduleEnabled) {
+            return handleResponse(res, 200, "Settlement module disabled by admin", {
+                moduleEnabled: false,
+                balances: null,
+                monthlyChart: [],
+                ledger: [],
+            });
+        }
+
         const transactions = await Transaction.find({ user: sellerId, userModel: 'Seller' })
             .sort({ createdAt: -1 })
             .populate({
@@ -498,6 +510,7 @@ export const getSellerEarnings = async (req, res) => {
         }
 
         return handleResponse(res, 200, "Earnings fetched successfully", {
+            moduleEnabled: true,
             balances: {
                 settledBalance: settledBalance,
                 pendingPayouts: pendingPayouts,
@@ -533,6 +546,10 @@ export const getSellerEarnings = async (req, res) => {
                           .map((item) => `${item.name || "Item"} × ${item.quantity || 1}`)
                           .join(", ")
                     : "";
+                const commissionAmount = Number(order?.paymentBreakdown?.adminProductCommissionTotal ?? 0);
+                const packagingAmount = Number(order?.paymentBreakdown?.packagingChargeAmount ?? 0);
+                const taxAmount = Number(order?.paymentBreakdown?.taxTotal ?? 0);
+                const isBulkOrder = Boolean(order?.isBulkOrder || order?.paymentBreakdown?.isBulkOrder);
 
                 return {
                     id: (t.reference || t._id).toString(),
@@ -554,6 +571,10 @@ export const getSellerEarnings = async (req, res) => {
                     orderStatus: order?.status || null,
                     orderTotal,
                     sellerPayout,
+                    commissionAmount,
+                    packagingAmount,
+                    taxAmount,
+                    isBulkOrder,
                     paymentMethod: order?.payment?.method || null,
                     paymentStatus: order?.payment?.status || null,
                     itemCount,

@@ -45,6 +45,8 @@ const OffersManagement = () => {
         style: 'blue',
         icon: 'sparkles',
         appliesOnOrderNumber: 1,
+        discountValue: 0,
+        usageLimit: 0,
         order: 0,
         status: 'active',
         categoryIds: [],
@@ -104,6 +106,8 @@ const OffersManagement = () => {
             style: 'blue',
             icon: 'sparkles',
             appliesOnOrderNumber: 1,
+            discountValue: 0,
+            usageLimit: 0,
             order: offers.length,
             status: 'active',
             categoryIds: [],
@@ -126,6 +130,8 @@ const OffersManagement = () => {
             style: offer.style || 'blue',
             icon: offer.icon || 'sparkles',
             appliesOnOrderNumber: offer.appliesOnOrderNumber || 1,
+            discountValue: offer.discountValue || 0,
+            usageLimit: offer.usageLimit || 0,
             order: typeof offer.order === 'number' ? offer.order : 0,
             status: offer.status || 'active',
             categoryIds: offer.categoryIds || [],
@@ -144,6 +150,8 @@ const OffersManagement = () => {
         const payload = {
             ...formData,
             appliesOnOrderNumber: Number(formData.appliesOnOrderNumber) || 1,
+            discountValue: Number(formData.discountValue) || 0,
+            usageLimit: Number(formData.usageLimit) || 0,
             order: Number(formData.order) || 0,
         };
 
@@ -450,6 +458,35 @@ const OffersManagement = () => {
                                 min={1}
                                 value={formData.appliesOnOrderNumber}
                                 onChange={(e) => setFormData(prev => ({ ...prev, appliesOnOrderNumber: e.target.value }))}
+                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Discount Value
+                            </label>
+                            <input
+                                type="number"
+                                min={0}
+                                value={formData.discountValue}
+                                onChange={(e) => setFormData(prev => ({ ...prev, discountValue: e.target.value }))}
+                                placeholder="e.g. 60"
+                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Usage Limit
+                            </label>
+                            <input
+                                type="number"
+                                min={0}
+                                value={formData.usageLimit}
+                                onChange={(e) => setFormData(prev => ({ ...prev, usageLimit: e.target.value }))}
+                                placeholder="0 = unlimited"
                                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none"
                             />
                         </div>

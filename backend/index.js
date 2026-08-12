@@ -43,6 +43,14 @@ import {
   getRewardMaintenanceJobHandler,
   getRewardMaintenanceJobInterval,
 } from "./app/jobs/rewardMaintenanceJob.js";
+import {
+  getTrendingSearchAggregationJobHandler,
+  getTrendingSearchAggregationJobInterval,
+} from "./app/jobs/trendingSearchAggregationJob.js";
+import {
+  getTrendingProductsAggregationJobHandler,
+  getTrendingProductsAggregationJobInterval,
+} from "./app/jobs/trendingProductsAggregationJob.js";
 import logger from "./app/services/logger.js";
 import { stopScheduledJobs } from "./app/services/distributedScheduler.js";
 import {
@@ -300,7 +308,19 @@ async function startScheduler() {
     getRewardMaintenanceJobInterval(),
     getRewardMaintenanceJobHandler()
   );
-  
+
+  registerScheduledJob(
+    'trendingSearchAggregationJob',
+    getTrendingSearchAggregationJobInterval(),
+    getTrendingSearchAggregationJobHandler()
+  );
+
+  registerScheduledJob(
+    'trendingProductsAggregationJob',
+    getTrendingProductsAggregationJobInterval(),
+    getTrendingProductsAggregationJobHandler()
+  );
+
   // Register payout batch job (if enabled)
   if (isPayoutBatchJobEnabled()) {
     registerScheduledJob(

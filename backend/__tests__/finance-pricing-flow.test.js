@@ -49,8 +49,16 @@ jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", ()
 }));
 
 const mockGetActiveSubscriptionForSeller = jest.fn();
+const mockResolveFreeTierStatus = jest.fn().mockResolvedValue({
+  applicable: false,
+  isOverLimit: false,
+  publishedCount: 0,
+  limit: 0,
+  surchargePercent: 0,
+});
 jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
   getActiveSubscriptionForSeller: mockGetActiveSubscriptionForSeller,
+  resolveFreeTierStatus: mockResolveFreeTierStatus,
 }));
 
 const {

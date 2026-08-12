@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -24,9 +24,17 @@ const resolveTipAmount = (txn) =>
       0,
   );
 
+const TAB_CHART_LABEL = {
+  today: "Today (by hour)",
+  weekly: "Last 7 Days",
+  monthly: "Last 30 Days",
+};
+
 const EarningsPage = () => {
   const [activeTab, setActiveTab] = useState("weekly");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [earningsData, setEarningsData] = useState({
     totalEarnings: 0,
     incentives: 0,
@@ -36,10 +44,12 @@ const EarningsPage = () => {
     recentTransactions: [],
   });
 
-  const fetchEarnings = async () => {
+  const fetchEarnings = async (range) => {
+    const isFirstLoad = !hasLoadedRef.current;
     try {
-      setLoading(true);
-      const response = await deliveryApi.getEarnings();
+      if (isFirstLoad) setLoading(true);
+      else setRefreshing(true);
+      const response = await deliveryApi.getEarnings({ range });
       if (response.data.success && response.data.result) {
         const result = response.data.result;
         setEarningsData({
@@ -54,14 +64,16 @@ const EarningsPage = () => {
     } catch {
       toast.error("Failed to fetch earnings data");
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   React.useEffect(() => {
-    fetchEarnings();
+    fetchEarnings(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeTab]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -114,6 +126,12 @@ const EarningsPage = () => {
         initial="hidden"
         animate="visible"
       >
+        {refreshing && (
+          <div className="flex items-center justify-center gap-2 -mt-2 -mb-2 text-xs font-medium text-primary">
+            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span>Updating…</span>
+          </div>
+        )}
         <motion.div variants={itemVariants}>
           <div className="bg-gradient-to-br from-primary to-brand-600 rounded-2xl p-6 text-white shadow-lg shadow-primary/30 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl" />
@@ -156,7 +174,7 @@ const EarningsPage = () => {
                 Earnings Trend
               </h3>
               <Button variant="ghost" size="sm" className="h-8 text-xs">
-                Last 7 Days
+                {TAB_CHART_LABEL[activeTab] || "Last 7 Days"}
               </Button>
             </div>
             <div className="h-64 w-full">

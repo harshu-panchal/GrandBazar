@@ -12,6 +12,7 @@ import {
   getAdminHeroConfig,
   upsertHeroConfig,
   getRecommendedStoresForUser,
+  trackSuperAdEvent,
 } from "../controller/experienceController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
@@ -81,5 +82,6 @@ router.post(
 router.get("/experience", getPublicExperienceSections);
 router.get("/experience/hero", getPublicHeroConfig);
 router.get("/experience/recommended-stores", getRecommendedStoresForUser);
+router.post("/experience/super-ads/:sectionId/:itemId/track", trackSuperAdEvent);
 
 export default router;

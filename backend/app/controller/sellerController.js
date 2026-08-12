@@ -2,6 +2,7 @@ import Seller from "../models/seller.js";
 import Store from "../models/store.js";
 import Transaction from "../models/transaction.js";
 import Product from "../models/product.js";
+import Setting from "../models/setting.js";
 import { handleResponse, calculateDistance } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
@@ -13,6 +14,7 @@ import {
 import { formatBusinessModelPayload, filterStoreIdsByOwnerBusinessModel } from "../services/sellerBusinessModelService.js";
 import { getSellerSubscriptionSummary } from "../services/subscriptionService.js";
 import { getPlatformDeliveryProvider } from "../services/finance/financeSettingsService.js";
+import { getDeliveryEtaSettings, computeEtaFromDistance, computeStoreDistanceKm } from "../services/deliveryEtaService.js";
 
 /* ===============================
    GET NEARBY STORES (public)
@@ -116,6 +118,11 @@ export const getNearbySellers = async (req, res) => {
         Number(b.favoriteCount || 0) - Number(a.favoriteCount || 0);
       if (favDiff !== 0) return favDiff;
       return Number(a.distance || 0) - Number(b.distance || 0);
+    });
+
+    const etaSettings = await getDeliveryEtaSettings();
+    visibleStores.forEach((s) => {
+      s.deliveryEta = computeEtaFromDistance(s.distance, etaSettings);
     });
 
     return handleResponse(
@@ -304,6 +311,7 @@ export const updateSellerProfile = async (req, res) => {
       radius,
       banners,
       storeVideo,
+      logoUrl,
       description,
       isActive,
     } = req.body;
@@ -359,6 +367,7 @@ export const updateSellerProfile = async (req, res) => {
     if (shopName) store.shopName = shopName;
     if (banners !== undefined) store.banners = banners;
     if (storeVideo !== undefined) store.storeVideo = storeVideo;
+    if (logoUrl !== undefined) store.logoUrl = logoUrl;
     if (description !== undefined) store.description = description;
     if (address !== undefined) store.address = address;
     if (locality !== undefined) store.locality = locality;
@@ -412,13 +421,14 @@ export const updateSellerProfile = async (req, res) => {
 export const getPublicSellerProfile = async (req, res) => {
   try {
     const { id } = req.params;
+    const { lat, lng } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return handleResponse(res, 400, "Invalid store ID format");
     }
 
     const store = await Store.findById(id)
-      .select("shopName slug category description banners storeVideo address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount avgRating reviewCount seoTitle seoDescription seoKeywords")
+      .select("shopName slug category description banners storeVideo logoUrl address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount avgRating reviewCount seoTitle seoDescription seoKeywords")
       .lean();
 
     if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {
@@ -452,6 +462,12 @@ export const getPublicSellerProfile = async (req, res) => {
     }).lean();
     store.signatureProducts = signatureProducts || [];
     store.name = store.shopName;
+
+    const distanceKm = computeStoreDistanceKm(store, Number(lat), Number(lng));
+    if (Number.isFinite(distanceKm)) {
+      const etaSettings = await getDeliveryEtaSettings();
+      store.deliveryEta = computeEtaFromDistance(distanceKm, etaSettings);
+    }
 
     return handleResponse(
       res,
@@ -512,13 +528,18 @@ export const getStoreAlternatives = async (req, res) => {
       return handleResponse(res, 404, "Store not found");
     }
 
-    // Find active, open stores matching category or city
+    const settings = await Setting.findOne({}).select("alternativesDisplayLimit").lean();
+    const displayLimit = Number(settings?.alternativesDisplayLimit) || 6;
+
+    // Find active, open stores matching category or city (admin can exclude specific
+    // stores from ever being suggested via Store.excludeFromAlternatives).
     const alternatives = await Store.find({
       _id: { $ne: targetStore._id },
       isActive: true,
       isOpen: true,
       isVerified: true,
       applicationStatus: "approved",
+      excludeFromAlternatives: { $ne: true },
       $or: [
         { category: targetStore.category },
         { categories: { $in: [targetStore.category] } },
@@ -527,7 +548,7 @@ export const getStoreAlternatives = async (req, res) => {
     })
       .select("shopName slug category description banners storeVideo address locality city state location serviceRadius isActive isOpen isVerified avgRating reviewCount favoriteCount logoUrl")
       .sort({ avgRating: -1, reviewCount: -1 })
-      .limit(6)
+      .limit(displayLimit)
       .lean();
 
     return handleResponse(res, 200, "Store alternatives fetched successfully", alternatives);

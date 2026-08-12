@@ -28,7 +28,7 @@ const OfferSections = ({ sections, noServiceData }) => {
               price: p.salePrice ?? p.price,
               originalPrice: p.price ?? p.salePrice,
               weight: p.weight,
-              deliveryTime: p.deliveryTime,
+              deliveryTime: p.deliveryEta?.label || p.deliveryTime || "8-15 mins",
             }));
 
           return (

@@ -4,7 +4,6 @@ import {
   Search,
   Calendar,
   MapPin,
-  Clock,
   ChevronRight,
   Filter,
 } from "lucide-react";
@@ -19,6 +18,22 @@ const displayOrderStatus = (order) => {
   if (order?.workflowStatus === "CANCELLED" || order?.status === "cancelled")
     return "cancelled";
   return order?.status || "active";
+};
+
+/** Real rider earning for this order (delivery commission + tip), not a flat % guess. */
+const resolveOrderEarnings = (order) =>
+  Math.round(Number(order?.paymentBreakdown?.riderPayoutTotal || 0));
+
+/** Real distance stored on the order at checkout time, if available. No fabricated fallback. */
+const resolveDistanceKm = (order) => {
+  const raw =
+    order?.paymentBreakdown?.distanceKmRounded ??
+    order?.paymentBreakdown?.distanceKmActual ??
+    order?.distanceSnapshot?.distanceKmRounded ??
+    order?.distanceSnapshot?.distanceKmActual;
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return `${num.toFixed(1)} km`;
 };
 
 const OrderHistory = () => {
@@ -244,7 +259,7 @@ const OrderHistory = () => {
                       </div>
                       <div className="text-left sm:text-right shrink-0">
                         <span className="block font-bold text-lg text-brand-600 whitespace-nowrap">
-                          ₹{Math.round((order.pricing?.total || 0) * 0.1)}
+                          ₹{resolveOrderEarnings(order)}
                         </span>
                         <span className="ds-caption text-gray-400">Earnings</span>
                       </div>
@@ -275,14 +290,12 @@ const OrderHistory = () => {
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center text-xs text-gray-500">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="flex items-center bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                          <MapPin size={12} className="mr-1 text-gray-400" />{" "}
-                          2.4 km {/* Mock for now */}
-                        </span>
-                        <span className="flex items-center bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                          <Clock size={12} className="mr-1 text-gray-400" /> 15
-                          min
-                        </span>
+                        {resolveDistanceKm(order) && (
+                          <span className="flex items-center bg-gray-50 px-2 py-1 rounded border border-gray-100">
+                            <MapPin size={12} className="mr-1 text-gray-400" />{" "}
+                            {resolveDistanceKm(order)}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center text-primary font-bold group-hover:underline self-end sm:self-auto">
                         View Details <ChevronRight size={14} className="ml-0.5" />

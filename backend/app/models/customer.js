@@ -60,6 +60,12 @@ const userSchema = new mongoose.Schema(
             default: false,
         },
 
+        /** When the customer accepted Terms & Conditions / Privacy Policy at signup (null for pre-existing accounts). */
+        termsAcceptedAt: {
+            type: Date,
+            default: null,
+        },
+
         otp: {
             type: String,
             select: false,
@@ -129,6 +135,12 @@ const userSchema = new mongoose.Schema(
         },
 
         isActive: {
+            type: Boolean,
+            default: true,
+        },
+
+        /** Customer-controlled preference: whether push notifications should be sent to this account. */
+        notificationsEnabled: {
             type: Boolean,
             default: true,
         },

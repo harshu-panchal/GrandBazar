@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { adminApi } from '@/modules/admin/services/adminApi';
 import StoreSwitcher from '@/modules/seller/components/StoreSwitcher';
+import ShopStatusToggle from '@/modules/seller/components/ShopStatusToggle';
 import { AnimatePresence } from 'framer-motion';
 import NotificationPopup from './NotificationPopup';
 import { toast } from 'sonner';
@@ -175,6 +176,7 @@ const Topbar = ({ onMenuClick }) => {
             </div>
 
             <div className="flex items-center space-x-4">
+                {isSeller && <ShopStatusToggle />}
                 {isSeller && <StoreSwitcher className="hidden md:block" />}
                 <div className="relative" ref={notificationRef}>
                     <button

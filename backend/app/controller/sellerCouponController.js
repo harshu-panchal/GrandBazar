@@ -5,6 +5,11 @@ import { normalizeCouponDateInput } from "../services/couponEligibilityService.j
 const normalizeCouponCode = (code = "") =>
   String(code).trim().toUpperCase().replace(/\s+/g, " ");
 
+const VALID_COUPON_TYPES = Coupon.schema.path("couponType").enumValues;
+
+const resolveCouponType = (couponType) =>
+  VALID_COUPON_TYPES.includes(couponType) ? couponType : "generic";
+
 const resolveSellerId = (sellerId) => {
   const id = sellerId?.toString?.() || sellerId;
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : sellerId;
@@ -20,6 +25,7 @@ export const createSellerCoupon = async (req, res) => {
             code,
             title,
             description,
+            couponType,
             discountType,
             discountValue,
             maxDiscount,
@@ -62,7 +68,7 @@ export const createSellerCoupon = async (req, res) => {
             validFrom: normalizeCouponDateInput(validFrom, "start"),
             validTill: normalizeCouponDateInput(validTill, "end"),
             isActive: isActive !== undefined ? isActive : true,
-            couponType: "generic"
+            couponType: resolveCouponType(couponType)
         });
 
         res.status(201).json({
@@ -133,6 +139,15 @@ export const updateSellerCoupon = async (req, res) => {
         }
         if (updates.validTill) {
             updates.validTill = normalizeCouponDateInput(updates.validTill, "end");
+        }
+
+        if (updates.couponType !== undefined) {
+            if (!VALID_COUPON_TYPES.includes(updates.couponType)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid coupon type",
+                });
+            }
         }
 
         const coupon = await Coupon.findOneAndUpdate(

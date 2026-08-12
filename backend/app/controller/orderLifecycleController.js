@@ -1,5 +1,6 @@
 import handleResponse from "../utils/helper.js";
 import Store from "../models/store.js";
+import PreOrderCampaign from "../models/preOrderCampaign.js";
 import {
   resolveStoreSchedulingSettings,
   validateScheduleSelection,
@@ -10,6 +11,7 @@ import {
   approveRescheduleRequest,
   rejectRescheduleRequest,
   adminRescheduleOnBehalf,
+  sellerRescheduleOnBehalf,
 } from "../services/orderRescheduleService.js";
 import {
   applyOrderPriceAdjustment,
@@ -42,6 +44,7 @@ import {
   createReplacementRequest,
   reviewReplacementRequest,
   createSplitDeliveries,
+  markSplitDeliveryStage,
   getOrderModificationTimeline,
 } from "../services/orderModificationService.js";
 import Order from "../models/order.js";
@@ -78,7 +81,7 @@ export const updateSellerSchedulingSettings = async (req, res) => {
         $set: {
           schedulingSettings: {
             enabled: Boolean(enabled),
-            maxDaysAhead: Number(maxDaysAhead || 7),
+            maxDaysAhead: Number(maxDaysAhead || 30),
             rescheduleCutoffDays: Number(rescheduleCutoffDays ?? 1),
             selfLogistics: Boolean(selfLogistics),
             deliveryWindows: Array.isArray(deliveryWindows) ? deliveryWindows : [],
@@ -95,14 +98,31 @@ export const updateSellerSchedulingSettings = async (req, res) => {
 
 export const getAvailableDeliverySlots = async (req, res) => {
   try {
-    const { sellerId, deliveryDate } = req.query;
+    const { sellerId, deliveryDate, campaignId } = req.query;
+    const fulfillmentType = campaignId ? "preorder" : (req.query.fulfillmentType || "scheduled");
     const store = await Store.findById(sellerId).lean();
     if (!store) return handleResponse(res, 404, "Store not found");
     const settings = resolveStoreSchedulingSettings(store);
-    if (!settings.enabled) {
+
+    let campaign = null;
+    if (campaignId) {
+      campaign = await PreOrderCampaign.findOne({
+        campaignId,
+        status: { $ne: "cancelled" },
+      })
+        .select("campaignId deliveryWindow deliveryWindows rescheduleCutoffDays")
+        .lean();
+      if (!campaign) return handleResponse(res, 404, "Campaign not found");
+    }
+
+    // The store's general "scheduling enabled" toggle only governs regular
+    // scheduled orders — a pre-order campaign's own delivery window applies
+    // regardless of that flag (mirrors validateScheduleSelection's own check).
+    if (!campaign && !settings.enabled) {
       return handleResponse(res, 200, "Scheduling is disabled for this store", {
         deliveryDate,
         schedulingEnabled: false,
+        maxDaysAhead: settings.maxDaysAhead,
         windows: (settings.deliveryWindows || []).map((window) => ({
           ...window,
           available: false,
@@ -110,13 +130,19 @@ export const getAvailableDeliverySlots = async (req, res) => {
         })),
       });
     }
+
+    const windowsSource =
+      campaign?.deliveryWindows?.length > 0 ? campaign.deliveryWindows : settings.deliveryWindows;
+
     const windows = [];
-    for (const window of settings.deliveryWindows) {
+    for (const window of windowsSource) {
       try {
         await validateScheduleSelection({
           sellerId,
           deliveryDate,
           windowLabel: window.label,
+          fulfillmentType,
+          campaign,
           checkRescheduleCutoff: false,
         });
         windows.push({ ...window, available: true, reason: null });
@@ -131,6 +157,8 @@ export const getAvailableDeliverySlots = async (req, res) => {
     return handleResponse(res, 200, "Delivery slots", {
       deliveryDate,
       schedulingEnabled: true,
+      campaignDeliveryWindow: campaign?.deliveryWindow || null,
+      maxDaysAhead: settings.maxDaysAhead,
       windows,
     });
   } catch (error) {
@@ -195,6 +223,15 @@ export const adminRescheduleOrder = async (req, res) => {
   }
 };
 
+export const sellerRescheduleOrder = async (req, res) => {
+  try {
+    const order = await sellerRescheduleOnBehalf(req.user.id, req.params.orderId, req.body);
+    return handleResponse(res, 200, "Order rescheduled", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
 export const adjustOrder = async (req, res) => {
   try {
     const { items, reason } = req.body || {};
@@ -213,6 +250,12 @@ export const adjustOrder = async (req, res) => {
 export const partialCancelOrder = async (req, res) => {
   try {
     const { itemIndexes, reason } = req.body || {};
+    if (!String(reason || "").trim() || String(reason).trim().length < 10) {
+      return handleResponse(res, 400, "Please provide a reason (at least 10 characters)");
+    }
+    if (!Array.isArray(itemIndexes) || !itemIndexes.length) {
+      return handleResponse(res, 400, "Select at least one item to cancel");
+    }
     const order = await partialCancelOrderItems({
       orderId: req.params.orderId,
       itemIndexes,
@@ -278,6 +321,22 @@ export const splitOrderDelivery = async (req, res) => {
       actorId: req.user?.id,
     });
     return handleResponse(res, 200, "Split delivery plan saved", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const updateSplitDeliveryStatus = async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    const order = await markSplitDeliveryStage({
+      orderId: req.params.orderId,
+      splitId: req.params.splitId,
+      status,
+      actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+      actorId: req.user?.id,
+    });
+    return handleResponse(res, 200, "Split delivery status updated", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

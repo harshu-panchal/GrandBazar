@@ -8,6 +8,7 @@ export const sellerApi = {
         }
         return axiosInstance.post('/seller/signup', data);
     },
+    validateInvite: (token) => axiosInstance.get(`/seller/invite/${token}`),
     sendVerificationOtp: (data) => axiosInstance.post('/seller/verification/send-otp', data),
     verifyVerificationOtp: (data) => axiosInstance.post('/seller/verification/verify-otp', data),
     sendForgotPasswordOtp: (data) => axiosInstance.post('/seller/forgot-password/send-otp', data),
@@ -48,6 +49,7 @@ export const sellerApi = {
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
+    getOrderInvoice: (orderId) => axiosInstance.get(`/orders/${orderId}/invoice/seller`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
     getEarnings: () => axiosInstance.get('/seller/earnings'),
     getWalletSummary: () => axiosInstance.get('/seller/wallet/summary'),
@@ -122,10 +124,17 @@ export const sellerApi = {
     cancelCampaign: (campaignId, data) => axiosInstance.put(`/orders/campaigns/${campaignId}/cancel`, data),
     approveReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/approve`, data),
     rejectReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/reject`, data),
+    sellerReschedule: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/seller`, data),
+    getAvailableDeliverySlots: (params) => axiosInstance.get(`/orders/scheduling/slots`, { params }),
     adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
     partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
     requestProductReplacement: (orderId, data) => axiosInstance.post(`/orders/${orderId}/replacements`, data),
     splitOrderDelivery: (orderId, data) => axiosInstance.post(`/orders/${orderId}/split-delivery`, data),
+    updateSplitDeliveryStatus: (orderId, splitId, data) =>
+        axiosInstance.put(`/orders/${orderId}/split-delivery/${splitId}/status`, data),
     getOrderModificationHistory: (orderId) => axiosInstance.get(`/orders/${orderId}/modifications`),
     updateSelfLogistics: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/self`, data),
+    uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };

@@ -12,6 +12,9 @@ import {
     publishSellerProduct,
     bulkPublishSellerProducts,
     getUnpublishedSellerProducts,
+    getTrendingSearchesController,
+    getTrendingProductsController,
+    getSimilarProductsController,
 } from "../controller/productController.js";
 import { adjustStock, getStockHistory } from "../controller/stockController.js";
 import {
@@ -33,6 +36,8 @@ const router = express.Router();
 
 // Public routes with optional auth (to detect admin/seller vs customer)
 router.get("/", optionalVerifyToken, getProducts);
+router.get("/search/trending", getTrendingSearchesController);
+router.get("/trending", getTrendingProductsController);
 
 const sellerChain = [verifyToken, allowRoles("seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
 
@@ -46,6 +51,7 @@ router.post("/adjust-stock", ...sellerChain, checkSubSellerPermission("inventory
 router.get("/moderation", verifyToken, allowRoles("admin"), getModerationProducts);
 router.patch("/moderation/:id/approve", verifyToken, allowRoles("admin"), approveProduct);
 router.patch("/moderation/:id/reject", verifyToken, allowRoles("admin"), rejectProduct);
+router.get("/:id/similar", optionalVerifyToken, getSimilarProductsController);
 router.get("/:id", optionalVerifyToken, getProductById);
 
 router.post(

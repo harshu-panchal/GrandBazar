@@ -703,6 +703,7 @@ export async function placeOrderAtomic({
       amount: Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0),
       status: "Pending",
       reference: order.orderId,
+      paymentMethod: order.paymentMode || null,
       meta: {
         checkoutGroupId,
       },

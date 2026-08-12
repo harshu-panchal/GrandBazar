@@ -215,6 +215,7 @@ const ProductManagement = () => {
       { id: Date.now(), name: "", price: "", salePrice: "", stock: "", sku: "" },
     ],
     isSignatureProduct: false,
+    isPreorderEligible: false,
     displayOrder: 0,
     addons: [],
   });
@@ -372,6 +373,7 @@ const ProductManagement = () => {
       data.append("weight", formData.weight);
       data.append("tags", formData.tags);
       data.append("isSignatureProduct", formData.isSignatureProduct);
+      data.append("isPreorderEligible", formData.isPreorderEligible);
       data.append("displayOrder", Number(formData.displayOrder) || 0);
       
       if (formData.addons && formData.addons.length > 0) {
@@ -485,6 +487,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: item.isSignatureProduct || false,
+        isPreorderEligible: item.isPreorderEligible || false,
         displayOrder: item.displayOrder ?? 0,
         addons: item.addons || [],
       });
@@ -518,6 +521,7 @@ const ProductManagement = () => {
           },
         ],
         isSignatureProduct: false,
+        isPreorderEligible: false,
         displayOrder: 0,
         addons: [],
       });
@@ -1212,6 +1216,21 @@ const ProductManagement = () => {
                             Mark as Signature Product
                           </label>
                           <span className="text-xs text-slate-500 font-medium">This product will be highlighted on your store and the main home page.</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">
+                        <input
+                          type="checkbox"
+                          id="preorderEligibleEdit"
+                          checked={formData.isPreorderEligible}
+                          onChange={(e) => setFormData({ ...formData, isPreorderEligible: e.target.checked })}
+                          className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary/20 transition-all cursor-pointer"
+                        />
+                        <div className="flex flex-col">
+                          <label htmlFor="preorderEligibleEdit" className="text-sm font-bold text-slate-800 cursor-pointer">
+                            Available for future/pre-order
+                          </label>
+                          <span className="text-xs text-slate-500 font-medium">Only products marked here can be added to your Pre-Order Campaigns.</span>
                         </div>
                       </div>
                     </div>

@@ -1,14 +1,42 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { customerApi } from "../../services/customerApi";
 import DeliverySlotPicker from "../checkout/DeliverySlotPicker";
 import { toast } from "sonner";
 
-export default function OrderLifecycleActions({ order, onRefresh }) {
+// Complaints share the exact same post-delivery window as returns/refunds
+// (see backend/app/utils/returnWindow.js) — same admin setting, same
+// countdown semantics as the return-request flow on OrderDetailPage.
+export default function OrderLifecycleActions({ order, onRefresh, returnWindowMinutes = 1440 }) {
   const [showReschedule, setShowReschedule] = useState(false);
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [paying, setPaying] = useState(false);
   const [reviewingReplacement, setReviewingReplacement] = useState("");
+  const [disputeCountdown, setDisputeCountdown] = useState(null);
+
+  const isDelivered = order?.status === "delivered" || order?.workflowStatus === "DELIVERED";
+
+  useEffect(() => {
+    if (!order || !isDelivered) {
+      setDisputeCountdown(null);
+      return undefined;
+    }
+    const windowStart = new Date(order.deliveredAt || order.createdAt).getTime();
+    const windowMs = returnWindowMinutes * 60 * 1000;
+    const tick = () => {
+      const remaining = Math.max(0, windowStart + windowMs - Date.now());
+      if (remaining <= 0) {
+        setDisputeCountdown(0);
+        return;
+      }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      setDisputeCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [order, isDelivered, returnWindowMinutes]);
 
   if (!order) return null;
 
@@ -18,7 +46,10 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
   const awaitingExtra =
     order.status === "awaiting_extra_payment" ||
     order.workflowStatus === "AWAITING_EXTRA_PAYMENT";
-  const canDispute = order.status === "delivered" || order.workflowStatus === "DELIVERED";
+  // The server is always the source of truth and will reject a late
+  // request regardless — this just keeps the button from inviting a
+  // complaint the backend is going to refuse anyway.
+  const canDispute = isDelivered && disputeCountdown !== 0;
   const pendingReplacementRequests = Array.isArray(order.replacementRequests)
     ? order.replacementRequests.filter((request) => request?.customerDecision === "pending")
     : [];
@@ -133,6 +164,11 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
 
       {canDispute && !order.disputeRef && (
         <div className="space-y-2">
+          {disputeCountdown && disputeCountdown !== 0 && (
+            <p className="text-xs font-semibold text-red-600">
+              Complaint window ends in {disputeCountdown}
+            </p>
+          )}
           <textarea
             className="w-full rounded-xl border border-slate-200 p-2 text-sm"
             placeholder="Describe the issue"
@@ -147,6 +183,11 @@ export default function OrderLifecycleActions({ order, onRefresh }) {
             Raise dispute
           </button>
         </div>
+      )}
+      {isDelivered && disputeCountdown === 0 && !order.disputeRef && (
+        <p className="text-xs font-semibold text-slate-400">
+          The complaint window for this order has closed.
+        </p>
       )}
 
       {pendingReplacementRequests.length > 0 && (

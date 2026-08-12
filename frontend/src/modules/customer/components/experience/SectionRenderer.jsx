@@ -1,11 +1,70 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ProductCard from "../shared/ProductCard";
 import { cn } from "@/lib/utils";
 import ExperienceBannerCarousel from "./ExperienceBannerCarousel";
+import { buildStorePath } from "@core/seo/url";
+import { customerApi } from "../../services/customerApi";
 
 const LAZY_CHUNK_SIZE = 20;
 const LAZY_ROOT_MARGIN = "260px 0px";
+
+/**
+ * Own component (not inlined in SectionRenderer's .map) because impression
+ * tracking needs a per-strip effect+ref — hooks can't live inside a map callback.
+ */
+const SuperAdStrip = ({ sectionId, items, navigate }) => {
+  const trackedImpressions = useRef(new Set());
+
+  useEffect(() => {
+    if (!sectionId) return;
+    items.forEach((item) => {
+      const itemId = item._id;
+      if (!itemId || trackedImpressions.current.has(itemId)) return;
+      trackedImpressions.current.add(itemId);
+      customerApi.trackSuperAdEvent(sectionId, itemId, "impression").catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionId, items]);
+
+  const handleAdClick = (item) => {
+    if (sectionId && item._id) {
+      customerApi.trackSuperAdEvent(sectionId, item._id, "click").catch(() => {});
+    }
+    if (item.linkType === "url" && item.linkValue) {
+      window.open(item.linkValue, "_blank", "noopener,noreferrer");
+    } else if (item.linkType !== "none") {
+      navigate(buildStorePath(item.sellerId));
+    }
+  };
+
+  return (
+    <div className="-mx-4 md:-mx-8 lg:-mx-[50px] px-4 md:px-8 lg:px-[50px]">
+      <div className="flex overflow-x-auto gap-3 no-scrollbar pb-1 snap-x snap-mandatory">
+        {items.map((item, idx) => (
+          <div
+            key={item._id || idx}
+            onClick={() => handleAdClick(item)}
+            className={cn(
+              "relative w-[280px] md:w-[360px] shrink-0 snap-start rounded-2xl overflow-hidden aspect-[16/7] bg-slate-100",
+              item.linkType !== "none" && "cursor-pointer active:scale-[0.98] transition-transform"
+            )}
+          >
+            <img src={item.imageUrl} alt={item.title || item.sellerId?.shopName || "Ad"} className="w-full h-full object-cover" />
+            <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/50 text-[9px] font-black uppercase tracking-widest text-white">
+              Sponsored
+            </span>
+            {item.title && (
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
+                <p className="text-xs font-black text-white truncate">{item.title}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const LazyLoadTrigger = ({ enabled, onVisible }) => {
   const ref = React.useRef(null);
@@ -376,6 +435,56 @@ const SectionRenderer = ({ sections = [], productsById = {}, categoriesById = {}
                 enabled={hasMore}
                 onVisible={() => loadMoreForSection(sectionKey, cappedItems.length)}
               />
+            </div>
+          );
+        }
+
+        if (section.displayType === "super_ads") {
+          const items = section.config?.superAds?.items || [];
+          const validItems = items.filter((a) => a?.sellerId && a?.imageUrl);
+          if (!validItems.length) return null;
+
+          return (
+            <SuperAdStrip
+              key={section._id || sectionKey}
+              sectionId={section._id}
+              items={validItems}
+              navigate={navigate}
+            />
+          );
+        }
+
+        if (section.displayType === "seller_highlights") {
+          const stores = (section.config?.sellerHighlights?.sellerIds || []).filter(Boolean);
+          if (!stores.length) return null;
+
+          return (
+            <div
+              key={section._id || sectionKey}
+              className="-mx-4 md:-mx-8 lg:-mx-[50px] px-4 md:px-8 lg:px-[50px]"
+            >
+              {heading && (
+                <h3 className="text-base font-black text-[#1A1A1A] mb-3">{heading}</h3>
+              )}
+              <div className="flex overflow-x-auto gap-3 no-scrollbar pb-1 snap-x snap-mandatory">
+                {stores.map((store) => (
+                  <div
+                    key={store._id}
+                    onClick={() => navigate(buildStorePath(store))}
+                    className="w-[150px] shrink-0 snap-start rounded-2xl border border-slate-100 bg-white shadow-sm cursor-pointer active:scale-95 transition-transform overflow-hidden"
+                  >
+                    <div className="h-16 w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                      <span className="text-2xl font-black text-primary/70">
+                        {String(store.shopName || "S").charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-[11px] font-bold text-slate-900 truncate">{store.shopName}</p>
+                      <p className="text-[9px] font-semibold text-slate-400 truncate mt-0.5">{store.category || "General Store"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           );
         }

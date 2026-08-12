@@ -25,6 +25,12 @@ import {
   resolveProductApprovalStatus,
 } from "../services/productModerationService.js";
 import { attachAdvanceBookingMetaToProducts } from "../services/preOrderCampaignService.js";
+import { logSearchQuery, getTrendingSearches } from "../services/searchTrendingService.js";
+import { getTrendingProducts } from "../services/trendingProductsService.js";
+import { resolveProductAddons } from "../services/productAddonService.js";
+import { recordAuditLog } from "../services/auditTrailService.js";
+import { getDeliveryEtaSettings, computeEtaFromDistance } from "../services/deliveryEtaService.js";
+import { assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
 
 function buildProductListKey(queryParams) {
   const sorted = Object.keys(queryParams)
@@ -398,7 +404,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct displayOrder variants addons createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -429,6 +435,7 @@ export const getProducts = async (req, res) => {
       ]);
 
       const nameMap = Object.fromEntries([...categoryEntries, ...sellerEntries]);
+      const etaSettings = shouldApplyLocationFilter ? await getDeliveryEtaSettings() : null;
 
       // Enrich products to match the shape previously returned by .populate()
       const products = rawProducts.map((p) => {
@@ -449,6 +456,9 @@ export const getProducts = async (req, res) => {
             ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
             : null,
           ...(Number.isFinite(distanceKm) ? { distance: distanceKm, distanceKm } : {}),
+          ...(Number.isFinite(distanceKm) && etaSettings
+            ? { deliveryEta: computeEtaFromDistance(distanceKm, etaSettings) }
+            : {}),
         };
       });
 
@@ -475,7 +485,118 @@ export const getProducts = async (req, res) => {
       });
     }
 
+    if (search && String(search).trim() && role !== "admin" && role !== "seller") {
+      logSearchQuery({
+        query: search,
+        customerId: req.user?.id || null,
+        resultCount: result?.total ?? 0,
+      }).catch(() => {});
+    }
+
     return handleResponse(res, 200, "Products fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   GET TRENDING SEARCHES
+================================ */
+export const getTrendingSearchesController = async (req, res) => {
+  try {
+    const items = await getTrendingSearches();
+    return handleResponse(res, 200, "Trending searches fetched", { items });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   GET TRENDING PRODUCTS
+================================ */
+export const getTrendingProductsController = async (req, res) => {
+  try {
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const items = await getTrendingProducts({ limit });
+    return handleResponse(res, 200, "Trending products fetched", { items });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   GET SIMILAR PRODUCTS
+================================ */
+const SIMILAR_PRODUCT_FIELDS =
+  "name slug price salePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
+
+export const getSimilarProductsController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const enforceRadius = isCustomerVisibilityRequest(req);
+
+    const current = await Product.findById(id)
+      .select("categoryId subcategoryId headerId")
+      .lean();
+    if (!current) {
+      return handleResponse(res, 404, "Product not found");
+    }
+
+    let sellerFilter = null;
+    if (enforceRadius) {
+      const coords = parseCustomerCoordinates(req.query || {});
+      if (!coords.valid) {
+        return handleResponse(res, 400, "lat and lng are required for customer product visibility");
+      }
+      const nearbySellerIds = await getNearbySellerIdsForCustomer(coords.lat, coords.lng);
+      if (!nearbySellerIds.length) {
+        return handleResponse(res, 200, "Similar products fetched", { items: [] });
+      }
+      sellerFilter = { $in: nearbySellerIds };
+    }
+
+    const baseVisibility = {
+      status: "active",
+      isPublished: { $ne: false },
+      stock: { $gt: 0 },
+      ...getApprovedOrLegacyFilter(),
+      ...(sellerFilter ? { sellerId: sellerFilter } : {}),
+    };
+
+    let items = [];
+    if (current.subcategoryId) {
+      items = await Product.find({
+        _id: { $ne: id },
+        subcategoryId: current.subcategoryId,
+        ...baseVisibility,
+      })
+        .select(SIMILAR_PRODUCT_FIELDS)
+        .populate("sellerId", "shopName")
+        .limit(limit)
+        .lean();
+    }
+
+    // Broaden to category (then header) level if the tighter match came up short.
+    for (const [field, value] of [
+      ["categoryId", current.categoryId],
+      ["headerId", current.headerId],
+    ]) {
+      if (items.length >= limit || !value) continue;
+      const excludeIds = [id, ...items.map((p) => p._id)];
+      const more = await Product.find({
+        _id: { $nin: excludeIds },
+        [field]: value,
+        ...baseVisibility,
+      })
+        .select(SIMILAR_PRODUCT_FIELDS)
+        .populate("sellerId", "shopName")
+        .limit(limit - items.length)
+        .lean();
+      items = items.concat(more);
+    }
+
+    return handleResponse(res, 200, "Similar products fetched", { items });
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
@@ -541,7 +662,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct displayOrder variants addons importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -659,6 +780,18 @@ export const createProduct = async (req, res) => {
       productData.sellerId = req.user.id;
     }
 
+    // No-op unless admin has switched Setting.freeTierEnforcementMode to
+    // "hard" (default "soft" never blocks here — only surcharges at
+    // checkout, see subscriptionService.resolveFreeTierStatus). New
+    // products default to status: "active"/isPublished: true, so this is
+    // the actual gate for commission-model sellers, not just the separate
+    // draft-publish flow.
+    try {
+      await assertCanCreateFreeTierProduct(productData.sellerId);
+    } catch (limitError) {
+      return handleResponse(res, limitError.statusCode || 403, limitError.message);
+    }
+
     // Handle multipart files (mainImage and galleryImages)
     const files = req.files || [];
     if (files.length > 0) {
@@ -741,6 +874,9 @@ export const createProduct = async (req, res) => {
 
     if (productData.isSignatureProduct !== undefined) {
       productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
+    }
+    if (productData.isPreorderEligible !== undefined) {
+      productData.isPreorderEligible = String(productData.isPreorderEligible) === "true";
     }
     if (productData.displayOrder !== undefined) {
       const order = Number(productData.displayOrder);
@@ -921,6 +1057,9 @@ export const updateProduct = async (req, res) => {
     if (productData.isSignatureProduct !== undefined) {
       productData.isSignatureProduct = String(productData.isSignatureProduct) === "true";
     }
+    if (productData.isPreorderEligible !== undefined) {
+      productData.isPreorderEligible = String(productData.isPreorderEligible) === "true";
+    }
     if (productData.displayOrder !== undefined) {
       const order = Number(productData.displayOrder);
       productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
@@ -1074,7 +1213,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -1087,6 +1226,11 @@ export const getProductById = async (req, res) => {
     if (!product) {
       return handleResponse(res, 404, "Product not found");
     }
+
+    // Product.addons is a bare array of Product refs — hydrate into full
+    // cards (with any per-pairing price override) for the detail page's
+    // "Frequently Paired Add-ons" section.
+    product.addons = await resolveProductAddons(product);
 
     if (enforceRadius) {
       const approvalState = resolveProductApprovalStatus(product);
@@ -1179,6 +1323,9 @@ export const getModerationProducts = async (req, res) => {
       "name-desc": { name: -1, createdAt: -1 },
       "price-asc": { price: 1, createdAt: -1 },
       "price-desc": { price: -1, createdAt: -1 },
+      "stock-asc": { stock: 1, createdAt: -1 },
+      "stock-desc": { stock: -1, createdAt: -1 },
+      "seller-asc": { sellerId: 1, createdAt: -1 },
     };
     const sortQuery = sortMap[String(sort || "newest").toLowerCase()] || sortMap.newest;
 
@@ -1245,6 +1392,8 @@ export const approveProduct = async (req, res) => {
       note,
     );
 
+    const before = await Product.findById(id).select("approvalStatus status").lean();
+
     const updated = await Product.findByIdAndUpdate(
       id,
       { $set: moderationUpdate },
@@ -1259,6 +1408,16 @@ export const approveProduct = async (req, res) => {
     if (!updated) {
       return handleResponse(res, 404, "Product not found");
     }
+
+    void recordAuditLog({
+      actorId: req.user?.id || null,
+      action: "PRODUCT_APPROVED",
+      targetType: "Product",
+      targetId: id,
+      before,
+      after: { approvalStatus: updated.approvalStatus, status: updated.status },
+      metadata: { note },
+    });
 
     await enqueueProductIndex(id);
     await invalidate(`cache:catalog:product:${id}`);
@@ -1285,6 +1444,8 @@ export const rejectProduct = async (req, res) => {
       note,
     );
 
+    const before = await Product.findById(id).select("approvalStatus status").lean();
+
     const updated = await Product.findByIdAndUpdate(
       id,
       { $set: moderationUpdate },
@@ -1299,6 +1460,16 @@ export const rejectProduct = async (req, res) => {
     if (!updated) {
       return handleResponse(res, 404, "Product not found");
     }
+
+    void recordAuditLog({
+      actorId: req.user?.id || null,
+      action: "PRODUCT_REJECTED",
+      targetType: "Product",
+      targetId: id,
+      before,
+      after: { approvalStatus: updated.approvalStatus, status: updated.status },
+      metadata: { note },
+    });
 
     await enqueueProductIndex(id);
     await invalidate(`cache:catalog:product:${id}`);

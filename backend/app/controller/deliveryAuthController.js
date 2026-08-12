@@ -21,7 +21,7 @@ export const signupDelivery = async (req, res) => {
     try {
         const {
             name, phone, vehicleType,
-            email, address, vehicleNumber,
+            email, address, currentArea, city, vehicleNumber,
             drivingLicenseNumber,
             accountHolder, accountNumber, ifsc
         } = req.body;
@@ -36,10 +36,7 @@ export const signupDelivery = async (req, res) => {
             return handleResponse(res, 400, "Delivery partner already exists");
         }
 
-        let otp = generateOTP();
-        if (phone === "6268423925" || phone === "+916268423925" || phone === "9111966732" || phone === "+919111966732") {
-            otp = "1234";
-        }
+        const otp = generateOTP();
 
         let aadharUrl = delivery?.documents?.aadhar || "";
         let panUrl = delivery?.documents?.pan || "";
@@ -79,6 +76,7 @@ export const signupDelivery = async (req, res) => {
             vehicleType,
             email,
             address,
+            currentArea: currentArea || city || (address ? address.split(',').pop().trim() : '') || "Main City",
             vehicleNumber,
             drivingLicenseNumber,
             accountHolder,
@@ -124,14 +122,11 @@ export const loginDelivery = async (req, res) => {
 
         const delivery = await Delivery.findOne({ phone });
 
-        if (!delivery || !delivery.isVerified) {
+        if (!delivery || !delivery.isPhoneVerified) {
             return handleResponse(res, 404, "Delivery partner not found");
         }
 
-        let otp = generateOTP();
-        if (phone === "6268423925" || phone === "+916268423925" || phone === "9111966732" || phone === "+919111966732") {
-            otp = "1234";
-        }
+        const otp = generateOTP();
 
         delivery.otp = otp;
         delivery.otpExpiry = Date.now() + 5 * 60 * 1000;
@@ -168,8 +163,9 @@ export const verifyDeliveryOTP = async (req, res) => {
             return handleResponse(res, 400, "Invalid or expired OTP");
         }
 
-        delivery.isVerified = true;
-        delivery.isOnline = true; // Auto-activate delivery boy on login
+        // Confirms the phone number only — `isVerified` (admin document review)
+        // and `isOnline` must not flip here or new signups skip approval entirely.
+        delivery.isPhoneVerified = true;
         delivery.otp = undefined;
         delivery.otpExpiry = undefined;
         delivery.lastLogin = new Date();
@@ -210,7 +206,11 @@ export const getDeliveryProfile = async (req, res) => {
 ================================ */
 export const updateDeliveryProfile = async (req, res) => {
     try {
-        const { name, email, address, vehicleType, vehicleNumber, drivingLicenseNumber, currentArea, isOnline } = req.body;
+        const {
+            name, email, address, vehicleType, vehicleNumber, drivingLicenseNumber,
+            currentArea, isOnline, documents, emergencyContacts,
+            vehicleModel, vehicleColor, fuelType,
+        } = req.body;
 
         const delivery = await Delivery.findById(req.user.id);
         if (!delivery) {
@@ -224,7 +224,40 @@ export const updateDeliveryProfile = async (req, res) => {
         if (vehicleNumber) delivery.vehicleNumber = vehicleNumber;
         if (drivingLicenseNumber) delivery.drivingLicenseNumber = drivingLicenseNumber;
         if (currentArea) delivery.currentArea = currentArea;
-        if (typeof isOnline !== 'undefined') delivery.isOnline = isOnline;
+        if (typeof vehicleModel !== "undefined") delivery.vehicleModel = vehicleModel;
+        if (typeof vehicleColor !== "undefined") delivery.vehicleColor = vehicleColor;
+        if (typeof fuelType !== "undefined") delivery.fuelType = fuelType;
+
+        if (documents && typeof documents === "object") {
+            const existing = delivery.documents || {};
+            delivery.documents = {
+                aadhar: typeof documents.aadhar !== "undefined" ? String(documents.aadhar || "").trim() : existing.aadhar,
+                pan: typeof documents.pan !== "undefined" ? String(documents.pan || "").trim() : existing.pan,
+                drivingLicense: typeof documents.drivingLicense !== "undefined" ? String(documents.drivingLicense || "").trim() : existing.drivingLicense,
+            };
+        }
+
+        if (Array.isArray(emergencyContacts)) {
+            delivery.emergencyContacts = emergencyContacts
+                .filter((c) => c && String(c.name || "").trim() && String(c.phone || "").trim())
+                .slice(0, 5)
+                .map((c) => ({
+                    name: String(c.name).trim(),
+                    relation: String(c.relation || "").trim(),
+                    phone: String(c.phone).trim(),
+                }));
+        }
+
+        if (typeof isOnline !== 'undefined') {
+            if (isOnline && !delivery.isVerified) {
+                return handleResponse(
+                    res,
+                    403,
+                    "Your account is pending admin verification. You can go online once it's approved."
+                );
+            }
+            delivery.isOnline = isOnline;
+        }
 
         await delivery.save();
 

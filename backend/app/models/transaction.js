@@ -42,6 +42,17 @@ const transactionSchema = new mongoose.Schema(
         meta: {
             type: Object,
         },
+        // Denormalized from the sibling Order/Refund record at write-time, for
+        // at-a-glance querying/reporting without joining back — populated only
+        // for transaction types where it's meaningful (payment/refund rows).
+        paymentMethod: {
+            type: String,
+            default: null,
+        },
+        refundStatus: {
+            type: String,
+            default: null,
+        },
     },
     { timestamps: true }
 );

@@ -45,6 +45,16 @@ const AdminWallet = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadingId, setLoadingId] = useState(null);
+    const [adjustModal, setAdjustModal] = useState({ isOpen: false, payout: null });
+    const [adjustAmount, setAdjustAmount] = useState('');
+    const [adjustDirection, setAdjustDirection] = useState('deduct');
+    const [adjustReason, setAdjustReason] = useState('');
+    const [isAdjusting, setIsAdjusting] = useState(false);
+    const [holdModal, setHoldModal] = useState({ isOpen: false, orderId: null, sellerLabel: '' });
+    const [holdReason, setHoldReason] = useState('');
+    const [isHolding, setIsHolding] = useState(false);
+    const [releasingOrderId, setReleasingOrderId] = useState(null);
+    const [bulkOnly, setBulkOnly] = useState(false);
 
     const fetchData = async (page = 1) => {
         try {
@@ -55,7 +65,7 @@ const AdminWallet = () => {
             const [summaryRes, ledgerRes, requestsRes] = await Promise.all([
                 adminApi.getFinanceSummary(),
                 adminApi.getFinanceLedger(params),
-                adminApi.getFinancePayouts({ seller: true, status: "PENDING", page: 1, limit: 100 })
+                adminApi.getFinancePayouts({ seller: true, status: "PENDING", bulkOnly: bulkOnly || undefined, page: 1, limit: 100 })
             ]);
 
             if (summaryRes.data.success || ledgerRes.data.success) {
@@ -112,7 +122,7 @@ const AdminWallet = () => {
         }, 500);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [txnPageSize, searchTerm]);
+    }, [txnPageSize, searchTerm, bulkOnly]);
 
     // Track the actual page change separately (no debounce needed for clicking next)
     useEffect(() => {
@@ -139,6 +149,78 @@ const AdminWallet = () => {
             toast.error(error.response?.data?.message || "Action failed");
         } finally {
             setLoadingId(null);
+        }
+    };
+
+    const openAdjustModal = (payout) => {
+        setAdjustModal({ isOpen: true, payout });
+        setAdjustAmount('');
+        setAdjustDirection('deduct');
+        setAdjustReason('');
+    };
+
+    const handleSubmitAdjustment = async () => {
+        const rawAmount = Number(adjustAmount);
+        if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+            toast.error('Enter a positive amount');
+            return;
+        }
+        if (!adjustReason.trim()) {
+            toast.error('A reason is required for this adjustment');
+            return;
+        }
+        const signedAmount = adjustDirection === 'deduct' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+        try {
+            setIsAdjusting(true);
+            const res = await adminApi.adjustPayout(adjustModal.payout._id, {
+                amount: signedAmount,
+                reason: adjustReason.trim(),
+            });
+            if (res.data.success) {
+                toast.success('Settlement adjustment applied');
+                setAdjustModal({ isOpen: false, payout: null });
+                fetchData(txnPage);
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to apply adjustment');
+        } finally {
+            setIsAdjusting(false);
+        }
+    };
+
+    const openHoldModal = (orderId, sellerLabel) => {
+        setHoldModal({ isOpen: true, orderId, sellerLabel });
+        setHoldReason('');
+    };
+
+    const handleSubmitHold = async () => {
+        if (!holdReason.trim()) {
+            toast.error('A reason is required to place a payout on hold');
+            return;
+        }
+        try {
+            setIsHolding(true);
+            await adminApi.holdSellerPayout(holdModal.orderId, { reason: holdReason.trim() });
+            toast.success('Payout placed on hold');
+            setHoldModal({ isOpen: false, orderId: null, sellerLabel: '' });
+            fetchData(txnPage);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to place payout on hold');
+        } finally {
+            setIsHolding(false);
+        }
+    };
+
+    const handleReleaseHold = async (orderId) => {
+        setReleasingOrderId(orderId);
+        try {
+            await adminApi.releaseSellerPayout(orderId);
+            toast.success('Payout hold released');
+            fetchData(txnPage);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to release hold');
+        } finally {
+            setReleasingOrderId(null);
         }
     };
 
@@ -409,6 +491,17 @@ const AdminWallet = () => {
                                     className="pl-9 pr-4 py-2 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/10 w-full sm:w-48 transition-all"
                                 />
                             </div>
+                            {activeTab === 'seller_requests' && (
+                                <label className="flex items-center gap-1.5 px-3 py-2 bg-white ring-1 ring-slate-200 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-wider cursor-pointer whitespace-nowrap">
+                                    <input
+                                        type="checkbox"
+                                        checked={bulkOnly}
+                                        onChange={(e) => setBulkOnly(e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-400"
+                                    />
+                                    Bulk orders only
+                                </label>
+                            )}
                         </div>
                     </div>
 
@@ -448,8 +541,8 @@ const AdminWallet = () => {
                                                         </Badge>
                                                     </td>
                                                     <td className="px-6 py-5 text-right pr-8">
-                                                        {(req.status || '').toUpperCase() === 'PENDING' ? (
-                                                            <div className="flex items-center justify-end gap-2">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            {(req.status || '').toUpperCase() === 'PENDING' && (
                                                                 <button
                                                                     disabled={isProcessing || loadingId === req._id}
                                                                     onClick={() => handleUpdateStatus(req._id, 'COMPLETED')}
@@ -461,10 +554,44 @@ const AdminWallet = () => {
                                                                         'Approve'
                                                                     )}
                                                                 </button>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[10px] font-bold text-slate-400 italic">No Actions</span>
-                                                        )}
+                                                            )}
+                                                            {['PENDING', 'PROCESSING', 'COMPLETED'].includes((req.status || '').toUpperCase()) && (
+                                                                <button
+                                                                    onClick={() => openAdjustModal(req)}
+                                                                    className="px-4 py-2 bg-white ring-1 ring-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase hover:border-amber-400 hover:text-amber-700 transition-all active:scale-95"
+                                                                >
+                                                                    Adjust
+                                                                </button>
+                                                            )}
+                                                            {(() => {
+                                                                const relatedOrder = req.relatedOrderIds?.[0];
+                                                                const orderKey = relatedOrder?.orderId || relatedOrder?._id;
+                                                                if (!orderKey) return null;
+                                                                const sellerLabel = req.beneficiary?.shopName || req.beneficiary?.name || '';
+                                                                if (relatedOrder?.settlementStatus?.sellerPayout === 'HOLD') {
+                                                                    return (
+                                                                        <button
+                                                                            disabled={releasingOrderId === orderKey}
+                                                                            onClick={() => handleReleaseHold(orderKey)}
+                                                                            className="px-4 py-2 bg-white ring-1 ring-emerald-200 text-emerald-700 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-50 transition-all active:scale-95 disabled:opacity-50"
+                                                                        >
+                                                                            {releasingOrderId === orderKey ? '...' : 'Release Hold'}
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                if (['PENDING', 'PROCESSING'].includes((req.status || '').toUpperCase())) {
+                                                                    return (
+                                                                        <button
+                                                                            onClick={() => openHoldModal(orderKey, sellerLabel)}
+                                                                            className="px-4 py-2 bg-white ring-1 ring-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase hover:border-rose-400 hover:text-rose-700 transition-all active:scale-95"
+                                                                        >
+                                                                            Hold
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -711,6 +838,131 @@ const AdminWallet = () => {
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* Settlement Adjustment Modal */}
+            <Modal
+                isOpen={adjustModal.isOpen}
+                onClose={() => setAdjustModal({ isOpen: false, payout: null })}
+                title="Adjust Settlement"
+                size="md"
+            >
+                {adjustModal.payout && (
+                    <div className="space-y-5">
+                        <div className="text-center pb-4 border-b border-slate-100">
+                            <p className="text-sm font-bold text-slate-900">
+                                {adjustModal.payout.beneficiary?.shopName || adjustModal.payout.beneficiary?.name || adjustModal.payout.beneficiaryId}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                Current payout amount: ₹{Math.abs(adjustModal.payout.amount || 0).toLocaleString()}
+                            </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setAdjustDirection('deduct')}
+                                className={cn(
+                                    "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    adjustDirection === 'deduct' ? "bg-rose-600 text-white shadow-md" : "bg-slate-50 text-slate-500",
+                                )}
+                            >
+                                Deduct
+                            </button>
+                            <button
+                                onClick={() => setAdjustDirection('add')}
+                                className={cn(
+                                    "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    adjustDirection === 'add' ? "bg-emerald-600 text-white shadow-md" : "bg-slate-50 text-slate-500",
+                                )}
+                            >
+                                Add
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount (₹)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={adjustAmount}
+                                onChange={(e) => setAdjustAmount(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10"
+                                placeholder="0"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason</label>
+                            <textarea
+                                value={adjustReason}
+                                onChange={(e) => setAdjustReason(e.target.value)}
+                                rows={3}
+                                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 resize-none"
+                                placeholder="Why is this adjustment being made?"
+                            />
+                        </div>
+
+                        <div className="pt-2 flex gap-3">
+                            <button
+                                onClick={() => setAdjustModal({ isOpen: false, payout: null })}
+                                className="flex-1 py-3 bg-white ring-1 ring-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmitAdjustment}
+                                disabled={isAdjusting}
+                                className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all disabled:opacity-60"
+                            >
+                                {isAdjusting ? 'Applying…' : 'Apply Adjustment'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Manual Settlement Hold Modal */}
+            <Modal
+                isOpen={holdModal.isOpen}
+                onClose={() => setHoldModal({ isOpen: false, orderId: null, sellerLabel: '' })}
+                title="Hold Payout"
+                size="md"
+            >
+                <div className="space-y-5">
+                    {holdModal.sellerLabel && (
+                        <div className="text-center pb-4 border-b border-slate-100">
+                            <p className="text-sm font-bold text-slate-900">{holdModal.sellerLabel}</p>
+                        </div>
+                    )}
+                    <p className="text-xs text-slate-500">
+                        This is a manual hold, separate from the automatic return-window hold — it only clears when you release it here, even after the return window has passed.
+                    </p>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason</label>
+                        <textarea
+                            value={holdReason}
+                            onChange={(e) => setHoldReason(e.target.value)}
+                            rows={3}
+                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 resize-none"
+                            placeholder="Why is this payout being held?"
+                        />
+                    </div>
+                    <div className="pt-2 flex gap-3">
+                        <button
+                            onClick={() => setHoldModal({ isOpen: false, orderId: null, sellerLabel: '' })}
+                            className="flex-1 py-3 bg-white ring-1 ring-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitHold}
+                            disabled={isHolding}
+                            className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all disabled:opacity-60"
+                        >
+                            {isHolding ? 'Placing hold…' : 'Place on Hold'}
+                        </button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

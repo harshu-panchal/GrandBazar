@@ -31,6 +31,34 @@ export const CartProvider = ({ children }) => {
   const pendingRequestsRef = React.useRef(0);
   const lsDebounceRef = useRef(null);
 
+  const [fulfillmentType, setFulfillmentType] = useState("instant");
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState("now");
+  const [schedulePayload, setSchedulePayload] = useState(null);
+
+  const primarySellerId = useMemo(() => {
+    const item = cart[0];
+    return item?.sellerId?._id || item?.sellerId || item?.storeId || null;
+  }, [cart]);
+
+  const setSchedule = (payload) => {
+    setSchedulePayload(payload);
+    setFulfillmentType(payload?.fulfillmentType || "instant");
+    setSelectedTimeSlot(payload?.timeSlot || "now");
+  };
+
+  // The chosen slot is scoped to whichever store's cart it was picked for —
+  // switching to a different store's items invalidates it rather than
+  // silently carrying a stale window/date into the new checkout.
+  const prevSellerIdRef = useRef(primarySellerId);
+  useEffect(() => {
+    if (prevSellerIdRef.current !== primarySellerId) {
+      prevSellerIdRef.current = primarySellerId;
+      setFulfillmentType("instant");
+      setSelectedTimeSlot("now");
+      setSchedulePayload(null);
+    }
+  }, [primarySellerId]);
+
   // Clear cart locally when user logs out is handled by the useEffect dependency on isAuthenticated
   const normalizeBackendCart = (items) => {
     if (!items) return [];
@@ -50,6 +78,11 @@ export const CartProvider = ({ children }) => {
         price,
         salePrice,
         image: product?.mainImage, // Handle mapping for frontend
+        // Pre-order campaign association — resolved and persisted server-side
+        // (backend/app/controller/cartController.js). Drives Cart/Checkout's
+        // Scheduling Page mode; see CartPage.jsx.
+        campaignId: item.campaignId || null,
+        advanceBooking: item.advanceBooking || null,
       };
     });
   };
@@ -334,6 +367,9 @@ export const CartProvider = ({ children }) => {
     } else {
       setCart([]);
     }
+    setFulfillmentType("instant");
+    setSelectedTimeSlot("now");
+    setSchedulePayload(null);
   };
 
   const cartTotal = cart.reduce((total, item) => {
@@ -354,8 +390,13 @@ export const CartProvider = ({ children }) => {
     cartTotal,
     cartCount,
     loading,
+    primarySellerId,
+    fulfillmentType,
+    selectedTimeSlot,
+    schedulePayload,
+    setSchedule,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cart, cartTotal, cartCount, loading]);
+  }), [cart, cartTotal, cartCount, loading, primarySellerId, fulfillmentType, selectedTimeSlot, schedulePayload]);
 
   return (
     <CartContext.Provider value={cartValue}>

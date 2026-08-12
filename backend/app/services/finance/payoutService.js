@@ -4,6 +4,7 @@ import Wallet from "../../models/wallet.js";
 import Payout from "../../models/payout.js";
 import Transaction from "../../models/transaction.js";
 import FinanceAuditLog from "../../models/financeAuditLog.js";
+import BulkSettlement from "../../models/bulkSettlement.js";
 import {
   PAYOUT_STATUS,
   PAYOUT_TYPE,
@@ -33,6 +34,10 @@ export async function createPendingPayoutForOrder({
   amount,
   remarks = "Automatic payout creation on delivery.",
   metadata = {},
+  isBulkSettlement = false,
+  commissionAmount = 0,
+  packagingAmount = 0,
+  taxAmount = 0,
 }) {
   if (!order || !beneficiaryId || amount <= 0) return null;
 
@@ -63,6 +68,10 @@ export async function createPendingPayoutForOrder({
           status: PAYOUT_STATUS.PENDING,
           relatedOrderIds: [order._id],
           remarks,
+          isBulkSettlement: Boolean(isBulkSettlement),
+          commissionAmount: roundCurrency(commissionAmount || 0),
+          packagingAmount: roundCurrency(packagingAmount || 0),
+          taxAmount: roundCurrency(taxAmount || 0),
           metadata: {
             ...metadata,
             orderId: order.orderId,
@@ -90,6 +99,29 @@ export async function createPendingPayoutForOrder({
       },
       { session },
     );
+
+    // One consolidated record per bulk order — see WS-15 item 247. Only for
+    // seller payouts: bulk-order commission/packaging/tax economics are a
+    // seller-payout concept, rider payouts never set isBulkSettlement.
+    if (isBulkSettlement && payoutType === PAYOUT_TYPE.SELLER) {
+      await BulkSettlement.findOneAndUpdate(
+        { order: order._id },
+        {
+          order: order._id,
+          orderId: order.orderId,
+          payout: payout[0]._id,
+          bulkOrderReason: order.bulkOrderReason || order.paymentBreakdown?.bulkOrderReason || null,
+          bulkOrderLineIndexes: order.paymentBreakdown?.bulkOrderLineIndexes || [],
+          sellerId: beneficiaryId,
+          sellerPayoutAmount: roundCurrency(amount),
+          commissionAmount: roundCurrency(commissionAmount || 0),
+          packagingAmount: roundCurrency(packagingAmount || 0),
+          taxAmount: roundCurrency(taxAmount || 0),
+          status: "PENDING",
+        },
+        { upsert: true, session },
+      );
+    }
 
     await session.commitTransaction();
     return payout[0];
@@ -144,6 +176,14 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
       await order.save({ session });
     }
 
+    if (payout.isBulkSettlement && payout.payoutType === PAYOUT_TYPE.SELLER) {
+      await BulkSettlement.updateOne(
+        { payout: payout._id },
+        { $set: { status: "COMPLETED", settledAt: new Date() } },
+        { session },
+      );
+    }
+
     await createFinanceAuditLog(
       {
         action: "PAYOUT_PROCESSED",
@@ -187,6 +227,10 @@ export async function queueSellerPayouts({ orderIds = [] } = {}) {
       beneficiaryId: order.seller,
       amount: order.paymentBreakdown?.sellerPayoutTotal || 0,
       metadata: { trigger: "queueSellerPayouts" },
+      isBulkSettlement: Boolean(order.isBulkOrder || order.paymentBreakdown?.isBulkOrder),
+      commissionAmount: order.paymentBreakdown?.adminProductCommissionTotal || 0,
+      packagingAmount: order.paymentBreakdown?.packagingChargeAmount || 0,
+      taxAmount: order.paymentBreakdown?.taxTotal || 0,
     });
     if (payout) created.push(payout);
   }
@@ -245,6 +289,14 @@ export async function cancelPendingPayoutForOrder(orderId, payoutType, { remarks
     payout.cancelledAt = new Date();
     if (adminId) payout.createdBy = adminId;
     await payout.save({ session });
+
+    if (payout.isBulkSettlement && payout.payoutType === PAYOUT_TYPE.SELLER) {
+      await BulkSettlement.updateOne(
+        { payout: payout._id },
+        { $set: { status: "CANCELLED" } },
+        { session },
+      );
+    }
 
     await createLedgerEntry(
       {

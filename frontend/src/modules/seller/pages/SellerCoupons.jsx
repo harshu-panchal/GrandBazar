@@ -35,6 +35,7 @@ const emptyForm = {
   code: "",
   title: "",
   description: "",
+  couponType: "generic",
   discountType: "percentage",
   discountValue: "",
   maxDiscount: "",
@@ -86,6 +87,7 @@ const SellerCoupons = () => {
         code: coupon.code || "",
         title: coupon.title || "",
         description: coupon.description || "",
+        couponType: coupon.couponType || "generic",
         discountType: coupon.discountType || "percentage",
         discountValue: coupon.discountValue ?? "",
         maxDiscount: coupon.maxDiscount ?? "",
@@ -299,6 +301,20 @@ const SellerCoupons = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium mb-1">Coupon Type</label>
+              <select
+                value={formData.couponType}
+                onChange={(e) => setFormData({ ...formData, couponType: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
+              >
+                {COUPON_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-sm font-medium mb-1">Discount Type</label>
               <select
                 value={formData.discountType}
@@ -312,6 +328,8 @@ const SellerCoupons = () => {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Discount Value</label>
               <input
@@ -319,18 +337,6 @@ const SellerCoupons = () => {
                 min="0"
                 value={formData.discountValue}
                 onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Min Order Value</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.minOrderValue}
-                onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
               />
             </div>
@@ -344,6 +350,16 @@ const SellerCoupons = () => {
                 className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Min Order Value</label>
+            <input
+              type="number"
+              min="0"
+              value={formData.minOrderValue}
+              onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 dark:bg-gray-800"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

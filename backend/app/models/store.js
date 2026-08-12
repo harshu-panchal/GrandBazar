@@ -19,6 +19,11 @@ const storeSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    logoUrl: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     slug: {
       type: String,
       trim: true,
@@ -197,6 +202,12 @@ const storeSchema = new mongoose.Schema(
       default: true,
     },
 
+    /** Admin-controlled: excludes this store from ever appearing as a suggested alternative for other closed stores. */
+    excludeFromAlternatives: {
+      type: Boolean,
+      default: false,
+    },
+
     location: {
       type: {
         type: String,
@@ -233,7 +244,7 @@ const storeSchema = new mongoose.Schema(
 
     schedulingSettings: {
       enabled: { type: Boolean, default: false },
-      maxDaysAhead: { type: Number, default: 7, min: 1, max: 90 },
+      maxDaysAhead: { type: Number, default: 30, min: 1, max: 90 },
       rescheduleCutoffDays: { type: Number, default: 1, min: 0, max: 7 },
       selfLogistics: { type: Boolean, default: false },
       deliveryWindows: {

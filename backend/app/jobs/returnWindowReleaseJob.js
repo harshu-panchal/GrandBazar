@@ -24,6 +24,10 @@ const releaseExpiredSellerHolds = async () => {
       returnStatus: "none",
       returnWindowExpiresAt: { $lte: now },
       "settlementStatus.sellerPayout": "HOLD",
+      // A manual admin hold (see adminFinanceController.js
+      // holdSellerPayoutController) only clears via the matching manual
+      // release action — never by the return window simply expiring.
+      "financeFlags.manualSettlementHold": { $ne: true },
     })
       .select("_id orderId")
       .lean();

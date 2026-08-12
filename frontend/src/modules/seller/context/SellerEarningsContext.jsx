@@ -4,6 +4,7 @@ const defaultEarnings = {
   balances: {},
   ledger: [],
   monthlyChart: [],
+  moduleEnabled: true,
 };
 
 const SellerEarningsContext = createContext({

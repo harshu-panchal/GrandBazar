@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Order from "../models/order.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
+import Delivery from "../models/delivery.js";
 import OrderOtp from "../models/orderOtp.js";
 import Store from "../models/store.js";
 import {
@@ -480,7 +481,14 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
 /**
  * Seller rejects: SELLER_PENDING -> CANCELLED + compensation.
  */
-export async function sellerRejectAtomic(sellerId, orderId) {
+export async function sellerRejectAtomic(sellerId, orderId, reason) {
+  const trimmedReason = String(reason || "").trim();
+  if (trimmedReason.length < 10) {
+    const err = new Error("Please provide a cancellation reason (at least 10 characters)");
+    err.statusCode = 400;
+    throw err;
+  }
+
   orderId = await requireCanonicalOrderId(orderId);
   const now = new Date();
   const order = await Order.findOneAndUpdate(
@@ -496,7 +504,7 @@ export async function sellerRejectAtomic(sellerId, orderId) {
         workflowStatus: WORKFLOW_STATUS.CANCELLED,
         status: "cancelled",
         cancelledBy: "seller",
-        cancelReason: "Rejected by seller",
+        cancelReason: trimmedReason,
       },
     },
     { new: true },
@@ -529,7 +537,7 @@ export async function sellerRejectAtomic(sellerId, orderId) {
  * Seller advances order after accept (self-delivery / external / customer pickup).
  * Platform logistics (rider flow) is rejected — rider updates those statuses.
  */
-export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStatus) {
+export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStatus, additionalData = {}) {
   orderId = await requireCanonicalOrderId(orderId);
   const legacy = String(nextLegacyStatus || "").toLowerCase();
 
@@ -568,7 +576,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
 
   if (legacy === "cancelled") {
     if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
-      return sellerRejectAtomic(sellerId, orderId);
+      return sellerRejectAtomic(sellerId, orderId, additionalData.cancelReason);
     }
     const err = new Error(
       "This order can no longer be cancelled from here. Use cancellation approval flow if needed.",
@@ -826,6 +834,121 @@ export async function deliveryAcceptAtomic(deliveryId, orderId, idempotencyKey) 
   );
 
   return { order: updated, duplicate: false };
+}
+
+/**
+ * Admin manually assigns a specific rider to an order awaiting delivery search —
+ * an override for when the automatic broadcast/accept flow is stuck. Skips the
+ * broadcast-specific gates (accept window, per-rider skip list) since the admin
+ * is deliberately bypassing that matching mechanism.
+ */
+export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const deliveryOid = toDeliveryObjectId(riderId);
+  if (!deliveryOid) {
+    const err = new Error("Invalid delivery partner");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const rider = await Delivery.findById(deliveryOid).select("name isOnline isVerified location").lean();
+  if (!rider) {
+    const err = new Error("Delivery partner not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (!rider.isVerified) {
+    const err = new Error("This delivery partner is not verified yet");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!rider.isOnline) {
+    const err = new Error("This delivery partner is currently offline");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const now = new Date();
+  const updated = await Order.findOneAndUpdate(
+    {
+      orderId,
+      workflowVersion: { $gte: 2 },
+      workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
+      deliveryBoy: null,
+    },
+    {
+      $set: {
+        deliveryBoy: deliveryOid,
+        workflowStatus: WORKFLOW_STATUS.DELIVERY_ASSIGNED,
+        status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_ASSIGNED),
+        assignedAt: now,
+        deliveryRiderStep: 1,
+        assignedByAdmin: adminId || null,
+      },
+      $inc: { assignmentVersion: 1 },
+    },
+    { new: true },
+  ).populate("seller", "location shopName");
+
+  if (!updated) {
+    const o = await Order.findOne({ orderId }).lean();
+    if (!o) {
+      const err = new Error("Order not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const msg = o.deliveryBoy
+      ? "This order already has a delivery partner assigned."
+      : "This order is not currently awaiting delivery-partner assignment.";
+    const err = new Error(msg);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  await removeDeliveryTimeoutJob(orderId, updated.deliverySearchMeta?.attempt || 1);
+
+  const lastBroadcast = await DeliveryAssignment.findOne({
+    orderId,
+    status: "broadcasting",
+  }).sort({ createdAt: -1 });
+  if (lastBroadcast) {
+    lastBroadcast.status = "assigned";
+    lastBroadcast.winnerDeliveryId = deliveryOid;
+    await lastBroadcast.save();
+  }
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.DELIVERY_ASSIGNED, {
+    orderId: updated.orderId,
+    deliveryId: deliveryOid,
+    customerId: updated.customer,
+    sellerId: updated.seller?._id || updated.seller,
+  });
+
+  await retractDeliveryBroadcastForOrder(updated.orderId, deliveryOid);
+
+  emitOrderStatusUpdate(
+    updated.orderId,
+    {
+      workflowStatus: WORKFLOW_STATUS.DELIVERY_ASSIGNED,
+      deliveryBoyId: deliveryOid.toString(),
+    },
+    updated.customer,
+  );
+
+  let distanceKm = null;
+  const sellerCoords = updated.seller?.location?.coordinates;
+  const riderCoords = rider.location?.coordinates;
+  if (
+    Array.isArray(sellerCoords) && sellerCoords.length === 2 &&
+    Array.isArray(riderCoords) && riderCoords.length === 2 &&
+    !(riderCoords[0] === 0 && riderCoords[1] === 0)
+  ) {
+    distanceKm = Math.round(
+      (distanceMeters(sellerCoords[1], sellerCoords[0], riderCoords[1], riderCoords[0]) / 1000) * 10,
+    ) / 10;
+  }
+
+  return { order: updated, rider, distanceKm };
 }
 
 export async function processSellerTimeoutJob({ orderId }) {

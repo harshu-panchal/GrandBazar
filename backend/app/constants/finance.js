@@ -75,6 +75,11 @@ export const PAYOUT_STATUS = {
   PROCESSING: "PROCESSING",
   COMPLETED: "COMPLETED",
   FAILED: "FAILED",
+  // Was missing despite payoutService.js referencing PAYOUT_STATUS.CANCELLED
+  // in cancelPendingPayoutForOrder (return-reversal path) — that assignment
+  // was silently writing `undefined` to payout.status. Adding it here fixes
+  // that pre-existing bug, not just this workstream's new code.
+  CANCELLED: "CANCELLED",
 };
 
 export const COMMISSION_TYPE = {
@@ -105,6 +110,44 @@ export const DELIVERY_PRICING_MODE = {
   DISTANCE_BASED: "distance_based",
 };
 
+// GST slabs recognized by Indian GST law for retail goods/services.
+export const GST_SLAB = {
+  EXEMPT: 0,
+  SLAB_5: 5,
+  SLAB_12: 12,
+  SLAB_18: 18,
+  SLAB_28: 28,
+};
+
+export const TAX_JURISDICTION = {
+  INTRA_STATE: "intra_state", // seller & delivery address same state -> CGST + SGST
+  INTER_STATE: "inter_state", // different states -> IGST
+};
+
+export const INVOICE_TYPE = {
+  CUSTOMER: "customer",
+  SELLER: "seller",
+};
+
+export const REFUND_TYPE = {
+  RETURN: "return",
+  PRICE_ADJUSTMENT: "price_adjustment",
+  CANCELLATION: "cancellation",
+};
+
+export const REFUND_MODE = {
+  WALLET: "wallet",
+  GATEWAY: "gateway",
+  COD_ADJUSTMENT: "cod_adjustment",
+};
+
+export const REFUND_STATUS = {
+  INITIATED: "initiated",
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+};
+
 export const FINANCE_AUDIT_ACTION = {
   ORDER_FINANCE_SNAPSHOT_FROZEN: "ORDER_FINANCE_SNAPSHOT_FROZEN",
   ONLINE_PAYMENT_VERIFIED: "ONLINE_PAYMENT_VERIFIED",
@@ -115,6 +158,8 @@ export const FINANCE_AUDIT_ACTION = {
   PAYOUT_PROCESSED: "PAYOUT_PROCESSED",
   DELIVERY_SETTINGS_UPDATED: "DELIVERY_SETTINGS_UPDATED",
   FINANCE_ADJUSTMENT_APPLIED: "FINANCE_ADJUSTMENT_APPLIED",
+  SELLER_PAYOUT_HELD: "SELLER_PAYOUT_HELD",
+  SELLER_PAYOUT_RELEASED: "SELLER_PAYOUT_RELEASED",
 };
 
 export const ALL_PAYMENT_MODES = Object.values(PAYMENT_MODE);
@@ -133,3 +178,9 @@ export const ALL_HANDLING_FEE_TYPES = Object.values(HANDLING_FEE_TYPE);
 export const ALL_HANDLING_FEE_STRATEGIES = Object.values(HANDLING_FEE_STRATEGY);
 export const ALL_DELIVERY_PRICING_MODES = Object.values(DELIVERY_PRICING_MODE);
 export const ALL_FINANCE_AUDIT_ACTIONS = Object.values(FINANCE_AUDIT_ACTION);
+export const ALL_GST_SLABS = Object.values(GST_SLAB);
+export const ALL_TAX_JURISDICTIONS = Object.values(TAX_JURISDICTION);
+export const ALL_INVOICE_TYPES = Object.values(INVOICE_TYPE);
+export const ALL_REFUND_TYPES = Object.values(REFUND_TYPE);
+export const ALL_REFUND_MODES = Object.values(REFUND_MODE);
+export const ALL_REFUND_STATUSES = Object.values(REFUND_STATUS);
