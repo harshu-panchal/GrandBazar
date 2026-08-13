@@ -363,7 +363,7 @@ export const getOrderInvoice = async (req, res) => {
       return handleResponse(res, 404, "Order not found");
     }
     const order = await Order.findOne(orderKey)
-      .select("_id orderId customer seller")
+      .select("_id orderId customer seller status orderStatus workflowStatus deliveredAt")
       .lean();
     if (!order) {
       return handleResponse(res, 404, "Order not found");
@@ -381,7 +381,27 @@ export const getOrderInvoice = async (req, res) => {
       }
     }
 
-    const invoice = await getInvoiceForOrder(order.orderId, type);
+    let invoice = await getInvoiceForOrder(order.orderId, type);
+
+    // If invoice is missing, but order is delivered (e.g. self-pickup or legacy transition), generate on-demand now
+    if (!invoice) {
+      const isDelivered =
+        String(order.status).toLowerCase() === "delivered" ||
+        String(order.orderStatus).toLowerCase() === "delivered" ||
+        String(order.workflowStatus).toUpperCase() === "DELIVERED" ||
+        Boolean(order.deliveredAt);
+
+      if (isDelivered) {
+        try {
+          const { generateOrderInvoices } = await import("../services/finance/invoiceService.js");
+          await generateOrderInvoices(order._id);
+          invoice = await getInvoiceForOrder(order.orderId, type);
+        } catch (genErr) {
+          console.error(`[getOrderInvoice] On-demand invoice generation error for ${order.orderId}:`, genErr);
+        }
+      }
+    }
+
     if (!invoice) {
       return handleResponse(res, 404, "Invoice not yet generated for this order — invoices are created once the order is delivered.");
     }

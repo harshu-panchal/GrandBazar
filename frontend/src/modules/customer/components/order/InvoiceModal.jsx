@@ -15,7 +15,7 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
     const pricing = order.pricing || {};
     const breakdown = order.paymentBreakdown || {};
     const items = Array.isArray(order.items) ? order.items : [];
-    const isDelivered = order.status === 'delivered' || order.orderStatus === 'delivered';
+    const isDelivered = order.status === 'delivered' || order.orderStatus === 'delivered' || order.workflowStatus === 'DELIVERED' || Boolean(order.deliveredAt);
     const isInterState = breakdown.taxJurisdiction === 'inter_state';
 
     const handlePrint = () => {

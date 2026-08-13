@@ -41,6 +41,7 @@ import { assertTransition } from "./orderStateMachine.js";
 import {
   scheduleOrderActivationJob,
 } from "./orderSchedulingService.js";
+import { markOrderReadyForCustomerPickup } from "./customerPickupService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
@@ -626,6 +627,27 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
 
   assertTransition(ws, nextWorkflow);
 
+  if (nextWorkflow === WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
+    // Customer-pickup orders need a real OTP/QR generated and hashed at rest —
+    // delegate to the dedicated service instead of a bare status $set, which
+    // previously left the order looking "ready for pickup" with no verifiable
+    // code ever generated (customer and seller both saw an empty OTP box).
+    const pickupResult = await markOrderReadyForCustomerPickup(sellerId, orderId);
+    const updatedOrder = await Order.findOne({ orderId, seller: sellerId })
+      .populate("customer", "name phone")
+      .populate("seller", "shopName address name location serviceRadius");
+    if (!updatedOrder) {
+      const err = new Error("Could not update order status — state may have changed");
+      err.statusCode = 409;
+      throw err;
+    }
+    const orderObj = updatedOrder.toObject();
+    orderObj.pickupOtp = pickupResult.otp;
+    orderObj.pickupQrToken = pickupResult.qrToken;
+    orderObj.pickupExpiresAt = pickupResult.expiresAt;
+    return orderObj;
+  }
+
   const now = new Date();
   const $set = {
     workflowStatus: nextWorkflow,
@@ -633,9 +655,6 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     orderStatus: legacyStatusFromWorkflow(nextWorkflow),
   };
   if (nextWorkflow === WORKFLOW_STATUS.PICKUP_READY) {
-    $set.pickupReadyAt = now;
-  }
-  if (nextWorkflow === WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
     $set.pickupReadyAt = now;
   }
   if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {

@@ -103,6 +103,7 @@ import {
   customerVerifyPickup,
   sellerVerifyPickup,
   getPickupStatus,
+  sellerResendPickupOtp,
   adminGetStoreDeliveryPolicy,
   adminUpdateStoreDeliveryPolicy,
 } from "../controller/deliveryPolicyController.js";
@@ -592,6 +593,11 @@ router.get(
   verifyToken,
   allowRoles("customer", "user"),
   getPickupStatus,
+);
+router.post(
+  "/:orderId/pickup/resend-otp",
+  ...sellerOrdersWriteChain,
+  sellerResendPickupOtp,
 );
 router.get(
   "/stores/:storeId/delivery-policy",

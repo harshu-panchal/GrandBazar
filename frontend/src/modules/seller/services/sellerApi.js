@@ -118,6 +118,7 @@ export const sellerApi = {
     updateDeliveryPolicy: (data) => axiosInstance.put('/orders/delivery-policy', data),
     markOrderReadyForPickup: (orderId) => axiosInstance.post(`/orders/${orderId}/pickup/ready`),
     verifyCustomerPickup: (orderId, data) => axiosInstance.post(`/orders/${orderId}/pickup/verify-seller`, data),
+    resendPickupOtp: (orderId) => axiosInstance.post(`/orders/${orderId}/pickup/resend-otp`),
     listCampaigns: (params) => axiosInstance.get('/orders/campaigns', { params }),
     createCampaign: (data) => axiosInstance.post('/orders/campaigns', data),
     updateCampaign: (campaignId, data) => axiosInstance.put(`/orders/campaigns/${campaignId}`, data),

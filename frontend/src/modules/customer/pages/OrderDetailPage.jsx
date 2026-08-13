@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import InvoiceModal from "../components/order/InvoiceModal";
 import HelpModal from "../components/order/HelpModal";
 import LiveTrackingMap from "../components/order/LiveTrackingMap";
+import PickupRouteMap from "../components/order/PickupRouteMap";
+import { useLocation as useAppLocation } from "../context/LocationContext";
 import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
 import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
 import RateOrderItems from "../components/order/RateOrderItems";
@@ -141,6 +143,12 @@ const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
 
 const OrderDetailPage = () => {
   const { settings } = useSettings();
+  const {
+    currentLocation,
+    hasValidLocation,
+    refreshLocation,
+    isFetchingLocation,
+  } = useAppLocation();
   const { orderId } = useParams();
   const [showInvoice, setShowInvoice] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -537,6 +545,9 @@ const OrderDetailPage = () => {
     order.paymentStatus !== "PAID" &&
     status !== "cancelled";
   const sellerLocation = coordsToLatLng(order?.seller?.location?.coordinates);
+  const customerOwnLocation = hasValidLocation
+    ? { lat: Number(currentLocation.latitude), lng: Number(currentLocation.longitude) }
+    : null;
   const routePhase = getTrackingRoutePhase(order);
   const routeMatchesPhase =
     routePhase === "pickup"
@@ -952,9 +963,13 @@ const OrderDetailPage = () => {
           </div>
         )}
 
-        {/* Enhanced Map with Cleaner Design - Hide when delivered or cancelled */}
+        {/* Enhanced Map with Cleaner Design - Hide when delivered or cancelled.
+            Also hidden for self-pickup orders: there's no rider to search for,
+            track, or estimate an arrival time for — the customer travels to
+            the store, not the other way around. */}
         {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled"
-          && order.logisticsMode !== "external" && !order.externalTrackingLink && (
+          && order.logisticsMode !== "external" && !order.externalTrackingLink
+          && order.fulfillmentMethod !== "customer_pickup" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -974,6 +989,25 @@ const OrderDetailPage = () => {
               routePhase={routePhase}
               routePolyline={activeRoutePolyline}
               onOpenInMaps={handleOpenInMaps}
+            />
+          </motion.div>
+        )}
+
+        {/* Self-pickup orders get a route from the customer to the store
+            instead — there's no rider to track, but the customer still
+            needs to know how to get there. */}
+        {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled"
+          && order.fulfillmentMethod === "customer_pickup" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <PickupRouteMap
+              customerLocation={customerOwnLocation}
+              storeLocation={sellerLocation}
+              storeName={order?.seller?.shopName || "the store"}
+              onRequestLocation={refreshLocation}
+              isLocating={isFetchingLocation}
             />
           </motion.div>
         )}

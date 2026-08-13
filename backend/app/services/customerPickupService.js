@@ -6,9 +6,12 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
+import { applyDeliveredSettlement } from "./orderSettlement.js";
 
 const OTP_EXPIRY_MS = () =>
   parseInt(process.env.CUSTOMER_PICKUP_OTP_EXPIRY_MS || String(24 * 60 * 60 * 1000), 10);
+const OTP_RESEND_COOLDOWN_MS = () =>
+  parseInt(process.env.CUSTOMER_PICKUP_OTP_RESEND_COOLDOWN_MS || String(30 * 1000), 10);
 
 function hashToken(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -50,6 +53,7 @@ export async function markOrderReadyForCustomerPickup(sellerId, orderId) {
     expiresAt,
     verifiedAt: null,
     verifiedBy: null,
+    lastOtpSentAt: new Date(),
   };
   await order.save();
 
@@ -70,6 +74,70 @@ export async function markOrderReadyForCustomerPickup(sellerId, orderId) {
     sellerId: order.seller,
     customerMessage: `Your order #${orderId} is ready for pickup.`,
   });
+
+  return { orderId, otp, qrToken, expiresAt };
+}
+
+/**
+ * Seller-initiated re-send: issues a fresh OTP/QR (invalidating the old one
+ * — nothing is "recovered", since only the hash is ever persisted) for an
+ * order that's already ready for pickup. Covers the case where the customer
+ * wasn't on the order page for the one-time live push when the seller first
+ * marked it ready, and lets the seller read the new code out to a customer
+ * who's calling or standing at the counter without it.
+ */
+export async function resendPickupOtpBySeller(sellerId, orderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId, seller: sellerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (order.fulfillmentMethod !== FULFILLMENT_METHOD.CUSTOMER_PICKUP) {
+    const err = new Error("Order is not a customer pickup order");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (order.workflowStatus !== WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
+    const err = new Error("Order is not ready for pickup yet");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const lastSentAt = order.customerPickup?.lastOtpSentAt;
+  if (lastSentAt) {
+    const elapsedMs = Date.now() - new Date(lastSentAt).getTime();
+    const cooldownMs = OTP_RESEND_COOLDOWN_MS();
+    if (elapsedMs < cooldownMs) {
+      const err = new Error(
+        `Please wait ${Math.ceil((cooldownMs - elapsedMs) / 1000)}s before requesting another OTP`,
+      );
+      err.statusCode = 429;
+      throw err;
+    }
+  }
+
+  const otp = generateOtp();
+  const qrToken = generateQrToken();
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS());
+
+  order.customerPickup.otpHash = hashToken(otp);
+  order.customerPickup.qrTokenHash = hashToken(qrToken);
+  order.customerPickup.expiresAt = expiresAt;
+  order.customerPickup.lastOtpSentAt = new Date();
+  await order.save();
+
+  emitOrderStatusUpdate(
+    orderId,
+    {
+      workflowStatus: WORKFLOW_STATUS.CUSTOMER_PICKUP_READY,
+      customerPickupOtp: otp,
+      customerPickupQr: qrToken,
+      pickupExpiresAt: expiresAt,
+    },
+    order.customer,
+  );
 
   return { orderId, otp, qrToken, expiresAt };
 }
@@ -133,6 +201,14 @@ export async function verifyCustomerPickup({
     verifiedBy,
   };
   await order.save();
+
+  // Same financial side effects every other "became delivered" path
+  // triggers (seller/rider payout creation, admin earning credit, return
+  // window, and — what this was actually missing — invoice generation).
+  // This was a real gap: self-pickup orders reached DELIVERED without ever
+  // running settlement, so no invoice existed for the customer or seller to
+  // download even though the order was genuinely delivered.
+  await applyDeliveredSettlement(order, orderId);
 
   emitOrderStatusUpdate(
     orderId,

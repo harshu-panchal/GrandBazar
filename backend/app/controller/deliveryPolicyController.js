@@ -10,6 +10,7 @@ import {
   markOrderReadyForCustomerPickup,
   verifyCustomerPickup,
   getCustomerPickupCredentials,
+  resendPickupOtpBySeller,
 } from "../services/customerPickupService.js";
 import { resolveStoreSchedulingSettings } from "../services/orderSchedulingService.js";
 import { DEFAULT_DELIVERY_POLICY, DEFAULT_AVAILABILITY } from "../constants/deliveryPolicy.js";
@@ -296,6 +297,17 @@ export const sellerVerifyPickup = async (req, res) => {
       verifiedBy: "seller",
     });
     return handleResponse(res, 200, "Pickup verified", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const sellerResendPickupOtp = async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const sellerId = req.user?.id;
+    const result = await resendPickupOtpBySeller(sellerId, orderId);
+    return handleResponse(res, 200, "Pickup OTP resent", result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

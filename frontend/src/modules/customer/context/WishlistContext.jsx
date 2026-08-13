@@ -2,7 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from "
 import { customerApi } from "../services/customerApi";
 import { useAuth } from "../../../core/context/AuthContext";
 
-const WishlistContext = createContext();
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw against the still-mounted Provider's old one.
+const WishlistContext =
+  globalThis.__zintoWishlistContext ??
+  (globalThis.__zintoWishlistContext = createContext());
 
 const defaultWishlistContext = {
   wishlist: [],

@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const CartAnimationContext = createContext({
-  animateAddToCart: () => {},
-  animateRemoveFromCart: () => {},
-});
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw against the still-mounted Provider's old one.
+const CartAnimationContext =
+  globalThis.__zintoCartAnimationContext ??
+  (globalThis.__zintoCartAnimationContext = createContext({
+    animateAddToCart: () => {},
+    animateRemoveFromCart: () => {},
+  }));
 
 export const useCartAnimation = () => useContext(CartAnimationContext);
 

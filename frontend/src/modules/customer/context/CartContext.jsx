@@ -7,7 +7,12 @@ import {
 } from "../../../shared/utils/couponEligibility";
 import { toast } from "sonner";
 
-const CartContext = createContext();
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw "Cannot destructure ... as it is undefined"
+// against the still-mounted CartProvider's old context object.
+const CartContext =
+  globalThis.__zintoCartContext ??
+  (globalThis.__zintoCartContext = createContext());
 
 export const useCart = () => useContext(CartContext);
 

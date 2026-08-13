@@ -19,6 +19,11 @@ const OrderProgressTracker = ({
 }) => {
   const status = getLegacyStatusFromOrder(order);
   const currentStage = STATUS_TO_STAGE[status] || "confirmed";
+  // Self-pickup orders have no rider — "arriving in X mins" / distance are
+  // delivery-only concepts and were previously shown as fake fallback values
+  // (a hardcoded 8 minutes, "—" for distance) since there's no rider location
+  // to compute them from. The customer travels to the store, not vice versa.
+  const isCustomerPickup = order?.fulfillmentMethod === "customer_pickup";
 
   const steps = [
     {
@@ -157,8 +162,8 @@ const OrderProgressTracker = ({
         })}
       </motion.div>
 
-      {/* ETA Display */}
-      {status !== "delivered" && (
+      {/* ETA Display — not applicable to self-pickup orders */}
+      {status !== "delivered" && !isCustomerPickup && (
         <div className="mt-6 pt-5 border-t border-slate-100">
           <div className="flex items-center justify-between bg-amber-50 rounded-2xl p-4 gap-4">
             <div className="flex items-center gap-3">

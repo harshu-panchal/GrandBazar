@@ -195,6 +195,10 @@ const Orders = () => {
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
+    const [customerPickupOtp, setCustomerPickupOtp] = useState('');
+    const [customerPickupQr, setCustomerPickupQr] = useState('');
+    const [pickupOtpSending, setPickupOtpSending] = useState(false);
+    const [pickupOtpCooldown, setPickupOtpCooldown] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -461,6 +465,9 @@ const Orders = () => {
         setAdjustMode(false);
         setAdjustItems([]);
         setAdjustReason('');
+        setCustomerPickupOtp('');
+        setCustomerPickupQr('');
+        setPickupOtpCooldown(0);
         setIsDetailsModalOpen(true);
 
         try {
@@ -910,6 +917,31 @@ const Orders = () => {
             handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
                 pickupProofImages: [pickupImage]
             });
+        }
+    };
+
+    useEffect(() => {
+        if (pickupOtpCooldown <= 0) return undefined;
+        const iv = setInterval(() => {
+            setPickupOtpCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+        }, 1000);
+        return () => clearInterval(iv);
+    }, [pickupOtpCooldown]);
+
+    const handleSendPickupOtp = async (orderId) => {
+        if (pickupOtpSending || pickupOtpCooldown > 0) return;
+        setPickupOtpSending(true);
+        try {
+            const res = await sellerApi.resendPickupOtp(orderId);
+            const result = res.data?.result || {};
+            if (result.otp) setCustomerPickupOtp(result.otp);
+            if (result.qrToken) setCustomerPickupQr(result.qrToken);
+            showToast(customerPickupOtp ? 'New OTP sent to customer' : 'OTP sent to customer', 'success');
+            setPickupOtpCooldown(30);
+        } catch (err) {
+            showToast(err?.response?.data?.message || 'Failed to send OTP', 'error');
+        } finally {
+            setPickupOtpSending(false);
         }
     };
 
@@ -2045,6 +2077,43 @@ const Orders = () => {
                                                 </div>
                                             );
                                         })()}
+                                        {resolveFulfillmentMethod(selectedOrder) === 'customer_pickup'
+                                            && String(selectedOrder.workflowStatus || '').toUpperCase() === 'CUSTOMER_PICKUP_READY' && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 space-y-2.5">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                                    Store Pickup OTP
+                                                </p>
+                                                <p className="text-xs font-semibold text-slate-700">
+                                                    Send a pickup code to the customer, or resend a fresh one if they say they didn't get it or lost it.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSendPickupOtp(selectedOrder.id)}
+                                                    disabled={pickupOtpSending || pickupOtpCooldown > 0}
+                                                    className="w-full rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    {pickupOtpSending
+                                                        ? 'Sending...'
+                                                        : pickupOtpCooldown > 0
+                                                            ? `Resend OTP in ${pickupOtpCooldown}s`
+                                                            : customerPickupOtp
+                                                                ? 'Resend OTP'
+                                                                : 'Send OTP'}
+                                                </button>
+                                                {customerPickupOtp && (
+                                                    <div className="rounded-xl bg-white p-3 text-center">
+                                                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Current OTP</p>
+                                                        <p className="text-2xl font-black tracking-[0.3em] text-slate-900 mt-1">{customerPickupOtp}</p>
+                                                    </div>
+                                                )}
+                                                {customerPickupQr && (
+                                                    <div className="rounded-xl bg-white p-3 text-center">
+                                                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">QR Token</p>
+                                                        <p className="text-[11px] font-mono break-all text-slate-800 mt-1">{customerPickupQr}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         {selectedOrder.reschedule?.status === 'requested' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200">
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Reschedule Requested</p>

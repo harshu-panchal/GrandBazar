@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 
-const ProductDetailContext = createContext();
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw against the still-mounted Provider's old one.
+const ProductDetailContext =
+  globalThis.__zintoProductDetailContext ??
+  (globalThis.__zintoProductDetailContext = createContext());
 
 export const useProductDetail = () => {
     const context = useContext(ProductDetailContext);

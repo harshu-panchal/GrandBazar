@@ -2,7 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from "
 import { customerApi } from "../services/customerApi";
 import { useAuth } from "../../../core/context/AuthContext";
 
-const FavoriteStoresContext = createContext();
+// Survive Vite HMR: re-evaluating this module must not create a new context
+// identity, or consumers throw against the still-mounted Provider's old one.
+const FavoriteStoresContext =
+  globalThis.__zintoFavoriteStoresContext ??
+  (globalThis.__zintoFavoriteStoresContext = createContext());
 
 export const useFavoriteStores = () => useContext(FavoriteStoresContext);
 

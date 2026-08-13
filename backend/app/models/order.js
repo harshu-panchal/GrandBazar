@@ -597,6 +597,7 @@ const orderSchema = new mongoose.Schema(
       expiresAt: { type: Date, default: null },
       verifiedAt: { type: Date, default: null },
       verifiedBy: { type: String, enum: ["customer", "seller", ""], default: "" },
+      lastOtpSentAt: { type: Date, default: null },
     },
     fulfillmentMeta: {
       autoSwitched: { type: Boolean, default: false },
