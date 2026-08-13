@@ -51,6 +51,10 @@ import {
   getTrendingProductsAggregationJobHandler,
   getTrendingProductsAggregationJobInterval,
 } from "./app/jobs/trendingProductsAggregationJob.js";
+import {
+  getProductAvailabilityJobHandler,
+  getProductAvailabilityJobInterval,
+} from "./app/jobs/productAvailabilityJob.js";
 import logger from "./app/services/logger.js";
 import { stopScheduledJobs } from "./app/services/distributedScheduler.js";
 import {
@@ -319,6 +323,12 @@ async function startScheduler() {
     'trendingProductsAggregationJob',
     getTrendingProductsAggregationJobInterval(),
     getTrendingProductsAggregationJobHandler()
+  );
+
+  registerScheduledJob(
+    'productAvailabilityJob',
+    getProductAvailabilityJobInterval(),
+    getProductAvailabilityJobHandler()
   );
 
   // Register payout batch job (if enabled)

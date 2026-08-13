@@ -53,6 +53,7 @@ export class MongoSearchBackend extends SearchBackend {
     
     // Status filter (always active)
     mongoQuery.status = "active";
+    mongoQuery.isCurrentlyAvailable = { $ne: false };
     Object.assign(mongoQuery, getApprovedOrLegacyFilter());
     
     // Category filter

@@ -367,6 +367,7 @@ export const getProducts = async (req, res) => {
       finalQuery.status = "active";
       finalQuery.isPublished = { $ne: false };
       finalQuery.stock = { $gt: 0 }; // Hide out-of-stock products from customer app
+      finalQuery.isCurrentlyAvailable = { $ne: false }; // Hide seller-scheduled/paused products
       finalQuery = { $and: [finalQuery, getApprovedOrLegacyFilter()] };
     } else {
       if (status && status !== "all") {
@@ -1020,6 +1021,22 @@ export const updateProduct = async (req, res) => {
       }
     }
 
+    if (typeof productData.availability === "string") {
+      try {
+        productData.availability = JSON.parse(productData.availability);
+      } catch (e) {
+        delete productData.availability;
+      }
+    }
+    if (productData.availability && typeof productData.availability === "object") {
+      // Set via dot-path so this never clobbers `availability.pausedUntil`,
+      // which is managed independently by the pause/unpause endpoints.
+      const { dailyStartTime, dailyEndTime } = productData.availability;
+      productData["availability.dailyStartTime"] = dailyStartTime || null;
+      productData["availability.dailyEndTime"] = dailyEndTime || null;
+      delete productData.availability;
+    }
+
     // Admin bypasses sellerId check
     const query = role === "admin" ? { _id: id } : { _id: id, sellerId };
     const product = await Product.findOne(query);
@@ -1234,7 +1251,12 @@ export const getProductById = async (req, res) => {
 
     if (enforceRadius) {
       const approvalState = resolveProductApprovalStatus(product);
-      if (product.status !== "active" || product.isPublished === false || approvalState !== PRODUCT_APPROVAL_STATUS.APPROVED) {
+      if (
+        product.status !== "active" ||
+        product.isPublished === false ||
+        product.isCurrentlyAvailable === false ||
+        approvalState !== PRODUCT_APPROVAL_STATUS.APPROVED
+      ) {
         return handleResponse(res, 404, "Product not found");
       }
     }
@@ -1484,6 +1506,50 @@ export const rejectProduct = async (req, res) => {
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const toggleSellerProductStatus = async (req, res) => {
+  try {
+    const { toggleProductStatus } = await import("../services/productPublishService.js");
+    const product = await toggleProductStatus({
+      productId: req.params.id,
+      storeId: req.user.id,
+    });
+    return handleResponse(res, 200, "Product status updated successfully", product);
+  } catch (error) {
+    const status = error.message === "Product not found" ? 404 : 400;
+    return handleResponse(res, status, error.message);
+  }
+};
+
+export const pauseSellerProduct = async (req, res) => {
+  try {
+    const { hours } = req.body;
+    const { pauseProduct } = await import("../services/productPublishService.js");
+    const product = await pauseProduct({
+      productId: req.params.id,
+      storeId: req.user.id,
+      hours,
+    });
+    return handleResponse(res, 200, "Product paused successfully", product);
+  } catch (error) {
+    const status = error.message === "Product not found" ? 404 : 400;
+    return handleResponse(res, status, error.message);
+  }
+};
+
+export const unpauseSellerProduct = async (req, res) => {
+  try {
+    const { unpauseProduct } = await import("../services/productPublishService.js");
+    const product = await unpauseProduct({
+      productId: req.params.id,
+      storeId: req.user.id,
+    });
+    return handleResponse(res, 200, "Product resumed successfully", product);
+  } catch (error) {
+    const status = error.message === "Product not found" ? 404 : 400;
+    return handleResponse(res, status, error.message);
   }
 };
 

@@ -44,6 +44,7 @@ export const getPublicOfferSections = async (req, res) => {
             select: "name slug price salePrice mainImage stock unit sellerId status approvalStatus",
             match: {
               status: "active",
+              isCurrentlyAvailable: { $ne: false },
               ...getApprovedOrLegacyFilter(),
             },
           })

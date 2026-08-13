@@ -31,6 +31,9 @@ export const sellerApi = {
     getUnpublishedProducts: () => axiosInstance.get('/products/seller/unpublished'),
     publishProductPricing: (id, data) => axiosInstance.patch(`/products/seller/${id}/publish`, data),
     bulkPublishProductPricing: (data) => axiosInstance.patch('/products/seller/publish-bulk', data),
+    toggleProductStatus: (id) => axiosInstance.patch(`/products/seller/${id}/toggle-status`),
+    pauseProduct: (id, hours) => axiosInstance.patch(`/products/seller/${id}/pause`, { hours }),
+    unpauseProduct: (id) => axiosInstance.patch(`/products/seller/${id}/unpause`),
 
     // Categories (Public)
     getCategories: (params) => axiosInstance.get('/admin/categories', { params }),

@@ -40,6 +40,7 @@ export async function computeTrendingProductsSnapshot() {
     _id: { $in: productIds },
     status: "active",
     isPublished: { $ne: false },
+    isCurrentlyAvailable: { $ne: false },
     stock: { $gt: 0 },
     ...getApprovedOrLegacyFilter(),
   })

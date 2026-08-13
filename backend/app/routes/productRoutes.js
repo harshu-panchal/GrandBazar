@@ -12,6 +12,9 @@ import {
     publishSellerProduct,
     bulkPublishSellerProducts,
     getUnpublishedSellerProducts,
+    toggleSellerProductStatus,
+    pauseSellerProduct,
+    unpauseSellerProduct,
     getTrendingSearchesController,
     getTrendingProductsController,
     getSimilarProductsController,
@@ -46,6 +49,9 @@ router.get("/seller/me", ...sellerChain, checkSubSellerPermission("products", "r
 router.get("/seller/unpublished", ...sellerChain, checkSubSellerPermission("products", "read"), getUnpublishedSellerProducts);
 router.patch("/seller/publish-bulk", ...sellerChain, checkSubSellerPermission("products", "write"), bulkPublishSellerProducts);
 router.patch("/seller/:id/publish", ...sellerChain, checkSubSellerPermission("products", "write"), publishSellerProduct);
+router.patch("/seller/:id/toggle-status", ...sellerChain, checkSubSellerPermission("products", "write"), toggleSellerProductStatus);
+router.patch("/seller/:id/pause", ...sellerChain, checkSubSellerPermission("products", "write"), pauseSellerProduct);
+router.patch("/seller/:id/unpause", ...sellerChain, checkSubSellerPermission("products", "write"), unpauseSellerProduct);
 router.get("/stock-history", ...sellerChain, checkSubSellerPermission("inventory", "read"), getStockHistory);
 router.post("/adjust-stock", ...sellerChain, checkSubSellerPermission("inventory", "write"), adjustStock);
 router.get("/moderation", verifyToken, allowRoles("admin"), getModerationProducts);

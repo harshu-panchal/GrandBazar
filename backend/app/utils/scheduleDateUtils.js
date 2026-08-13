@@ -68,6 +68,30 @@ function zonedDateAndMinutes(deliveryDate, minutes, timeZone) {
   return new Date(guess.getTime() - offsetMinutes * 60000);
 }
 
+/** Current wall-clock minutes-since-midnight in `timeZone` for the given instant (default now). */
+export function currentMinutesInZone(date = new Date(), timeZone = DEFAULT_STORE_TIMEZONE()) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+  const hour = parts.hour === "24" ? 0 : Number(parts.hour);
+  return hour * 60 + Number(parts.minute);
+}
+
+/**
+ * Whether `minutes` (minutes-since-midnight) falls within [startMinutes, endMinutes],
+ * supporting overnight windows where startMinutes > endMinutes (e.g. 22:00–05:00).
+ */
+export function isMinutesWithinWindow(minutes, startMinutes, endMinutes) {
+  if (startMinutes <= endMinutes) {
+    return minutes >= startMinutes && minutes <= endMinutes;
+  }
+  return minutes >= startMinutes || minutes <= endMinutes;
+}
+
 export function combineDateAndWindowStart(deliveryDate, windowStart, timeZone = DEFAULT_STORE_TIMEZONE()) {
   return zonedDateAndMinutes(deliveryDate, parseTimeToMinutes(windowStart), timeZone);
 }

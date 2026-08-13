@@ -221,6 +221,24 @@ const productSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        availability: {
+            dailyStartTime: {
+                type: String,
+                default: null, // "HH:mm" in store timezone; recurring hidden-window start
+            },
+            dailyEndTime: {
+                type: String,
+                default: null, // "HH:mm" in store timezone; recurring hidden-window end
+            },
+            pausedUntil: {
+                type: Date,
+                default: null, // absolute instant; product hidden until this time
+            },
+        },
+        isCurrentlyAvailable: {
+            type: Boolean,
+            default: true, // derived; maintained by productAvailabilityJob, never set directly
+        },
     },
     { timestamps: true }
 );
@@ -237,6 +255,7 @@ productSchema.index({ sellerId: 1, approvalStatus: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, createdAt: -1, _id: -1 });
 productSchema.index({ sellerId: 1, displayOrder: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, isPublished: 1, status: 1 });
+productSchema.index({ isCurrentlyAvailable: 1, status: 1 });
 productSchema.index({ name: "text", tags: "text" }); // For better search if regex is too slow
 
 export default mongoose.model("Product", productSchema);

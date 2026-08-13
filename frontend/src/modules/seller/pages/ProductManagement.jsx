@@ -22,6 +22,8 @@ import {
   HiOutlineSwatch,
   HiOutlineSquaresPlus,
   HiOutlineSparkles,
+  HiOutlineClock,
+  HiOutlineChevronDown,
 } from "react-icons/hi2";
 import Modal from "@shared/components/ui/Modal";
 import { cn } from "@/lib/utils";
@@ -218,6 +220,7 @@ const ProductManagement = () => {
     isPreorderEligible: false,
     displayOrder: 0,
     addons: [],
+    availability: { dailyStartTime: "", dailyEndTime: "" },
   });
 
   const safeProducts = useMemo(
@@ -322,6 +325,17 @@ const ProductManagement = () => {
     return <Badge variant="success" className="text-[10px] px-2 py-0.5">Approved</Badge>;
   };
 
+  const formatHiddenUntil = (product) => {
+    const pausedUntil = product.availability?.pausedUntil;
+    if (pausedUntil && new Date(pausedUntil) > new Date()) {
+      return `Hidden until ${new Date(pausedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    if (product.availability?.dailyStartTime && product.availability?.dailyEndTime) {
+      return `Hidden daily ${product.availability.dailyStartTime}–${product.availability.dailyEndTime}`;
+    }
+    return "Hidden by schedule";
+  };
+
   const handleSave = async () => {
     try {
       // Categories are inherited (read-only) from the Master Catalog for claimed
@@ -375,7 +389,11 @@ const ProductManagement = () => {
       data.append("isSignatureProduct", formData.isSignatureProduct);
       data.append("isPreorderEligible", formData.isPreorderEligible);
       data.append("displayOrder", Number(formData.displayOrder) || 0);
-      
+      data.append("availability", JSON.stringify({
+        dailyStartTime: formData.availability?.dailyStartTime || null,
+        dailyEndTime: formData.availability?.dailyEndTime || null,
+      }));
+
       if (formData.addons && formData.addons.length > 0) {
         data.append("addons", JSON.stringify(formData.addons));
       }
@@ -456,6 +474,62 @@ const ProductManagement = () => {
     }
   };
 
+  const [pauseMenuOpenFor, setPauseMenuOpenFor] = useState(null);
+
+  const patchProductInList = (productId, patch) => {
+    setProducts((prev) =>
+      Array.isArray(prev)
+        ? prev.map((p) => ((p._id || p.id) === productId ? { ...p, ...patch } : p))
+        : prev
+    );
+  };
+
+  const handleToggleStatus = async (product) => {
+    const productId = product._id || product.id;
+    if (product.isPublished === false) {
+      toast.error("Set a price for this product before toggling availability");
+      return;
+    }
+    try {
+      const res = await sellerApi.toggleProductStatus(productId);
+      const nextStatus = res?.data?.result?.status || (product.status === "active" ? "inactive" : "active");
+      patchProductInList(productId, { status: nextStatus });
+      toast.success(nextStatus === "active" ? "Product is now live" : "Product turned off");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update product status");
+    }
+  };
+
+  const handlePauseProduct = async (product, hours) => {
+    const productId = product._id || product.id;
+    setPauseMenuOpenFor(null);
+    try {
+      const res = await sellerApi.pauseProduct(productId, hours);
+      patchProductInList(productId, {
+        isCurrentlyAvailable: false,
+        availability: res?.data?.result?.availability || { pausedUntil: new Date(Date.now() + hours * 3600000).toISOString() },
+      });
+      toast.success(`Product hidden for ${hours} hour${hours === 1 ? "" : "s"}`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to pause product");
+    }
+  };
+
+  const handleUnpauseProduct = async (product) => {
+    const productId = product._id || product.id;
+    setPauseMenuOpenFor(null);
+    try {
+      const res = await sellerApi.unpauseProduct(productId);
+      patchProductInList(productId, {
+        isCurrentlyAvailable: res?.data?.result?.isCurrentlyAvailable ?? true,
+        availability: res?.data?.result?.availability || { ...product.availability, pausedUntil: null },
+      });
+      toast.success("Product visible again");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to resume product");
+    }
+  };
+
   const openEditModal = (item = null) => {
     if (item) {
       setFormData({
@@ -490,6 +564,10 @@ const ProductManagement = () => {
         isPreorderEligible: item.isPreorderEligible || false,
         displayOrder: item.displayOrder ?? 0,
         addons: item.addons || [],
+        availability: {
+          dailyStartTime: item.availability?.dailyStartTime || "",
+          dailyEndTime: item.availability?.dailyEndTime || "",
+        },
       });
       setEditingItem(item);
     } else {
@@ -524,6 +602,7 @@ const ProductManagement = () => {
         isPreorderEligible: false,
         displayOrder: 0,
         addons: [],
+        availability: { dailyStartTime: "", dailyEndTime: "" },
       });
       setEditingItem(null);
     }
@@ -741,6 +820,9 @@ const ProductManagement = () => {
                 <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
                   Approval
                 </th>
+                <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+                  Availability
+                </th>
                 <th className="px-6 py-3 text-right text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
                   Actions
                 </th>
@@ -847,6 +929,66 @@ const ProductManagement = () => {
                           Submitted
                         </span>
                       ) : null}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={p.status === "active"}
+                        disabled={p.isPublished === false}
+                        onClick={() => handleToggleStatus(p)}
+                        title={p.isPublished === false ? "Set a price before toggling" : (p.status === "active" ? "Turn off (stop selling)" : "Turn on")}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                          p.status === "active" ? "bg-brand-600" : "bg-slate-300"
+                        )}>
+                        <span
+                          className={cn(
+                            "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                            p.status === "active" ? "translate-x-5" : "translate-x-1"
+                          )}
+                        />
+                      </button>
+
+                      {p.isCurrentlyAvailable === false && (
+                        <Badge variant="warning" className="text-[9px] px-1.5 py-0.5 whitespace-nowrap">
+                          {formatHiddenUntil(p)}
+                        </Badge>
+                      )}
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setPauseMenuOpenFor(pauseMenuOpenFor === (p._id || p.id) ? null : (p._id || p.id))}
+                          className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-brand-600">
+                          <HiOutlineClock className="h-3 w-3" />
+                          Pause
+                          <HiOutlineChevronDown className="h-3 w-3" />
+                        </button>
+                        {pauseMenuOpenFor === (p._id || p.id) && (
+                          <div className="absolute right-0 z-10 mt-1 w-32 rounded-lg border border-slate-100 bg-white py-1 shadow-lg">
+                            {[1, 2, 4].map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => handlePauseProduct(p, h)}
+                                className="block w-full px-3 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50">
+                                Pause {h}h
+                              </button>
+                            ))}
+                            {p.availability?.pausedUntil && (
+                              <button
+                                type="button"
+                                onClick={() => handleUnpauseProduct(p)}
+                                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-brand-600 hover:bg-brand-50">
+                                Resume now
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -1059,6 +1201,50 @@ const ProductManagement = () => {
                         <option value="active">PUBLISHED</option>
                         <option value="inactive">DRAFT</option>
                       </select>
+                    </div>
+
+                    <div className="mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                        Auto-hide daily (optional)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={formData.availability?.dailyStartTime || ""}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              availability: { ...formData.availability, dailyStartTime: e.target.value },
+                            })
+                          }
+                          className="w-full rounded-lg border border-slate-200 text-xs px-2 py-1.5 focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+                        />
+                        <span className="text-[10px] text-slate-400">to</span>
+                        <input
+                          type="time"
+                          value={formData.availability?.dailyEndTime || ""}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              availability: { ...formData.availability, dailyEndTime: e.target.value },
+                            })
+                          }
+                          className="w-full rounded-lg border border-slate-200 text-xs px-2 py-1.5 focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+                        />
+                      </div>
+                      {(formData.availability?.dailyStartTime || formData.availability?.dailyEndTime) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData({ ...formData, availability: { dailyStartTime: "", dailyEndTime: "" } })
+                          }
+                          className="mt-2 text-[10px] font-medium text-slate-400 hover:text-rose-500">
+                          Clear schedule
+                        </button>
+                      )}
+                      <p className="mt-2 text-[10px] text-slate-400 leading-snug">
+                        Hides this item from the shop every day during this window. Leave blank to keep it always available.
+                      </p>
                     </div>
                   </div>
                 </div>
