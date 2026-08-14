@@ -56,6 +56,7 @@ const AddProduct = () => {
     tags: "",
     weight: "",
     brand: "",
+    packagingCharge: "",
     mainImage: null,
     galleryImages: [],
     variants: [
@@ -181,6 +182,9 @@ const AddProduct = () => {
       data.append("isSignatureProduct", formData.isSignatureProduct);
       data.append("isPreorderEligible", formData.isPreorderEligible);
       data.append("displayOrder", Number(formData.displayOrder) || 0);
+      if (formData.packagingCharge !== "") {
+        data.append("packagingCharge", formData.packagingCharge);
+      }
 
       // Images
       if (formData.mainImageFile) {
@@ -404,6 +408,25 @@ const AddProduct = () => {
                   />
                   <span className="text-[10px] text-slate-500 font-medium ml-1">
                     Lower numbers appear first in your store.
+                  </span>
+                </div>
+                <div className="space-y-1.5 flex flex-col">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+                    Packaging Charge (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.packagingCharge}
+                    onChange={(e) =>
+                      setFormData({ ...formData, packagingCharge: e.target.value })
+                    }
+                    className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-md text-sm font-semibold outline-none ring-primary/5 focus:ring-2 transition-all"
+                    placeholder="Optional — leave blank for default"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium ml-1">
+                    Only for this product. Leave blank to use your store's normal packaging charge.
                   </span>
                 </div>
               </div>

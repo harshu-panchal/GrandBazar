@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronLeft, MapPin, Clock, Search, Phone,
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare, Building2
+  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare, Building2, Loader2
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
@@ -70,6 +70,16 @@ const getEmbedUrl = (url) => {
   return match && match[1] ? `https://www.youtube.com/embed/${match[1]}` : url;
 };
 
+const formatStoreProduct = (p) => ({
+  ...p,
+  id: p._id,
+  image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+  price: p.salePrice || p.price,
+  originalPrice: p.price,
+  weight: p.weight || "1 unit",
+  deliveryTime: p.deliveryEta?.label || "10-15 mins",
+});
+
 const StoreDetailPage = () => {
   const { slugAndId } = useParams();
   const navigate = useNavigate();
@@ -85,6 +95,8 @@ const StoreDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [liveFavoriteCount, setLiveFavoriteCount] = useState(0);
@@ -175,7 +187,11 @@ const StoreDetailPage = () => {
           ? customerApi.getProducts({
               sellerId,
               lat: currentLocation.latitude,
-              lng: currentLocation.longitude
+              lng: currentLocation.longitude,
+              // Store catalogs are usually well under the API's page cap, but
+              // the default (24) was silently truncating category tabs and
+              // the in-store search below to whatever fit on page 1.
+              limit: 100,
             })
           : Promise.resolve({ data: { success: true, result: { items: [] } } })
       ]);
@@ -203,17 +219,7 @@ const StoreDetailPage = () => {
           ? rawResult
           : [];
 
-        const formattedProds = dbProds.map(p => ({
-          ...p,
-          id: p._id,
-          image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-          price: p.salePrice || p.price,
-          originalPrice: p.price,
-          weight: p.weight || "1 unit",
-          deliveryTime: p.deliveryEta?.label || "10-15 mins"
-        }));
-
-        setProducts(formattedProds);
+        setProducts(dbProds.map(formatStoreProduct));
       }
 
       try {
@@ -245,6 +251,59 @@ const StoreDetailPage = () => {
       fetchData();
     }
   }, [sellerId, currentLocation?.latitude, currentLocation?.longitude]);
+
+  // In-store product search — hits the real sellerId-scoped search endpoint
+  // instead of filtering only the first page of `products` client-side, so
+  // it actually finds items beyond the store's first ~100 products.
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed || !sellerId) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return undefined;
+    }
+
+    const hasValidLocation =
+      Number.isFinite(currentLocation?.latitude) &&
+      Number.isFinite(currentLocation?.longitude);
+    if (!hasValidLocation) return undefined;
+
+    let cancelled = false;
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      customerApi
+        .getProducts({
+          sellerId,
+          search: trimmed,
+          lat: currentLocation.latitude,
+          lng: currentLocation.longitude,
+          limit: 100,
+        })
+        .then((res) => {
+          if (cancelled) return;
+          const rawResult = res.data?.result;
+          const dbProds = Array.isArray(res.data?.results)
+            ? res.data.results
+            : Array.isArray(rawResult?.items)
+            ? rawResult.items
+            : Array.isArray(rawResult)
+            ? rawResult
+            : [];
+          setSearchResults(dbProds.map(formatStoreProduct));
+        })
+        .catch(() => {
+          if (!cancelled) setSearchResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false);
+        });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, sellerId, currentLocation?.latitude, currentLocation?.longitude]);
 
   useEffect(() => {
     if (seller?.isOpen !== false || !sellerId) {
@@ -286,19 +345,18 @@ const StoreDetailPage = () => {
     ];
   }, [products]);
 
-  // Filtered and Searched products
+  // Filtered products — when a search is active, base list comes from the
+  // real search API (searchResults) instead of client-filtering only the
+  // already-fetched page; category chip filtering stays client-side on top
+  // either way, since the full category set is already loaded.
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesSearch = 
-        String(p.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(p.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-      
+    const trimmed = searchQuery.trim();
+    const base = trimmed ? (searchResults || []) : products;
+    return base.filter(p => {
       const catId = p.categoryId?._id || p.categoryId || "general";
-      const matchesCategory = selectedCategory === "all" || catId === selectedCategory;
-
-      return matchesSearch && matchesCategory;
+      return selectedCategory === "all" || catId === selectedCategory;
     });
-  }, [products, selectedCategory, searchQuery]);
+  }, [products, searchResults, selectedCategory, searchQuery]);
 
   const initialLetter = String(seller?.shopName || seller?.name || "S").charAt(0).toUpperCase();
   const favorited = isFavoriteStore(sellerId);
@@ -791,7 +849,11 @@ const StoreDetailPage = () => {
                 {/* Search products bar */}
                 <div className="flex items-center justify-between gap-4 flex-wrap bg-white border border-slate-100 p-3 rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
                   <div className="relative w-full max-w-sm">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    {isSearching ? (
+                      <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" size={16} />
+                    ) : (
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    )}
                     <input
                       type="text"
                       value={searchQuery}
@@ -800,9 +862,13 @@ const StoreDetailPage = () => {
                       className="w-full bg-slate-50 border border-transparent hover:border-slate-100 focus:border-slate-200 pl-11 pr-4 py-2.5 rounded-2xl text-xs font-bold text-slate-800 transition-all outline-none"
                     />
                   </div>
-                  
+
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mr-2">
-                    Showing {filteredProducts.length} of {products.length} Products
+                    {isSearching
+                      ? "Searching…"
+                      : searchQuery.trim()
+                      ? `${filteredProducts.length} results for "${searchQuery.trim()}"`
+                      : `Showing ${filteredProducts.length} of ${products.length} Products`}
                   </span>
                 </div>
 

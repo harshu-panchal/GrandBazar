@@ -166,6 +166,10 @@ const DeliveryLayout = () => {
       earnings: earnings,
       expiresAt: payload.deliverySearchExpiresAt || null,
       isReturnPickup: payload.type === "RETURN_PICKUP" || payload.isReturnPickup === true,
+      // Admin assigned this order directly — no accept-window race, so no
+      // countdown/reject, and "accepting" it is just acknowledging, not an
+      // API call (the order is already theirs; see handleAcceptOrder).
+      isPreAssigned: payload.type === "ADMIN_ASSIGNED",
       items: payload.items || [],
     });
     return true;
@@ -507,6 +511,15 @@ const DeliveryLayout = () => {
   const skipOrder = useCallback(async () => {
     const current = activeOrderRef.current;
     if (!current || acceptInFlightRef.current) return;
+    if (current.isPreAssigned) {
+      // Nothing to reject — an admin-assigned order isn't in the broadcast
+      // pool. Just dismiss the alert; it stays visible in "My Orders".
+      shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(current.id);
+      markIncomingOrderHandled(current.id);
+      stopOrderRingtone();
+      setActiveOrder(null);
+      return;
+    }
     try {
       console.log("Delivery Alert - Skipping order:", current.id);
       if (current.isReturnPickup) {
@@ -525,9 +538,10 @@ const DeliveryLayout = () => {
     }
   }, []);
 
-  // Countdown from server deadline (same idea as seller panel)
+  // Countdown from server deadline (same idea as seller panel) — skipped for
+  // admin-assigned orders, which have no accept-window to race against.
   useEffect(() => {
-    if (!activeOrder) return undefined;
+    if (!activeOrder || activeOrder.isPreAssigned) return undefined;
     const left = secondsLeftUntilDeliveryExpiry(activeOrder.expiresAt);
     if (left <= 0) {
       if (!acceptInFlightRef.current) {
@@ -570,12 +584,16 @@ const DeliveryLayout = () => {
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : `${Date.now()}`;
-      if (activeOrder.isReturnPickup) {
+      if (activeOrder.isPreAssigned) {
+        // Already assigned server-side by admin — nothing to accept, just
+        // acknowledging. Calling the normal accept endpoint here would fail
+        // (order is no longer in the open accept-window state).
+      } else if (activeOrder.isReturnPickup) {
         await deliveryApi.acceptReturnPickup(activeOrder.id);
       } else {
         await deliveryApi.acceptOrder(activeOrder.id, idem);
       }
-      toast.success("Order accepted!");
+      toast.success(activeOrder.isPreAssigned ? "Order opened" : "Order accepted!");
       const orderId = activeOrder.id;
       shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(orderId);
       markIncomingOrderHandled(orderId);
@@ -625,10 +643,14 @@ const DeliveryLayout = () => {
                       id="delivery-order-alert-title"
                       className="text-xl font-black text-slate-900 mb-1"
                     >
-                      {activeOrder.isReturnPickup ? "Return pickup request" : "New order request"}
+                      {activeOrder.isPreAssigned
+                        ? "New order assigned to you"
+                        : activeOrder.isReturnPickup ? "Return pickup request" : "New order request"}
                     </h2>
                     <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-4">
-                      {activeOrder.isReturnPickup ? "Collect return item" : "Accept or reject"}
+                      {activeOrder.isPreAssigned
+                        ? "Assigned by admin"
+                        : activeOrder.isReturnPickup ? "Collect return item" : "Accept or reject"}
                     </p>
                     <div className="flex items-center gap-2 mb-6">
                       <span className="text-2xl font-black text-brand-600">₹{activeOrder.earnings}</span>
@@ -692,40 +714,55 @@ const DeliveryLayout = () => {
                       </div>
                     </div>
 
-                    <div className="w-full h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
-                      <motion.div
-                        key={`${activeOrder.id}-${acceptWindowTotal}`}
-                        initial={{ width: "100%" }}
-                        animate={{ width: "0%" }}
-                        transition={{
-                          duration: Math.max(1, acceptWindowTotal || 60),
-                          ease: "linear",
-                        }}
-                        className={timeLeft < 10 ? "bg-rose-500 h-full" : "bg-primary h-full"}
-                      />
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-400 mb-4 w-full text-center">
-                      {timeLeft}s left to respond
-                    </p>
+                    {!activeOrder.isPreAssigned && (
+                      <>
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
+                          <motion.div
+                            key={`${activeOrder.id}-${acceptWindowTotal}`}
+                            initial={{ width: "100%" }}
+                            animate={{ width: "0%" }}
+                            transition={{
+                              duration: Math.max(1, acceptWindowTotal || 60),
+                              ease: "linear",
+                            }}
+                            className={timeLeft < 10 ? "bg-rose-500 h-full" : "bg-primary h-full"}
+                          />
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 mb-4 w-full text-center">
+                          {timeLeft}s left to respond
+                        </p>
+                      </>
+                    )}
 
-                    <div className="grid grid-cols-2 gap-4 w-full">
-                      <button
-                        type="button"
-                        onClick={skipOrder}
-                        disabled={isAcceptingOrder}
-                        className="py-4 rounded-2xl bg-slate-100 text-slate-700 font-black text-xs uppercase tracking-wider hover:bg-slate-200/80 disabled:opacity-50 disabled:pointer-events-none"
-                      >
-                        Reject
-                      </button>
+                    {activeOrder.isPreAssigned ? (
                       <button
                         type="button"
                         onClick={handleAcceptOrder}
                         disabled={isAcceptingOrder}
-                        className="py-4 rounded-2xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg shadow-primary/30 active:scale-95 disabled:opacity-60 disabled:pointer-events-none"
+                        className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg shadow-primary/30 active:scale-95 disabled:opacity-60 disabled:pointer-events-none"
                       >
-                        {isAcceptingOrder ? "Accepting…" : "Accept"}
+                        {isAcceptingOrder ? "Opening…" : "View Order"}
                       </button>
-                    </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4 w-full">
+                        <button
+                          type="button"
+                          onClick={skipOrder}
+                          disabled={isAcceptingOrder}
+                          className="py-4 rounded-2xl bg-slate-100 text-slate-700 font-black text-xs uppercase tracking-wider hover:bg-slate-200/80 disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAcceptOrder}
+                          disabled={isAcceptingOrder}
+                          className="py-4 rounded-2xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg shadow-primary/30 active:scale-95 disabled:opacity-60 disabled:pointer-events-none"
+                        >
+                          {isAcceptingOrder ? "Accepting…" : "Accept"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               </div>

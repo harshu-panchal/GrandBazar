@@ -24,6 +24,7 @@ import {
   HiOutlineSparkles,
   HiOutlineClock,
   HiOutlineChevronDown,
+  HiOutlineArrowTrendingUp,
 } from "react-icons/hi2";
 import Modal from "@shared/components/ui/Modal";
 import { cn } from "@/lib/utils";
@@ -130,6 +131,8 @@ const ProductManagement = () => {
   const [viewingVariants, setViewingVariants] = useState(null);
   const [isVariantsViewModalOpen, setIsVariantsViewModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [suggestedAddons, setSuggestedAddons] = useState([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [modalTab, setModalTab] = useState("general");
 
   const makeSku = (name, index = 1) => {
@@ -211,6 +214,7 @@ const ProductManagement = () => {
     tags: "",
     weight: "",
     brand: "",
+    packagingCharge: "",
     mainImage: null,
     galleryImages: [],
     variants: [
@@ -385,6 +389,7 @@ const ProductManagement = () => {
       data.append("status", formData.status);
       data.append("brand", formData.brand);
       data.append("weight", formData.weight);
+      data.append("packagingCharge", formData.packagingCharge);
       data.append("tags", formData.tags);
       data.append("isSignatureProduct", formData.isSignatureProduct);
       data.append("isPreorderEligible", formData.isPreorderEligible);
@@ -530,6 +535,23 @@ const ProductManagement = () => {
     }
   };
 
+  const fetchSuggestedAddons = async (productId) => {
+    if (!productId) {
+      setSuggestedAddons([]);
+      return;
+    }
+    setIsLoadingSuggestions(true);
+    try {
+      const response = await sellerApi.getSuggestedAddons(productId);
+      const list = response.data.result || response.data.results || [];
+      setSuggestedAddons(Array.isArray(list) ? list : []);
+    } catch (error) {
+      setSuggestedAddons([]);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
   const openEditModal = (item = null) => {
     if (item) {
       setFormData({
@@ -548,6 +570,7 @@ const ProductManagement = () => {
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : item.tags || "",
         weight: item.weight || "",
         brand: item.brand || "",
+        packagingCharge: item.packagingCharge ?? "",
         mainImage: item.mainImage || null,
         galleryImages: item.galleryImages || [],
         variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => ({ ...v, id: v._id || Date.now() })) : [
@@ -570,7 +593,9 @@ const ProductManagement = () => {
         },
       });
       setEditingItem(item);
+      fetchSuggestedAddons(item._id || item.id);
     } else {
+      setSuggestedAddons([]);
       setFormData({
         name: "",
         slug: "",
@@ -586,6 +611,7 @@ const ProductManagement = () => {
         tags: "",
         weight: "",
         brand: "",
+        packagingCharge: "",
         mainImage: null,
         galleryImages: [],
         variants: [
@@ -1388,6 +1414,25 @@ const ProductManagement = () => {
                             Lower numbers appear first in your store.
                           </span>
                         </div>
+                        <div className="space-y-1.5 flex flex-col">
+                          <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+                            Packaging Charge (₹)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.packagingCharge}
+                            onChange={(e) =>
+                              setFormData({ ...formData, packagingCharge: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
+                            placeholder="Optional — leave blank for default"
+                          />
+                          <span className="text-[10px] text-slate-500 font-medium ml-1">
+                            Only for this product. Leave blank to use your store's normal packaging charge.
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">
                         <input
@@ -1672,6 +1717,54 @@ const ProductManagement = () => {
                           </p>
                         </div>
                       </div>
+
+                      {editingItem && (isLoadingSuggestions || suggestedAddons.some((s) => !formData.addons.includes(s.productId))) && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                          <div className="flex items-center gap-1.5">
+                            <HiOutlineArrowTrendingUp className="w-4 h-4 text-amber-600" />
+                            <h5 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Suggested pairings</h5>
+                          </div>
+                          <p className="text-[11px] text-amber-700/80 -mt-2">
+                            Products customers frequently bought together with this one in past orders — not yet added as an add-on.
+                          </p>
+                          {isLoadingSuggestions ? (
+                            <p className="text-xs text-amber-700">Analyzing order history…</p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {suggestedAddons.filter((s) => !formData.addons.includes(s.productId)).map((s) => (
+                                <div
+                                  key={s.productId}
+                                  className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-amber-100"
+                                >
+                                  <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                                    {s.mainImage ? (
+                                      <img src={s.mainImage} alt={s.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <HiOutlinePhoto className="w-full h-full p-2 text-slate-300" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">
+                                      Bought together {s.coPurchaseCount}x
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFormData((prev) => ({
+                                      ...prev,
+                                      addons: prev.addons.includes(s.productId) ? prev.addons : [...prev.addons, s.productId],
+                                    }))}
+                                    className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold uppercase tracking-wide transition-colors flex-shrink-0"
+                                  >
+                                    + Add
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {safeProducts.length <= 1 ? (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { Search, Mic, ArrowLeft, X, TrendingUp, ChevronRight, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,6 +31,8 @@ const SearchPage = () => {
     const [isListening, setIsListening] = useState(false);
     const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
     const [noServiceData, setNoServiceData] = useState(null);
+    const [listeningData, setListeningData] = useState(null);
+    const recognitionRef = useRef(null);
 
     // Manage Recent Searches with LocalStorage
     const [pastSearches, setPastSearches] = useState(() => {
@@ -76,16 +78,31 @@ const SearchPage = () => {
         return () => clearTimeout(timer);
     }, [query]);
 
+    // Dynamically load the "listening" Lottie the first time voice search is used
+    const ensureListeningAnimation = () => {
+        if (listeningData) return;
+        import('@/assets/lottie/listening.json')
+            .then((m) => setListeningData(m.default))
+            .catch(() => {});
+    };
+
     // Voice Search Logic (Enhanced)
     const handleVoiceSearch = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+            return;
+        }
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert('Voice search is not supported in your browser. Please try Chrome.');
             return;
         }
 
+        ensureListeningAnimation();
+
         const recognition = new SpeechRecognition();
-        recognition.lang = 'en-IN'; 
+        recognition.lang = 'en-IN';
         recognition.continuous = false;
         recognition.interimResults = true;
 
@@ -93,9 +110,12 @@ const SearchPage = () => {
             setIsListening(true);
             setQuery(''); // Clear previous search if starting fresh
         };
-        
-        recognition.onend = () => setIsListening(false);
-        
+
+        recognition.onend = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+        };
+
         recognition.onresult = (event) => {
             let transcript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -114,6 +134,7 @@ const SearchPage = () => {
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
             setIsListening(false);
+            recognitionRef.current = null;
             if (event.error === 'not-allowed') {
                 alert('Microphone access denied. Please enable it in your browser settings.');
             } else {
@@ -123,6 +144,7 @@ const SearchPage = () => {
 
         try {
             recognition.start();
+            recognitionRef.current = recognition;
         } catch (e) {
             console.error('Recognition start error:', e);
             setIsListening(false);
@@ -395,6 +417,47 @@ const SearchPage = () => {
                         </div>
                     </div>
                 </div>
+
+                <AnimatePresence>
+                    {isListening && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center px-6"
+                            onClick={() => recognitionRef.current?.stop()}
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white rounded-3xl w-full max-w-xs p-8 flex flex-col items-center text-center shadow-2xl"
+                            >
+                                <div className="w-44 h-44 -my-4">
+                                    {listeningData ? (
+                                        <Lottie animationData={listeningData} loop={true} />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <Mic size={56} strokeWidth={2} className="text-primary animate-pulse" />
+                                        </div>
+                                    )}
+                                </div>
+                                <h3 className="text-lg font-black text-slate-900">Listening…</h3>
+                                <p className="text-sm text-slate-500 font-semibold mt-1 min-h-[20px] line-clamp-2">
+                                    {query ? `"${query}"` : 'Say something to search'}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => recognitionRef.current?.stop()}
+                                    className="mt-6 px-6 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors active:scale-95"
+                                >
+                                    Tap to stop
+                                </button>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {categories.length > 0 && (
                     <div className="px-5 pt-4 flex gap-2 overflow-x-auto no-scrollbar">

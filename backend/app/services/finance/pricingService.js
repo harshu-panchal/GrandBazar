@@ -545,13 +545,47 @@ export function calculateHandlingFee(cartItems, options = {}) {
   };
 }
 
+function hasProductPackagingOverride(item) {
+  const value = item?.productPackagingCharge;
+  return value !== null && value !== undefined && Number.isFinite(Number(value));
+}
+
+/**
+ * Per-product packaging charge (optional, seller-set) wins over the
+ * category-hierarchy packing fee for that line — it's charged per unit,
+ * once per line item, and the line is excluded from the category grouping
+ * below so it isn't double-counted.
+ */
+function calculateProductPackagingOverrides(cartItems = []) {
+  const overrideItems = cartItems.filter(hasProductPackagingOverride);
+  const productOverrides = overrideItems.map((item) => {
+    const quantity = normalizeLineQuantity(item.quantity);
+    const packagingChargePerUnit = Math.max(Number(item.productPackagingCharge) || 0, 0);
+    return {
+      productId: item.productId,
+      productName: item.productName,
+      packagingChargePerUnit,
+      quantity,
+      computedFee: roundCurrency(packagingChargePerUnit * quantity),
+    };
+  });
+  const productPackagingFeeCharged = roundCurrency(
+    productOverrides.reduce((sum, row) => addMoney(sum, row.computedFee), 0),
+  );
+  return { productOverrides, productPackagingFeeCharged };
+}
+
 export function calculatePackingFee(cartItems, options = {}) {
   const {
     packingFeeStrategy = HANDLING_FEE_STRATEGY.HIGHEST_CATEGORY_FEE,
     categoryById = new Map(),
   } = options;
 
-  const enrichedItems = attachResolvedFeeCategories(cartItems, categoryById);
+  const { productOverrides, productPackagingFeeCharged } =
+    calculateProductPackagingOverrides(cartItems);
+  const categoryCartItems = cartItems.filter((item) => !hasProductPackagingOverride(item));
+
+  const enrichedItems = attachResolvedFeeCategories(categoryCartItems, categoryById);
 
   const categorySubtotalMap = new Map();
   for (const item of enrichedItems) {
@@ -619,10 +653,12 @@ export function calculatePackingFee(cartItems, options = {}) {
   }
 
   return {
-    packingFeeCharged: roundCurrency(totalPackingFee),
+    packingFeeCharged: roundCurrency(addMoney(totalPackingFee, productPackagingFeeCharged)),
     packingFeeStrategy,
     packingCategoryUsed,
     categoryFees,
+    productOverrides,
+    productPackagingFeeCharged,
   };
 }
 
@@ -731,7 +767,7 @@ export async function hydrateOrderItems(
 
   const productQuery = Product.find({ _id: { $in: productIds } })
     .select(
-      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule gstSlabOverride isPreorderEligible",
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule gstSlabOverride packagingCharge isPreorderEligible",
     )
     .lean();
   if (session) productQuery.session(session);
@@ -819,6 +855,13 @@ export async function hydrateOrderItems(
         product.gstSlabOverride === null || product.gstSlabOverride === undefined
           ? null
           : Number(product.gstSlabOverride),
+      // Optional seller-set packaging charge for this specific product. null
+      // = not set, falls back to the category-hierarchy packing fee (see
+      // calculatePackingFee) instead of being treated as "free packaging".
+      productPackagingCharge:
+        product.packagingCharge === null || product.packagingCharge === undefined
+          ? null
+          : Number(product.packagingCharge),
       isAddonLine,
       parentProductId: parentProductId || null,
     };
@@ -1214,6 +1257,10 @@ export async function generateOrderPaymentBreakdown({
 
   // Packaging charge is paid to the seller
   sellerPayoutTotal = addMoney(sellerPayoutTotal, packagingChargeAmount);
+  // Same for the optional per-product packaging charge — the seller set it
+  // and incurs the actual packaging cost, unlike the admin-configured
+  // category-hierarchy packing fee below, which is a platform line-item fee.
+  sellerPayoutTotal = addMoney(sellerPayoutTotal, packing.productPackagingFeeCharged);
 
   // Odd-hour / weather surcharges use a configurable platform/seller revenue
   // split (default 100% platform, matching the legacy single-surcharge behavior).
@@ -1227,11 +1274,13 @@ export async function generateOrderPaymentBreakdown({
   const surchargePlatformShare = roundCurrency(totalSurcharges - surchargeSellerShare);
   sellerPayoutTotal = addMoney(sellerPayoutTotal, surchargeSellerShare);
 
-  // Category packing + handling go to platform (same as logistics margin)
+  // Category packing + handling go to platform (same as logistics margin).
+  // The optional per-product packaging charge is excluded here — it's
+  // already routed to the seller above, not platform margin.
   const platformLogisticsMargin = roundCurrency(
     delivery.deliveryFeeCharged +
       handling.handlingFeeCharged +
-      packing.packingFeeCharged -
+      (packing.packingFeeCharged - packing.productPackagingFeeCharged) -
       (rider.riderPayoutBase + rider.riderPayoutDistance + rider.riderPayoutBonus),
   );
   // Surcharges go to platform except for whatever share is configured to the seller.
@@ -1330,6 +1379,7 @@ export async function generateOrderPaymentBreakdown({
     packagingCharge: packagingChargeAmount > 0
       ? { amount: packagingChargeAmount, storeId: String(storeId) }
       : null,
+    productPackagingCharges: packing.productOverrides.length > 0 ? packing.productOverrides : null,
     taxJurisdiction,
     sellerState: storeDoc?.state || "",
     customerState: customerState || "",
@@ -1346,6 +1396,7 @@ export async function generateOrderPaymentBreakdown({
     deliveryFeeCharged: delivery.deliveryFeeCharged,
     handlingFeeCharged: handling.handlingFeeCharged,
     packingFeeCharged: packing.packingFeeCharged,
+    productPackagingChargeAmount: packing.productPackagingFeeCharged,
     tipTotal: normalizedTip,
     discountTotal: normalizedDiscount,
     taxTotal: normalizedTax,

@@ -649,6 +649,13 @@ export async function getActiveSellerByIdData(id) {
     banners: Array.isArray(store.banners) ? store.banners : [],
     storeVideo: store.storeVideo || "",
     excludeFromAlternatives: Boolean(store.excludeFromAlternatives),
+    schedulingSettings: store.schedulingSettings || {
+      enabled: false,
+      maxDaysAhead: 30,
+      rescheduleCutoffDays: 1,
+      selfLogistics: false,
+      deliveryWindows: [],
+    },
     bankInfo: {
       bankName: store.bankName || "",
       accountNo: store.accountNumber || "",

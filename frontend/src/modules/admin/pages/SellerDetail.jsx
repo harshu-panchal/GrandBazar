@@ -113,6 +113,13 @@ const SellerDetail = () => {
         banners: [],
         storeVideo: '',
         excludeFromAlternatives: false,
+        schedulingSettings: {
+            enabled: false,
+            maxDaysAhead: 30,
+            rescheduleCutoffDays: 1,
+            selfLogistics: false,
+            deliveryWindows: [],
+        },
     });
 
     const [headerCategories, setHeaderCategories] = useState([
@@ -120,6 +127,7 @@ const SellerDetail = () => {
         "Snacks & Branded Foods", "Personal Care", "Household Care", "Electronics & Appliances", 
         "Fashion & Apparel", "Pharmacy & Health", "Beauty & Cosmetics", "Pet Care", "General Store"
     ]);
+    const [subscriptionPlans, setSubscriptionPlans] = useState([]);
 
     useEffect(() => {
         const fetchHeaderCategories = async () => {
@@ -237,6 +245,15 @@ const SellerDetail = () => {
                     banners: Array.isArray(detail.banners) ? detail.banners : [],
                     storeVideo: detail.storeVideo || '',
                     excludeFromAlternatives: Boolean(detail.excludeFromAlternatives),
+                    schedulingSettings: {
+                        enabled: Boolean(detail.schedulingSettings?.enabled),
+                        maxDaysAhead: detail.schedulingSettings?.maxDaysAhead ?? 30,
+                        rescheduleCutoffDays: detail.schedulingSettings?.rescheduleCutoffDays ?? 1,
+                        selfLogistics: Boolean(detail.schedulingSettings?.selfLogistics),
+                        deliveryWindows: Array.isArray(detail.schedulingSettings?.deliveryWindows)
+                            ? detail.schedulingSettings.deliveryWindows
+                            : [],
+                    },
                 });
                 setSeller((prev) => ({
                     ...prev,
@@ -441,6 +458,41 @@ const SellerDetail = () => {
         setShopSetupForm((prev) => ({ ...prev, banners: prev.banners.filter((_, i) => i !== index) }));
     };
 
+    const handleAddDeliveryWindow = () => {
+        setShopSetupForm((prev) => ({
+            ...prev,
+            schedulingSettings: {
+                ...prev.schedulingSettings,
+                deliveryWindows: [
+                    ...(prev.schedulingSettings?.deliveryWindows || []),
+                    { label: '', start: '09:00', end: '12:00', capacityPerDay: 50, enabled: true },
+                ],
+            },
+        }));
+    };
+
+    const handleUpdateDeliveryWindow = (index, field, value) => {
+        setShopSetupForm((prev) => ({
+            ...prev,
+            schedulingSettings: {
+                ...prev.schedulingSettings,
+                deliveryWindows: prev.schedulingSettings.deliveryWindows.map((w, i) =>
+                    i === index ? { ...w, [field]: value } : w
+                ),
+            },
+        }));
+    };
+
+    const handleRemoveDeliveryWindow = (index) => {
+        setShopSetupForm((prev) => ({
+            ...prev,
+            schedulingSettings: {
+                ...prev.schedulingSettings,
+                deliveryWindows: prev.schedulingSettings.deliveryWindows.filter((_, i) => i !== index),
+            },
+        }));
+    };
+
     const handleLogoUpload = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -497,20 +549,20 @@ const SellerDetail = () => {
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
             {/* Header / Action Bar */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-2">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate('/admin/sellers/active')}
-                        className="p-2.5 bg-white ring-1 ring-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm group"
+                        className="p-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all shadow-sm group"
                     >
-                        <ChevronLeft className="h-5 w-5 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+                        <ChevronLeft className="h-4 w-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
                     </button>
                     <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="ds-h1">{seller.shopName}</h1>
-                            <Badge variant="success" className="text-[10px] font-black uppercase tracking-widest">{seller.status}</Badge>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{seller.shopName}</h1>
+                            <Badge variant="success" className="bg-emerald-100 text-emerald-700 border-none text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">{seller.status}</Badge>
                         </div>
-                        <p className="ds-description mt-1 text-slate-500 font-medium">Owned by {seller.ownerName} • {seller.category}</p>
+                        <p className="text-sm mt-1 text-slate-500 font-medium">Owned by {seller.ownerName} <span className="opacity-40 px-1">•</span> {seller.category}</p>
                     </div>
                 </div>
 
@@ -518,50 +570,51 @@ const SellerDetail = () => {
                     <button
                         onClick={handleResendCredentials}
                         disabled={isSendingCredentials}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 ring-1 ring-amber-200 text-amber-800 rounded-2xl text-xs font-bold hover:bg-amber-100 transition-all disabled:opacity-60"
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm disabled:opacity-60"
                     >
-                        <Mail className="h-4 w-4 text-amber-600" />
-                        {isSendingCredentials ? 'SENDING...' : 'RESEND CREDENTIALS'}
+                        <Mail className="h-3.5 w-3.5 text-slate-500" />
+                        {isSendingCredentials ? 'Sending...' : 'Resend Credentials'}
                     </button>
                     <button
                         onClick={handleRefresh}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all"
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
                     >
-                        <RotateCw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
-                        SYNC DATA
+                        <RotateCw className={cn("h-3.5 w-3.5 text-slate-500", isRefreshing && "animate-spin")} />
+                        Sync Data
                     </button>
                     <button
                         onClick={() => setActiveTab('shop-setup')}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                        className="flex items-center gap-2 px-5 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-sm hover:shadow-md"
                     >
-                        <Edit3 className="h-4 w-4" />
-                        EDIT SHOP
+                        <Edit3 className="h-3.5 w-3.5" />
+                        Edit Shop
                     </button>
                 </div>
             </div>
 
             {/* Quick Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                 {[
-                    { label: 'Wallet Balance', value: '—', icon: Wallet, color: 'emerald', sub: 'Available for Payout' },
-                    { label: 'Total Revenue', value: seller.totalRevenue ? `₹${(seller.totalRevenue / 1000).toFixed(1)}k` : '—', icon: TrendingUp, color: 'blue', sub: 'Gross Sales' },
-                    { label: 'Orders Handled', value: seller.totalOrders || 0, icon: ShoppingBag, color: 'indigo', sub: 'Lifetime Orders' },
-                    { label: 'Store Rating', value: `${Number(seller.avgRating || seller.rating || 0).toFixed(1)} / 5`, icon: Star, color: 'amber', sub: `${seller.reviewCount || 0} customer reviews` },
+                    { label: 'Wallet Balance', value: '—', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', sub: 'Available for Payout' },
+                    { label: 'Total Revenue', value: seller.totalRevenue ? `₹${(seller.totalRevenue / 1000).toFixed(1)}k` : '—', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50', sub: 'Gross Sales' },
+                    { label: 'Orders Handled', value: seller.totalOrders || 0, icon: ShoppingBag, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: 'Lifetime Orders' },
+                    { label: 'Store Rating', value: `${Number(seller.avgRating || seller.rating || 0).toFixed(1)}`, icon: Star, color: 'text-amber-600', bg: 'bg-amber-50', sub: `${seller.reviewCount || 0} reviews`, supplement: '/ 5' },
                 ].map((stat, i) => (
-                    <Card key={i} className="p-6 border-none shadow-xl ring-1 ring-slate-100 bg-white group hover:ring-primary/20 transition-all">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className={cn("p-2.5 rounded-2xl",
-                                stat.color === 'emerald' && "bg-brand-50 text-brand-600",
-                                stat.color === 'blue' && "bg-brand-50 text-brand-600",
-                                stat.color === 'indigo' && "bg-brand-50 text-brand-600",
-                                stat.color === 'amber' && "bg-amber-50 text-amber-600",
-                            )}>
-                                <stat.icon className="h-5 w-5" />
+                    <Card key={i} className="p-5 border border-slate-200 shadow-sm bg-white rounded-2xl hover:shadow-md hover:border-slate-300 transition-all duration-300 flex flex-col justify-between overflow-hidden relative">
+                        <div className="flex items-center justify-between mb-4 z-10">
+                            <div className={cn("p-2.5 rounded-xl flex items-center justify-center", stat.bg, stat.color)}>
+                                <stat.icon className="h-4 w-4" />
                             </div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.sub}</span>
                         </div>
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{stat.label}</h4>
-                        <h3 className="text-2xl font-black text-slate-900">{stat.value}</h3>
+                        <div className="z-10">
+                            <h4 className="text-xs font-semibold text-slate-500 mb-1">{stat.label}</h4>
+                            <div className="flex items-baseline gap-1">
+                                <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{stat.value}</h3>
+                                {stat.supplement && <span className="text-sm font-medium text-slate-400">{stat.supplement}</span>}
+                            </div>
+                            <p className="text-[11px] font-medium text-slate-400 mt-2 uppercase tracking-wide">{stat.sub}</p>
+                        </div>
+                        <div className={cn("absolute -bottom-6 -right-6 w-24 h-24 rounded-full opacity-30 blur-2xl", stat.bg)}></div>
                     </Card>
                 ))}
             </div>
@@ -570,7 +623,8 @@ const SellerDetail = () => {
                 {/* Main Content Area */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Tabs Navigation */}
-                    <div className="flex items-center gap-2 p-1 bg-slate-100/50 backdrop-blur-sm rounded-2xl w-fit">
+                    <div className="flex overflow-x-auto hide-scrollbar border-b border-slate-200/80 w-full mb-1">
+                        <div className="flex items-center gap-6 px-1 h-12">
                         {[
                             { id: 'orders', label: 'Order History', icon: History },
                             { id: 'transactions', label: 'Transactions', icon: Banknote },
@@ -585,20 +639,24 @@ const SellerDetail = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
-                                    "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                                    "relative h-full flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap",
                                     activeTab === tab.id
-                                        ? "bg-white text-primary shadow-sm ring-1 ring-slate-200"
-                                        : "text-slate-400 hover:text-slate-600"
+                                        ? "text-slate-900"
+                                        : "text-slate-500 hover:text-slate-700"
                                 )}
                             >
-                                <tab.icon className="h-4 w-4" />
+                                <tab.icon className={cn("h-3.5 w-3.5", activeTab === tab.id ? "text-slate-900" : "text-slate-400")} />
                                 {tab.label}
+                                {activeTab === tab.id && (
+                                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 rounded-t-full"></div>
+                                )}
                             </button>
                         ))}
+                        </div>
                     </div>
 
                     {/* Tab Content */}
-                    <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden min-h-[500px]">
+                    <Card className="border border-slate-200 shadow-sm bg-white rounded-2xl overflow-hidden min-h-[500px]">
                         {activeTab === 'orders' && (
                             <div className="animate-in fade-in slide-in-from-right-2 duration-300">
                                 <div className="p-4 pb-4 flex items-center justify-between border-b border-slate-50">
@@ -956,21 +1014,22 @@ const SellerDetail = () => {
 
                         {activeTab === 'products' && (
                             <div className="p-6 animate-in fade-in slide-in-from-right-2 duration-300">
-                                <div className="border-b border-slate-100 pb-4 mb-6 flex items-center justify-between">
+                                <div className="border-b border-slate-100 pb-5 mb-5 flex items-center justify-between">
                                     <div>
-                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                                        <h4 className="text-base font-bold text-slate-900 tracking-tight">
                                             Products from this Seller
                                         </h4>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            {sellerProductsTotal} product{sellerProductsTotal === 1 ? '' : 's'} · Edit any product directly on behalf of this seller.
+                                        <p className="text-[13px] text-slate-500 mt-1 font-medium">
+                                            {sellerProductsTotal} product{sellerProductsTotal === 1 ? '' : 's'} <span className="px-1 opacity-40">•</span> Edit any product directly on behalf of this seller.
                                         </p>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={() => navigate(`/admin/products?newForSeller=${id}`)}
-                                        className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-sm"
+                                        className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2"
                                     >
-                                        + Add Product for this Seller
+                                        <Plus className="h-3.5 w-3.5" />
+                                        Add Product
                                     </button>
                                 </div>
 
@@ -1463,6 +1522,148 @@ const SellerDetail = () => {
                                         </label>
                                     </div>
 
+                                    {/* Scheduling & Future Orders */}
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
+                                            <Clock className="h-3.5 w-3.5" /> Scheduling &amp; Future Orders
+                                        </h5>
+                                        <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer max-w-xl">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(shopSetupForm.schedulingSettings?.enabled)}
+                                                onChange={(e) => setShopSetupForm({
+                                                    ...shopSetupForm,
+                                                    schedulingSettings: { ...shopSetupForm.schedulingSettings, enabled: e.target.checked },
+                                                })}
+                                                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                            />
+                                            <span>
+                                                <span className="block text-xs font-bold text-slate-700">Allow customers to schedule future deliveries</span>
+                                                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">When off, customers can only order for the soonest available delivery from this store.</span>
+                                            </span>
+                                        </label>
+
+                                        {shopSetupForm.schedulingSettings?.enabled && (
+                                            <div className="space-y-4 pl-1">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 mb-1">Max Days Ahead</label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            max="90"
+                                                            value={shopSetupForm.schedulingSettings?.maxDaysAhead ?? 30}
+                                                            onChange={(e) => setShopSetupForm({
+                                                                ...shopSetupForm,
+                                                                schedulingSettings: { ...shopSetupForm.schedulingSettings, maxDaysAhead: Number(e.target.value) },
+                                                            })}
+                                                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                        />
+                                                        <p className="text-[10px] text-slate-400 font-medium mt-1">How far in advance a customer can pick a delivery date.</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 mb-1">Reschedule Cutoff (days)</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max="7"
+                                                            value={shopSetupForm.schedulingSettings?.rescheduleCutoffDays ?? 1}
+                                                            onChange={(e) => setShopSetupForm({
+                                                                ...shopSetupForm,
+                                                                schedulingSettings: { ...shopSetupForm.schedulingSettings, rescheduleCutoffDays: Number(e.target.value) },
+                                                            })}
+                                                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                                        />
+                                                        <p className="text-[10px] text-slate-400 font-medium mt-1">How close to the delivery date a reschedule is still allowed.</p>
+                                                    </div>
+                                                </div>
+
+                                                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer max-w-xl">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(shopSetupForm.schedulingSettings?.selfLogistics)}
+                                                        onChange={(e) => setShopSetupForm({
+                                                            ...shopSetupForm,
+                                                            schedulingSettings: { ...shopSetupForm.schedulingSettings, selfLogistics: e.target.checked },
+                                                        })}
+                                                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                    />
+                                                    <span>
+                                                        <span className="block text-xs font-bold text-slate-700">Seller self-logistics</span>
+                                                        <span className="block text-[10px] text-slate-400 font-medium mt-0.5">This seller delivers scheduled orders themselves instead of the platform's delivery fleet.</span>
+                                                    </span>
+                                                </label>
+
+                                                <div>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <p className="text-xs font-bold text-slate-700">Delivery Windows</p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAddDeliveryWindow}
+                                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-700"
+                                                        >
+                                                            <Plus className="h-3.5 w-3.5" /> Add Window
+                                                        </button>
+                                                    </div>
+                                                    {(shopSetupForm.schedulingSettings?.deliveryWindows || []).length === 0 ? (
+                                                        <p className="text-[11px] text-slate-400 font-medium">No delivery windows configured — customers won't see any time-slot options while scheduling is on.</p>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {shopSetupForm.schedulingSettings.deliveryWindows.map((window, index) => (
+                                                                <div key={index} className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={window.label}
+                                                                        onChange={(e) => handleUpdateDeliveryWindow(index, 'label', e.target.value)}
+                                                                        placeholder="Label, e.g. 9 AM - 12 PM"
+                                                                        className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-brand-500"
+                                                                    />
+                                                                    <input
+                                                                        type="time"
+                                                                        value={window.start}
+                                                                        onChange={(e) => handleUpdateDeliveryWindow(index, 'start', e.target.value)}
+                                                                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-brand-500"
+                                                                    />
+                                                                    <span className="text-[10px] text-slate-400">to</span>
+                                                                    <input
+                                                                        type="time"
+                                                                        value={window.end}
+                                                                        onChange={(e) => handleUpdateDeliveryWindow(index, 'end', e.target.value)}
+                                                                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-brand-500"
+                                                                    />
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={window.capacityPerDay}
+                                                                        onChange={(e) => handleUpdateDeliveryWindow(index, 'capacityPerDay', Number(e.target.value))}
+                                                                        title="Capacity per day"
+                                                                        className="w-20 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-brand-500"
+                                                                    />
+                                                                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={Boolean(window.enabled)}
+                                                                            onChange={(e) => handleUpdateDeliveryWindow(index, 'enabled', e.target.checked)}
+                                                                            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                                        />
+                                                                        On
+                                                                    </label>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleRemoveDeliveryWindow(index)}
+                                                                        className="p-1.5 text-red-400 hover:text-red-600 transition-colors"
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* Packaging & Charges */}
                                     <div className="space-y-4 pt-2 border-t border-slate-100">
                                         <h5 className="text-xs font-black text-brand-700 uppercase tracking-wider bg-brand-50/60 px-3 py-1.5 rounded-lg inline-block">
@@ -1553,56 +1754,56 @@ const SellerDetail = () => {
                 </div>
 
                 {/* Sidebar Context */}
-                <div className="space-y-6">
+                <div className="space-y-6 mt-1">
                     {/* Owner Card */}
-                    <Card className="p-4 border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl text-left">
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="h-16 w-16 bg-slate-100 rounded-2xl flex items-center justify-center overflow-hidden">
-                                <User className="h-8 w-8 text-slate-300" />
+                    <Card className="p-6 border border-slate-200 shadow-sm bg-white rounded-2xl text-left overflow-hidden relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-slate-100 to-transparent rounded-bl-full opacity-60 z-0 pointer-events-none"></div>
+                        <div className="relative z-10 flex flex-col items-center text-center pb-6 border-b border-slate-100 mb-6">
+                            <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-100 mb-3">
+                                <User className="h-7 w-7 text-slate-400" />
                             </div>
-                            <div>
-                                <h4 className="text-lg font-black text-slate-900">{seller.ownerName}</h4>
-                                <Badge variant="primary" className="text-[8px] font-black tracking-[0.2em] px-2">PARTNER</Badge>
+                            <h4 className="text-lg font-bold text-slate-900 tracking-tight">{seller.ownerName}</h4>
+                            <span className="inline-block mt-1 px-2.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-bold rounded-md uppercase tracking-wider">Partner Manager</span>
+                        </div>
+
+                        <div className="relative z-10 space-y-4">
+                            <div className="flex items-center gap-3 text-slate-600 hover:text-slate-900 transition-colors group cursor-pointer">
+                                <div className="h-8 w-8 flex items-center justify-center bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-700 rounded-lg transition-colors border border-slate-100 group-hover:border-slate-200">
+                                    <Mail className="h-3.5 w-3.5" />
+                                </div>
+                                <span className="text-[13px] font-medium truncate">{seller.email}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-slate-600 hover:text-slate-900 transition-colors group cursor-pointer">
+                                <div className="h-8 w-8 flex items-center justify-center bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-700 rounded-lg transition-colors border border-slate-100 group-hover:border-slate-200">
+                                    <Phone className="h-3.5 w-3.5" />
+                                </div>
+                                <span className="text-[13px] font-medium">{seller.phone}</span>
+                            </div>
+                            <div className="flex items-start gap-3 text-slate-600 hover:text-slate-900 transition-colors group">
+                                <div className="h-8 w-8 flex items-center justify-center bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-700 rounded-lg shrink-0 mt-0.5 border border-slate-100 group-hover:border-slate-200 transition-colors">
+                                    <MapPin className="h-3.5 w-3.5" />
+                                </div>
+                                <span className="text-[13px] font-medium leading-relaxed">{seller.location}</span>
                             </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-3 text-slate-500 hover:text-primary transition-colors cursor-pointer">
-                                <div className="p-2 bg-slate-50 rounded-xl">
-                                    <Mail className="h-4 w-4" />
-                                </div>
-                                <span className="text-xs font-bold">{seller.email}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-slate-500 hover:text-primary transition-colors cursor-pointer">
-                                <div className="p-2 bg-slate-50 rounded-xl">
-                                    <Phone className="h-4 w-4" />
-                                </div>
-                                <span className="text-xs font-bold">{seller.phone}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-slate-500">
-                                <div className="p-2 bg-slate-50 rounded-xl">
-                                    <MapPin className="h-4 w-4" />
-                                </div>
-                                <span className="text-xs font-bold leading-relaxed">{seller.location}</span>
-                            </div>
-                        </div>
-
-                        <button className="w-full mt-8 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all">
-                            MESSAGE OWNER
+                        <button className="w-full relative z-10 mt-8 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm">
+                            Message Owner
                         </button>
                     </Card>
 
                     {/* Quick Notifications */}
-                    <Card className="p-4 border-none shadow-xl ring-1 ring-slate-900 bg-slate-900 rounded-xl text-white">
-                        <h4 className="text-[10px] font-bold opacity-40 uppercase tracking-[0.2em] mb-6">Strategic Comms</h4>
+                    <Card className="p-5 border border-slate-200 bg-slate-900 shadow-md rounded-2xl text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-white/10 to-transparent rounded-bl-full pointer-events-none"></div>
+                        <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-4">Strategic Comms</h4>
                         <div className="space-y-4">
-                            <p className="text-xs font-medium text-slate-400 italic leading-relaxed">Send a high-priority push to the shop manager app.</p>
+                            <p className="text-[13px] text-slate-400 leading-relaxed font-medium">Send a top-priority push notification directly to the shop manager's device.</p>
                             <textarea
-                                placeholder="Message to store..."
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all min-h-[100px]"
+                                placeholder="Write message..."
+                                className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 text-[13px] text-white placeholder-slate-500 font-medium outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all min-h-[90px] resize-none"
                             />
-                            <button className="w-full py-4 bg-primary text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all">
-                                SEND ALERT
+                            <button className="w-full py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-lg shadow-white/5 transition-all">
+                                Send Alert
                             </button>
                         </div>
                     </Card>

@@ -21,7 +21,8 @@ import {
     HiOutlineExclamationCircle,
     HiOutlineFolderOpen,
     HiOutlineSwatch,
-    HiOutlineSquaresPlus
+    HiOutlineSquaresPlus,
+    HiOutlineArrowTrendingUp
 } from 'react-icons/hi2';
 import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
@@ -78,6 +79,7 @@ const ProductManagement = () => {
         tags: '',
         weight: '',
         brand: '',
+        packagingCharge: '',
         mainImage: null,
         galleryImages: [],
         applyCommission: false,
@@ -94,6 +96,8 @@ const ProductManagement = () => {
 
     const [sellers, setSellers] = useState([]);
     const [sellerProductsForAddons, setSellerProductsForAddons] = useState([]);
+    const [suggestedAddons, setSuggestedAddons] = useState([]);
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
     const fetchSellerProductsForAddons = async (sellerId, excludeProductId) => {
         if (!sellerId) {
@@ -108,6 +112,55 @@ const ProductManagement = () => {
         } catch (error) {
             setSellerProductsForAddons([]);
         }
+    };
+
+    const fetchAddonMappings = async (productId) => {
+        if (!productId) return;
+        try {
+            const response = await adminApi.getProductAddonMappings(productId);
+            const rows = response.data.result || response.data.results || [];
+            const byId = {};
+            rows.forEach((row) => {
+                byId[row.addonProductId] = {
+                    priceOverride: row.priceOverride ?? '',
+                    required: Boolean(row.required),
+                    sortOrder: row.sortOrder ?? 0,
+                };
+            });
+            setFormData((prev) => ({ ...prev, addonMappings: byId }));
+        } catch (error) {
+            // Non-fatal — the addons tab still works with base selection only.
+        }
+    };
+
+    const fetchSuggestedAddons = async (productId) => {
+        if (!productId) {
+            setSuggestedAddons([]);
+            return;
+        }
+        setIsLoadingSuggestions(true);
+        try {
+            const response = await adminApi.getSuggestedAddons(productId);
+            const list = response.data.result || response.data.results || [];
+            setSuggestedAddons(Array.isArray(list) ? list : []);
+        } catch (error) {
+            setSuggestedAddons([]);
+        } finally {
+            setIsLoadingSuggestions(false);
+        }
+    };
+
+    const updateAddonMapping = (productId, field, value) => {
+        setFormData((prev) => ({
+            ...prev,
+            addonMappings: {
+                ...prev.addonMappings,
+                [productId]: {
+                    ...(prev.addonMappings[productId] || { priceOverride: '', required: false, sortOrder: 0 }),
+                    [field]: value,
+                },
+            },
+        }));
     };
 
     const fetchSellers = async () => {
@@ -204,6 +257,7 @@ const ProductManagement = () => {
             data.append('isFeatured', formData.isFeatured);
             data.append('brand', formData.brand);
             data.append('weight', formData.weight);
+            data.append('packagingCharge', formData.packagingCharge);
             data.append('tags', formData.tags);
             data.append('variants', JSON.stringify(formData.variants));
             data.append('isPreorderEligible', formData.isPreorderEligible);
@@ -212,6 +266,18 @@ const ProductManagement = () => {
             } else {
                 data.append('addons', JSON.stringify([]));
             }
+            const addonMappingsPayload = (formData.addons || []).map((addonProductId) => {
+                const mapping = formData.addonMappings[addonProductId] || {};
+                return {
+                    addonProductId,
+                    priceOverride: mapping.priceOverride === '' || mapping.priceOverride === undefined
+                        ? null
+                        : Number(mapping.priceOverride),
+                    required: Boolean(mapping.required),
+                    sortOrder: Number(mapping.sortOrder) || 0,
+                };
+            });
+            data.append('addonMappings', JSON.stringify(addonMappingsPayload));
             const applyCommission = !!formData.applyCommission;
             const commissionValue = applyCommission
                 ? Math.max(0, Number(formData.adminCommission) || 0)
@@ -368,6 +434,7 @@ const ProductManagement = () => {
                 tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '',
                 weight: item.weight || '',
                 brand: item.brand || '',
+                packagingCharge: item.packagingCharge ?? '',
                 mainImage: item.mainImage || null,
                 galleryImages: item.galleryImages || item.images || [],
                 applyCommission,
@@ -377,6 +444,7 @@ const ProductManagement = () => {
                 sellerId: item.sellerId?._id || item.sellerId || '',
                 isPreorderEligible: item.isPreorderEligible || false,
                 addons: Array.isArray(item.addons) ? item.addons.map((a) => a?._id || a) : [],
+                addonMappings: {},
                 variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => ({ ...v, id: v._id || Date.now() })) : [
                     {
                         id: Date.now(),
@@ -390,12 +458,15 @@ const ProductManagement = () => {
             });
             setEditingItem(item);
             fetchSellerProductsForAddons(item.sellerId?._id || item.sellerId, item._id);
+            fetchAddonMappings(item._id);
+            fetchSuggestedAddons(item._id);
         } else {
+            setSuggestedAddons([]);
             setFormData({
                 name: '', slug: '', sku: '', description: '', price: '',
                 salePrice: '', stock: '', lowStockAlert: 5, unit: 'packet',
                 header: '', categoryId: '', subcategoryId: '', status: 'active',
-                isFeatured: false, tags: '', weight: '', brand: '',
+                isFeatured: false, tags: '', weight: '', brand: '', packagingCharge: '',
                 mainImage: null, galleryImages: [],
                 applyCommission: false,
                 adminCommission: '',
@@ -404,6 +475,7 @@ const ProductManagement = () => {
                 sellerId: '',
                 isPreorderEligible: false,
                 addons: [],
+                addonMappings: {},
                 variants: [
                     { id: Date.now(), name: 'Default', price: '', salePrice: '', stock: '', sku: '' }
                 ]
@@ -996,6 +1068,19 @@ const ProductManagement = () => {
                                                         placeholder="AUTO-GENERATED"
                                                     />
                                                 </div>
+                                                <div className="space-y-1.5 flex flex-col">
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Packaging Charge (₹)</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={formData.packagingCharge}
+                                                        onChange={(e) => setFormData({ ...formData, packagingCharge: e.target.value })}
+                                                        className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none ring-primary/5 focus:ring-2"
+                                                        placeholder="Optional — leave blank for default"
+                                                    />
+                                                    <span className="text-[10px] text-slate-400 font-medium ml-1">Overrides the seller's store/category packaging charge for this product only.</span>
+                                                </div>
                                             </div>
 
                                             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
@@ -1079,9 +1164,58 @@ const ProductManagement = () => {
                                             <div>
                                                 <h4 className="text-sm font-bold text-slate-900">Product Add-ons</h4>
                                                 <p className="text-xs text-slate-600 font-medium mt-1">
-                                                    Select other products from the same seller to recommend alongside this one.
+                                                    Select other products from the same seller to recommend alongside this one. For a selected add-on, you can optionally override its price, mark it required, and set its display order.
                                                 </p>
                                             </div>
+
+                                            {editingItem && (isLoadingSuggestions || suggestedAddons.some((s) => !formData.addons.includes(s.productId))) && (
+                                                <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <HiOutlineArrowTrendingUp className="w-4 h-4 text-amber-600" />
+                                                        <h5 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Suggested pairings</h5>
+                                                    </div>
+                                                    <p className="text-[11px] text-amber-700/80 -mt-2">
+                                                        Products customers frequently bought together with this one in past orders — not yet added as an add-on.
+                                                    </p>
+                                                    {isLoadingSuggestions ? (
+                                                        <p className="text-xs text-amber-700">Analyzing order history…</p>
+                                                    ) : (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            {suggestedAddons.filter((s) => !formData.addons.includes(s.productId)).map((s) => (
+                                                                <div
+                                                                    key={s.productId}
+                                                                    className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-amber-100"
+                                                                >
+                                                                    <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                                                                        {s.mainImage ? (
+                                                                            <img src={s.mainImage} alt={s.name} className="w-full h-full object-cover" />
+                                                                        ) : (
+                                                                            <HiOutlinePhoto className="w-full h-full p-2 text-slate-300" />
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
+                                                                        <p className="text-[10px] text-slate-500 font-medium">
+                                                                            Bought together {s.coPurchaseCount}x
+                                                                        </p>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setFormData((prev) => ({
+                                                                            ...prev,
+                                                                            addons: prev.addons.includes(s.productId) ? prev.addons : [...prev.addons, s.productId],
+                                                                        }))}
+                                                                        className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold uppercase tracking-wide transition-colors flex-shrink-0"
+                                                                    >
+                                                                        + Add
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {!formData.sellerId ? (
                                                 <p className="text-sm text-slate-500">Select a seller in General Info first.</p>
                                             ) : sellerProductsForAddons.length === 0 ? (
@@ -1090,41 +1224,84 @@ const ProductManagement = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {sellerProductsForAddons.map((prod) => {
                                                         const isSelected = formData.addons.includes(prod._id);
+                                                        const mapping = formData.addonMappings[prod._id] || { priceOverride: '', required: false, sortOrder: 0 };
                                                         return (
                                                             <div
                                                                 key={prod._id}
-                                                                onClick={() => {
-                                                                    setFormData((prev) => ({
-                                                                        ...prev,
-                                                                        addons: isSelected
-                                                                            ? prev.addons.filter((id) => id !== prod._id)
-                                                                            : [...prev.addons, prod._id],
-                                                                    }));
-                                                                }}
                                                                 className={cn(
-                                                                    "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                                                                    "rounded-xl border transition-all overflow-hidden",
                                                                     isSelected ? "border-primary bg-primary/5 ring-1 ring-primary/50" : "border-slate-200 hover:border-slate-300 bg-white"
                                                                 )}
                                                             >
-                                                                <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
-                                                                    {prod.mainImage ? (
-                                                                        <img src={prod.mainImage} alt={prod.name} className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <HiOutlinePhoto className="w-full h-full p-3 text-slate-300" />
-                                                                    )}
+                                                                <div
+                                                                    onClick={() => {
+                                                                        setFormData((prev) => ({
+                                                                            ...prev,
+                                                                            addons: isSelected
+                                                                                ? prev.addons.filter((id) => id !== prod._id)
+                                                                                : [...prev.addons, prod._id],
+                                                                        }));
+                                                                    }}
+                                                                    className="flex items-center gap-3 p-3 cursor-pointer"
+                                                                >
+                                                                    <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
+                                                                        {prod.mainImage ? (
+                                                                            <img src={prod.mainImage} alt={prod.name} className="w-full h-full object-cover" />
+                                                                        ) : (
+                                                                            <HiOutlinePhoto className="w-full h-full p-3 text-slate-300" />
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                                                                        <p className="text-[10px] text-slate-500 font-medium">₹{prod.price}</p>
+                                                                    </div>
+                                                                    <div className={cn(
+                                                                        "w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0",
+                                                                        isSelected ? "bg-primary border-primary text-white" : "border-slate-300 text-transparent"
+                                                                    )}>
+                                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
-                                                                    <p className="text-[10px] text-slate-500 font-medium">₹{prod.price}</p>
-                                                                </div>
-                                                                <div className={cn(
-                                                                    "w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0",
-                                                                    isSelected ? "bg-primary border-primary text-white" : "border-slate-300 text-transparent"
-                                                                )}>
-                                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                                    </svg>
-                                                                </div>
+                                                                {isSelected && (
+                                                                    <div
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="px-3 pb-3 pt-1 border-t border-primary/20 bg-white/60 space-y-2"
+                                                                    >
+                                                                        <div className="grid grid-cols-2 gap-2">
+                                                                            <div>
+                                                                                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Price Override (₹)</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    value={mapping.priceOverride}
+                                                                                    onChange={(e) => updateAddonMapping(prod._id, 'priceOverride', e.target.value)}
+                                                                                    placeholder={`Default ₹${prod.price}`}
+                                                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-primary/40"
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Sort Order</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    value={mapping.sortOrder}
+                                                                                    onChange={(e) => updateAddonMapping(prod._id, 'sortOrder', e.target.value)}
+                                                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-primary/40"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 cursor-pointer">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={mapping.required}
+                                                                                onChange={(e) => updateAddonMapping(prod._id, 'required', e.target.checked)}
+                                                                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                                                                            />
+                                                                            Required add-on
+                                                                        </label>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}

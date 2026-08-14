@@ -217,6 +217,15 @@ const productSchema = new mongoose.Schema(
             enum: [0, 5, 12, 18, 28, null],
             default: null, // null = inherit gstSlab from category
         },
+        packagingCharge: {
+            type: Number,
+            default: null,
+            min: 0,
+            // Optional per-product packaging charge, set by the seller (or
+            // admin on their behalf). null = not set — checkout falls back to
+            // the category-hierarchy packing fee / store packaging charge as
+            // before. When set, it wins for this product's line items.
+        },
         isPreorderEligible: {
             type: Boolean,
             default: false,

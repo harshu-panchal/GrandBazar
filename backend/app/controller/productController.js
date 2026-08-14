@@ -27,7 +27,12 @@ import {
 import { attachAdvanceBookingMetaToProducts } from "../services/preOrderCampaignService.js";
 import { logSearchQuery, getTrendingSearches } from "../services/searchTrendingService.js";
 import { getTrendingProducts } from "../services/trendingProductsService.js";
-import { resolveProductAddons } from "../services/productAddonService.js";
+import {
+  resolveProductAddons,
+  getProductAddonMappings,
+  syncProductAddonMappings,
+  getSuggestedAddons,
+} from "../services/productAddonService.js";
 import { recordAuditLog } from "../services/auditTrailService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance } from "../services/deliveryEtaService.js";
 import { assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
@@ -99,6 +104,14 @@ function makeProductSku(name, index = 1) {
     .replace(/[^a-z0-9]/g, "")
     .slice(0, 5) || "item";
   return `${prefix}-${String(index).padStart(3, "0")}`;
+}
+
+// "" / null / undefined / invalid -> null (explicitly unset, falls back to
+// category/store packaging); anything else -> a non-negative number.
+function normalizeOptionalNonNegativeNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? num : null;
 }
 
 function parseJsonIfString(value) {
@@ -405,7 +418,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons createdAt",
+            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -663,7 +676,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -845,6 +858,21 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    // Per-pairing addon overrides (price/required/sort order) — admin-only,
+    // stored in a separate collection (ProductAddonMapping), not on Product
+    // itself, so pull it out before productData reaches Product.create.
+    let addonMappingsToSync = null;
+    if (Object.prototype.hasOwnProperty.call(productData, "addonMappings")) {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role === "admin" || role === "superadmin") {
+        addonMappingsToSync = typeof productData.addonMappings === "string"
+          ? parseJsonIfString(productData.addonMappings)
+          : productData.addonMappings;
+        if (!Array.isArray(addonMappingsToSync)) addonMappingsToSync = [];
+      }
+      delete productData.addonMappings;
+    }
+
     if (!productData.name) {
       return handleResponse(res, 400, "Product name is required");
     }
@@ -882,6 +910,9 @@ export const createProduct = async (req, res) => {
     if (productData.displayOrder !== undefined) {
       const order = Number(productData.displayOrder);
       productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(productData, "packagingCharge")) {
+      productData.packagingCharge = normalizeOptionalNonNegativeNumber(productData.packagingCharge);
     }
 
     if (role === "admin" || role === "superadmin") {
@@ -926,7 +957,11 @@ export const createProduct = async (req, res) => {
     Object.assign(productData, moderationUpdate);
 
     const product = await Product.create(productData);
-    
+
+    if (addonMappingsToSync !== null) {
+      await syncProductAddonMappings(product._id, addonMappingsToSync);
+    }
+
     if (product && product._id) {
       // Enqueue search indexing asynchronously
       await enqueueProductIndex(product._id.toString());
@@ -1021,6 +1056,17 @@ export const updateProduct = async (req, res) => {
       }
     }
 
+    let addonMappingsToSync = null;
+    if (Object.prototype.hasOwnProperty.call(productData, "addonMappings")) {
+      if (role === "admin" || role === "superadmin") {
+        addonMappingsToSync = typeof productData.addonMappings === "string"
+          ? parseJsonIfString(productData.addonMappings)
+          : productData.addonMappings;
+        if (!Array.isArray(addonMappingsToSync)) addonMappingsToSync = [];
+      }
+      delete productData.addonMappings;
+    }
+
     if (typeof productData.availability === "string") {
       try {
         productData.availability = JSON.parse(productData.availability);
@@ -1081,6 +1127,9 @@ export const updateProduct = async (req, res) => {
       const order = Number(productData.displayOrder);
       productData.displayOrder = Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0;
     }
+    if (Object.prototype.hasOwnProperty.call(productData, "packagingCharge")) {
+      productData.packagingCharge = normalizeOptionalNonNegativeNumber(productData.packagingCharge);
+    }
 
     if (role === "admin" || role === "superadmin") {
       Object.assign(productData, normalizeProductCommissionFields(productData));
@@ -1127,7 +1176,11 @@ export const updateProduct = async (req, res) => {
       { $set: productData },
       { new: true, runValidators: true },
     );
-    
+
+    if (addonMappingsToSync !== null) {
+      await syncProductAddonMappings(id, addonMappingsToSync);
+    }
+
     // Enqueue search indexing asynchronously
     await enqueueProductIndex(id);
     await invalidate(`cache:catalog:product:${id}`);
@@ -1280,6 +1333,44 @@ export const getProductById = async (req, res) => {
 };
 
 /* ===============================
+   ADMIN: Get addon pairing overrides for a product
+   (raw mapping rows, for the admin edit form — see getProductById above
+   for the customer-facing hydrated version)
+================================ */
+export const getProductAddonMappingsController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mappings = await getProductAddonMappings(id);
+    return handleResponse(res, 200, "Addon mappings fetched", mappings);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   Suggested add-ons — data-driven pairing candidates from order co-purchase
+   history, surfaced while picking add-ons (seller: own product only; admin: any)
+================================ */
+export const getSuggestedAddonsController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const role = String(req.user?.role || "").toLowerCase();
+
+    if (role === "seller") {
+      const owned = await Product.findById(id).select("sellerId").lean();
+      if (!owned || String(owned.sellerId) !== String(req.user.id)) {
+        return handleResponse(res, 403, "Not authorized to view suggestions for this product");
+      }
+    }
+
+    const suggestions = await getSuggestedAddons(id, { limit: 8 });
+    return handleResponse(res, 200, "Suggested addons fetched", suggestions);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
    ADMIN MODERATION LIST
 ================================ */
 export const getModerationProducts = async (req, res) => {
@@ -1355,7 +1446,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
+            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

@@ -110,23 +110,20 @@ const OrderDetail = () => {
 
     const loadRiders = async () => {
         try {
-            const res = await adminApi.getActiveFleet();
-            const list = res.data?.results || res.data?.result || res.data || [];
-            if (Array.isArray(list) && list.length > 0) {
+            const res = await adminApi.getDeliveryPartners();
+            const payload = res.data?.result || res.data?.data || res.data;
+            const list = Array.isArray(payload?.items) ? payload.items : (Array.isArray(payload) ? payload : []);
+            
+            if (list.length > 0) {
+                // Filter only verified/active partners for the dropdown if needed
+                // Currently just setting the whole list
                 setAvailableRiders(list);
             } else {
-                const res2 = await adminApi.getDeliveryPartners();
-                const list2 = res2.data?.results || res2.data?.result || res2.data || [];
-                setAvailableRiders(Array.isArray(list2) ? list2 : []);
+                setAvailableRiders([]);
             }
         } catch (e) {
-            try {
-                const res2 = await adminApi.getDeliveryPartners();
-                const list2 = res2.data?.results || res2.data?.result || res2.data || [];
-                setAvailableRiders(Array.isArray(list2) ? list2 : []);
-            } catch (err) {
-                console.error("Failed to load delivery partners", err);
-            }
+            console.error("Failed to load delivery partners", e);
+            setAvailableRiders([]);
         }
     };
 

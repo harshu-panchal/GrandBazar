@@ -94,6 +94,8 @@ export const adminApi = {
     updateProduct: (id, formData) => axiosInstance.put(`/products/${id}`, formData),
     getProductById: (id) => axiosInstance.get(`/products/${id}`),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
+    getProductAddonMappings: (id) => axiosInstance.get(`/products/${id}/addon-mappings`),
+    getSuggestedAddons: (id) => axiosInstance.get(`/products/${id}/suggested-addons`),
 
     // Catalog Management
     getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),

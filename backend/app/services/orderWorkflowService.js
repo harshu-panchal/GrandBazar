@@ -24,6 +24,7 @@ import {
   emitToSeller,
   emitDeliveryBroadcastForSeller,
   emitToCustomer,
+  emitToDelivery,
   retractDeliveryBroadcastForOrder,
 } from "./orderSocketEmitter.js";
 import { distanceMeters } from "../utils/geoUtils.js";
@@ -944,6 +945,22 @@ export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
   });
 
   await retractDeliveryBroadcastForOrder(updated.orderId, deliveryOid);
+
+  // Unlike the auto-broadcast/accept flow, this order was assigned directly
+  // by an admin — the rider never goes through the accept-window race, so
+  // this is a real-time "here's your order" alert, not a broadcast to
+  // compete for. type: "ADMIN_ASSIGNED" tells the delivery app to skip the
+  // accept-endpoint call (the order is already theirs) and just show it.
+  // Without this, the only signal the rider got was a best-effort FCM push
+  // via emitNotificationEvent above — no in-app ringtone/alert, since that's
+  // driven exclusively by the "delivery:broadcast" socket event.
+  emitToDelivery(deliveryOid, {
+    event: "delivery:broadcast",
+    payload: deliveryBroadcastPayloadFromOrder(updated, {
+      type: "ADMIN_ASSIGNED",
+      deliverySearchExpiresAt: null,
+    }),
+  });
 
   emitOrderStatusUpdate(
     updated.orderId,

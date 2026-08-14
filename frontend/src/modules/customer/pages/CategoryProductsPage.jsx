@@ -34,6 +34,7 @@ const CategoryProductsPage = () => {
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [noServiceData, setNoServiceData] = useState(null);
+    const [refreshTick, setRefreshTick] = useState(0);
     const canonicalPath = category ? buildCategoryPath(category) : `/category/${catId || ""}`;
     const canonicalUrl = `${window.location.origin}${canonicalPath}`;
 
@@ -60,53 +61,13 @@ const CategoryProductsPage = () => {
             .catch(() => {});
     }, []);
 
-    const fetchData = async () => {
-        setIsLoading(true);
-        try {
-            const hasValidLocation =
-                Number.isFinite(currentLocation?.latitude) &&
-                Number.isFinite(currentLocation?.longitude);
-
-            // Fetch products and categories in parallel instead of sequentially
-            const [prodRes, catRes] = await Promise.all([
-                hasValidLocation
-                    ? customerApi.getProducts({
-                        categoryId: catId,
-                        lat: currentLocation.latitude,
-                        lng: currentLocation.longitude,
-                    })
-                    : Promise.resolve({ data: { success: true, result: { items: [] } } }),
-                customerApi.getCategories({ tree: true }),
-            ]);
-
-            if (prodRes.data.success) {
-                const rawResult = prodRes.data.result;
-                const dbProds = Array.isArray(prodRes.data.results)
-                    ? prodRes.data.results
-                    : Array.isArray(rawResult?.items)
-                    ? rawResult.items
-                    : Array.isArray(rawResult)
-                    ? rawResult
-                    : [];
-
-                const formattedProds = dbProds.map(p => ({
-                    ...p,
-                    id: p._id,
-                    image:
-                      p.mainImage ||
-                      p.image ||
-                      "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                    price: p.salePrice || p.price,
-                    originalPrice: p.price,
-                    weight: p.weight || "1 unit",
-                    deliveryTime: p.deliveryEta?.label || "8-15 mins"
-                }));
-                setProducts(Array.isArray(formattedProds) ? formattedProds : []);
-            } else {
-                setProducts([]);
-            }
-
-            if (catRes.data.success) {
+    // Category tree + subcategory chip list — only needs refetching when the
+    // category itself changes, not on every subcategory tap.
+    useEffect(() => {
+        let cancelled = false;
+        customerApi.getCategories({ tree: true })
+            .then((catRes) => {
+                if (cancelled || !catRes.data.success) return;
                 const tree = catRes.data.results || catRes.data.result || [];
                 let currentCat = null;
                 for (const header of tree) {
@@ -126,24 +87,87 @@ const CategoryProductsPage = () => {
                     }));
                     setSubCategories([{ id: 'all', name: 'All', icon: 'https://cdn-icons-png.flaticon.com/128/2321/2321831.png' }, ...subs]);
                 }
-            }
-        } catch (error) {
-            console.error("Error fetching category data:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            })
+            .catch((error) => console.error("Error fetching category tree:", error));
+        return () => { cancelled = true; };
+    }, [catId]);
 
     useEffect(() => {
-        fetchData();
         setSelectedSubCategory(location.state?.activeSubcategoryId || 'all');
-    }, [catId, location.state?.activeSubcategoryId, currentLocation?.latitude, currentLocation?.longitude]);
+    }, [catId, location.state?.activeSubcategoryId]);
+
+    // Products — refetches from the server whenever the selected subcategory
+    // changes, instead of client-filtering only the category's first page of
+    // results (which silently missed products past the default page size).
+    useEffect(() => {
+        let cancelled = false;
+        const fetchProducts = async () => {
+            setIsLoading(true);
+            try {
+                const hasValidLocation =
+                    Number.isFinite(currentLocation?.latitude) &&
+                    Number.isFinite(currentLocation?.longitude);
+
+                if (!hasValidLocation) {
+                    if (!cancelled) setProducts([]);
+                    return;
+                }
+
+                const params = {
+                    categoryId: catId,
+                    lat: currentLocation.latitude,
+                    lng: currentLocation.longitude,
+                    limit: 100,
+                };
+                if (selectedSubCategory !== 'all') {
+                    params.subcategoryId = selectedSubCategory;
+                }
+
+                const prodRes = await customerApi.getProducts(params);
+                if (cancelled) return;
+
+                if (prodRes.data.success) {
+                    const rawResult = prodRes.data.result;
+                    const dbProds = Array.isArray(prodRes.data.results)
+                        ? prodRes.data.results
+                        : Array.isArray(rawResult?.items)
+                        ? rawResult.items
+                        : Array.isArray(rawResult)
+                        ? rawResult
+                        : [];
+
+                    const formattedProds = dbProds.map(p => ({
+                        ...p,
+                        id: p._id,
+                        image:
+                          p.mainImage ||
+                          p.image ||
+                          "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
+                        price: p.salePrice || p.price,
+                        originalPrice: p.price,
+                        weight: p.weight || "1 unit",
+                        deliveryTime: p.deliveryEta?.label || "8-15 mins"
+                    }));
+                    setProducts(Array.isArray(formattedProds) ? formattedProds : []);
+                } else {
+                    setProducts([]);
+                }
+            } catch (error) {
+                console.error("Error fetching category products:", error);
+                if (!cancelled) setProducts([]);
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        };
+        fetchProducts();
+        return () => { cancelled = true; };
+    }, [catId, selectedSubCategory, currentLocation?.latitude, currentLocation?.longitude, refreshTick]);
 
     const safeProducts = Array.isArray(products) ? products : [];
 
-    const filteredProducts = safeProducts.filter(p =>
-        selectedSubCategory === 'all' || p.subcategoryId?._id === selectedSubCategory || p.subcategoryId === selectedSubCategory
-    );
+    // Subcategory filtering now happens server-side (see the products fetch
+    // effect above) — `products` already reflects the selected subcategory.
+    const filteredProducts = safeProducts;
 
     const productsById = React.useMemo(() => {
         const map = {};
@@ -190,8 +214,8 @@ const CategoryProductsPage = () => {
                         <p className="text-slate-500 font-bold text-sm max-w-[280px] mb-8 leading-relaxed">
                             {settings?.appName || 'Our service'} is not available in your area yet. We're expanding fast!
                         </p>
-                        <button 
-                            onClick={fetchData}
+                        <button
+                            onClick={() => setRefreshTick((t) => t + 1)}
                             className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/10"
                         >
                             Try Refreshing
@@ -230,7 +254,10 @@ const CategoryProductsPage = () => {
 
                         {/* Content */}
                         <main className="flex-1 p-2 pb-24 bg-white space-y-4 overflow-x-hidden">
-                            <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                            <div className={cn(
+                                "grid grid-cols-2 gap-x-2 gap-y-3 transition-opacity",
+                                isLoading && "opacity-40 pointer-events-none"
+                            )}>
                                 {filteredProducts.map((product) => (
                                     <ProductCard key={product.id} product={product} compact={true} />
                                 ))}

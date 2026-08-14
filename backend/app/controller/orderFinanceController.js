@@ -1,4 +1,5 @@
 import Order from "../models/order.js";
+import Setting from "../models/setting.js";
 import handleResponse from "../utils/helper.js";
 import {
   checkoutPreviewSchema,
@@ -17,6 +18,22 @@ import { placeOrderAtomic } from "../services/orderPlacementService.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
 import { verifyClientPaymentCallback } from "../services/paymentService.js";
 import { buildCheckoutPricingSnapshot } from "../services/checkoutPricingService.js";
+import { checkOperatingHours } from "../utils/operatingHours.js";
+
+// Admin-configurable cutoff (Setting.operatingHours — enabled/startHour/endHour/
+// cutoffMessage, all editable in AdminSettings.jsx). Was already enforced in the
+// legacy placeOrder route but not here, on the endpoint the live customer
+// checkout actually calls — throws so both callers below can share one check.
+async function assertWithinOperatingHours() {
+  const platformSettings = await Setting.findOne({}).select("operatingHours").lean();
+  if (!platformSettings?.operatingHours) return;
+  const operatingCheck = checkOperatingHours(platformSettings.operatingHours);
+  if (!operatingCheck.isAllowed) {
+    const err = new Error(operatingCheck.message || "Orders are currently closed.");
+    err.statusCode = 403;
+    throw err;
+  }
+}
 
 function validateWithJoi(schema, payload) {
   const { error, value } = schema.validate(payload, {
@@ -34,6 +51,7 @@ function validateWithJoi(schema, payload) {
 
 export const previewCheckoutFinance = async (req, res) => {
   try {
+    await assertWithinOperatingHours();
     const payload = validateWithJoi(checkoutPreviewSchema, req.body || {});
     const pricingSnapshot = await buildCheckoutPricingSnapshot({
       orderItems: payload.items,
@@ -76,6 +94,8 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
     if (!customerId) {
       return handleResponse(res, 401, "Unauthorized");
     }
+
+    await assertWithinOperatingHours();
 
     const validated = validateWithJoi(createFinanceOrderSchema, req.body || {});
     const payload = {
