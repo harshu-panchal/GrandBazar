@@ -57,6 +57,9 @@ const Level2Categories = () => {
     handlingFees: "",
     packingFees: "",
     gstSlab: "",
+    returnEligible: true,
+    refundWindowHours: "",
+    restockFeePercent: "",
   });
 
   const [imageFile, setImageFile] = useState(null);
@@ -181,6 +184,10 @@ const Level2Categories = () => {
           data.append(key, formData.applyCommission ? "true" : "false");
           return;
         }
+        if (key === "returnEligible") {
+          data.append(key, formData.returnEligible ? "true" : "false");
+          return;
+        }
         if (key === "adminCommission" || key === "handlingFees" || key === "packingFees" || key === "gstSlab") {
           data.append(key, formData[key] === "" ? "0" : String(formData[key]));
           return;
@@ -245,6 +252,9 @@ const Level2Categories = () => {
       handlingFees: "",
       packingFees: "",
       gstSlab: "",
+      returnEligible: true,
+      refundWindowHours: "",
+      restockFeePercent: "",
     });
     setImageFile(null);
     setPreviewUrl(null);
@@ -269,6 +279,9 @@ const Level2Categories = () => {
       handlingFees: item.handlingFees ?? "",
       packingFees: item.packingFees ?? "",
       gstSlab: item.gstSlab ?? "",
+      returnEligible: item.returnEligible !== false,
+      refundWindowHours: item.refundWindowHours ?? "",
+      restockFeePercent: item.restockFeePercent ?? "",
     });
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
@@ -430,6 +443,9 @@ const Level2Categories = () => {
                   GST (%)
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Returns
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -440,13 +456,13 @@ const Level2Categories = () => {
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="11" className="text-center py-8 text-gray-500">
+                  <td colSpan="12" className="text-center py-8 text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="text-center py-8 text-gray-500">
+                  <td colSpan="12" className="text-center py-8 text-gray-500">
                     No categories found
                   </td>
                 </tr>
@@ -501,6 +517,20 @@ const Level2Categories = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
                       {cat.gstSlab ?? 0}%
+                    </td>
+                    <td className="py-3 px-4">
+                      {cat.returnEligible === false ? (
+                        <Badge variant="error" className="bg-red-50 text-red-600">
+                          No returns
+                        </Badge>
+                      ) : (
+                        <span className="text-gray-500 text-sm">
+                          {cat.refundWindowHours ?? 24}h
+                          {Number(cat.restockFeePercent || 0) > 0
+                            ? ` · ${cat.restockFeePercent}% fee`
+                            : ""}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <Badge
@@ -787,6 +817,63 @@ const Level2Categories = () => {
                         GST is charged on checkout for products in this category. A product-level override, if set, wins over this.
                       </p>
                     </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!formData.returnEligible}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            returnEligible: e.target.checked,
+                          })
+                        }
+                        className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      Eligible for returns / refund
+                    </label>
+                    <p className="text-xs text-gray-500">
+                      Uncheck for categories that should never be returnable (e.g. cosmetics, perishables). Customers won't be able to request a return or refund for products in this category.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Refund Window (hours)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.refundWindowHours}
+                          disabled={!formData.returnEligible}
+                          onChange={(e) =>
+                            setFormData({ ...formData, refundWindowHours: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                          placeholder="Platform default (24)"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          Restock Fee (%)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.restockFeePercent}
+                          disabled={!formData.returnEligible}
+                          onChange={(e) =>
+                            setFormData({ ...formData, restockFeePercent: e.target.value })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                          placeholder="0"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Leave the refund window blank to use the platform-wide default set in Settings. When multiple categories are in one order, the shortest window and any non-eligible category both apply to the whole return request.
+                    </p>
                   </div>
                 </div>
 

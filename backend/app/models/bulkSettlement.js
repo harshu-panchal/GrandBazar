@@ -24,9 +24,12 @@ const bulkSettlementSchema = new mongoose.Schema(
       default: null,
     },
     bulkOrderLineIndexes: { type: [Number], default: [] },
+    // Store the payout's beneficiary Store _id — same beneficiary semantics
+    // as Payout.beneficiaryId for payoutType SELLER (Order.seller refs Store,
+    // not Seller; see getAdminFinancePayoutsController's beneficiary lookup).
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Seller",
+      ref: "Store",
       default: null,
     },
     sellerPayoutAmount: { type: Number, default: 0 },

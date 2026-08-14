@@ -80,6 +80,7 @@ import {
 import {
     adjustPayoutController,
     exportAdminFinanceStatementController,
+    getAdminBulkSettlementsController,
     getAdminFinanceLedgerController,
     getAdminFinancePayoutsController,
     getAdminFinanceSummaryController,
@@ -183,6 +184,12 @@ router.get(
     verifyToken,
     allowRoles("admin"),
     getAdminFinancePayoutsController,
+);
+router.get(
+    "/finance/bulk-settlements",
+    verifyToken,
+    allowRoles("admin"),
+    getAdminBulkSettlementsController,
 );
 router.post(
     "/finance/payouts/process",

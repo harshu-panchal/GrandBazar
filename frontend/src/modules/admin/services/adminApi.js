@@ -63,6 +63,7 @@ export const adminApi = {
     getFinanceSummary: () => axiosInstance.get('/admin/finance/summary'),
     getFinanceLedger: (params) => axiosInstance.get('/admin/finance/ledger', { params }),
     getFinancePayouts: (params) => axiosInstance.get('/admin/finance/payouts', { params }),
+    getBulkSettlements: (params) => axiosInstance.get('/admin/finance/bulk-settlements', { params }),
     processFinancePayouts: (data) => axiosInstance.post('/admin/finance/payouts/process', data),
     adjustPayout: (payoutId, data) => axiosInstance.post(`/admin/finance/payouts/${payoutId}/adjust`, data),
     holdSellerPayout: (orderId, data) => axiosInstance.post(`/admin/finance/orders/${orderId}/hold`, data),

@@ -3,6 +3,7 @@ import Wallet from "../models/wallet.js";
 import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import Order from "../models/order.js";
+import BulkSettlement from "../models/bulkSettlement.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
@@ -131,6 +132,47 @@ export const getAdminFinancePayoutsController = async (req, res) => {
     });
 
     return handleResponse(res, 200, "Finance payouts fetched", {
+      items,
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit) || 1,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// Read-side for BulkSettlement: the model has been populated correctly by
+// payoutService.js for every bulk-order payout, but nothing surfaced it back
+// to admin — only the coarse Payout.isBulkSettlement filter existed. This
+// gives admin the actual per-order commission/packaging/tax breakdown.
+export const getAdminBulkSettlementsController = async (req, res) => {
+  try {
+    const { status, sellerId, orderId, page = 1, limit = 25 } = req.query;
+
+    const query = {};
+    if (status) query.status = status;
+    if (sellerId) query.sellerId = sellerId;
+    if (orderId) query.orderId = { $regex: String(orderId).trim(), $options: "i" };
+
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
+    const skip = (safePage - 1) * safeLimit;
+
+    const [items, total] = await Promise.all([
+      BulkSettlement.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .populate("sellerId", "shopName")
+        .populate("payout", "status amount")
+        .populate("order", "orderId status")
+        .lean(),
+      BulkSettlement.countDocuments(query),
+    ]);
+
+    return handleResponse(res, 200, "Bulk settlements fetched", {
       items,
       page: safePage,
       limit: safeLimit,

@@ -55,6 +55,7 @@ const AdminWallet = () => {
     const [isHolding, setIsHolding] = useState(false);
     const [releasingOrderId, setReleasingOrderId] = useState(null);
     const [bulkOnly, setBulkOnly] = useState(false);
+    const [bulkDetailModal, setBulkDetailModal] = useState({ isOpen: false, loading: false, data: null, orderId: null });
 
     const fetchData = async (page = 1) => {
         try {
@@ -208,6 +209,18 @@ const AdminWallet = () => {
             toast.error(error.response?.data?.message || 'Failed to place payout on hold');
         } finally {
             setIsHolding(false);
+        }
+    };
+
+    const openBulkDetail = async (orderId) => {
+        setBulkDetailModal({ isOpen: true, loading: true, data: null, orderId });
+        try {
+            const res = await adminApi.getBulkSettlements({ orderId, limit: 1 });
+            const items = res.data.result?.items || [];
+            setBulkDetailModal({ isOpen: true, loading: false, data: items[0] || null, orderId });
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to load bulk settlement breakdown');
+            setBulkDetailModal({ isOpen: true, loading: false, data: null, orderId });
         }
     };
 
@@ -527,7 +540,12 @@ const AdminWallet = () => {
                                                                 <Building2 className="h-5 w-5 text-brand-500" />
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-bold text-slate-900">{req.beneficiary?.shopName || req.beneficiary?.name || req.beneficiaryId}</p>
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-sm font-bold text-slate-900">{req.beneficiary?.shopName || req.beneficiary?.name || req.beneficiaryId}</p>
+                                                                    {req.isBulkSettlement && (
+                                                                        <Badge variant="primary" className="text-[8px] font-black px-2 py-0.5">BULK</Badge>
+                                                                    )}
+                                                                </div>
                                                                 <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{req.beneficiary?.phone || req.payoutType}</p>
                                                             </div>
                                                         </div>
@@ -542,6 +560,19 @@ const AdminWallet = () => {
                                                     </td>
                                                     <td className="px-6 py-5 text-right pr-8">
                                                         <div className="flex items-center justify-end gap-2">
+                                                            {req.isBulkSettlement && (() => {
+                                                                const relatedOrder = req.relatedOrderIds?.[0];
+                                                                const orderKey = relatedOrder?.orderId || relatedOrder?._id;
+                                                                if (!orderKey) return null;
+                                                                return (
+                                                                    <button
+                                                                        onClick={() => openBulkDetail(orderKey)}
+                                                                        className="px-4 py-2 bg-white ring-1 ring-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase hover:border-brand-400 hover:text-brand-700 transition-all active:scale-95"
+                                                                    >
+                                                                        Breakdown
+                                                                    </button>
+                                                                );
+                                                            })()}
                                                             {(req.status || '').toUpperCase() === 'PENDING' && (
                                                                 <button
                                                                     disabled={isProcessing || loadingId === req._id}
@@ -963,6 +994,61 @@ const AdminWallet = () => {
                         </button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Bulk-Order Settlement Breakdown Modal */}
+            <Modal
+                isOpen={bulkDetailModal.isOpen}
+                onClose={() => setBulkDetailModal({ isOpen: false, loading: false, data: null, orderId: null })}
+                title="Bulk Settlement Breakdown"
+                size="md"
+            >
+                {bulkDetailModal.loading ? (
+                    <div className="py-10 flex items-center justify-center">
+                        <RotateCw className="h-5 w-5 animate-spin text-slate-400" />
+                    </div>
+                ) : !bulkDetailModal.data ? (
+                    <div className="py-10 text-center">
+                        <p className="text-sm font-bold text-slate-500">No bulk settlement record found for order {bulkDetailModal.orderId}.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-5">
+                        <div className="text-center pb-4 border-b border-slate-100">
+                            <p className="text-sm font-bold text-slate-900">{bulkDetailModal.data.orderId}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                {bulkDetailModal.data.sellerId?.shopName || 'Unknown seller'}
+                                {bulkDetailModal.data.bulkOrderReason ? ` · ${bulkDetailModal.data.bulkOrderReason.replace('_', ' ')}` : ''}
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-slate-50 rounded-xl p-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Seller Payout</p>
+                                <p className="text-lg font-black text-slate-900">₹{Number(bulkDetailModal.data.sellerPayoutAmount || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl p-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Commission</p>
+                                <p className="text-lg font-black text-slate-900">₹{Number(bulkDetailModal.data.commissionAmount || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl p-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Packaging</p>
+                                <p className="text-lg font-black text-slate-900">₹{Number(bulkDetailModal.data.packagingAmount || 0).toLocaleString()}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl p-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax</p>
+                                <p className="text-lg font-black text-slate-900">₹{Number(bulkDetailModal.data.taxAmount || 0).toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between px-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Settlement status</span>
+                            <Badge variant={bulkDetailModal.data.status === 'COMPLETED' ? 'success' : bulkDetailModal.data.status === 'CANCELLED' ? 'danger' : 'warning'} className="text-[8px] font-black px-2.5 py-1">
+                                {bulkDetailModal.data.status}
+                            </Badge>
+                        </div>
+                        {bulkDetailModal.data.settledAt && (
+                            <p className="text-[10px] text-slate-400 text-center">Settled on {new Date(bulkDetailModal.data.settledAt).toLocaleString()}</p>
+                        )}
+                    </div>
+                )}
             </Modal>
         </div>
     );
