@@ -81,7 +81,15 @@ export async function resolveCategoryWindowOverrideHours(productIds = []) {
   });
 
   const configuredWindows = categories
-    .map((c) => Number(c.refundWindowHours))
+    .map((c) => c.refundWindowHours)
+    // Number(null) is 0, not NaN — without this null/undefined check a
+    // category that was explicitly saved with no window configured (as
+    // opposed to a genuine 0-hour window) would incorrectly win as the
+    // strictest override via Math.min below, effectively disabling returns
+    // for every product in that category instead of falling back to the
+    // platform default.
+    .filter((hours) => hours !== null && hours !== undefined)
+    .map((hours) => Number(hours))
     .filter((hours) => Number.isFinite(hours) && hours >= 0);
   const overrideHours = configuredWindows.length > 0 ? Math.min(...configuredWindows) : null;
 

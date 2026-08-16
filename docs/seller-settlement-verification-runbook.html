@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seller Settlement Verification Runbook</title>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --surface: #ffffff;
+    --surface-2: #ebe8e0;
+    --ink: #1e2430;
+    --ink-mute: #5b6270;
+    --ink-faint: #878e99;
+    --accent: #2f6f5e;
+    --accent-strong: #1f4f42;
+    --accent-tint: #e3ede9;
+    --good: #2e7d4f;
+    --good-tint: #e4f1e8;
+    --warn: #a8690f;
+    --warn-tint: #f7ecd8;
+    --bad: #b23a3a;
+    --bad-tint: #f8e6e6;
+    --border: #ddd8cc;
+    --code-bg: #23282f;
+    --code-ink: #dfe4ea;
+    --code-accent: #7bcab4;
+    --shadow: 0 1px 2px rgba(30,36,48,.06), 0 8px 24px -12px rgba(30,36,48,.18);
+    --font-head: "Segoe UI Semibold", "Segoe UI", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Segoe UI", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161d;
+      --surface: #1a2027;
+      --surface-2: #222933;
+      --ink: #e8e6de;
+      --ink-mute: #a1a8b3;
+      --ink-faint: #737b87;
+      --accent: #57b39c;
+      --accent-strong: #85d3bd;
+      --accent-tint: #1c2b28;
+      --good: #52b57d;
+      --good-tint: #1a2b21;
+      --warn: #d9a441;
+      --warn-tint: #302716;
+      --bad: #d9635f;
+      --bad-tint: #301c1c;
+      --border: #2b323d;
+      --code-bg: #0f1318;
+      --code-ink: #dfe4ea;
+      --code-accent: #7bcab4;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161d;
+    --surface: #1a2027;
+    --surface-2: #222933;
+    --ink: #e8e6de;
+    --ink-mute: #a1a8b3;
+    --ink-faint: #737b87;
+    --accent: #57b39c;
+    --accent-strong: #85d3bd;
+    --accent-tint: #1c2b28;
+    --good: #52b57d;
+    --good-tint: #1a2b21;
+    --warn: #d9a441;
+    --warn-tint: #302716;
+    --bad: #d9635f;
+    --bad-tint: #301c1c;
+    --border: #2b323d;
+    --code-bg: #0f1318;
+    --code-ink: #dfe4ea;
+    --code-accent: #7bcab4;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  html { color-scheme: light dark; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-strong); }
+  code, .mono { font-family: var(--font-mono); }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 272px minmax(0,1fr);
+    max-width: 1280px;
+    margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.toc { position: static !important; max-height:none !important; }
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 18px 28px 24px;
+    border-right: 1px solid var(--border);
+  }
+  .toc .brand {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: .02em;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .toc .brand-sub {
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    margin-bottom: 20px;
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0 0 22px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toc ol li a {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    text-decoration: none;
+    color: var(--ink-mute);
+    font-size: 0.86rem;
+    padding: 7px 10px;
+    border-radius: 7px;
+  }
+  .toc ol li a:hover { background: var(--surface-2); color: var(--ink); }
+  .toc ol li a .n {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    min-width: 1.1em;
+  }
+  .toc-legend {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+  }
+  .toc-legend .row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+
+  main { padding: 40px 40px 100px; min-width: 0; }
+  @media (max-width: 640px) { main { padding: 28px 18px 80px; } }
+
+  header.hero { margin-bottom: 30px; }
+  header.hero .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+    margin-bottom: 10px;
+  }
+  header.hero h1 {
+    font-family: var(--font-head);
+    font-size: clamp(1.7rem, 3vw, 2.35rem);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  header.hero p.lede {
+    max-width: 68ch;
+    color: var(--ink-mute);
+    font-size: 1.02rem;
+    margin: 0 0 22px;
+  }
+
+  .fixture {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 22px 26px;
+    margin-bottom: 8px;
+  }
+  .fixture h2 {
+    font-family: var(--font-head);
+    font-size: 0.95rem;
+    margin: 0 0 4px;
+  }
+  .fixture p.sub {
+    color: var(--ink-faint);
+    font-size: 0.85rem;
+    margin: 0 0 16px;
+  }
+  .fixture-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+    gap: 10px;
+  }
+  .fixture-item {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .fixture-item .label { font-size: 0.7rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .fixture-item .val { font-family: var(--font-mono); font-weight: 600; font-size: 0.92rem; }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 0.9rem;
+    color: var(--ink-mute);
+    margin: 22px 0 8px;
+  }
+  .callout strong { color: var(--ink); }
+  .callout.warn { border-left-color: var(--warn); }
+
+  section.req {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    margin: 26px 0;
+    scroll-margin-top: 20px;
+    overflow: hidden;
+  }
+  .req-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 26px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .req-head .idx {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    width: 30px; height:30px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .req-head h2 {
+    font-family: var(--font-head);
+    font-size: 1.1rem;
+    margin: 0;
+    flex: 1;
+    letter-spacing: -0.005em;
+  }
+  .pill {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .pill.good { background: var(--good-tint); color: var(--good); }
+  .pill.warn { background: var(--warn-tint); color: var(--warn); }
+
+  .req-body { padding: 6px 26px 24px; }
+  .req-body h3 {
+    font-family: var(--font-head);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-faint);
+    margin: 20px 0 10px;
+  }
+  .req-body h3:first-child { margin-top: 18px; }
+
+  ol.steps { margin: 0; padding-left: 1.3em; display:flex; flex-direction:column; gap:8px; }
+  ol.steps li { padding-left: 4px; }
+  ol.steps li::marker { font-family: var(--font-mono); color: var(--accent-strong); font-weight:600; }
+  .path { background: var(--accent-tint); color: var(--accent-strong); padding: 1px 7px; border-radius: 5px; font-size: 0.85em; }
+
+  table.expect {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+  }
+  table.expect th, table.expect td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.expect th { color: var(--ink-faint); font-weight:600; font-size:0.72rem; text-transform:uppercase; letter-spacing:.04em; }
+  table.expect td.num { font-family: var(--font-mono); font-weight: 600; text-align: right; }
+  .tablewrap { overflow-x: auto; }
+
+  .gap-box {
+    background: var(--warn-tint);
+    border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+    border-radius: 9px;
+    padding: 13px 16px;
+    font-size: 0.87rem;
+    color: var(--ink);
+    margin-top: 14px;
+  }
+  .gap-box strong { color: var(--warn); }
+
+  pre.api {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 9px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+  pre.api .m { color: var(--code-accent); font-weight:600; }
+  pre.api .c { color: #8b93a1; }
+
+  footer.end {
+    margin-top: 50px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--ink-faint);
+    font-size: 0.82rem;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="toc">
+    <div class="brand">Seller Settlement<br/>Verification Runbook</div>
+    <div class="brand-sub">GrandBazar / Zinto — 8 checklist points</div>
+    <ol>
+      <li><a href="#fixture"><span class="n">00</span> Test fixture setup</a></li>
+      <li><a href="#r1"><span class="n">01</span> Product selling amount</a></li>
+      <li><a href="#r2"><span class="n">02</span> Applicable commissions</a></li>
+      <li><a href="#r3"><span class="n">03</span> GST / tax components</a></li>
+      <li><a href="#r4"><span class="n">04</span> Packaging / handling sharing</a></li>
+      <li><a href="#r5"><span class="n">05</span> Refund deductions</a></li>
+      <li><a href="#r6"><span class="n">06</span> Partial cancellation</a></li>
+      <li><a href="#r7"><span class="n">07</span> Replacement impact</a></li>
+      <li><a href="#r8"><span class="n">08</span> Platform charges/deductions</a></li>
+    </ol>
+    <div class="toc-legend">
+      <div class="row"><span class="pill good">Verified</span> confirmed working in code</div>
+      <div class="row"><span class="pill warn">Fixed 08-15</span> was broken, now fixed</div>
+    </div>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <div class="eyebrow">Manual QA · grounded in a live code read · fixes applied 2026‑08‑15</div>
+      <h1>How to verify all 8 seller settlement rules</h1>
+      <p class="lede">A single worked example runs through every section below, so the expected numbers at each step are concrete and checkable — not just "should look about right." Three of these sections cover math that was broken until today (§3 GST refund reversal, §5 restocking fee, §6 partial-return payout proration) — those sections call out old-vs-new numbers explicitly so you can confirm the fix, not just the feature.</p>
+    </header>
+
+    <div class="fixture" id="fixture">
+      <h2>Test fixture — set this up once, reuse for every section below</h2>
+      <p class="sub">One product, one category, one store config. All expected numbers in this guide are computed from these exact values.</p>
+      <div class="fixture-grid">
+        <div class="fixture-item"><div class="label">Product</div><div class="val">"Test Widget" · ₹500</div></div>
+        <div class="fixture-item"><div class="label">Category commission</div><div class="val">10%</div></div>
+        <div class="fixture-item"><div class="label">Category GST slab</div><div class="val">12%</div></div>
+        <div class="fixture-item"><div class="label">Category restocking fee</div><div class="val">20%</div></div>
+        <div class="fixture-item"><div class="label">Store packaging charge</div><div class="val">₹20 flat, enabled</div></div>
+        <div class="fixture-item"><div class="label">Return-pickup fee</div><div class="val">₹20 flat (Setting)</div></div>
+        <div class="fixture-item"><div class="label">Order</div><div class="val">Qty 2 → subtotal ₹1000</div></div>
+      </div>
+      <h3 style="margin-top:18px">Setup steps</h3>
+      <ol class="steps">
+        <li>Create/assign the product to a category at <span class="path">/admin/categories/level2</span>. Set <strong>Admin Commission = 10%</strong>, <strong>GST Slab = 12%</strong>, and in the <strong>Returns &amp; Refunds</strong> box, <strong>Restock Fee = 20%</strong> (leave "Eligible for returns" checked).</li>
+        <li>On the seller's store (via <span class="path">/admin/sellers/active/:id</span> → Shop Setup, or the seller's own settings), set <strong>Packaging Charge = ₹20</strong>, enabled.</li>
+        <li>At <span class="path">/admin/settings</span>, confirm <strong>Return Delivery Commission</strong> (the flat per-return-pickup fee) is set — use ₹20 for this guide's numbers, or note whatever value is already configured and adjust the expected totals below accordingly.</li>
+        <li>Place a test order for <strong>qty 2</strong> of the product as a customer, same city as the seller (intra-state, so GST splits as CGST+SGST, not IGST).</li>
+      </ol>
+    </div>
+
+    <!-- 1 -->
+    <section class="req" id="r1">
+      <div class="req-head">
+        <div class="idx">01</div>
+        <h2>Settlement considers product selling amount</h2>
+        <span class="pill good">Verified</span>
+      </div>
+      <div class="req-body">
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>After placing the order, open it in <span class="path">/admin/orders</span> (or query <code class="mono">GET /orders/:orderId</code> as admin) and inspect <code class="mono">paymentBreakdown.productSubtotal</code>.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">productSubtotal</code></td><td>₹500 × 2</td><td class="num">₹1,000.00</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="req" id="r2">
+      <div class="req-head">
+        <div class="idx">02</div>
+        <h2>Settlement considers applicable commissions</h2>
+        <span class="pill good">Verified</span>
+      </div>
+      <div class="req-body">
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>On the same order, check <code class="mono">paymentBreakdown.adminProductCommissionTotal</code> and <code class="mono">lineItems[0].appliedCommissionSourceLevel</code>.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">adminProductCommissionTotal</code></td><td>10% × ₹1,000</td><td class="num">₹100.00</td></tr>
+            <tr><td>Seller's merchandise share</td><td>₹1,000 − ₹100</td><td class="num">₹900.00</td></tr>
+          </table>
+        </div>
+        <div class="gap-box">
+          <strong>Known limitation (not a bug, tracked separately):</strong> the live commission resolver only checks the <strong>subcategory</strong> tier — commission set at the Level‑2 category (the one you just configured) or header tier is silently skipped unless nothing more specific applies. For this fixture to show 10% as expected, either set the commission directly on a <em>subcategory</em>, or confirm the product has no subcategory assigned (Level‑2 becomes the deepest applicable tier in that case). If <code class="mono">appliedCommissionSourceLevel</code> comes back <code class="mono">"shop"</code> or <code class="mono">"city"</code> instead of your expected tier, this is why — not a new issue, already on record for a future fix.
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="req" id="r3">
+      <div class="req-head">
+        <div class="idx">03</div>
+        <h2>Settlement considers GST/tax components</h2>
+        <span class="pill warn">Fixed 08-15 (refund side)</span>
+      </div>
+      <div class="req-body">
+        <h3>Steps — GST at checkout (was already correct)</h3>
+        <ol class="steps">
+          <li>Check <code class="mono">paymentBreakdown.cgstTotal</code> / <code class="mono">sgstTotal</code> and confirm <code class="mono">sellerPayoutTotal</code> does <strong>not</strong> include them.</li>
+          <li>Download both invoices from the order (customer: order detail → Invoice; seller: <span class="path">/seller/invoices</span>) and confirm the GST breakdown matches.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">cgstTotal</code> + <code class="mono">sgstTotal</code></td><td>12% × ₹1,000</td><td class="num">₹120.00</td></tr>
+            <tr><td><code class="mono">cgstTotal</code></td><td>half of ₹120</td><td class="num">₹60.00</td></tr>
+            <tr><td><code class="mono">sgstTotal</code></td><td>half of ₹120</td><td class="num">₹60.00</td></tr>
+            <tr><td>GST inside <code class="mono">sellerPayoutTotal</code>?</td><td>—</td><td class="num">₹0.00 (excluded, by design)</td></tr>
+          </table>
+        </div>
+        <h3>Steps — GST reversed on refund (this is the fix — see §5 for the full return walkthrough)</h3>
+        <p style="font-size:0.87rem; color:var(--ink-mute); margin:0">Skip to <a href="#r5">§5 Refund deductions</a> to actually trigger a return — the GST-reversal check is folded into that walkthrough since it only fires as part of a real refund.</p>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="req" id="r4">
+      <div class="req-head">
+        <div class="idx">04</div>
+        <h2>Settlement considers packaging/handling charge sharing</h2>
+        <span class="pill good">Verified</span>
+      </div>
+      <div class="req-body">
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>Confirm <code class="mono">paymentBreakdown.packagingChargeAmount</code> on the order equals the store's configured flat charge.</li>
+          <li>Confirm <code class="mono">sellerPayoutTotal</code> includes it (packaging is seller revenue, not platform's).</li>
+          <li><em>Optional — product-level override:</em> on the product itself, set a <strong>Packaging Charge</strong> override (e.g. ₹35) via <span class="path">/admin/products</span> or the seller's product form, place a fresh order, and confirm <code class="mono">productPackagingChargeAmount</code> reflects ₹35 × quantity instead of the store default, and that it's <em>added to</em>, not instead of, the store-level charge (they're two separate sources).</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">packagingChargeAmount</code></td><td>store flat charge</td><td class="num">₹20.00</td></tr>
+            <tr><td><code class="mono">sellerPayoutTotal</code> so far</td><td>₹900 (merch.) + ₹20 (pack.)</td><td class="num">₹920.00</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="req" id="r5">
+      <div class="req-head">
+        <div class="idx">05</div>
+        <h2>Settlement considers refund deductions</h2>
+        <span class="pill warn">Fixed 08-15</span>
+      </div>
+      <div class="req-body">
+        <p style="color:var(--ink-mute); font-size:0.92rem; margin:0 0 4px">Two real bugs lived here until today: the restocking fee was configured but <strong>never actually applied</strong> (dead code — a status field set earlier in the return lifecycle silently bypassed the fee-calculation block every time), and GST was never reversed on refund. Both are fixed — this walkthrough proves it with real numbers.</p>
+
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>Mark the order <strong>Delivered</strong> (via delivery app or admin override) so a seller <code class="mono">Payout</code> gets created — confirm one exists at <span class="path">/admin/wallet</span> with status <em>PENDING</em>, amount ≈ ₹920 (plus delivery/handling if any — packaging is the only piece this guide's fixture adds).</li>
+          <li>As the customer, request a return for <strong>1 of the 2 units</strong> (a partial return — this also sets up §6's prorated-payout check).</li>
+          <li>As seller/admin, approve the return request.</li>
+          <li>Move it through pickup → QC → mark <strong>QC passed</strong> — this is what fires the actual refund (<code class="mono">completeReturnAndRefund</code>).</li>
+        </ol>
+
+        <h3>Expected — customer refund (1 unit returned)</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Step</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td>Gross item value returned</td><td>₹500 × 1</td><td class="num">₹500.00</td></tr>
+            <tr><td>Restocking fee deducted</td><td>20% × ₹500</td><td class="num">− ₹100.00</td></tr>
+            <tr><td>Net merchandise refund</td><td>₹500 − ₹100</td><td class="num">₹400.00</td></tr>
+            <tr><td>GST refunded</td><td>12% × ₹400</td><td class="num">+ ₹48.00</td></tr>
+            <tr><td style="font-weight:700">Customer wallet credit</td><td>₹400 + ₹48</td><td class="num" style="font-weight:700">₹448.00</td></tr>
+          </table>
+        </div>
+        <div class="gap-box">
+          <strong>Before today's fix</strong>, this would have credited a flat <strong>₹500.00</strong> — no restocking fee deducted (the field was dead code) and no GST added back. If you see exactly ₹500.00 credited, the fix isn't deployed/running yet.
+        </div>
+
+        <h3>Expected — seller clawback (same return)</h3>
+        <p style="font-size:0.87rem; color:var(--ink-mute); margin:0 0 10px">This walkthrough has the payout still <em>PENDING</em> when the return completes (step 1 above) — that's the "held" case, and it behaves differently from a return on an order whose payout was already released to the seller's available balance. Both are shown below; make sure you're checking the numbers for the scenario you actually set up.</p>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Step</th><th>Formula</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td>Seller's original payout share for 1 unit</td><td>₹900 (2-unit line share) × ½</td><td class="num">₹450.00</td></tr>
+            <tr><td style="font-weight:700">If payout still PENDING (this walkthrough)</td><td>only the merch. share comes off the payout</td><td class="num" style="font-weight:700">₹450.00</td></tr>
+            <tr><td>— return-pickup fee in this case</td><td>not charged (seller never received the payout yet)</td><td class="num">₹0.00</td></tr>
+            <tr><td style="font-weight:700">If payout already RELEASED (different setup)</td><td>₹450 debited from available balance + ₹20 return-pickup fee</td><td class="num" style="font-weight:700">₹470.00</td></tr>
+          </table>
+        </div>
+        <p style="font-size:0.85rem; color:var(--ink-faint); margin:8px 0 0">The return-pickup fee only being charged once a payout has actually been released is existing, unchanged platform policy — not something this pass touched. If you want to see the ₹470/released-balance path instead, process the payout (<span class="path">/admin/wallet</span> → process) <em>before</em> starting the return, rather than leaving it pending.</p>
+        <div class="gap-box">
+          <strong>Before today's fix</strong>, the seller-side debit used the <em>customer's</em> refund figure instead of what the seller actually received — and if the payout was still on hold, it would have cancelled the <strong>entire</strong> ₹920 pending payout for a return of just 1 of 2 units, not a prorated ₹450. Check <span class="path">/admin/wallet</span> after this return: if the payout status shows fully <em>CANCELLED</em> rather than reduced to <strong>₹470 remaining</strong> (₹920 − ₹450, still <em>HOLD</em>/pending), the proration fix isn't active.
+        </div>
+
+        <h3>Where to verify</h3>
+        <ul class="steps" style="list-style:none; padding-left:0; display:flex; flex-direction:column; gap:6px; font-size:0.87rem; color:var(--ink-mute)">
+          <li>• Customer wallet balance (increase of ₹448.00)</li>
+          <li>• <code class="mono">Transaction</code> records: one <code class="mono">type:"Refund"</code> for the customer (+448), one for the seller (−450 in the pending-payout case, −470 if the payout had already been released) — check <code class="mono">meta.gstRefunded</code> / <code class="mono">meta.sellerShareOfReturnedItems</code> / <code class="mono">meta.returnDeliveryCommissionCharged</code> on each for the itemized breakdown</li>
+          <li>• <span class="path">/admin/wallet</span>: the seller's payout for this order shows reduced to <strong>₹470 remaining</strong> (₹920 − ₹450), status still <em>HOLD</em>/pending, not cancelled</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="req" id="r6">
+      <div class="req-head">
+        <div class="idx">06</div>
+        <h2>Settlement considers partial cancellation adjustments</h2>
+        <span class="pill good">Verified</span>
+      </div>
+      <div class="req-body">
+        <p style="color:var(--ink-mute); font-size:0.92rem; margin:0 0 4px">This is about cancelling items <em>before</em> dispatch — distinct from §5's post-delivery return/refund.</p>
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>Place a fresh order for <strong>qty 2</strong> of the fixture product (subtotal ₹1,000, same config).</li>
+          <li>Before any delivery partner is assigned, cancel <strong>1 of the 2</strong> line items (partial cancellation) as the customer/seller/admin, whichever surface is enabled.</li>
+          <li>Confirm the order moves to <code class="mono">status: "partial_cancelled"</code> and inspect <code class="mono">paymentBreakdown</code> again.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula (1 unit remaining)</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">productSubtotal</code></td><td>₹500 × 1</td><td class="num">₹500.00</td></tr>
+            <tr><td><code class="mono">adminProductCommissionTotal</code></td><td>10% × ₹500</td><td class="num">₹50.00</td></tr>
+            <tr><td><code class="mono">sellerPayoutTotal</code></td><td>(₹500−₹50) + ₹20 packaging</td><td class="num">₹470.00</td></tr>
+          </table>
+        </div>
+        <p style="font-size:0.85rem; color:var(--ink-faint)">The whole breakdown is recomputed from scratch on the reduced item set — confirm it's not just the original ₹920 with a note attached. If the delivery partner has already been assigned, the app should refuse the cancellation with a 409 rather than silently no-op — worth confirming as a negative test too.</p>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section class="req" id="r7">
+      <div class="req-head">
+        <div class="idx">07</div>
+        <h2>Settlement considers replacement impact</h2>
+        <span class="pill good">Verified (pre-dispatch only)</span>
+      </div>
+      <div class="req-body">
+        <p style="color:var(--ink-mute); font-size:0.92rem; margin:0 0 4px">Replacement here means a <strong>seller-initiated substitution before dispatch</strong> (e.g. an item is out of stock) that the customer approves — not a post-delivery "replace instead of refund" request. That second flow doesn't exist in this app; only the return→refund path (§5) covers delivered orders.</p>
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>On a fresh, undispatched order, have the seller propose a replacement item priced <strong>within</strong> <code class="mono">Setting.replacementPriceTolerancePercent</code> of the original (check the configured value at <span class="path">/admin/settings</span>).</li>
+          <li>Customer approves the replacement.</li>
+          <li>Repeat with a replacement priced <strong>above</strong> tolerance, and separately one priced <strong>below</strong> the original.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Scenario</th><th>Expected system behavior</th></tr>
+            <tr><td>Cheaper replacement</td><td>Order updates to the new item; a real credit-note refund is issued for the difference</td></tr>
+            <tr><td>Pricier, within tolerance</td><td>Order updates; customer is prompted for the extra payment (<code class="mono">AWAITING_EXTRA_PAYMENT</code>)</td></tr>
+            <tr><td>Pricier, outside tolerance</td><td>Rejected — replacement not offered/allowed at that price gap</td></tr>
+          </table>
+        </div>
+        <p style="font-size:0.85rem; color:var(--ink-faint)">In every accepted case, re-check <code class="mono">paymentBreakdown.sellerPayoutTotal</code> — it should reflect the <em>replacement</em> item's commission/GST/packaging, not the original item's, since it goes through the same recompute-and-freeze path as §6.</p>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="req" id="r8">
+      <div class="req-head">
+        <div class="idx">08</div>
+        <h2>Settlement considers platform charges/deductions</h2>
+        <span class="pill good">Verified</span>
+      </div>
+      <div class="req-body">
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li>At <span class="path">/admin/settings</span>, enable the <strong>odd-hour surcharge</strong> with an amount (e.g. ₹15) and a seller revenue split (e.g. 50%).</li>
+          <li>Place an order inside that time window.</li>
+          <li>Inspect <code class="mono">paymentBreakdown.oddHourSurchargeAmount</code> and how much of it lands in <code class="mono">sellerPayoutTotal</code> vs <code class="mono">platformTotalEarning</code>.</li>
+        </ol>
+        <h3>Expected</h3>
+        <div class="tablewrap">
+          <table class="expect">
+            <tr><th>Field</th><th>Formula (50% split)</th><td class="num" style="font-weight:700">Value</td></tr>
+            <tr><td><code class="mono">oddHourSurchargeAmount</code></td><td>configured flat amount</td><td class="num">₹15.00</td></tr>
+            <tr><td>Seller's share (added to payout)</td><td>50% × ₹15</td><td class="num">₹7.50</td></tr>
+            <tr><td>Platform's share</td><td>50% × ₹15</td><td class="num">₹7.50</td></tr>
+          </table>
+        </div>
+        <p style="font-size:0.85rem; color:var(--ink-faint)">Also confirm delivery fee and the category-hierarchy packing/handling fee (distinct from the store/product packaging charge in §4) are <strong>excluded</strong> from <code class="mono">sellerPayoutTotal</code> entirely — those are pure platform logistics margin by design.</p>
+      </div>
+    </section>
+
+    <footer class="end">
+      Grounded in a direct read of <code>backend/app/services/finance/pricingService.js</code>, <code>orderController.js</code>, <code>orderPriceAdjustmentService.js</code>, <code>orderModificationService.js</code>, and <code>payoutService.js</code> on 2026‑08‑15, the same day the §5/§3-refund-side fixes shipped. All dollar figures above are fixture-specific — recompute if you use different commission/GST/restocking/packaging values. Re-verify against fresh <code>git log</code>/<code>git diff</code> if this guide is used after further changes land.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

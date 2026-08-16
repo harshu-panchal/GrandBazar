@@ -5,6 +5,8 @@ import Setting from "../models/setting.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { applyOrderPriceAdjustment } from "./orderPriceAdjustmentService.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
+import { validateScheduleSelection } from "./orderSchedulingService.js";
+import { FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 
 function nextVersion(order) {
   return Number(order.modificationVersion || 0) + 1;
@@ -267,6 +269,7 @@ export async function createSplitDeliveries({
   splits = [],
   actorRole = "seller",
   actorId = "",
+  sellerId = null,
 }) {
   orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({ orderId });
@@ -275,10 +278,33 @@ export async function createSplitDeliveries({
     err.statusCode = 404;
     throw err;
   }
+  if (actorRole !== "admin" && sellerId && String(order.seller) !== String(sellerId)) {
+    const err = new Error("Access denied. You are not authorized to split this order.");
+    err.statusCode = 403;
+    throw err;
+  }
   if (!Array.isArray(splits) || splits.length < 2) {
     const err = new Error("At least two split delivery records are required");
     err.statusCode = 400;
     throw err;
+  }
+
+  // Every leg after the first is, by definition, a delayed delivery for
+  // items that couldn't go out with the rest — it must carry a real,
+  // seller-committed date/window rather than a vague "next delivery" label
+  // with nothing behind it, so the customer sees an actual timeline.
+  for (let idx = 1; idx < splits.length; idx += 1) {
+    if (!splits[idx]?.deliveryDate) {
+      const err = new Error(`Split ${idx + 1} needs a delivery date — only the first split can go out immediately.`);
+      err.statusCode = 400;
+      throw err;
+    }
+    await validateScheduleSelection({
+      sellerId: order.seller,
+      deliveryDate: splits[idx].deliveryDate,
+      windowLabel: splits[idx].windowLabel,
+      fulfillmentType: FULFILLMENT_TYPE.SCHEDULED,
+    });
   }
 
   const used = new Set();
@@ -368,7 +394,7 @@ export async function createSplitDeliveries({
  * without care) rather than being bolted on here — this function closes
  * the status-visibility gap without touching money movement.
  */
-export async function markSplitDeliveryStage({ orderId, splitId, status, actorRole = "seller", actorId = "" }) {
+export async function markSplitDeliveryStage({ orderId, splitId, status, actorRole = "seller", actorId = "", sellerId = null }) {
   orderId = await requireCanonicalOrderId(orderId);
   const allowedStatuses = ["processing", "out_for_delivery", "delivered", "cancelled"];
   if (!allowedStatuses.includes(status)) {
@@ -377,7 +403,11 @@ export async function markSplitDeliveryStage({ orderId, splitId, status, actorRo
     throw err;
   }
 
-  const order = await Order.findOne({ orderId, "splitDeliveries.splitId": splitId });
+  const orderQuery = { orderId, "splitDeliveries.splitId": splitId };
+  if (actorRole !== "admin" && sellerId) {
+    orderQuery.seller = sellerId;
+  }
+  const order = await Order.findOne(orderQuery);
   if (!order) {
     const err = new Error("Order or split delivery not found");
     err.statusCode = 404;

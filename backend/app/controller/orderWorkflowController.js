@@ -18,7 +18,7 @@ import {
   generateReturnDropOtp,
   validateReturnDropOtp,
 } from "../services/deliveryOtpService.js";
-import { emitToCustomer, emitToSeller } from "../services/orderSocketEmitter.js";
+import { emitToCustomer, emitToSeller, emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
 import { creditWallet } from "../services/finance/walletService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -310,6 +310,7 @@ export const verifyReturnPickupOtp = async (req, res) => {
     order.returnStatus = "return_in_transit";
     order.returnPickedAt = new Date();
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
     // POPULATE before response to ensure frontend consistency
     await order.populate([
@@ -388,6 +389,7 @@ export const requestReturnDropOtp = async (req, res) => {
 
     // Update to return_drop_pending
     await Order.updateOne({ _id: order._id }, { $set: { returnStatus: "return_drop_pending" } });
+    emitOrderStatusUpdate(order.orderId, { returnStatus: "return_drop_pending" }, order.customer);
 
     const sellerId = order.seller?._id?.toString() || order.seller?.toString();
 
@@ -463,6 +465,7 @@ export const verifyReturnDropOtp = async (req, res) => {
     order.returnDropVerifiedAt = new Date();
     order.returnDropVerifiedBy = userId;
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
     // Notify admin + seller + customer
     try {

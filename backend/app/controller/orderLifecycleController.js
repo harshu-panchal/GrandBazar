@@ -17,6 +17,7 @@ import {
   applyOrderPriceAdjustment,
   payPriceDifference,
   partialCancelOrderItems,
+  addItemsToOrder,
 } from "../services/orderPriceAdjustmentService.js";
 import {
   raiseDispute,
@@ -235,11 +236,13 @@ export const sellerRescheduleOrder = async (req, res) => {
 export const adjustOrder = async (req, res) => {
   try {
     const { items, reason } = req.body || {};
+    const isSeller = req.user.role === "seller";
     const order = await applyOrderPriceAdjustment({
       orderId: req.params.orderId,
       items,
       reason,
-      actorLabel: req.user.role === "seller" ? "seller" : "admin",
+      actorLabel: isSeller ? "seller" : "admin",
+      sellerId: isSeller ? req.user.id : null,
     });
     return handleResponse(res, 200, "Order adjusted", order);
   } catch (error) {
@@ -256,13 +259,30 @@ export const partialCancelOrder = async (req, res) => {
     if (!Array.isArray(itemIndexes) || !itemIndexes.length) {
       return handleResponse(res, 400, "Select at least one item to cancel");
     }
+    const isSeller = req.user.role === "seller";
     const order = await partialCancelOrderItems({
       orderId: req.params.orderId,
       itemIndexes,
       reason,
-      actorLabel: req.user.role === "seller" ? "seller" : "admin",
+      actorLabel: isSeller ? "seller" : "admin",
+      sellerId: isSeller ? req.user.id : null,
     });
     return handleResponse(res, 200, "Partial cancellation applied", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const addOrderItems = async (req, res) => {
+  try {
+    const { items, reason } = req.body || {};
+    const order = await addItemsToOrder({
+      customerId: req.user.id,
+      orderId: req.params.orderId,
+      items,
+      reason,
+    });
+    return handleResponse(res, 200, "Items added to order", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -314,11 +334,13 @@ export const reviewProductReplacement = async (req, res) => {
 export const splitOrderDelivery = async (req, res) => {
   try {
     const { splits } = req.body || {};
+    const isAdmin = req.user?.role === "admin";
     const order = await createSplitDeliveries({
       orderId: req.params.orderId,
       splits,
-      actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+      actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
       actorId: req.user?.id,
+      sellerId: isAdmin ? null : req.user?.id,
     });
     return handleResponse(res, 200, "Split delivery plan saved", order);
   } catch (error) {
@@ -329,12 +351,14 @@ export const splitOrderDelivery = async (req, res) => {
 export const updateSplitDeliveryStatus = async (req, res) => {
   try {
     const { status } = req.body || {};
+    const isAdmin = req.user?.role === "admin";
     const order = await markSplitDeliveryStage({
       orderId: req.params.orderId,
       splitId: req.params.splitId,
       status,
-      actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+      actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
       actorId: req.user?.id,
+      sellerId: isAdmin ? null : req.user?.id,
     });
     return handleResponse(res, 200, "Split delivery status updated", order);
   } catch (error) {

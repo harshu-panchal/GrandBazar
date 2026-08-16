@@ -268,6 +268,49 @@ export function canSellerSplitOrReplace(order) {
 }
 
 /**
+ * Customers can add items to an order up until the seller packs it — mirrors
+ * the backend's ADD_ITEMS_BLOCKED_WORKFLOW_STATUSES guard in
+ * orderPriceAdjustmentService.js (server is always the final authority).
+ */
+export function canCustomerAddItems(order) {
+  if (!order) return false;
+
+  const ws = String(order?.workflowStatus || "").toUpperCase();
+  if (
+    [
+      WORKFLOW_STATUS.PICKUP_READY,
+      WORKFLOW_STATUS.CUSTOMER_PICKUP_READY,
+      WORKFLOW_STATUS.OUT_FOR_DELIVERY,
+      WORKFLOW_STATUS.DELIVERED,
+      WORKFLOW_STATUS.CANCELLED,
+      WORKFLOW_STATUS.DISPUTED,
+    ].includes(ws)
+  ) {
+    return false;
+  }
+  if (order.deliveryBoy) return false;
+
+  const legacy = String(getLegacyStatusFromOrder(order) || "").toLowerCase();
+  if (
+    [
+      "packed",
+      "ready_for_pickup",
+      "out_for_delivery",
+      "delivered",
+      "cancelled",
+      "completed",
+      "refunded",
+      "disputed",
+      "awaiting_extra_payment",
+    ].includes(legacy)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Latest admin store reassignment, if any.
  * Prefers denormalized `storeReassignment`, falls back to modificationTimeline.
  */

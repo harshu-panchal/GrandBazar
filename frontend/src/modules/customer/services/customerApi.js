@@ -127,6 +127,11 @@ export const customerApi = {
     axiosInstance.post(`/orders/reschedule/${orderId}/request`, data),
   payOrderDifference: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/pay-difference`, data),
+  addOrderItems: (orderId, data) => {
+    invalidateCache("/orders/my-orders");
+    invalidateCache("/orders/details/");
+    return axiosInstance.post(`/orders/${orderId}/add-items`, data);
+  },
   reviewReplacementRequest: (orderId, requestId, data) =>
     axiosInstance.put(`/orders/${orderId}/replacements/${requestId}/review`, data),
   getOrderModificationHistory: (orderId) =>

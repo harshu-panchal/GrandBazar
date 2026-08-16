@@ -1,6 +1,7 @@
 // Premium Billing & Financial Configuration System
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Card from '@shared/components/ui/Card';
+import Pagination from '@shared/components/ui/Pagination';
 import {
     RotateCcw,
     Save,
@@ -12,6 +13,7 @@ import {
     History,
     CloudRain,
     Clock,
+    X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -268,6 +270,43 @@ const BillingCharges = () => {
         setConfig(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
     };
 
+    const [isAuditLogOpen, setIsAuditLogOpen] = useState(false);
+    const [auditLogs, setAuditLogs] = useState([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditTotalPages, setAuditTotalPages] = useState(1);
+    const [auditTotal, setAuditTotal] = useState(0);
+
+    const fetchAuditLogs = async (page = 1) => {
+        setAuditLoading(true);
+        try {
+            const res = await adminApi.getAuditLogs({ page, limit: 20 });
+            const payload = res?.data?.result || {};
+            setAuditLogs(Array.isArray(payload.items) ? payload.items : []);
+            setAuditPage(payload.page || page);
+            setAuditTotalPages(payload.totalPages || 1);
+            setAuditTotal(payload.total || 0);
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to load audit logs', 'error');
+        } finally {
+            setAuditLoading(false);
+        }
+    };
+
+    const handleOpenAuditLog = () => {
+        setIsAuditLogOpen(true);
+        fetchAuditLogs(1);
+    };
+
+    const formatAuditDate = (value) =>
+        value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+    const formatAuditAction = (action) =>
+        String(action || '')
+            .split('_')
+            .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+            .join(' ');
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
             {/* Header Section */}
@@ -282,7 +321,10 @@ const BillingCharges = () => {
                     <p className="admin-description mt-1">Set up delivery fees, platform charges, and free delivery limits.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+                    <button
+                        onClick={handleOpenAuditLog}
+                        className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+                    >
                         <History className="h-4 w-4 text-slate-400" />
                         AUDIT LOGS
                     </button>
@@ -1022,6 +1064,70 @@ const BillingCharges = () => {
                     </Card>
                 </div>
             </div>
+
+            {isAuditLogOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-12">
+                    <div
+                        className="fixed inset-0 bg-slate-900/40 backdrop-blur-md"
+                        onClick={() => setIsAuditLogOpen(false)}
+                    />
+                    <div className="w-full max-w-3xl relative z-10 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <div>
+                                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                                    <History className="h-5 w-5 text-slate-400" />
+                                    Audit Logs
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-1">Recent admin actions across the platform.</p>
+                            </div>
+                            <button
+                                onClick={() => setIsAuditLogOpen(false)}
+                                className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
+                            >
+                                <X className="h-5 w-5 text-slate-400" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1">
+                            {auditLoading ? (
+                                <div className="text-center py-16 text-sm text-slate-500">Loading...</div>
+                            ) : auditLogs.length === 0 ? (
+                                <div className="text-center py-16 text-sm text-slate-500">No audit log entries found.</div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {auditLogs.map((entry) => (
+                                        <div key={entry._id} className="p-5 hover:bg-slate-50/60 transition-colors">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-sm font-bold text-slate-900">{formatAuditAction(entry.action)}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                                    {formatAuditDate(entry.createdAt)}
+                                                </p>
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                {entry.targetType} · {entry.targetId}
+                                            </p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">
+                                                By {entry.actorId?.name || entry.actorId?.email || entry.actorRole || 'Admin'}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-slate-100">
+                            <Pagination
+                                page={auditPage}
+                                totalPages={auditTotalPages}
+                                total={auditTotal}
+                                pageSize={20}
+                                onPageChange={(p) => fetchAuditLogs(p)}
+                                loading={auditLoading}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -4,6 +4,7 @@ import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import Order from "../models/order.js";
 import BulkSettlement from "../models/bulkSettlement.js";
+import Refund from "../models/refund.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
@@ -184,6 +185,56 @@ export const getAdminBulkSettlementsController = async (req, res) => {
   }
 };
 
+// Read-side for Refund: the model is correctly written on every return,
+// price-adjustment, and cancellation refund, but nothing ever reads it back
+// — admin's Returns page shows refund amounts from the Order's own return
+// subdocument instead. This is the only place `mode`/`gatewayReference`/
+// `failureReason` are recorded, so it's also the only way to find a refund
+// that's stuck in "initiated" (gateway refunds aren't auto-reconciled here).
+export const getAdminRefundsController = async (req, res) => {
+  try {
+    const { status, type, mode, orderId, page = 1, limit = 25 } = req.query;
+
+    const query = {};
+    if (status) query.status = status;
+    if (type) query.type = type;
+    if (mode) query.mode = mode;
+    if (orderId) query.orderId = { $regex: String(orderId).trim(), $options: "i" };
+
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
+    const skip = (safePage - 1) * safeLimit;
+
+    const [items, total, stuckCount] = await Promise.all([
+      Refund.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .populate("order", "orderId status seller customer")
+        .lean(),
+      Refund.countDocuments(query),
+      // "Stuck" = still initiated after more than an hour — gateway refunds
+      // in this codebase aren't auto-reconciled, so these need a human to check.
+      Refund.countDocuments({
+        status: "initiated",
+        mode: "gateway",
+        createdAt: { $lte: new Date(Date.now() - 60 * 60 * 1000) },
+      }),
+    ]);
+
+    return handleResponse(res, 200, "Refunds fetched", {
+      items,
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit) || 1,
+      stuckCount,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 export const processAdminFinancePayoutsController = async (req, res) => {
   try {
     const validated = validateWithJoi(payoutProcessSchema, req.body || {});
@@ -201,7 +252,7 @@ export const processAdminFinancePayoutsController = async (req, res) => {
 
     return handleResponse(res, 200, "Payout processing completed", result);
   } catch (error) {
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
@@ -219,6 +270,25 @@ export const settleSellerPayoutManualController = async (req, res) => {
 
     if (payout.status === "COMPLETED") {
       return handleResponse(res, 400, "Payout has already been marked as settled.");
+    }
+
+    if (payout.relatedOrderIds?.length) {
+      const heldOrder = await Order.findOne({
+        _id: { $in: payout.relatedOrderIds },
+        $or: [
+          { "settlementStatus.sellerPayout": "HOLD" },
+          { "financeFlags.manualSettlementHold": true },
+        ],
+      })
+        .select("orderId")
+        .lean();
+      if (heldOrder) {
+        return handleResponse(
+          res,
+          409,
+          `Cannot settle this payout — order ${heldOrder.orderId} is on settlement hold. Release the hold first.`,
+        );
+      }
     }
 
     payout.status = "COMPLETED";
@@ -241,6 +311,18 @@ export const settleSellerPayoutManualController = async (req, res) => {
             "settlementStatus.reconciledAt": new Date(),
           },
         }
+      );
+    }
+
+    // This bypasses processPayout() entirely (a separate manual-settlement
+    // path), so it must independently keep BulkSettlement in sync the same
+    // way processPayout does — otherwise a bulk order settled through this
+    // route stays stuck showing "PENDING" in the admin bulk-breakdown modal
+    // forever, even though it was actually paid out.
+    if (payout.isBulkSettlement && payout.payoutType === "SELLER") {
+      await BulkSettlement.updateOne(
+        { payout: payout._id },
+        { $set: { status: "COMPLETED", settledAt: new Date() } },
       );
     }
 
@@ -386,6 +468,14 @@ export const adjustPayoutController = async (req, res) => {
       }
       wallet.availableBalance = roundCurrency((wallet.availableBalance || 0) + normalizedAmount);
     }
+    // createLedgerEntry only writes a ledger doc, it never touches wallet
+    // aggregates — keep totalCredited/totalDebited in step with the ledger
+    // the same way every other wallet-mutating flow in this file does.
+    if (isCredit) {
+      wallet.totalCredited = roundCurrency((wallet.totalCredited || 0) + absAmount);
+    } else {
+      wallet.totalDebited = roundCurrency((wallet.totalDebited || 0) + absAmount);
+    }
 
     payout.metadata = {
       ...(payout.metadata || {}),
@@ -415,6 +505,18 @@ export const adjustPayoutController = async (req, res) => {
       payoutId: payout._id,
       metadata: { amount: normalizedAmount, reason: String(reason).trim() },
     });
+
+    // Keep the bulk-order breakdown modal (AdminWallet.jsx) honest — without
+    // this it kept showing the pre-adjustment sellerPayoutAmount forever.
+    if (payout.isBulkSettlement && payout.payoutType === "SELLER") {
+      const wasPending = payout.status === PAYOUT_STATUS.PENDING || payout.status === PAYOUT_STATUS.PROCESSING;
+      await BulkSettlement.updateOne(
+        { payout: payout._id },
+        wasPending
+          ? { $set: { sellerPayoutAmount: payout.amount } }
+          : { $inc: { sellerPayoutAmount: normalizedAmount } },
+      );
+    }
 
     return handleResponse(res, 200, "Settlement adjustment applied", { payout, wallet });
   } catch (error) {

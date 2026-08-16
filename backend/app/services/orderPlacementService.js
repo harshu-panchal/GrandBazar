@@ -166,21 +166,51 @@ async function findExistingCheckoutByIdempotency(customerId, idempotencyKey) {
   };
 }
 
+function cartLineKey(productId, variantSku) {
+  return `${String(productId)}::${String(variantSku || "").trim()}`;
+}
+
+/**
+ * Cart is the only place campaignId is ever written server-side (see
+ * cartController.addToCart) — the client payload never carries it
+ * reliably (CheckoutPage sends fulfillmentType/campaignId from ephemeral
+ * React state that resets on refresh or a seller switch). So regardless of
+ * whether items came from the request body or the stored cart, annotate
+ * each resolved item with its campaignId from the customer's actual cart —
+ * that's what fulfillmentType gets reconciled against below, instead of
+ * trusting the client's word for it.
+ */
 async function resolveOrderItemsInput({
   payload,
   customerId,
   session,
 }) {
+  const cart = await Cart.findOne({ customerId }, null, { session });
+  const cartCampaignByLine = new Map();
+  if (cart && Array.isArray(cart.items)) {
+    for (const item of cart.items) {
+      if (item.campaignId) {
+        cartCampaignByLine.set(cartLineKey(item.productId, item.variantSku), String(item.campaignId));
+      }
+    }
+  }
+
   let orderItemsInput = Array.isArray(payload.items) ? payload.items.filter(Boolean) : [];
   if (orderItemsInput.length > 0) {
+    orderItemsInput = orderItemsInput.map((item) => ({
+      ...item,
+      campaignId:
+        item.campaignId ||
+        cartCampaignByLine.get(cartLineKey(item.product || item.productId, item.variantSku)) ||
+        null,
+    }));
     return {
       orderItemsInput,
       source: "DIRECT_ITEMS",
-      cartDocument: null,
+      cartDocument: cart,
     };
   }
 
-  const cart = await Cart.findOne({ customerId }, null, { session });
   if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
     const err = new Error("Cannot place order with empty cart");
     err.statusCode = 400;
@@ -191,6 +221,7 @@ async function resolveOrderItemsInput({
     product: item.productId,
     variantSku: String(item.variantSku || "").trim(),
     quantity: item.quantity,
+    campaignId: item.campaignId || null,
   }));
   return {
     orderItemsInput,
@@ -342,6 +373,30 @@ export async function placeOrderAtomic({
     const source = placementSource(normalizedPayload);
     const walletAmount = Math.max(0, Number(normalizedPayload.walletAmount || 0));
     const tipAmount = Math.max(0, Number(normalizedPayload.tipAmount || 0));
+
+    const {
+      orderItemsInput,
+      source: resolvedSource,
+      cartDocument,
+    } = await resolveOrderItemsInput({
+      payload: normalizedPayload,
+      customerId,
+      session,
+    });
+
+    // Reconcile against the customer's actual cart — campaignId is only
+    // ever written server-side on the cart (cartController.addToCart), so
+    // it's authoritative. This closes the gap where a lost/reset client
+    // fulfillmentType (page refresh, seller switch resets CartContext
+    // state) would otherwise silently place a genuine pre-order cart as a
+    // plain instant order with no campaign link and no allocation held.
+    const cartCampaignId = orderItemsInput.find((item) => item.campaignId)?.campaignId || null;
+    if (cartCampaignId) {
+      normalizedPayload.campaignId = cartCampaignId;
+      normalizedPayload.preOrderCampaignId = cartCampaignId;
+      normalizedPayload.fulfillmentType = FULFILLMENT_TYPE.PREORDER;
+    }
+
     const fulfillmentType = inferFulfillmentType(normalizedPayload);
     const isInstant = fulfillmentType === FULFILLMENT_TYPE.INSTANT && isInstantFulfillment(normalizedPayload);
 
@@ -387,16 +442,6 @@ export async function placeOrderAtomic({
         );
       }
     }
-
-    const {
-      orderItemsInput,
-      source: resolvedSource,
-      cartDocument,
-    } = await resolveOrderItemsInput({
-      payload: normalizedPayload,
-      customerId,
-      session,
-    });
 
     // Enforce exactly one coupon per order — re-validate server-side
     let resolvedDiscountTotal = 0;
@@ -498,12 +543,12 @@ export async function placeOrderAtomic({
       paymentMode === "COD" &&
       (isInstant || fulfillmentType === FULFILLMENT_TYPE.SCHEDULED);
 
-    await assertCartPreorderRules(
-      orderItemsInput.map((item) => ({
-        ...item,
-        campaignId: normalizedPayload.campaignId || normalizedPayload.preOrderCampaignId,
-      })),
-    );
+    // Each item already carries its own real campaignId from
+    // resolveOrderItemsInput (cart-derived) — pass them through as-is so a
+    // genuine mix (e.g. a manipulated DIRECT_ITEMS payload naming products
+    // that don't match the customer's actual cart) is actually caught,
+    // instead of every item being forced onto the same campaignId first.
+    await assertCartPreorderRules(orderItemsInput);
 
     for (let index = 0; index < pricingSnapshot.sellerBreakdownEntries.length; index += 1) {
       const entry = pricingSnapshot.sellerBreakdownEntries[index];
@@ -678,10 +723,11 @@ export async function placeOrderAtomic({
       await Transaction.create({
         user: customerId,
         userModel: "User",
-        type: "Wallet Payment",
+        type: "Order Payment",
         amount: -walletAmount,
         status: "Settled",
         reference: `WLT-CHOUT-${checkoutGroupId}`,
+        paymentMethod: "WALLET",
         meta: { checkoutGroupId }
       }, { session });
 

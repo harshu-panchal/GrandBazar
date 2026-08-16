@@ -45,9 +45,12 @@ const cartSchema = new mongoose.Schema(
                     type: Number,
                     default: null,
                 },
+                // Actually a Store _id (see cartController.addToCart, which sources
+                // this from Product.sellerId, itself ref: "Store") — not a Seller
+                // account id. Named sellerId for historical/API-shape reasons.
                 sellerId: {
                     type: mongoose.Schema.Types.ObjectId,
-                    ref: "Seller",
+                    ref: "Store",
                     default: null,
                 },
             },

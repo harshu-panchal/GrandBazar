@@ -77,6 +77,7 @@ const OrdersList = React.lazy(() => import("../pages/OrdersList"));
 const OrderDetail = React.lazy(() => import("../pages/OrderDetail"));
 const DisputeConsolePage = React.lazy(() => import("../pages/DisputeConsolePage"));
 const Returns = React.lazy(() => import("../pages/Returns"));
+const Refunds = React.lazy(() => import("../pages/Refunds"));
 const SellerDetail = React.lazy(() => import("../pages/SellerDetail"));
 const SubscriptionManagement = React.lazy(() => import("../pages/SubscriptionManagement"));
 const SupportTickets = React.lazy(() => import("../pages/SupportTickets"));
@@ -253,6 +254,7 @@ const navItems = [
       { label: "Cancelled", path: "/admin/orders/cancelled" },
       { label: "Returned", path: "/admin/orders/returned" },
       { label: "Return Requests", path: "/admin/returns" },
+      { label: "Refund Ledger", path: "/admin/refunds" },
     ],
   },
   {
@@ -422,6 +424,7 @@ const AdminRoutes = () => {
             <Route path="/orders/view/:orderId" element={<OrderDetail />} />
             <Route path="/disputes" element={<DisputeConsolePage />} />
             <Route path="/returns" element={<Returns />} />
+            <Route path="/refunds" element={<Refunds />} />
           </>
         )}
         

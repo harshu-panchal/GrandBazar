@@ -81,6 +81,7 @@ import {
     adjustPayoutController,
     exportAdminFinanceStatementController,
     getAdminBulkSettlementsController,
+    getAdminRefundsController,
     getAdminFinanceLedgerController,
     getAdminFinancePayoutsController,
     getAdminFinanceSummaryController,
@@ -99,6 +100,7 @@ import {
     upsertCityCommissionController,
     updateStoreCommission,
 } from "../controller/admin/commissionHierarchyController.js";
+import { getAuditLogsController } from "../controller/admin/auditLogController.js";
 
 import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
 import {
@@ -190,6 +192,18 @@ router.get(
     verifyToken,
     allowRoles("admin"),
     getAdminBulkSettlementsController,
+);
+router.get(
+    "/finance/refunds",
+    verifyToken,
+    allowRoles("admin"),
+    getAdminRefundsController,
+);
+router.get(
+    "/audit-logs",
+    verifyToken,
+    allowRoles("admin"),
+    getAuditLogsController,
 );
 router.post(
     "/finance/payouts/process",

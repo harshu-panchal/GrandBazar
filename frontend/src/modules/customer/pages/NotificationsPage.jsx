@@ -12,8 +12,10 @@ const ICON_BY_TYPE = {
     DELIVERY_ASSIGNED: Truck,
     ORDER_DELIVERED: CheckCircle2,
     ORDER_CANCELLED: XCircle,
+    CANCELLATION_REQUEST_REJECTED: XCircle,
     REFUND_INITIATED: Wallet,
     REFUND_COMPLETED: Wallet,
+    ITEMS_ADDED_TO_ORDER: Package,
 };
 
 function formatTimestamp(value) {

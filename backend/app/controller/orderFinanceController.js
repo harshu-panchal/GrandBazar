@@ -186,7 +186,8 @@ export const markCodCollectedAfterDelivery = async (req, res) => {
       return handleResponse(res, 404, "Order not found");
     }
 
-    if (order.paymentMode === "ONLINE") {
+    const hasExtraCashDue = order.paymentMode === "ONLINE" && order.financeFlags?.hasExtraCashDue;
+    if (order.paymentMode === "ONLINE" && !hasExtraCashDue) {
       return handleResponse(res, 400, "COD collection is only allowed for COD orders");
     }
 
@@ -209,7 +210,7 @@ export const markCodCollectedAfterDelivery = async (req, res) => {
       order.deliveryBoy ||
       (req.user?.role === "delivery" ? req.user.id : null);
 
-    if (order.financeFlags?.codMarkedCollected) {
+    if (!hasExtraCashDue && order.financeFlags?.codMarkedCollected) {
       return handleResponse(res, 200, "COD amount already marked as collected", order);
     }
 
@@ -258,11 +259,14 @@ export const markOrderDeliveredAndSettle = async (req, res) => {
     });
 
     // For COD orders, "delivery" implies cash is collected by the assigned delivery partner.
-    // This updates System Float (COD) as: grandTotal - riderPayoutTotal.
+    // This updates System Float (COD) as: grandTotal - riderPayoutTotal. An ONLINE
+    // order with a leftover extraCashDue (customer added items after placement and
+    // the wallet didn't fully cover it — see addItemsToOrder) is collected the same
+    // way at the door, for just the tracked remainder.
     if (
-      updated?.paymentMode === "COD" &&
       updated?.deliveryBoy &&
-      !updated?.financeFlags?.codMarkedCollected
+      ((updated?.paymentMode === "COD" && !updated?.financeFlags?.codMarkedCollected) ||
+        (updated?.paymentMode === "ONLINE" && updated?.financeFlags?.hasExtraCashDue))
     ) {
       const deliveryPartnerId = updated.deliveryBoy;
       const updatedWithCod = await handleCodOrderFinance(updated._id, {

@@ -92,7 +92,18 @@ export async function createPendingPayoutForOrder({
         walletId: wallet._id,
         actorType: ownerType,
         actorId: beneficiaryId,
-        type: LEDGER_TRANSACTION_TYPE.PAYOUT_QUEUED,
+        // LEDGER_TRANSACTION_TYPE.PAYOUT_QUEUED does not exist (never did —
+        // confirmed via runtime lookup) — this silently evaluated to
+        // `type: undefined`, which fails LedgerEntry's required-field
+        // validation on every single call, throwing inside this function's
+        // own transaction and aborting it. Concretely: every seller/rider
+        // payout creation on order delivery (settleDeliveredOrder ->
+        // createPendingSellerPayout/createPendingRiderPayout -> here) has
+        // been throwing, not just failing silently.
+        type:
+          payoutType === PAYOUT_TYPE.SELLER
+            ? LEDGER_TRANSACTION_TYPE.SELLER_PAYOUT_PENDING
+            : LEDGER_TRANSACTION_TYPE.RIDER_PAYOUT_PENDING,
         direction: LEDGER_DIRECTION.CREDIT,
         amount: roundCurrency(amount),
         description: `${payoutType} payout queued for order ${order.orderId}`,
@@ -142,6 +153,31 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
     if (!payout) throw new Error("Payout not found.");
     if (payout.status !== PAYOUT_STATUS.PENDING && payout.status !== PAYOUT_STATUS.PROCESSING) {
       throw new Error(`Invalid payout status for processing: ${payout.status}`);
+    }
+
+    // A payout's own `status` never reflects an admin hold — that lives on
+    // the related order(s) (settlementStatus.sellerPayout / financeFlags),
+    // set by holdSellerPayoutController. Without this check "Approve" could
+    // pay out a seller payout an admin explicitly put on hold, since the
+    // Payout row itself still looks like ordinary PENDING.
+    if (payout.payoutType === PAYOUT_TYPE.SELLER && payout.relatedOrderIds?.length) {
+      const heldOrder = await Order.findOne({
+        _id: { $in: payout.relatedOrderIds },
+        $or: [
+          { "settlementStatus.sellerPayout": "HOLD" },
+          { "financeFlags.manualSettlementHold": true },
+        ],
+      })
+        .select("orderId")
+        .session(session)
+        .lean();
+      if (heldOrder) {
+        const err = new Error(
+          `Cannot process this payout — order ${heldOrder.orderId} is on settlement hold. Release the hold first.`,
+        );
+        err.statusCode = 409;
+        throw err;
+      }
     }
 
     const ownerType = payoutTypeToOwnerType(payout.payoutType);
@@ -262,7 +298,15 @@ export async function queueRiderPayouts({ orderIds = [] } = {}) {
   return created;
 }
 
-export async function cancelPendingPayoutForOrder(orderId, payoutType, { remarks, adminId, session: externalSession } = {}) {
+/**
+ * Cancels a pending/processing payout for an order — or, when `partialAmount`
+ * is given and is less than the full payout, reduces it by just that amount
+ * instead. Needed because a return can cover only some of an order's items:
+ * cancelling the whole payout would over-reverse the seller's earnings for
+ * whatever wasn't returned. Returns the payout doc either way — callers can
+ * tell full-cancel from partial-reduce via `payout.status`.
+ */
+export async function cancelPendingPayoutForOrder(orderId, payoutType, { remarks, adminId, session: externalSession, partialAmount } = {}) {
   const session = externalSession || (await mongoose.startSession());
   const managedSession = !externalSession;
   if (managedSession) session.startTransaction();
@@ -276,21 +320,35 @@ export async function cancelPendingPayoutForOrder(orderId, payoutType, { remarks
 
     if (!payout) return null;
 
+    const fullAmount = roundCurrency(payout.amount);
+    const hasPartialAmount = partialAmount !== undefined && partialAmount !== null;
+    const reduceBy = hasPartialAmount
+      ? roundCurrency(Math.max(0, Math.min(Number(partialAmount) || 0, fullAmount)))
+      : fullAmount;
+    // Rounding-tolerant: treat "reduces to ~0 remaining" as a full cancellation.
+    const isFullCancellation = fullAmount - reduceBy <= 0.01;
+
     const ownerType = payoutTypeToOwnerType(payout.payoutType);
     const beneficiaryWallet = await getOrCreateWallet(ownerType, payout.beneficiaryId, { session });
 
-    const amount = roundCurrency(payout.amount);
-    beneficiaryWallet.pendingBalance = roundCurrency(Math.max((beneficiaryWallet.pendingBalance || 0) - amount, 0));
-    beneficiaryWallet.totalCredited = roundCurrency(Math.max((beneficiaryWallet.totalCredited || 0) - amount, 0));
+    beneficiaryWallet.pendingBalance = roundCurrency(Math.max((beneficiaryWallet.pendingBalance || 0) - reduceBy, 0));
+    beneficiaryWallet.totalCredited = roundCurrency(Math.max((beneficiaryWallet.totalCredited || 0) - reduceBy, 0));
     await beneficiaryWallet.save({ session });
 
-    payout.status = PAYOUT_STATUS.CANCELLED;
-    payout.remarks = remarks || `Payout cancelled due to return/reversal.`;
-    payout.cancelledAt = new Date();
+    if (isFullCancellation) {
+      payout.status = PAYOUT_STATUS.CANCELLED;
+      payout.remarks = remarks || `Payout cancelled due to return/reversal.`;
+      payout.cancelledAt = new Date();
+    } else {
+      payout.amount = roundCurrency(fullAmount - reduceBy);
+      payout.remarks = [payout.remarks, remarks || `Reduced by ${reduceBy} due to partial return.`]
+        .filter(Boolean)
+        .join(" | ");
+    }
     if (adminId) payout.createdBy = adminId;
     await payout.save({ session });
 
-    if (payout.isBulkSettlement && payout.payoutType === PAYOUT_TYPE.SELLER) {
+    if (isFullCancellation && payout.isBulkSettlement && payout.payoutType === PAYOUT_TYPE.SELLER) {
       await BulkSettlement.updateOne(
         { payout: payout._id },
         { $set: { status: "CANCELLED" } },
@@ -307,8 +365,10 @@ export async function cancelPendingPayoutForOrder(orderId, payoutType, { remarks
         actorId: payout.beneficiaryId,
         type: LEDGER_TRANSACTION_TYPE.PAYOUT_CANCELLED || "PAYOUT_CANCELLED",
         direction: LEDGER_DIRECTION.DEBIT,
-        amount,
-        description: `Pending ${payout.payoutType} payout reversed due to return.`,
+        amount: reduceBy,
+        description: isFullCancellation
+          ? `Pending ${payout.payoutType} payout reversed due to return.`
+          : `Pending ${payout.payoutType} payout reduced due to partial return.`,
       },
       { session },
     );

@@ -1012,17 +1012,35 @@ const OrderDetailPage = () => {
           </motion.div>
         )}
 
-        {order?.partialCancellation?.isPartial && order?.partialCancellation?.updatedEtaAt && (
+        {order?.partialCancellation?.isPartial && (
           <div className="flex items-start gap-2.5 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
             <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
             <p className="text-xs font-semibold text-amber-800">
-              Delivery time updated after an item was cancelled from this order.
+              An item was removed from this order{order?.partialCancellation?.reason ? ` — ${order.partialCancellation.reason}` : "."}
               {order?.schedule?.deliveryDate && order?.schedule?.windowLabel
-                ? ` New window: ${new Date(order.schedule.deliveryDate).toLocaleDateString()} · ${order.schedule.windowLabel}.`
-                : ""}
+                ? ` The rest of your order is still on track for ${new Date(order.schedule.deliveryDate).toLocaleDateString()} · ${order.schedule.windowLabel}.`
+                : " The rest of your order is unaffected."}
             </p>
           </div>
         )}
+
+        {(() => {
+          const timeline = Array.isArray(order?.modificationTimeline) ? order.modificationTimeline : [];
+          const lastAdd = [...timeline].reverse().find((entry) => entry?.type === "items_added");
+          if (!lastAdd) return null;
+          const cashDue = Number(lastAdd.meta?.cashDueAtDelivery || 0);
+          return (
+            <div className="flex items-start gap-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+              <Package className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              <p className="text-xs font-semibold text-emerald-800">
+                Items were added to this order (₹{Number(lastAdd.meta?.deltaAmount || 0).toFixed(0)} extra).
+                {cashDue > 0
+                  ? ` ₹${cashDue.toFixed(0)} of this will be collected at delivery.`
+                  : " Paid from your wallet."}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Order Progress Tracker - New Component */}
         {!isAwaitingOnlinePayment && (
@@ -1394,6 +1412,103 @@ const OrderDetailPage = () => {
             <HelpCircle size={18} /> Help
           </button>
         </motion.div>
+
+        {/* Delivery Timeline - only when the seller split this order into
+            multiple deliveries (e.g. some items weren't available together) */}
+        {Array.isArray(order.splitDeliveries) && order.splitDeliveries.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+            className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100"
+          >
+            <h3 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
+              <Truck size={18} className="text-slate-400" />
+              Delivery Timeline
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Some items in this order are being delivered separately.
+            </p>
+            <div className="space-y-3">
+              {order.splitDeliveries.map((split) => {
+                const splitStatusStyle = {
+                  pending: "bg-amber-50 text-amber-700 ring-amber-200",
+                  processing: "bg-blue-50 text-blue-700 ring-blue-200",
+                  out_for_delivery: "bg-purple-50 text-purple-700 ring-purple-200",
+                  delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                  cancelled: "bg-rose-50 text-rose-700 ring-rose-200",
+                }[split.status] || "bg-slate-50 text-slate-600 ring-slate-200";
+                const splitItems = (split.itemIndexes || [])
+                  .map((idx) => order.items?.[idx]?.name)
+                  .filter(Boolean);
+                return (
+                  <div key={split.splitId} className="rounded-2xl border border-slate-100 p-3.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className="text-sm font-bold text-slate-800">{split.label || "Delivery"}</p>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ring-1 ${splitStatusStyle}`}>
+                        {String(split.status || "pending").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    {splitItems.length > 0 && (
+                      <p className="text-xs text-slate-500 mb-1.5">{splitItems.join(", ")}</p>
+                    )}
+                    {split.deliveryDate ? (
+                      <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                        <Clock size={12} className="text-slate-400" />
+                        {new Date(split.deliveryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {split.windowLabel ? ` · ${split.windowLabel}` : ""}
+                      </p>
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-500">Arriving with this order now</p>
+                    )}
+                    {split.deliveredAt && (
+                      <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                        Delivered {new Date(split.deliveredAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Delivery Proof - Only if seller/rider captured one */}
+        {((order.deliveryProofImages && order.deliveryProofImages.length > 0) ||
+          (order.pickupProofImages && order.pickupProofImages.length > 0)) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100"
+          >
+            <h3 className="text-base font-bold text-slate-800 mb-3">Delivery Proof</h3>
+            {order.deliveryProofImages && order.deliveryProofImages.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Delivered</p>
+                <div className="flex gap-2 flex-wrap">
+                  {order.deliveryProofImages.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt="Delivery proof" className="h-20 w-20 rounded-xl object-cover border border-slate-200" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {order.pickupProofImages && order.pickupProofImages.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Handed to delivery partner</p>
+                <div className="flex gap-2 flex-wrap">
+                  {order.pickupProofImages.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt="Pickup proof" className="h-20 w-20 rounded-xl object-cover border border-slate-200" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Return Section - Only if applicable */}
         {(canRequestReturn() || (returnDetails && returnDetails.returnStatus && returnDetails.returnStatus !== "none")) && (

@@ -55,6 +55,7 @@ import {
   retractDeliveryBroadcastForOrder,
   emitToSeller,
   emitToDelivery,
+  emitOrderStatusUpdate,
 } from "../services/orderSocketEmitter.js";
 import * as walletService from "../services/finance/walletService.js";
 import { OWNER_TYPE } from "../constants/finance.js";
@@ -656,6 +657,15 @@ export const cancelOrder = async (req, res) => {
     order.cancelReason = reason || "Cancelled by user";
     await order.save();
 
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+      orderId: order.orderId,
+      customerId: order.customer,
+      userId: order.customer,
+      sellerId: order.seller,
+      customerMessage: "Your order has been cancelled successfully.",
+      sellerMessage: `Order #${order.orderId} was cancelled by the customer.`,
+    });
+
     try {
       await invalidate(buildKey("orders", "customer", `${customerId}:*`));
     } catch (cacheErr) {
@@ -803,7 +813,12 @@ export const requestReturn = async (req, res) => {
         }
 
         const configuredWindows = categories
-          .map((c) => Number(c.refundWindowHours))
+          .map((c) => c.refundWindowHours)
+          // Number(null) is 0, not NaN — filter out unset values first so a
+          // category with no window configured doesn't win as a spurious
+          // "0-hour" override via Math.min below.
+          .filter((hours) => hours !== null && hours !== undefined)
+          .map((hours) => Number(hours))
           .filter((hours) => Number.isFinite(hours) && hours >= 0);
         if (configuredWindows.length > 0) {
           categoryRefundOverrideHours = Math.min(...configuredWindows);
@@ -877,6 +892,7 @@ export const requestReturn = async (req, res) => {
 
     await order.save();
 
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REQUESTED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -1035,9 +1051,12 @@ export const updateOrderStatus = async (req, res) => {
           userId,
           canonicalOrderId,
           String(status).toLowerCase(),
-          { cancelReason },
+          { cancelReason, pickupProofImages: req.body.pickupProofImages, deliveryProofImages: req.body.deliveryProofImages },
         );
         if (updated) {
+          if (updated.__pendingApproval) {
+            return handleResponse(res, 202, "Cancellation request sent to admin for approval", updated.order);
+          }
           return handleResponse(res, 200, "Order status updated", updated);
         }
         // null => legacy order path below (workflowVersion check already done, so shouldn't happen)
@@ -1254,6 +1273,7 @@ export const approveReturnRequest = async (req, res) => {
 
     await order.save();
 
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_APPROVED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -1372,6 +1392,7 @@ export const rejectReturnRequest = async (req, res) => {
 
     await order.save();
 
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REJECTED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -1430,6 +1451,7 @@ export const updateReturnQcStatus = async (req, res) => {
     order.returnQcNote = note ? String(note).trim().slice(0, 500) : undefined;
 
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
     if (qcStatus === "qc_passed") {
       const updated = await completeReturnAndRefund(order);
@@ -1533,6 +1555,7 @@ export const assignReturnDelivery = async (req, res) => {
     order.returnStatus = "return_pickup_assigned";
 
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
     if (riderId) {
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
         orderId: order.orderId,
@@ -1625,6 +1648,7 @@ export const acceptReturnPickup = async (req, res) => {
       order.returnDeliveryBoy = userId;
       order.returnStatus = "return_pickup_assigned";
       await order.save();
+      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
       // Retract broadcast so other riders stop seeing this task
       try {
@@ -1692,6 +1716,7 @@ export const rejectReturnPickup = async (req, res) => {
     }
     order.returnStatus = "return_approved";
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
     // Notify seller
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REJECTED, {
@@ -1725,9 +1750,24 @@ export const completeReturnAndRefund = async (order) => {
       )
       : 0);
 
-  // Category-based restocking fee: deduct per-item before crediting the refund.
+  // Per-item: category restocking fee (deducted from the customer's refund,
+  // kept by the seller), GST reversal (refunded to the customer on top of
+  // merchandise value — GST was never part of the seller's payout, so it's
+  // never clawed back from the seller either), and the seller's *actual*
+  // original payout share for the returned units (from the frozen
+  // paymentBreakdown snapshot, prorated by returned/original quantity) —
+  // this is what gets reversed from the seller, not the customer-facing
+  // refund figure, since those differ by the original per-line commission.
+  //
+  // NOTE: this used to be gated on `!order.returnRefundAmount`, but
+  // approveReturnRequest() always sets that field to the raw gross amount
+  // before this function ever runs — so the gate made this whole block dead
+  // code in the normal flow (restocking fee was configured but never
+  // actually applied). Now it always runs off `returnItems` directly.
   let restockFeeDeducted = 0;
-  if (!order.returnRefundAmount && Array.isArray(order.returnItems) && order.returnItems.length > 0) {
+  let gstRefundTotal = 0;
+  let sellerShareOfReturnedItems = 0;
+  if (Array.isArray(order.returnItems) && order.returnItems.length > 0) {
     const productIds = order.returnItems.map((item) => item.product).filter(Boolean);
     if (productIds.length > 0) {
       const products = await Product.find({ _id: { $in: productIds } })
@@ -1737,29 +1777,60 @@ export const completeReturnAndRefund = async (order) => {
         products.map((p) => [String(p._id), String(p.categoryId || "")]),
       );
       const categoryIds = Array.from(new Set(productCategoryById.values())).filter(Boolean);
+      let restockFeeByCategory = new Map();
       if (categoryIds.length > 0) {
         const Category = (await import("../models/category.js")).default;
         const categories = await Category.find({ _id: { $in: categoryIds } })
           .select("_id restockFeePercent")
           .lean();
-        const restockFeeByCategory = new Map(
+        restockFeeByCategory = new Map(
           categories.map((c) => [String(c._id), Number(c.restockFeePercent || 0)]),
         );
-        for (const item of order.returnItems) {
-          const catId = productCategoryById.get(String(item.product || ""));
-          const feePercent = catId ? restockFeeByCategory.get(catId) || 0 : 0;
-          if (feePercent > 0) {
-            const itemTotal = (item.price || 0) * (item.quantity || 0);
-            restockFeeDeducted += Number(((itemTotal * feePercent) / 100).toFixed(2));
-          }
+      }
+
+      // GST slab + the seller's original payout, exactly as frozen at
+      // checkout — not re-resolved live, so both match what was actually
+      // charged/paid regardless of any category/commission config changes since.
+      const lineItemByProductId = new Map(
+        (order.paymentBreakdown?.lineItems || []).map((li) => [String(li.productId), li]),
+      );
+
+      for (const item of order.returnItems) {
+        const pid = String(item.product || "");
+        const itemTotal = (item.price || 0) * (item.quantity || 0);
+
+        const catId = productCategoryById.get(pid);
+        const feePercent = catId ? restockFeeByCategory.get(catId) || 0 : 0;
+        const itemRestockFee = feePercent > 0
+          ? Number(((itemTotal * feePercent) / 100).toFixed(2))
+          : 0;
+        restockFeeDeducted += itemRestockFee;
+
+        const netMerchandise = Math.max(0, itemTotal - itemRestockFee);
+        const lineItem = lineItemByProductId.get(pid);
+        const gstSlab = lineItem ? Number(lineItem.gstSlab) || 0 : 0;
+        if (gstSlab > 0) {
+          gstRefundTotal += Number(((netMerchandise * gstSlab) / 100).toFixed(2));
+        }
+
+        if (lineItem && Number(lineItem.quantity) > 0) {
+          const proration = Math.min(1, (item.quantity || 0) / Number(lineItem.quantity));
+          sellerShareOfReturnedItems += Number(((Number(lineItem.sellerPayout) || 0) * proration).toFixed(2));
+        } else {
+          // Legacy order with no frozen line-item snapshot — fall back to
+          // the net merchandise value (can't recover the original per-line
+          // commission split, so this may over-claw slightly).
+          sellerShareOfReturnedItems += netMerchandise;
         }
       }
     }
   }
 
-  const refundAmount = Math.max(0, Number((grossRefundAmount - restockFeeDeducted).toFixed(2)));
+  const merchandiseRefund = Math.max(0, Number((grossRefundAmount - restockFeeDeducted).toFixed(2)));
+  const refundAmount = Math.max(0, Number((merchandiseRefund + gstRefundTotal).toFixed(2)));
   const commission = order.returnDeliveryCommission || 0;
   const walletRefundTotal = refundAmount;
+  const sellerClawback = Math.max(0, Number((sellerShareOfReturnedItems + commission).toFixed(2)));
 
   if (restockFeeDeducted > 0) {
     order.returnRestockFeeDeducted = restockFeeDeducted;
@@ -1778,6 +1849,7 @@ export const completeReturnAndRefund = async (order) => {
   });
   order.returnStatus = "refund_initiated";
   await order.save();
+  emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
   emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_INITIATED, {
     orderId: order.orderId,
     customerId: order.customer,
@@ -1806,61 +1878,91 @@ export const completeReturnAndRefund = async (order) => {
           type: "return_wallet",
           grossRefundAmount,
           restockFeeDeducted,
+          gstRefunded: gstRefundTotal,
         },
       });
     }
   }
 
-  // 2. Seller adjustment (cancel payout if on hold, else debit available balance)
-  if (order.seller && (refundAmount > 0 || commission > 0)) {
+  // 2. Seller adjustment (cancel/reduce payout if on hold, else debit available
+  // balance) — uses `sellerClawback` (the seller's actual original payout share
+  // for the returned units, plus the flat return-pickup fee), not the
+  // customer-facing `refundAmount` — those differ by the original per-line
+  // commission, restocking fee, and GST, none of which the seller ever received.
+  if (order.seller && sellerClawback > 0) {
     const isHeld =
       order.settlementStatus?.sellerPayout === "HOLD" ||
       order.financeFlags?.sellerPayoutHeld;
 
+    // Tracks what was *actually* deducted, since it differs by branch below —
+    // the ledger Transaction must record the real amount, not the theoretical
+    // full clawback, or the two would silently disagree.
+    let actualSellerDebit = 0;
+
     if (isHeld) {
       try {
         const { cancelPendingPayoutForOrder } = await import("../services/finance/payoutService.js");
-        const cancelled = await cancelPendingPayoutForOrder(order._id, "SELLER", {
-          remarks: `Payout cancelled due to return QC passed.`,
+        const adjusted = await cancelPendingPayoutForOrder(order._id, "SELLER", {
+          remarks: `Payout adjusted due to return QC passed.`,
+          // Only the returned items' share comes off the payout — a partial
+          // return must not wipe out the payout for items that weren't returned.
+          partialAmount: sellerShareOfReturnedItems,
         });
 
-        if (cancelled) {
-          // If payout was cancelled, we don't need to debit the seller's available balance
-          // because they never received the money in the first place.
+        if (adjusted) {
+          // The return-pickup fee is only ever collected via wallet debit
+          // once a payout has actually been released (else branch below) —
+          // preserved as-is from the original behavior, not something this
+          // pass changed. So while held, only the merchandise share moves.
+          actualSellerDebit = sellerShareOfReturnedItems;
+        }
+
+        if (adjusted?.status === "CANCELLED") {
+          // Fully cancelled (return covered the whole payout) — the seller
+          // never received any of this money, so nothing more to recover.
           await Order.findByIdAndUpdate(order._id, {
             "settlementStatus.sellerPayout": "CANCELLED",
             "financeFlags.sellerPayoutHeld": false,
           });
         }
+        // else: payout was only reduced (partial return) — settlementStatus
+        // stays HOLD, correctly reflecting the remaining pending payout.
       } catch (error) {
         console.error(`[ReturnFinance] Payout cancellation failed for seller ${order.seller}`, error.message);
       }
     } else {
       // If payment was already released (Available balance), we must debit to recover funds.
-      const adjustment = Math.max(0, refundAmount + commission);
       try {
         const { debitWallet } = await import("../services/finance/walletService.js");
         await debitWallet({
           ownerType: "SELLER",
           ownerId: order.seller,
-          amount: adjustment,
+          amount: sellerClawback,
           bucket: "available",
         });
+        actualSellerDebit = sellerClawback;
       } catch (error) {
         console.warn(`[ReturnFinance] Wallet debit failed for seller ${order.seller}.`, error.message);
       }
     }
 
-    const adjustment = Math.max(0, refundAmount + commission);
-    await Transaction.create({
-      user: order.seller,
-      userModel: "Seller",
-      order: order._id,
-      type: "Refund",
-      amount: -adjustment,
-      status: "Settled",
-      reference: `REF-SELL-${order.orderId}`,
-    });
+    if (actualSellerDebit > 0) {
+      await Transaction.create({
+        user: order.seller,
+        userModel: "Seller",
+        order: order._id,
+        type: "Refund",
+        amount: -actualSellerDebit,
+        status: "Settled",
+        reference: `REF-SELL-${order.orderId}`,
+        meta: {
+          orderId: order._id,
+          sellerShareOfReturnedItems,
+          returnDeliveryCommission: commission,
+          returnDeliveryCommissionCharged: isHeld ? 0 : commission,
+        },
+      });
+    }
   }
 
   // 3. Delivery partner earning for return pickup
@@ -1899,6 +2001,7 @@ export const completeReturnAndRefund = async (order) => {
   refundRecord.status = "completed";
   refundRecord.completedAt = new Date();
   await refundRecord.save();
+  emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
   emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
     orderId: order.orderId,
     customerId: order.customer,
@@ -1983,6 +2086,7 @@ export const updateReturnStatus = async (req, res) => {
         order.returnPickedAt = now;
       }
       await order.save();
+      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
       return handleResponse(res, 200, "Return status updated", order);
     }
 
@@ -1992,11 +2096,13 @@ export const updateReturnStatus = async (req, res) => {
         order.returnDeliveredBackAt = now;
       }
       await order.save();
+      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
       return handleResponse(res, 200, "Return received", order);
     }
 
     order.returnStatus = returnStatus;
     await order.save();
+    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
     return handleResponse(res, 200, "Return status updated", order);
   } catch (error) {

@@ -462,7 +462,7 @@ export async function createVendorAccountByAdmin({
 /**
  * Updates full store / shop profile on behalf of seller by Super Admin.
  */
-export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}) {
+export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}, adminId = null) {
   let store = await Store.findById(sellerOrStoreId);
   if (!store) {
     store = await Store.findOne({ ownerId: sellerOrStoreId });
@@ -498,11 +498,25 @@ export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}
     updateFields.schedulingSettings = storePayload.schedulingSettings;
   }
 
+  const before = {};
+  Object.keys(updateFields).forEach((key) => {
+    before[key] = store[key];
+  });
+
   const updatedStore = await Store.findByIdAndUpdate(
     store._id,
     { $set: updateFields },
     { new: true, runValidators: true }
   );
+
+  void recordAuditLog({
+    actorId: adminId,
+    action: "STORE_SETUP_UPDATED_BY_ADMIN",
+    targetType: "Store",
+    targetId: store._id,
+    before,
+    after: updateFields,
+  });
 
   return updatedStore;
 }

@@ -1367,6 +1367,9 @@ const OrderDetail = () => {
                                 </Badge>
                             </div>
                             <div className="space-y-2 text-xs font-bold text-slate-600">
+                                {order.cancellationRequest.requestedBy && (
+                                    <p>Requested by: {order.cancellationRequest.requestedBy}</p>
+                                )}
                                 <p>Reason: {order.cancellationRequest.reason || 'Not provided'}</p>
                                 {order.cancellationRequest.requestedAt && (
                                     <p>Requested at: {new Date(order.cancellationRequest.requestedAt).toLocaleString()}</p>

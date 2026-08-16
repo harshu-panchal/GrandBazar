@@ -432,7 +432,7 @@ export const getSellerEarnings = async (req, res) => {
             .populate({
                 path: "order",
                 select:
-                    "orderId status pricing payment address paymentBreakdown items createdAt customer",
+                    "orderId status pricing payment address paymentBreakdown items createdAt customer settlementStatus financeFlags",
                 populate: {
                     path: "customer",
                     select: "name phone email",
@@ -551,11 +551,27 @@ export const getSellerEarnings = async (req, res) => {
                 const taxAmount = Number(order?.paymentBreakdown?.taxTotal ?? 0);
                 const isBulkOrder = Boolean(order?.isBulkOrder || order?.paymentBreakdown?.isBulkOrder);
 
+                // orderSettlement.js flips this Transaction to "Settled" the
+                // instant an order is delivered, even when the seller payout
+                // itself is actually on hold (return window / dispute /
+                // manual admin hold) — Order.settlementStatus.sellerPayout is
+                // the real source of truth for payout state. Surface it
+                // separately rather than overwrite `status`, since other
+                // consumers of this ledger (CSV export, filters) key off the
+                // legacy Transaction status.
+                const isPayoutHeld = Boolean(
+                    order?.financeFlags?.sellerPayoutHeld || order?.financeFlags?.manualSettlementHold,
+                );
+                const sellerPayoutStatus =
+                    order && t.type === "Order Payment" ? order.settlementStatus?.sellerPayout || null : null;
+
                 return {
                     id: (t.reference || t._id).toString(),
                     type: t.type,
                     amount: t.amount,
                     status: t.status,
+                    sellerPayoutStatus,
+                    isPayoutHeld,
                     date: t.createdAt.toISOString().split("T")[0],
                     time: t.createdAt.toLocaleTimeString([], {
                         hour: "2-digit",

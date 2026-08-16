@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { customerApi } from "../../services/customerApi";
 import DeliverySlotPicker from "../checkout/DeliverySlotPicker";
+import AddOrderItemsModal from "./AddOrderItemsModal";
+import { canCustomerAddItems } from "@/shared/utils/orderStatus";
 import { toast } from "sonner";
 
 // Complaints share the exact same post-delivery window as returns/refunds
@@ -13,6 +15,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const [paying, setPaying] = useState(false);
   const [reviewingReplacement, setReviewingReplacement] = useState("");
   const [disputeCountdown, setDisputeCountdown] = useState(null);
+  const [showAddItems, setShowAddItems] = useState(false);
 
   const isDelivered = order?.status === "delivered" || order?.workflowStatus === "DELIVERED";
 
@@ -50,6 +53,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   // request regardless — this just keeps the button from inviting a
   // complaint the backend is going to refuse anyway.
   const canDispute = isDelivered && disputeCountdown !== 0;
+  const canAddItems = canCustomerAddItems(order);
   const pendingReplacementRequests = Array.isArray(order.replacementRequests)
     ? order.replacementRequests.filter((request) => request?.customerDecision === "pending")
     : [];
@@ -132,6 +136,23 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         >
           Pay difference ₹{order.priceAdjustment?.deltaAmount || 0}
         </button>
+      )}
+
+      {canAddItems && (
+        <button
+          type="button"
+          onClick={() => setShowAddItems(true)}
+          className="w-full rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary"
+        >
+          Add items to this order
+        </button>
+      )}
+      {showAddItems && (
+        <AddOrderItemsModal
+          order={order}
+          onClose={() => setShowAddItems(false)}
+          onAdded={() => onRefresh?.()}
+        />
       )}
 
       {canReschedule && (

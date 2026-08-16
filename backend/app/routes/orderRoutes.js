@@ -70,6 +70,7 @@ import {
   adjustOrder,
   partialCancelOrder,
   payOrderDifference,
+  addOrderItems,
   requestProductReplacement,
   reviewProductReplacement,
   splitOrderDelivery,
@@ -421,6 +422,12 @@ router.post(
   verifyToken,
   allowRoles("customer", "user"),
   payOrderDifference,
+);
+router.post(
+  "/:orderId/add-items",
+  verifyToken,
+  allowRoles("customer", "user"),
+  addOrderItems,
 );
 router.post(
   "/:orderId/replacements",

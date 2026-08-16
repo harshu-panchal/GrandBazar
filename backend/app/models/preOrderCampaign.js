@@ -67,6 +67,10 @@ const preOrderCampaignSchema = new mongoose.Schema(
       },
     ],
     rescheduleCutoffDays: { type: Number, default: null, min: 0 },
+    // Rolling cap on how far ahead of *today* a customer may pick a delivery
+    // date for this campaign — independent of (and tighter than) the fixed
+    // deliveryWindow calendar range. null = no extra cap beyond deliveryWindow.
+    maxAdvanceBookingDays: { type: Number, default: null, min: 0 },
     deliveryWindows: {
       type: [deliveryWindowSchema],
       default: [],

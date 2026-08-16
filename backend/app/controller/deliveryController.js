@@ -267,21 +267,32 @@ export const getDeliveryCodCashSummary = async (req, res) => {
 
         const orders = await Order.find({
             deliveryBoy: deliveryBoyId,
-            paymentMode: "COD",
             status: { $ne: "cancelled" },
             orderStatus: { $ne: "cancelled" },
+            $or: [
+                { paymentMode: "COD" },
+                { "financeFlags.hasExtraCashDue": true },
+            ],
         })
             .select(
-                "orderId status orderStatus deliveredAt createdAt financeFlags paymentBreakdown pricing",
+                "orderId status orderStatus paymentMode deliveredAt createdAt financeFlags paymentBreakdown pricing",
             )
             .sort({ createdAt: -1 })
             .limit(200)
             .lean();
 
         const normalized = orders.map((order) => {
-            const codMarkedCollected = Boolean(order.financeFlags?.codMarkedCollected);
-            const gross = roundCurrency(order.paymentBreakdown?.grandTotal ?? order.pricing?.total ?? 0);
-            const riderCommission = roundCurrency(order.paymentBreakdown?.riderPayoutTotal ?? 0);
+            // An ONLINE order only ever appears here for its extra-cash-due
+            // remainder (see addItemsToOrder) — the amount due is the tracked
+            // remainder itself, not the order's full (already-paid) grandTotal.
+            const isExtraCashOnly = order.paymentMode === "ONLINE" && order.financeFlags?.hasExtraCashDue;
+            const codMarkedCollected = isExtraCashOnly ? false : Boolean(order.financeFlags?.codMarkedCollected);
+            const gross = isExtraCashOnly
+                ? roundCurrency(order.paymentBreakdown?.codPendingAmount ?? 0)
+                : roundCurrency(order.paymentBreakdown?.grandTotal ?? order.pricing?.total ?? 0);
+            const riderCommission = isExtraCashOnly
+                ? 0
+                : roundCurrency(order.paymentBreakdown?.riderPayoutTotal ?? 0);
 
             const estimatedNet = roundCurrency(Math.max(gross - riderCommission, 0));
             const pendingNet = roundCurrency(order.paymentBreakdown?.codPendingAmount ?? 0);
@@ -294,6 +305,7 @@ export const getDeliveryCodCashSummary = async (req, res) => {
                 deliveredAt: order.deliveredAt || null,
                 createdAt: order.createdAt || null,
                 codMarkedCollected,
+                isExtraCashOnly,
                 amountGross: gross,
                 riderCommission,
                 amountNetExpected: estimatedNet,

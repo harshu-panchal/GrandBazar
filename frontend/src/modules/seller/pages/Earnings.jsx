@@ -28,10 +28,32 @@ const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}
 
 const statusVariant = (status) => {
   const s = String(status || "").toLowerCase();
-  if (s === "settled" || s === "delivered" || s === "completed") return "success";
+  if (s === "settled" || s === "completed" || s === "not_applicable") return "success";
   if (s === "pending" || s === "processing") return "warning";
+  if (s === "hold") return "error";
+  if (s === "delivered") return "success";
   if (s === "failed" || s === "cancelled") return "error";
   return "gray";
+};
+
+// Order.settlementStatus.sellerPayout is the real source of truth for
+// whether the seller's money for this order is actually released — the
+// legacy Transaction.status gets flipped to "Settled" at delivery time
+// regardless of a return-window/dispute/manual hold.
+const payoutStatusLabel = (row) => {
+  if (!row.sellerPayoutStatus) return row.status || "—";
+  if (row.sellerPayoutStatus === "HOLD" || row.isPayoutHeld) return "On Hold";
+  if (row.sellerPayoutStatus === "PENDING") return "Pending";
+  if (row.sellerPayoutStatus === "SETTLED" || row.sellerPayoutStatus === "COMPLETED") return "Settled";
+  if (row.sellerPayoutStatus === "NOT_APPLICABLE") return "Not Applicable";
+  return row.sellerPayoutStatus;
+};
+
+const payoutStatusVariant = (row) => {
+  if (!row.sellerPayoutStatus) return statusVariant(row.status);
+  if (row.sellerPayoutStatus === "HOLD" || row.isPayoutHeld) return "error";
+  if (row.sellerPayoutStatus === "PENDING") return "warning";
+  return statusVariant(row.sellerPayoutStatus);
 };
 
 const Earnings = () => {
@@ -423,8 +445,8 @@ const Earnings = () => {
                         )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap align-top">
-                        <Badge variant={statusVariant(row.status)} className="uppercase">
-                          {row.status || "—"}
+                        <Badge variant={payoutStatusVariant(row)} className="uppercase">
+                          {payoutStatusLabel(row)}
                         </Badge>
                       </td>
                     </tr>

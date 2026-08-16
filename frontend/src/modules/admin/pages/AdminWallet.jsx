@@ -143,7 +143,12 @@ const AdminWallet = () => {
                 remarks: reason || "",
             });
             if (res.data.success) {
-                toast.success(`Request processed successfully`);
+                const outcome = res.data.result?.results?.[0];
+                if (outcome?.status === "FAILED") {
+                    toast.error(outcome.reason || "Payout could not be processed");
+                } else {
+                    toast.success(`Request processed successfully`);
+                }
                 fetchData(txnPage);
             }
         } catch (error) {
@@ -573,7 +578,12 @@ const AdminWallet = () => {
                                                                     </button>
                                                                 );
                                                             })()}
-                                                            {(req.status || '').toUpperCase() === 'PENDING' && (
+                                                            {(req.status || '').toUpperCase() === 'PENDING' && req.relatedOrderIds?.[0]?.settlementStatus?.sellerPayout === 'HOLD' && (
+                                                                <span className="px-3 py-2 rounded-xl text-[10px] font-black uppercase text-rose-700 bg-rose-50 ring-1 ring-rose-200">
+                                                                    On Hold
+                                                                </span>
+                                                            )}
+                                                            {(req.status || '').toUpperCase() === 'PENDING' && req.relatedOrderIds?.[0]?.settlementStatus?.sellerPayout !== 'HOLD' && (
                                                                 <button
                                                                     disabled={isProcessing || loadingId === req._id}
                                                                     onClick={() => handleUpdateStatus(req._id, 'COMPLETED')}

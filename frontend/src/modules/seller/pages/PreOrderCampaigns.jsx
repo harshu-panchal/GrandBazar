@@ -23,10 +23,29 @@ const emptyForm = () => ({
   saleEndAt: "",
   deliveryStartDate: "",
   deliveryEndDate: "",
+  maxAdvanceBookingDays: "",
   timezone: "Asia/Kolkata",
   products: [],
   deliveryWindows: [],
 });
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// datetime-local / date inputs expect local (no-timezone) strings; convert an
+// ISO timestamp from the API back into that format so editing round-trips.
+const toDatetimeLocalValue = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
+const toDateValue = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
 
 const PreOrderCampaigns = () => {
   const { showToast } = useToast();
@@ -36,6 +55,8 @@ const PreOrderCampaigns = () => {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm());
+  const [editingCampaignId, setEditingCampaignId] = useState(null);
+  const [editingOriginalStatus, setEditingOriginalStatus] = useState(null);
 
   const extractArray = (res) => {
     const d = res?.data ?? res;
@@ -124,7 +145,38 @@ const PreOrderCampaigns = () => {
 
   const resetForm = () => {
     setForm(emptyForm());
+    setEditingCampaignId(null);
+    setEditingOriginalStatus(null);
     setShowForm(false);
+  };
+
+  const handleEdit = (campaign) => {
+    setEditingCampaignId(campaign.campaignId);
+    setEditingOriginalStatus(campaign.status);
+    setForm({
+      title: campaign.title || "",
+      description: campaign.description || "",
+      status: campaign.status === "sale_started" ? "active" : campaign.status || "draft",
+      saleStartAt: toDatetimeLocalValue(campaign.saleWindow?.startAt),
+      saleEndAt: toDatetimeLocalValue(campaign.saleWindow?.endAt),
+      deliveryStartDate: toDateValue(campaign.deliveryWindow?.startDate),
+      deliveryEndDate: toDateValue(campaign.deliveryWindow?.endDate),
+      maxAdvanceBookingDays:
+        campaign.maxAdvanceBookingDays == null ? "" : String(campaign.maxAdvanceBookingDays),
+      timezone: campaign.timezone || "Asia/Kolkata",
+      products: (campaign.products || []).map((p) => ({
+        product: String(p.product?._id || p.product || ""),
+        allocationCap: p.allocationCap ?? 10,
+        priceOverride: p.priceOverride == null ? "" : p.priceOverride,
+      })),
+      deliveryWindows: (campaign.deliveryWindows || []).map((w) => ({
+        label: w.label || "",
+        start: w.start || "09:00",
+        end: w.end || "12:00",
+        capacityPerDay: w.capacityPerDay ?? 50,
+      })),
+    });
+    setShowForm(true);
   };
 
   const validate = () => {
@@ -134,6 +186,8 @@ const PreOrderCampaigns = () => {
     if (!form.deliveryStartDate || !form.deliveryEndDate) return "Delivery window is required";
     if (new Date(form.deliveryEndDate) < new Date(form.deliveryStartDate))
       return "Delivery end must be on/after start";
+    if (form.maxAdvanceBookingDays !== "" && Number(form.maxAdvanceBookingDays) < 0)
+      return "Scheduling range must be 0 or more days";
     if (!form.products.length) return "Add at least one product";
     for (const p of form.products) {
       if (!p.product) return "Select a product for every row";
@@ -153,10 +207,15 @@ const PreOrderCampaigns = () => {
       showToast(err, "error");
       return;
     }
+    const isEditing = Boolean(editingCampaignId);
+    // Editing a campaign whose sale has already started (or later) must not
+    // silently downgrade it back to draft/active via the form's status
+    // select, which only offers those two options.
+    const canEditStatus = !isEditing || editingOriginalStatus === "draft";
     const payload = {
       title: form.title.trim(),
       description: form.description.trim(),
-      status: form.status,
+      ...(canEditStatus ? { status: form.status } : {}),
       saleWindow: {
         startAt: new Date(form.saleStartAt).toISOString(),
         endAt: new Date(form.saleEndAt).toISOString(),
@@ -165,6 +224,8 @@ const PreOrderCampaigns = () => {
         startDate: new Date(form.deliveryStartDate).toISOString(),
         endDate: new Date(form.deliveryEndDate).toISOString(),
       },
+      maxAdvanceBookingDays:
+        form.maxAdvanceBookingDays === "" ? null : Number(form.maxAdvanceBookingDays),
       timezone: form.timezone,
       deliveryWindows: form.deliveryWindows.map((w) => ({
         label: w.label.trim(),
@@ -182,12 +243,20 @@ const PreOrderCampaigns = () => {
     };
     try {
       setSaving(true);
-      await sellerApi.createCampaign(payload);
-      showToast("Campaign created", "success");
+      if (isEditing) {
+        await sellerApi.updateCampaign(editingCampaignId, payload);
+        showToast("Campaign updated", "success");
+      } else {
+        await sellerApi.createCampaign(payload);
+        showToast("Campaign created", "success");
+      }
       resetForm();
       loadCampaigns();
     } catch (e) {
-      showToast(e?.response?.data?.message || "Failed to create campaign", "error");
+      showToast(
+        e?.response?.data?.message || `Failed to ${isEditing ? "update" : "create"} campaign`,
+        "error",
+      );
     } finally {
       setSaving(false);
     }
@@ -223,7 +292,19 @@ const PreOrderCampaigns = () => {
             window; orders are processed when the sale starts.
           </p>
         </div>
-        <Button onClick={() => setShowForm((s) => !s)} className="flex items-center gap-2">
+        <Button
+          onClick={() => {
+            if (showForm) {
+              resetForm();
+            } else {
+              setForm(emptyForm());
+              setEditingCampaignId(null);
+              setEditingOriginalStatus(null);
+              setShowForm(true);
+            }
+          }}
+          className="flex items-center gap-2"
+        >
           {showForm ? <HiOutlineXMark className="w-5 h-5" /> : <HiOutlinePlus className="w-5 h-5" />}
           {showForm ? "Close" : "New Campaign"}
         </Button>
@@ -231,6 +312,11 @@ const PreOrderCampaigns = () => {
 
       {showForm && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-4">
+          {editingCampaignId && (
+            <div className="text-xs font-semibold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-lg px-3 py-2">
+              Editing campaign — changes apply to the existing campaign.
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Title</label>
@@ -239,13 +325,19 @@ const PreOrderCampaigns = () => {
             <div>
               <label className="block text-sm font-medium mb-1">Status</label>
               <select
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-2 disabled:opacity-60"
                 value={form.status}
                 onChange={(e) => setField("status", e.target.value)}
+                disabled={Boolean(editingCampaignId) && editingOriginalStatus !== "draft"}
               >
                 <option value="draft">Draft</option>
                 <option value="active">Active (schedule sale start)</option>
               </select>
+              {Boolean(editingCampaignId) && editingOriginalStatus !== "draft" && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Status is locked once a campaign is {editingOriginalStatus === "sale_started" ? "live" : editingOriginalStatus} — cancel it instead to stop it.
+                </p>
+              )}
             </div>
           </div>
           <div>
@@ -268,6 +360,19 @@ const PreOrderCampaigns = () => {
             <div>
               <label className="block text-sm font-medium mb-1">Delivery Window End</label>
               <Input type="date" value={form.deliveryEndDate} onChange={(e) => setField("deliveryEndDate", e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Scheduling Range (days ahead, optional)</label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="No extra limit"
+                value={form.maxAdvanceBookingDays}
+                onChange={(e) => setField("maxAdvanceBookingDays", e.target.value)}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                How far ahead of today a customer may pick a delivery date, on top of the delivery window above.
+              </p>
             </div>
           </div>
 
@@ -389,7 +494,7 @@ const PreOrderCampaigns = () => {
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="flex items-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create Campaign
+              {editingCampaignId ? "Update Campaign" : "Create Campaign"}
             </Button>
           </div>
         </div>
@@ -425,12 +530,18 @@ const PreOrderCampaigns = () => {
                       .map((p) => productLabel.get(String(p.product?._id || p.product)) || "Product")
                       .slice(0, 3)
                       .join(", ")}
+                    {c.maxAdvanceBookingDays != null && ` · scheduling range: ${c.maxAdvanceBookingDays}d`}
                   </p>
                 </div>
                 {["draft", "active", "sale_started"].includes(c.status) && (
-                  <Button variant="danger" size="sm" onClick={() => handleCancel(c.campaignId)}>
-                    Cancel
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => handleEdit(c)}>
+                      Edit
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => handleCancel(c.campaignId)}>
+                      Cancel
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}

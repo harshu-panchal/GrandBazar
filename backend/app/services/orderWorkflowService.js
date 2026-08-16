@@ -529,7 +529,7 @@ export async function sellerRejectAtomic(sellerId, orderId, reason) {
     customerId: order.customer,
     userId: order.customer,
     sellerId: order.seller,
-    customerMessage: "Your order was cancelled by the seller.",
+    customerMessage: `Your order was cancelled by the seller. Reason: ${trimmedReason}`,
     sellerMessage: `Order #${order.orderId} was cancelled.`,
   });
   return order;
@@ -577,14 +577,67 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   }
 
   if (legacy === "cancelled") {
-    if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
-      return sellerRejectAtomic(sellerId, orderId, additionalData.cancelReason);
+    const trimmedReason = String(additionalData.cancelReason || "").trim();
+    if (trimmedReason.length < 10) {
+      const err = new Error("Please provide a cancellation reason (at least 10 characters)");
+      err.statusCode = 400;
+      throw err;
     }
-    const err = new Error(
-      "This order can no longer be cancelled from here. Use cancellation approval flow if needed.",
+
+    if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
+      return sellerRejectAtomic(sellerId, orderId, trimmedReason);
+    }
+
+    // Order already accepted / in progress — seller can no longer cancel it
+    // outright, but (mirroring the customer cancellation-approval flow) can
+    // still ask admin to step in, as long as no delivery partner has been
+    // assigned yet.
+    if (order.cancellationRequest?.status === "pending") {
+      const err = new Error("A cancellation request is already pending admin approval");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const mode = resolveCustomerCancellationMode(order);
+    if (mode !== "approval") {
+      const err = new Error(
+        "This order can no longer be cancelled — a delivery partner may already be assigned, or it has been delivered.",
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const now = new Date();
+    const updatedRequest = await Order.findOneAndUpdate(
+      {
+        orderId,
+        seller: sellerId,
+        deliveryBoy: null,
+        status: { $nin: ["cancelled", "delivered"] },
+      },
+      {
+        $set: {
+          cancellationRequest: {
+            status: "pending",
+            reason: trimmedReason,
+            requestedAt: now,
+            requestedBy: "seller",
+            reviewedAt: null,
+            reviewedBy: null,
+            adminNote: "",
+          },
+        },
+      },
+      { new: true },
     );
-    err.statusCode = 409;
-    throw err;
+
+    if (!updatedRequest) {
+      const err = new Error("Unable to submit cancellation request");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return { __pendingApproval: true, order: updatedRequest };
   }
 
   const platformManaged =
@@ -660,9 +713,15 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   }
   if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
     $set.outForDeliveryAt = now;
+    if (Array.isArray(additionalData.pickupProofImages) && additionalData.pickupProofImages.length) {
+      $set.pickupProofImages = additionalData.pickupProofImages;
+    }
   }
   if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
     $set.deliveredAt = now;
+    if (Array.isArray(additionalData.deliveryProofImages) && additionalData.deliveryProofImages.length) {
+      $set.deliveryProofImages = additionalData.deliveryProofImages;
+    }
   }
 
   const updated = await Order.findOneAndUpdate(
@@ -1380,12 +1439,15 @@ export async function approveCustomerCancellationRequest(adminId, orderId, admin
     { workflowStatus: WORKFLOW_STATUS.CANCELLED },
     updated.customer,
   );
+  const requestedBySeller = order.cancellationRequest?.requestedBy === "seller";
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
     orderId: updated.orderId,
     customerId: updated.customer,
     userId: updated.customer,
     sellerId: updated.seller,
-    customerMessage: "Your cancellation request was approved and the order has been cancelled.",
+    customerMessage: requestedBySeller
+      ? `Your order was cancelled by the seller. Reason: ${cancellationNote}`
+      : `Your cancellation request was approved. Reason: ${cancellationNote}`,
     sellerMessage: `Order #${updated.orderId} was cancelled after admin approval.`,
   });
 
@@ -1444,6 +1506,15 @@ export async function rejectCustomerCancellationRequest(adminId, orderId, adminN
       adminNote: rejectionNote,
       status: "rejected",
     },
+  });
+  // The socket event above only reaches a customer with the app open right
+  // now — this is what actually notifies them if they're offline (push +
+  // in-app notification list), which previously never happened at all.
+  emitNotificationEvent(NOTIFICATION_EVENTS.CANCELLATION_REQUEST_REJECTED, {
+    orderId: updated.orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    adminNote: rejectionNote,
   });
 
   return updated;

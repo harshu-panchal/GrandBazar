@@ -36,6 +36,7 @@ export async function createPreOrderCampaign(sellerId, payload, createdBy = null
     deliveryWindow: payload.deliveryWindow,
     products: payload.products || [],
     rescheduleCutoffDays: payload.rescheduleCutoffDays ?? null,
+    maxAdvanceBookingDays: payload.maxAdvanceBookingDays ?? null,
     deliveryWindows: payload.deliveryWindows || [],
     timezone: payload.timezone || "Asia/Kolkata",
     createdBy,
@@ -157,6 +158,7 @@ export async function createAdminAdvanceBookingCampaign(adminId, payload = {}) {
     deliveryWindow,
     products: normalizedRows,
     rescheduleCutoffDays: payload.rescheduleCutoffDays ?? null,
+    maxAdvanceBookingDays: payload.maxAdvanceBookingDays ?? null,
     deliveryWindows: payload.deliveryWindows || [],
     timezone: payload.timezone || "Asia/Kolkata",
     createdByRole: "admin",
@@ -190,6 +192,7 @@ export async function updateAdminAdvanceBookingCampaign(adminId, campaignId, upd
     "saleWindow",
     "deliveryWindow",
     "rescheduleCutoffDays",
+    "maxAdvanceBookingDays",
     "deliveryWindows",
     "timezone",
   ]) {
@@ -604,10 +607,47 @@ export async function assertProductBookableForCart(productId) {
   throw err;
 }
 
-export async function updatePreOrderCampaign(sellerId, campaignId, updates) {
+export async function updatePreOrderCampaign(sellerId, campaignId, updates = {}) {
+  const allowed = {};
+  for (const key of [
+    "title",
+    "description",
+    "status",
+    "saleWindow",
+    "deliveryWindow",
+    "rescheduleCutoffDays",
+    "maxAdvanceBookingDays",
+    "deliveryWindows",
+    "timezone",
+  ]) {
+    if (updates[key] !== undefined) allowed[key] = updates[key];
+  }
+
+  if (Array.isArray(updates.products)) {
+    if (!updates.products.length) {
+      const err = new Error("At least one product is required");
+      err.statusCode = 400;
+      throw err;
+    }
+    allowed.products = updates.products.map((row) => ({
+      product: row.product || row.productId,
+      allocationCap: Math.max(1, Number(row.allocationCap || 100)),
+      allocatedQty: Math.max(0, Number(row.allocatedQty || 0)),
+      priceOverride:
+        row.priceOverride === "" || row.priceOverride == null
+          ? null
+          : Number(row.priceOverride),
+    }));
+    if (allowed.products.some((row) => !row.product)) {
+      const err = new Error("Select a product for every row");
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
   const campaign = await PreOrderCampaign.findOneAndUpdate(
     { campaignId, seller: sellerId, status: { $nin: ["cancelled", "completed"] } },
-    { $set: updates },
+    { $set: allowed },
     { new: true },
   );
   if (!campaign) {

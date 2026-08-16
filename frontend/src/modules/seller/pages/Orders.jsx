@@ -214,6 +214,11 @@ const Orders = () => {
     const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
     const [splitFirstLegIndexes, setSplitFirstLegIndexes] = useState([]);
     const [splitExtraFee, setSplitExtraFee] = useState('20');
+    const [splitDeliveryDate, setSplitDeliveryDate] = useState('');
+    const [splitWindowLabel, setSplitWindowLabel] = useState('');
+    const [splitWindows, setSplitWindows] = useState([]);
+    const [splitMaxDaysAhead, setSplitMaxDaysAhead] = useState(7);
+    const [isLoadingSplitOptions, setIsLoadingSplitOptions] = useState(false);
     const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
     const [rescheduleTarget, setRescheduleTarget] = useState(null);
     const [rescheduleDate, setRescheduleDate] = useState('');
@@ -498,14 +503,25 @@ const Orders = () => {
     };
 
     const handleStatusUpdate = async (orderId, newStatus, additionalData = {}) => {
-        if (newStatus === 'out_for_delivery' && !additionalData.pickupProofImages) {
-            setPendingStatusUpdate({ orderId, status: newStatus });
+        const normalizedStatus = String(newStatus).toLowerCase();
+        const targetOrder = orders.find((o) => o.id === orderId) || (selectedOrder?.id === orderId ? selectedOrder : null);
+        const isSelfDelivery = targetOrder ? resolveFulfillmentMethod(targetOrder) === 'seller_delivery' : false;
+
+        if (normalizedStatus === 'out_for_delivery' && !additionalData.pickupProofImages) {
+            setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'pickupProofImages' });
             setPickupImage(null);
             setIsPickupModalOpen(true);
             return;
         }
 
-        if (String(newStatus).toLowerCase() === 'cancelled' && !additionalData.cancelReason) {
+        if (normalizedStatus === 'delivered' && isSelfDelivery && !additionalData.deliveryProofImages) {
+            setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'deliveryProofImages' });
+            setPickupImage(null);
+            setIsPickupModalOpen(true);
+            return;
+        }
+
+        if (normalizedStatus === 'cancelled' && !additionalData.cancelReason) {
             setCancelReasonTarget(orderId);
             setCancelReasonText('');
             setIsCancelReasonModalOpen(true);
@@ -513,13 +529,17 @@ const Orders = () => {
         }
 
         try {
-            await sellerApi.updateOrderStatus(orderId, { 
-                status: newStatus.toLowerCase(),
+            const res = await sellerApi.updateOrderStatus(orderId, {
+                status: normalizedStatus,
                 ...additionalData
             });
-            showToast(`Order status updated to ${newStatus}`, "success");
+            const isPendingApproval = res.status === 202;
+            showToast(
+                res.data?.message || `Order status updated to ${newStatus}`,
+                "success",
+            );
             fetchOrders(); // Refresh orders
-            if (selectedOrder && selectedOrder.id === orderId) {
+            if (selectedOrder && selectedOrder.id === orderId && !isPendingApproval) {
                 setSelectedOrder({ ...selectedOrder, status: newStatus });
             }
             if (isPickupModalOpen) {
@@ -822,14 +842,28 @@ const Orders = () => {
         }
     };
 
-    const openSplitModal = (order) => {
+    const openSplitModal = async (order) => {
         if (!order || !Array.isArray(order.rawItems) || order.rawItems.length < 2) {
             showToast('At least 2 items required for split delivery', 'error');
             return;
         }
         setSplitFirstLegIndexes([0]);
         setSplitExtraFee('20');
+        setSplitDeliveryDate('');
+        setSplitWindowLabel('');
+        setSplitWindows([]);
         setIsSplitModalOpen(true);
+        setIsLoadingSplitOptions(true);
+        try {
+            const res = await sellerApi.getSchedulingSettings();
+            const settings = res.data?.result || {};
+            setSplitWindows(Array.isArray(settings.deliveryWindows) ? settings.deliveryWindows : []);
+            setSplitMaxDaysAhead(Number(settings.maxDaysAhead) || 7);
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to load delivery windows', 'error');
+        } finally {
+            setIsLoadingSplitOptions(false);
+        }
     };
 
     const closeSplitModal = () => {
@@ -850,6 +884,10 @@ const Orders = () => {
             showToast('Select at least one item for the first delivery, leaving at least one for the second', 'error');
             return;
         }
+        if (!splitDeliveryDate || !splitWindowLabel) {
+            showToast('Select a delivery date and window for the second delivery', 'error');
+            return;
+        }
         const secondLegIndexes = selectedOrder.rawItems
             .map((_, idx) => idx)
             .filter((idx) => !splitFirstLegIndexes.includes(idx));
@@ -868,6 +906,8 @@ const Orders = () => {
                         label: 'Part 2 - Next delivery',
                         itemIndexes: secondLegIndexes,
                         additionalDeliveryFee: Number.isFinite(feeNum) && feeNum >= 0 ? feeNum : 0,
+                        deliveryDate: splitDeliveryDate,
+                        windowLabel: splitWindowLabel,
                     },
                 ],
             });
@@ -910,12 +950,13 @@ const Orders = () => {
 
     const confirmPickup = () => {
         if (!pickupImage) {
-            showToast('Please upload a pickup proof image first', 'error');
+            showToast('Please upload a proof image first', 'error');
             return;
         }
         if (pendingStatusUpdate) {
+            const field = pendingStatusUpdate.proofField || 'pickupProofImages';
             handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
-                pickupProofImages: [pickupImage]
+                [field]: [pickupImage]
             });
         }
     };
@@ -1480,10 +1521,10 @@ const Orders = () => {
                                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                                         <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                                             <HiOutlineCamera className="h-5 w-5 text-primary" />
-                                            Capture Pickup Proof
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Capture Delivery Proof' : 'Capture Pickup Proof'}
                                         </h3>
-                                        <button 
-                                            onClick={() => setIsPickupModalOpen(false)} 
+                                        <button
+                                            onClick={() => setIsPickupModalOpen(false)}
                                             disabled={isUploading}
                                             className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
                                         >
@@ -1492,11 +1533,13 @@ const Orders = () => {
                                     </div>
                                     <div className="p-6 space-y-4 text-center">
                                         <p className="text-xs font-bold text-slate-600">
-                                            Please upload a photo of the order being handed over to the delivery partner.
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages'
+                                                ? 'Please upload a photo confirming the order was delivered to the customer.'
+                                                : 'Please upload a photo of the order being handed over to the delivery partner.'}
                                         </p>
                                         <div className="relative h-48 w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors">
                                             {pickupImage ? (
-                                                <img src={pickupImage} alt="Pickup Proof" className="h-full w-full object-cover" />
+                                                <img src={pickupImage} alt="Delivery Proof" className="h-full w-full object-cover" />
                                             ) : (
                                                 <div className="flex flex-col items-center">
                                                     {isUploading ? (
@@ -1528,12 +1571,12 @@ const Orders = () => {
                                         >
                                             CANCEL
                                         </Button>
-                                        <Button 
+                                        <Button
                                             onClick={confirmPickup}
                                             disabled={!pickupImage || isUploading}
                                             className="flex-1 text-xs"
                                         >
-                                            CONFIRM HANDOVER
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'CONFIRM DELIVERY' : 'CONFIRM HANDOVER'}
                                         </Button>
                                     </div>
                                 </motion.div>
@@ -1894,6 +1937,50 @@ const Orders = () => {
                                                 />
                                             </div>
                                         </div>
+                                        <div className="rounded-2xl bg-indigo-50/60 ring-1 ring-indigo-100 p-3 space-y-3">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">2nd delivery — when will these items actually arrive?</p>
+                                            {isLoadingSplitOptions ? (
+                                                <div className="flex justify-center py-3">
+                                                    <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">Delivery date</label>
+                                                        <DatePicker
+                                                            value={splitDeliveryDate}
+                                                            onChange={setSplitDeliveryDate}
+                                                            min={new Date().toISOString().split('T')[0]}
+                                                            max={new Date(Date.now() + splitMaxDaysAhead * 86400000).toISOString().split('T')[0]}
+                                                            placeholder="Select date"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">Delivery window</label>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            {splitWindows.map((w) => (
+                                                                <button
+                                                                    key={w.label}
+                                                                    type="button"
+                                                                    onClick={() => setSplitWindowLabel(w.label)}
+                                                                    className={cn(
+                                                                        "px-2.5 py-2 rounded-lg text-[11px] font-bold border transition-all",
+                                                                        splitWindowLabel === w.label
+                                                                            ? "bg-indigo-600 text-white border-indigo-600"
+                                                                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                                                                    )}
+                                                                >
+                                                                    {w.label}
+                                                                </button>
+                                                            ))}
+                                                            {splitWindows.length === 0 && (
+                                                                <p className="col-span-2 text-xs text-slate-400 font-semibold">No delivery windows configured — set them up in Delivery Scheduling first.</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
                                         <Button
@@ -1906,7 +1993,13 @@ const Orders = () => {
                                         </Button>
                                         <Button
                                             onClick={handleSubmitSplitDelivery}
-                                            disabled={splitSaving || !splitFirstLegIndexes.length || splitFirstLegIndexes.length >= (selectedOrder.rawItems || []).length}
+                                            disabled={
+                                                splitSaving ||
+                                                !splitFirstLegIndexes.length ||
+                                                splitFirstLegIndexes.length >= (selectedOrder.rawItems || []).length ||
+                                                !splitDeliveryDate ||
+                                                !splitWindowLabel
+                                            }
                                             className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700"
                                         >
                                             {splitSaving ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CREATE SPLIT'}

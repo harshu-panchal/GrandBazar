@@ -10,6 +10,10 @@ const mockDebitWallet = jest.fn();
 const mockGetOrCreateWallet = jest.fn();
 const mockUpdateCashInHand = jest.fn();
 const mockCreatePendingPayoutForOrder = jest.fn();
+const mockUserFindByIdAndUpdate = jest.fn();
+const mockTransactionCreate = jest.fn();
+const mockRefundCreate = jest.fn();
+const mockSettingFindOne = jest.fn();
 
 function createSession() {
   return {
@@ -75,6 +79,30 @@ jest.unstable_mockModule("mongoose", () => ({
 jest.unstable_mockModule("../app/models/order.js", () => ({
   default: {
     findOne: mockOrderFindOne,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/customer.js", () => ({
+  default: {
+    findByIdAndUpdate: mockUserFindByIdAndUpdate,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/transaction.js", () => ({
+  default: {
+    create: mockTransactionCreate,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/setting.js", () => ({
+  default: {
+    findOne: mockSettingFindOne,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/refund.js", () => ({
+  default: {
+    create: mockRefundCreate,
   },
 }));
 
@@ -145,6 +173,12 @@ describe("finance order flow", () => {
       _id: payoutType === PAYOUT_TYPE.SELLER ? "p-seller-1" : "p-rider-1",
       payoutType,
     }));
+    mockUserFindByIdAndUpdate.mockResolvedValue({ _id: "customer-1" });
+    mockTransactionCreate.mockResolvedValue([{ _id: "txn-1" }]);
+    mockRefundCreate.mockResolvedValue([{ _id: "refund-1" }]);
+    mockSettingFindOne.mockReturnValue({
+      session: () => ({ lean: () => Promise.resolve({ refundWindowHours: 24 }) }),
+    });
   });
 
   it("captures online payment and creates ledger entry", async () => {

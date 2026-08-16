@@ -3,6 +3,7 @@ import {
   COMMISSION_FIXED_RULE,
   COMMISSION_TYPE,
 } from "../constants/finance.js";
+import { recordAuditLog } from "./auditTrailService.js";
 
 export function normalizeCityKey(raw = "") {
   return String(raw || "")
@@ -37,7 +38,8 @@ export function normalizeCommissionPayload(payload = {}) {
 export async function upsertCityCommission({ cityKey, cityName = "", payload = {}, adminId = null }) {
   const normalizedCityKey = normalizeCityKey(cityKey);
   const normalized = normalizeCommissionPayload(payload);
-  return CityCommission.findOneAndUpdate(
+  const before = await CityCommission.findOne({ cityKey: normalizedCityKey }).lean();
+  const updated = await CityCommission.findOneAndUpdate(
     { cityKey: normalizedCityKey },
     {
       $set: {
@@ -49,6 +51,17 @@ export async function upsertCityCommission({ cityKey, cityName = "", payload = {
     },
     { upsert: true, new: true },
   );
+
+  void recordAuditLog({
+    actorId: adminId,
+    action: before ? "CITY_COMMISSION_UPDATED" : "CITY_COMMISSION_CREATED",
+    targetType: "CityCommission",
+    targetId: updated._id,
+    before,
+    after: normalized,
+  });
+
+  return updated;
 }
 
 export async function getCityCommissionByKey(cityKey) {

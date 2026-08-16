@@ -288,6 +288,17 @@ const orderSchema = new mongoose.Schema(
       // the return window has since expired.
       manualSettlementHold: { type: Boolean, default: false },
       manualSettlementHoldReason: { type: String, default: "" },
+      // Set once reverseOrderFinanceOnCancellation has run for this order —
+      // prevents a double wallet credit/debit if cancellation compensation
+      // is ever triggered more than once for the same order.
+      cancellationReversed: { type: Boolean, default: false },
+      // Set when a customer adds items to an already-placed ONLINE order and
+      // their wallet balance doesn't fully cover the extra cost (see
+      // addItemsToOrder in orderPriceAdjustmentService.js). The uncollected
+      // remainder is tracked in paymentBreakdown.codPendingAmount and must be
+      // collected as cash at delivery, same as a COD order, even though
+      // paymentMode stays "ONLINE" for the original portion.
+      hasExtraCashDue: { type: Boolean, default: false },
     },
     status: {
       type: String,
@@ -624,7 +635,7 @@ const orderSchema = new mongoose.Schema(
       },
       requestedBy: {
         type: String,
-        enum: ["customer"],
+        enum: ["customer", "seller"],
         default: undefined,
       },
       reviewedAt: {

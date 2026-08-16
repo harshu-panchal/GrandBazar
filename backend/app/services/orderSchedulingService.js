@@ -128,6 +128,18 @@ export async function validateScheduleSelection({
       err.statusCode = 400;
       throw err;
     }
+
+    if (campaign.maxAdvanceBookingDays != null) {
+      const campaignMaxDate = startOfDayUtc(now);
+      campaignMaxDate.setUTCDate(campaignMaxDate.getUTCDate() + campaign.maxAdvanceBookingDays);
+      if (delivery > campaignMaxDate) {
+        const err = new Error(
+          `Delivery date cannot be more than ${campaign.maxAdvanceBookingDays} days ahead for this campaign`,
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+    }
   }
 
   const windows =

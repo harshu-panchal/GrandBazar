@@ -1,5 +1,12 @@
 import mongoose from "mongoose";
 import Order from "../../models/order.js";
+import User from "../../models/customer.js";
+import Transaction from "../../models/transaction.js";
+import Setting from "../../models/setting.js";
+import {
+  computeReturnWindowForOrder,
+  resolveCategoryWindowOverrideHours,
+} from "../../utils/returnWindow.js";
 import {
   LEDGER_DIRECTION,
   LEDGER_TRANSACTION_TYPE,
@@ -11,6 +18,8 @@ import {
 import { addMoney, roundCurrency } from "../../utils/money.js";
 import { createLedgerEntry } from "./ledgerService.js";
 import { createFinanceAuditLog } from "./auditLogService.js";
+import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
 import {
   creditWallet,
   debitWallet,
@@ -104,33 +113,6 @@ function ensurePaymentBreakdownSnapshots(order) {
   };
 }
 
-function parsePositiveInt(value, fallback) {
-  const parsed = parseInt(value, 10);
-  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
-  return fallback;
-}
-
-function getReturnEligibilityDelayMinutes() {
-  return parsePositiveInt(process.env.RETURN_ELIGIBILITY_DELAY_MINUTES, 2);
-}
-
-function getReturnWindowMinutes() {
-  return parsePositiveInt(process.env.RETURN_WINDOW_MINUTES, 2);
-}
-
-function computeReturnWindowDates(deliveredAt) {
-  const eligibleDelay = getReturnEligibilityDelayMinutes();
-  const windowMinutes = getReturnWindowMinutes();
-  const start = deliveredAt instanceof Date ? deliveredAt : new Date();
-  const eligibleAt = new Date(start.getTime() + eligibleDelay * 60 * 1000);
-  const windowExpiresAt = new Date(start.getTime() + windowMinutes * 60 * 1000);
-
-  return {
-    eligibleAt,
-    windowExpiresAt,
-  };
-}
-
 export function freezeFinancialSnapshot(order, breakdown) {
   if (!order || !breakdown) return order;
 
@@ -195,6 +177,15 @@ export async function createPendingSellerPayout(order, { session, actorId } = {}
       amount,
       createdBy: actorId || null,
       metadata: { flow: "order_delivered" },
+      // Without these, isBulkSettlement always defaults to false here (see
+      // createPendingPayoutForOrder's signature) — so no BulkSettlement
+      // record was ever created on the real delivery path, and the admin
+      // "bulk order" badge/breakdown UI (AdminWallet.jsx) had nothing to
+      // show. queueSellerPayouts already does this correctly; mirrored here.
+      isBulkSettlement: Boolean(order.isBulkOrder || order.paymentBreakdown?.isBulkOrder),
+      commissionAmount: order.paymentBreakdown?.adminProductCommissionTotal || 0,
+      packagingAmount: order.paymentBreakdown?.packagingChargeAmount || 0,
+      taxAmount: order.paymentBreakdown?.taxTotal || 0,
     },
     { session },
   );
@@ -462,11 +453,17 @@ export async function handleCodOrderFinance(
     session.startTransaction();
     const order = await findOrderForUpdate(orderOrId, session);
 
-    if (order.paymentMode === "ONLINE") {
+    // An ONLINE order can still have cash due at the door if the customer
+    // added items post-placement and their wallet didn't fully cover the
+    // extra cost (see addItemsToOrder) — paymentMode stays ONLINE (the
+    // original amount really was captured via gateway), only the tracked
+    // extraCashDue remainder gets collected here.
+    const isExtraCashOnlyCollection = order.paymentMode === "ONLINE" && order.financeFlags?.hasExtraCashDue;
+    if (order.paymentMode === "ONLINE" && !isExtraCashOnlyCollection) {
       throw new Error("COD collection is not allowed for ONLINE orders");
     }
 
-    if (order.paymentMode !== "COD") {
+    if (order.paymentMode !== "COD" && !isExtraCashOnlyCollection) {
       order.paymentMode = "COD";
     }
 
@@ -476,7 +473,11 @@ export async function handleCodOrderFinance(
       throw new Error("COD can only be collected after order delivery");
     }
 
-    if (order.financeFlags?.codMarkedCollected) {
+    if (!isExtraCashOnlyCollection && order.financeFlags?.codMarkedCollected) {
+      await session.commitTransaction();
+      return order;
+    }
+    if (isExtraCashOnlyCollection && !(order.paymentBreakdown?.codPendingAmount > 0)) {
       await session.commitTransaction();
       return order;
     }
@@ -490,18 +491,22 @@ export async function handleCodOrderFinance(
       throw new Error("Delivery partner is required for COD collection");
     }
 
-    const codAmountGross = roundCurrency(
-      amount == null ? order.paymentBreakdown?.grandTotal || order.pricing?.total || 0 : amount,
-    );
+    const defaultAmount = isExtraCashOnlyCollection
+      ? order.paymentBreakdown?.codPendingAmount || 0
+      : order.paymentBreakdown?.grandTotal || order.pricing?.total || 0;
+    const codAmountGross = roundCurrency(amount == null ? defaultAmount : amount);
     if (codAmountGross <= 0) {
       throw new Error("COD collection amount must be greater than 0");
     }
 
     // Requirement: system float (COD) should track remittable cash with delivery partners,
-    // i.e. gross order amount minus delivery partner commission.
-    const deliveryPartnerCommission = roundCurrency(
-      order.paymentBreakdown?.riderPayoutTotal || 0,
-    );
+    // i.e. gross order amount minus delivery partner commission. A post-placement
+    // item-addition top-up never had its own rider commission computed, so it's
+    // collected in full — the order's normal riderPayoutTotal was already earned
+    // against the original delivery, not this later top-up.
+    const deliveryPartnerCommission = isExtraCashOnlyCollection
+      ? 0
+      : roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
     const codAmountNet = roundCurrency(
       Math.max(codAmountGross - deliveryPartnerCommission, 0),
     );
@@ -513,29 +518,44 @@ export async function handleCodOrderFinance(
       session,
     });
 
+    // Plain object spread ({...order.paymentBreakdown}) can silently drop
+    // deeply-nested Mixed-type sub-fields (like `snapshots`) on a Mongoose
+    // nested-path document field, depending on how that field was last
+    // written — toObject() reliably serializes everything the document
+    // actually holds.
+    const currentBreakdown = order.paymentBreakdown?.toObject
+      ? order.paymentBreakdown.toObject()
+      : order.paymentBreakdown || {};
     order.paymentBreakdown = {
-      ...(order.paymentBreakdown || {}),
+      ...currentBreakdown,
       codCollectedAmount: roundCurrency(
-        (order.paymentBreakdown?.codCollectedAmount || 0) + codAmountNet,
+        (currentBreakdown.codCollectedAmount || 0) + codAmountNet,
       ),
-      codRemittedAmount: roundCurrency(order.paymentBreakdown?.codRemittedAmount || 0),
+      codRemittedAmount: roundCurrency(currentBreakdown.codRemittedAmount || 0),
       codPendingAmount: roundCurrency(
-        (order.paymentBreakdown?.codCollectedAmount || 0) +
+        (currentBreakdown.codCollectedAmount || 0) +
           codAmountNet -
-          (order.paymentBreakdown?.codRemittedAmount || 0),
+          (currentBreakdown.codRemittedAmount || 0),
       ),
     };
 
-    order.paymentStatus = ORDER_PAYMENT_STATUS.CASH_COLLECTED;
-    order.payment = {
-      ...(order.payment || {}),
-      method: "cash",
-      status: "completed",
-    };
-    order.financeFlags = {
-      ...(order.financeFlags || {}),
-      codMarkedCollected: true,
-    };
+    if (isExtraCashOnlyCollection) {
+      order.financeFlags = {
+        ...(order.financeFlags || {}),
+        hasExtraCashDue: false,
+      };
+    } else {
+      order.paymentStatus = ORDER_PAYMENT_STATUS.CASH_COLLECTED;
+      order.payment = {
+        ...(order.payment || {}),
+        method: "cash",
+        status: "completed",
+      };
+      order.financeFlags = {
+        ...(order.financeFlags || {}),
+        codMarkedCollected: true,
+      };
+    }
 
     const riderWallet = await getOrCreateWallet(
       OWNER_TYPE.DELIVERY_PARTNER,
@@ -600,7 +620,22 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
     }
 
     if (!order.returnEligibleAt || !order.returnWindowExpiresAt) {
-      const { eligibleAt, windowExpiresAt } = computeReturnWindowDates(order.deliveredAt);
+      // Same admin-configurable (platform Setting.refundWindowHours, or a
+      // shorter/disabled per-category override) window requestReturn() and
+      // disputeService.js already resolve — previously this used a private,
+      // duplicated helper here that defaulted to a 2-MINUTE window when
+      // RETURN_WINDOW_MINUTES wasn't set, so the seller payout hold below
+      // (meant to protect against paying out before the return window
+      // closes) released almost immediately in practice instead of
+      // respecting the real (default 24h) admin-configured window.
+      const [platformSettings, { overrideHours }] = await Promise.all([
+        Setting.findOne({}).session(session).lean(),
+        resolveCategoryWindowOverrideHours((order.items || []).map((item) => item.product)),
+      ]);
+      const { eligibleAt, windowExpiresAt } = computeReturnWindowForOrder(
+        order,
+        overrideHours ?? platformSettings?.refundWindowHours,
+      );
       order.returnEligibleAt = order.returnEligibleAt || eligibleAt;
       order.returnWindowExpiresAt = order.returnWindowExpiresAt || windowExpiresAt;
       order.returnDeadline = order.returnDeadline || windowExpiresAt;
@@ -756,7 +791,7 @@ export async function reconcileCodCash(
     const nextPending = roundCurrency(codCollected - nextRemitted);
 
     order.paymentBreakdown = {
-      ...(order.paymentBreakdown || {}),
+      ...(order.paymentBreakdown?.toObject ? order.paymentBreakdown.toObject() : order.paymentBreakdown || {}),
       codCollectedAmount: codCollected,
       codRemittedAmount: nextRemitted,
       codPendingAmount: nextPending,
@@ -810,9 +845,17 @@ export async function reverseOrderFinanceOnCancellation(
     session.startTransaction();
     const order = await findOrderForUpdate(orderOrId, session);
 
+    if (order.financeFlags?.cancellationReversed) {
+      await session.abortTransaction();
+      return order;
+    }
+
+    let totalRefunded = 0;
+
     if (order.paymentMode === "ONLINE" && order.financeFlags?.onlinePaymentCaptured) {
       const refundAmount = roundCurrency(order.paymentBreakdown?.grandTotal || 0);
       if (refundAmount > 0) {
+        totalRefunded += refundAmount;
         const debitResult = await debitWallet({
           ownerType: OWNER_TYPE.ADMIN,
           ownerId: null,
@@ -842,31 +885,52 @@ export async function reverseOrderFinanceOnCancellation(
       order.paymentStatus = ORDER_PAYMENT_STATUS.REFUNDED;
     }
 
-    // NEW: Refund Wallet Amount Used
+    // Refund wallet amount the customer spent at checkout. This must land on
+    // User.walletBalance — the customer's actual spendable balance (checked
+    // and debited at checkout in orderPlacementService.js, shown on
+    // WalletPage.jsx) — NOT the finance `Wallet` collection's CUSTOMER-owned
+    // doc, which nothing ever reads back (that collection is real only for
+    // SELLER/ADMIN/DELIVERY_PARTNER owners). Mirrors the working return-refund
+    // pattern in orderController.js's completeReturnAndRefund.
     const walletUsed = roundCurrency(order.pricing?.walletAmount || order.paymentBreakdown?.walletAmount || 0);
     if (walletUsed > 0) {
-      await creditWallet({
-        ownerType: OWNER_TYPE.CUSTOMER,
-        ownerId: order.customer,
-        amount: walletUsed,
-        bucket: "available",
-        session,
-      });
+      totalRefunded = roundCurrency(totalRefunded + walletUsed);
+      await User.findByIdAndUpdate(
+        order.customer,
+        { $inc: { walletBalance: walletUsed } },
+        { session },
+      );
+      await Transaction.create(
+        [
+          {
+            user: order.customer,
+            userModel: "User",
+            order: order._id,
+            type: "Refund",
+            amount: walletUsed,
+            status: "Settled",
+            reference: `REF-CANCEL-WALLET-${order.orderId}`,
+            meta: { orderId: order.orderId, reason, kind: "cancellation_wallet_refund" },
+          },
+        ],
+        { session },
+      );
+    }
 
-      const customerWallet = await getOrCreateWallet(OWNER_TYPE.CUSTOMER, order.customer, { session });
-      await createLedgerEntry(
-        {
-          orderId: order._id,
-          walletId: customerWallet._id,
-          actorType: OWNER_TYPE.CUSTOMER,
-          actorId: order.customer,
-          type: LEDGER_TRANSACTION_TYPE.WALLET_REFUND,
-          direction: LEDGER_DIRECTION.CREDIT,
-          amount: walletUsed,
-          paymentMode: "WALLET",
-          description: `Refund for wallet payment: ${reason}`,
-          reference: order.orderId,
-        },
+    if (totalRefunded > 0) {
+      const Refund = (await import("../../models/refund.js")).default;
+      await Refund.create(
+        [
+          {
+            order: order._id,
+            orderId: order.orderId,
+            type: "cancellation",
+            amount: totalRefunded,
+            mode: "wallet",
+            status: "completed",
+            completedAt: new Date(),
+          },
+        ],
         { session },
       );
     }
@@ -876,6 +940,10 @@ export async function reverseOrderFinanceOnCancellation(
       overall: ORDER_SETTLEMENT_STATUS.CANCELLED,
       sellerPayout: "NOT_APPLICABLE",
       riderPayout: "NOT_APPLICABLE",
+    };
+    order.financeFlags = {
+      ...(order.financeFlags || {}),
+      cancellationReversed: true,
     };
 
     await createFinanceAuditLog(
@@ -891,6 +959,23 @@ export async function reverseOrderFinanceOnCancellation(
 
     await order.save({ session });
     await session.commitTransaction();
+
+    // Every cancellation path in the app routes through here (via
+    // compensateOrderCancellation), and until now none of them ever told
+    // the customer their money came back — they only ever saw "Order
+    // Cancelled". Fired only after a successful commit (not from inside the
+    // transaction) so a rollback can never produce a false notification;
+    // guarded by the cancellationReversed idempotency check above so a
+    // retried reversal on an already-reversed order can't double-notify.
+    if (totalRefunded > 0) {
+      emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
+        orderId: order.orderId,
+        customerId: order.customer,
+        userId: order.customer,
+        amount: totalRefunded,
+      });
+    }
+
     return order;
   } catch (error) {
     await session.abortTransaction();

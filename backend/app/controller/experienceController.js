@@ -651,6 +651,7 @@ export const getRecommendedStoresForUser = async (req, res) => {
           isActive: true,
           isVerified: true,
           applicationStatus: "approved",
+          excludeFromAlternatives: { $ne: true },
         })
           .select(storeSelect)
           .lean();
@@ -665,6 +666,7 @@ export const getRecommendedStoresForUser = async (req, res) => {
         isActive: true,
         isVerified: true,
         applicationStatus: "approved",
+        excludeFromAlternatives: { $ne: true },
       })
         .select(storeSelect)
         .sort({ avgRating: -1, reviewCount: -1 })

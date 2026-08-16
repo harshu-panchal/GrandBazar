@@ -85,14 +85,14 @@ function eventDefinition(eventType) {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Order Confirmed",
-        body: () => "Seller has confirmed your order.",
+        body: (payload) => payload.customerMessage || "Seller has confirmed your order.",
       };
     case NOTIFICATION_EVENTS.ORDER_PACKED:
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Order Packed",
-        body: () => "Your order is packed and ready.",
+        body: (payload) => payload.customerMessage || "Your order is packed and ready.",
       };
     case NOTIFICATION_EVENTS.OUT_FOR_DELIVERY:
       return {
@@ -153,20 +153,34 @@ function eventDefinition(eventType) {
           },
         ],
       };
-    case NOTIFICATION_EVENTS.REFUND_INITIATED:
+    case NOTIFICATION_EVENTS.REFUND_INITIATED: {
+      const refundInitiatedAmount = (payload) => payload.data?.refundAmount ?? payload.amount;
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Refund Initiated",
-        body: () => "Refund has been initiated for your order.",
+        body: (payload) => {
+          const amount = refundInitiatedAmount(payload);
+          return amount
+            ? `Refund of ₹${amount} has been initiated for your order.`
+            : "Refund has been initiated for your order.";
+        },
       };
-    case NOTIFICATION_EVENTS.REFUND_COMPLETED:
+    }
+    case NOTIFICATION_EVENTS.REFUND_COMPLETED: {
+      const refundCompletedAmount = (payload) => payload.data?.refundAmount ?? payload.amount;
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Refund Completed",
-        body: () => "Refund has been completed.",
+        body: (payload) => {
+          const amount = refundCompletedAmount(payload);
+          return amount
+            ? `Refund of ₹${amount} has been credited to your wallet.`
+            : "Refund has been completed.";
+        },
       };
+    }
     case NOTIFICATION_EVENTS.NEW_ORDER:
       return {
         role: NOTIFICATION_ROLES.SELLER,
@@ -207,6 +221,15 @@ function eventDefinition(eventType) {
               payload.orderId
                 ? `A delivery partner has been assigned to order #${payload.orderId} and is preparing to pick it up.`
                 : "A delivery partner has been assigned to your order.",
+          },
+          {
+            role: NOTIFICATION_ROLES.SELLER,
+            recipientIds: (payload) => normalizeIdList(payload.sellerId),
+            title: () => "Delivery Partner Assigned",
+            body: (payload) =>
+              payload.orderId
+                ? `A delivery partner has been assigned to order #${payload.orderId}.`
+                : "A delivery partner has been assigned to an order.",
           },
         ],
       };
@@ -439,6 +462,16 @@ function eventDefinition(eventType) {
             payload.note ? " Reason: " + payload.note : ""
           }`,
       };
+    case NOTIFICATION_EVENTS.CANCELLATION_REQUEST_REJECTED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Cancellation Request Rejected",
+        body: (payload) =>
+          `Your cancellation request for order #${payload.orderId || ""} was rejected — the order is still being processed.${
+            payload.adminNote ? " Note: " + payload.adminNote : ""
+          }`,
+      };
     case NOTIFICATION_EVENTS.PRICE_REVISED:
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
@@ -458,6 +491,34 @@ function eventDefinition(eventType) {
           payload.amount
             ? `Please pay the additional ₹${payload.amount} to continue with order #${payload.orderId || ""}.`
             : "Additional payment is required to continue your order.",
+      };
+    case NOTIFICATION_EVENTS.ITEMS_ADDED_TO_ORDER:
+      return {
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.CUSTOMER,
+            recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+            title: () => "Items Added to Your Order",
+            body: (payload) => {
+              const extra = payload.walletShortfall > 0
+                ? ` ₹${payload.walletShortfall} will be collected at delivery.`
+                : "";
+              return payload.orderId
+                ? `New items were added to order #${payload.orderId}.${extra}`
+                : `New items were added to your order.${extra}`;
+            },
+          },
+          {
+            role: NOTIFICATION_ROLES.SELLER,
+            recipientIds: (payload) => normalizeIdList(payload.sellerId),
+            title: () => "Order Updated",
+            body: (payload) =>
+              payload.orderId
+                ? `The customer added new items to order #${payload.orderId}. Please review before packing.`
+                : "A customer added new items to an order awaiting packing.",
+          },
+        ],
       };
     case NOTIFICATION_EVENTS.PREORDER_CONFIRMED:
       return {

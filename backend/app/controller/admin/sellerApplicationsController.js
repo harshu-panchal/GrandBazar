@@ -108,7 +108,7 @@ export const createVendorAccount = async (req, res) => {
 export const updateSellerStoreSetup = async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedStore = await updateStoreSetupByAdmin(id, req.body || {});
+    const updatedStore = await updateStoreSetupByAdmin(id, req.body || {}, req.user?.id || null);
     return handleResponse(res, 200, "Store setup updated successfully", updatedStore);
   } catch (error) {
     return handleResponse(res, 400, error.message);

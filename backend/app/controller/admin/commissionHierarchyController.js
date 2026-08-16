@@ -7,6 +7,7 @@ import {
   normalizeCommissionPayload,
   upsertCityCommission,
 } from "../../services/cityCommissionService.js";
+import { recordAuditLog } from "../../services/auditTrailService.js";
 
 function toStoreCommissionPayload(store) {
   return {
@@ -43,6 +44,10 @@ export async function updateStoreCommission(req, res) {
       return handleResponse(res, 400, "Invalid store id");
     }
     const normalized = normalizeCommissionPayload(req.body || {});
+    const before = await Store.findById(id)
+      .select("applyCommission adminCommissionType adminCommissionValue adminCommission adminCommissionFixedRule")
+      .lean();
+    if (!before) return handleResponse(res, 404, "Store not found");
     const updated = await Store.findByIdAndUpdate(
       id,
       {
@@ -58,6 +63,14 @@ export async function updateStoreCommission(req, res) {
     )
       .select("shopName city applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule");
     if (!updated) return handleResponse(res, 404, "Store not found");
+    void recordAuditLog({
+      actorId: req.user?.id || null,
+      action: "STORE_COMMISSION_UPDATED",
+      targetType: "Store",
+      targetId: id,
+      before,
+      after: normalized,
+    });
     return handleResponse(res, 200, "Store commission updated", toStoreCommissionPayload(updated));
   } catch (error) {
     return handleResponse(res, 500, error.message);
