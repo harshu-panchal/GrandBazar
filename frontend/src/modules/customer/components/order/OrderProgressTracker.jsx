@@ -1,15 +1,50 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Circle, Clock, Truck, Home } from "lucide-react";
+import { CheckCircle, Circle, Clock, PackageCheck, Bike, Truck, Home, ClipboardList, Wallet, XCircle } from "lucide-react";
 import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 
-const STATUS_TO_STAGE = {
-  pending: "confirmed",
-  confirmed: "confirmed",
-  packed: "confirmed",
-  out_for_delivery: "out_for_delivery",
-  delivered: "delivered",
+// Maps every v2 workflow status to a 0-6 position in STEPS below. Hold/side
+// states (scheduled, awaiting extra payment, searching for a rider, etc.)
+// stay at the last real milestone they've actually reached — e.g. a rider
+// search in progress still shows "Order Accepted" as the last completed
+// step, with "Logistics Assigned" pending, rather than inventing a state.
+const WORKFLOW_STAGE_INDEX = {
+  CREATED: 0,
+  PREORDER_HOLD: 0,
+  SELLER_PENDING: 1,
+  SELLER_ACCEPTED: 2,
+  SCHEDULED_HOLD: 2,
+  AWAITING_EXTRA_PAYMENT: 2,
+  DELIVERY_SEARCH: 2,
+  EXTERNAL_LOGISTICS_PENDING: 2,
+  DELIVERY_ASSIGNED: 3,
+  PICKUP_READY: 4,
+  CUSTOMER_PICKUP_READY: 4,
+  OUT_FOR_DELIVERY: 5,
+  DELIVERED: 6,
+  DISPUTED: 5,
 };
+
+// Pre-v2 orders have no workflowStatus — approximate from legacy fields,
+// mirroring getLegacyStatusFromOrder's own fallback heuristic.
+function legacyStageIndex(order, legacyStatus) {
+  if (legacyStatus === "delivered") return 6;
+  if (legacyStatus === "out_for_delivery") return 5;
+  if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
+  if (order?.deliveryBoy || order?.assignedAt) return 3;
+  if (legacyStatus === "confirmed") return 2;
+  if (legacyStatus === "pending") return 1;
+  return 0;
+}
+
+function resolveStageIndex(order, legacyStatus) {
+  const workflowVersion = Number(order?.workflowVersion) || 0;
+  const workflowStatus = String(order?.workflowStatus || "").toUpperCase();
+  if (workflowVersion >= 2 && workflowStatus in WORKFLOW_STAGE_INDEX) {
+    return WORKFLOW_STAGE_INDEX[workflowStatus];
+  }
+  return legacyStageIndex(order, legacyStatus);
+}
 
 const OrderProgressTracker = ({
   order,
@@ -18,67 +53,73 @@ const OrderProgressTracker = ({
   totalDistanceText = "—",
 }) => {
   const status = getLegacyStatusFromOrder(order);
-  const currentStage = STATUS_TO_STAGE[status] || "confirmed";
-  // Self-pickup orders have no rider — "arriving in X mins" / distance are
-  // delivery-only concepts and were previously shown as fake fallback values
-  // (a hardcoded 8 minutes, "—" for distance) since there's no rider location
-  // to compute them from. The customer travels to the store, not vice versa.
   const isCustomerPickup = order?.fulfillmentMethod === "customer_pickup";
 
-  const steps = [
-    {
-      id: "confirmed",
-      label: "Order Confirmed",
-      icon: CheckCircle,
-      statuses: ["confirmed"],
-    },
-    {
-      id: "out_for_delivery",
-      label: "Out for delivery",
-      icon: Truck,
-      statuses: ["out_for_delivery", "delivered"],
-    },
-    {
-      id: "delivered",
-      label: "Delivered",
-      icon: Home,
-      statuses: ["delivered"],
-    },
-  ];
-
-  const getStepStatus = (step) => {
-    if (status === "cancelled") return "cancelled";
-
-    const stepIndex = steps.findIndex((s) => s.id === step.id);
-
-    if (status === "pending") {
-      return stepIndex === 0 ? "active" : "pending";
-    }
-
-    if (status === "confirmed" || status === "packed") {
-      return stepIndex === 0 ? "completed" : "pending";
-    }
-
-    if (status === "out_for_delivery") {
-      if (stepIndex === 0) return "completed";
-      if (stepIndex === 1) return "active";
-      return "pending";
-    }
-
-    if (status === "delivered") {
-      return "completed";
-    }
-
-    return step.id === "confirmed" ? "active" : "pending";
-  };
-
   if (status === "cancelled") {
+    // financeFlags.cancellationReversed just means the reversal routine ran —
+    // it's set even for a plain COD order where nothing was ever collected.
+    // Mirror the backend's own gate for whether money actually moved back
+    // (reverseOrderFinanceOnCancellation only creates a Refund when online
+    // capture happened or a wallet amount was used at checkout).
+    const hadPayment =
+      (order?.paymentMode === "ONLINE" && order?.financeFlags?.onlinePaymentCaptured) ||
+      Number(order?.pricing?.walletAmount || order?.paymentBreakdown?.walletAmount || 0) > 0;
+    const refundIssued = Boolean(order?.financeFlags?.cancellationReversed) && hadPayment;
     return (
-      <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5">
-        <p className="text-center text-rose-700 font-semibold">Order Cancelled</p>
+      <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+            <XCircle size={20} className="text-rose-600" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-rose-800">Order Cancelled</p>
+            {order?.cancelReason && (
+              <p className="text-xs text-rose-600 mt-0.5">{order.cancelReason}</p>
+            )}
+          </div>
+        </div>
+        {refundIssued && (
+          <div className="flex items-center gap-3 border-t border-rose-200 pt-3">
+            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <Wallet size={18} className="text-emerald-600" />
+            </div>
+            <p className="text-xs font-semibold text-emerald-800">
+              Refund Initiated — the amount has been credited to your wallet.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
+
+  const showLogistics = !isCustomerPickup;
+  const showOutForDelivery = !isCustomerPickup;
+
+  const allSteps = [
+    { id: "placed", label: "Order Placed", icon: ClipboardList },
+    { id: "received", label: "Order Received", icon: Circle },
+    { id: "accepted", label: "Order Accepted", icon: CheckCircle },
+    { id: "logistics", label: "Logistics Assigned", icon: Bike, hidden: !showLogistics },
+    { id: "packed", label: isCustomerPickup ? "Ready for Pickup" : "Order Packed", icon: PackageCheck },
+    { id: "out_for_delivery", label: "Out for Delivery", icon: Truck, hidden: !showOutForDelivery },
+    { id: "delivered", label: isCustomerPickup ? "Picked Up" : "Delivered", icon: Home },
+  ];
+  const steps = allSteps.filter((s) => !s.hidden);
+
+  // Stage indexes in WORKFLOW_STAGE_INDEX/legacyStageIndex are defined against
+  // the full 7-slot timeline (0=placed .. 6=delivered) — re-map onto whichever
+  // steps are actually shown for this order's fulfillment method.
+  const fullIndex = resolveStageIndex(order, status);
+  const stepFullIndexMap = { placed: 0, received: 1, accepted: 2, logistics: 3, packed: 4, out_for_delivery: 5, delivered: 6 };
+  const currentStepPosition = steps.reduce((closest, step, idx) => {
+    return stepFullIndexMap[step.id] <= fullIndex ? idx : closest;
+  }, 0);
+
+  const getStepStatus = (index) => {
+    if (index < currentStepPosition) return "completed";
+    if (index === currentStepPosition) return status === "delivered" ? "completed" : "active";
+    return "pending";
+  };
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -87,11 +128,10 @@ const OrderProgressTracker = ({
         animate={{ opacity: 1 }}
         className="space-y-4">
         {steps.map((step, index) => {
-          const stepStatus = getStepStatus(step);
+          const stepStatus = getStepStatus(index);
           const Icon = step.icon;
           const isCompleted = stepStatus === "completed";
           const isActive = stepStatus === "active";
-          const isPending = stepStatus === "pending";
 
           return (
             <div

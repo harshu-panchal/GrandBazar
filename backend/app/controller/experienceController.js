@@ -8,6 +8,7 @@ import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
+import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
 
 /* ===============================
    Helpers
@@ -447,7 +448,16 @@ export const getPublicExperienceSections = async (req, res) => {
         ExperienceSection.find(query)
           .sort({ order: 1, createdAt: 1, _id: 1 })
           .populate("config.superAds.items.sellerId", "shopName slug")
-          .populate("config.superAds.items.productId", "name slug mainImage")
+          .populate({
+            path: "config.superAds.items.productId",
+            select: "name slug mainImage stock status isCurrentlyAvailable approvalStatus",
+            match: {
+              status: "active",
+              stock: { $gt: 0 },
+              isCurrentlyAvailable: { $ne: false },
+              ...getApprovedOrLegacyFilter(),
+            },
+          })
           .populate("config.sellerHighlights.sellerIds", "shopName slug avgRating category")
           .lean(),
       getTTL("homepage"),

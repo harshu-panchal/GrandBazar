@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Product from "../models/product.js";
 import ProductAddonMapping from "../models/productAddonMapping.js";
 import Order from "../models/order.js";
+import { getApprovedOrLegacyFilter } from "./productModerationService.js";
 
 const ADDON_FIELDS = "name slug price salePrice mainImage stock status sellerId";
 
@@ -18,7 +19,13 @@ export async function resolveProductAddons(product) {
   if (!addonIds.length) return [];
 
   const [addonProducts, mappings] = await Promise.all([
-    Product.find({ _id: { $in: addonIds }, status: "active" })
+    Product.find({
+      _id: { $in: addonIds },
+      status: "active",
+      stock: { $gt: 0 },
+      isCurrentlyAvailable: { $ne: false },
+      ...getApprovedOrLegacyFilter(),
+    })
       .select(ADDON_FIELDS)
       .lean(),
     ProductAddonMapping.find({
