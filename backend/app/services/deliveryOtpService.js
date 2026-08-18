@@ -3,6 +3,7 @@ import Order from '../models/order.js';
 import OrderOtp from '../models/orderOtp.js';
 import { checkProximity } from './proximityService.js';
 import { emitToCustomer, emitOrderStatusUpdate } from './orderSocketEmitter.js';
+import { useMockOtpEnabled, getMockOtp } from '../utils/otp.js';
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -274,7 +275,8 @@ export async function validateDeliveryOtp(orderId, enteredOtp) {
 
     // Hash the entered OTP and compare with stored hash
     const enteredHash = OrderOtp.hashCode(enteredOtp);
-    const isMatch = enteredHash === otpRecord.codeHash;
+    const isMockBypass = useMockOtpEnabled() && enteredOtp === getMockOtp();
+    const isMatch = isMockBypass || enteredHash === otpRecord.codeHash;
 
     if (!isMatch) {
       // Increment attempts
@@ -427,7 +429,8 @@ export async function validateReturnPickupOtp(orderId, enteredOtp) {
     }
 
     const enteredHash = OrderOtp.hashCode(enteredOtp);
-    const isMatch = enteredHash === otpRecord.codeHash;
+    const isMockBypass = useMockOtpEnabled() && enteredOtp === getMockOtp();
+    const isMatch = isMockBypass || enteredHash === otpRecord.codeHash;
 
     if (!isMatch) {
       otpRecord.attempts += 1;
@@ -529,7 +532,8 @@ export async function validateReturnDropOtp(orderId, enteredOtp) {
     }
 
     const enteredHash = OrderOtp.hashCode(enteredOtp);
-    const isMatch = enteredHash === otpRecord.codeHash;
+    const isMockBypass = useMockOtpEnabled() && enteredOtp === getMockOtp();
+    const isMatch = isMockBypass || enteredHash === otpRecord.codeHash;
 
     if (!isMatch) {
       otpRecord.attempts += 1;

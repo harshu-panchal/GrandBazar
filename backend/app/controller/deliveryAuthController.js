@@ -2,7 +2,7 @@ import Delivery from "../models/delivery.js";
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
-import { generateOTP, useRealSMS } from "../utils/otp.js";
+import { generateOTP, useRealSMS, useMockOtpEnabled, getMockOtp } from "../utils/otp.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
 
 const generateToken = (delivery) =>
@@ -154,11 +154,16 @@ export const verifyDeliveryOTP = async (req, res) => {
             return handleResponse(res, 400, "Phone and OTP are required");
         }
 
-        const delivery = await Delivery.findOne({
-            phone,
-            otp,
-            otpExpiry: { $gt: Date.now() },
-        });
+        let delivery;
+        if (useMockOtpEnabled() && otp === getMockOtp()) {
+            delivery = await Delivery.findOne({ phone });
+        } else {
+            delivery = await Delivery.findOne({
+                phone,
+                otp,
+                otpExpiry: { $gt: Date.now() },
+            });
+        }
 
         if (!delivery) {
             return handleResponse(res, 400, "Invalid or expired OTP");

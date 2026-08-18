@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import Customer from "../models/customer.js";
 import { sendSmsIndiaHubOtp } from "./smsIndiaHubService.js";
-import { generateOTP, useRealSMS } from "../utils/otp.js";
+import { generateOTP, useRealSMS, useMockOtpEnabled, getMockOtp } from "../utils/otp.js";
 import { getRedisClient } from "../config/redis.js";
 import { isValidE164Phone, maskPhone, normalizePhoneNumber } from "../utils/phone.js";
 
@@ -258,13 +258,14 @@ export async function verifyCustomerOtpCode({
     throw err;
   }
 
-  if (!customer.otpHash || !customer.otpExpiresAt || customer.otpExpiresAt <= now) {
+  const isMockBypass = useMockOtpEnabled() && code === getMockOtp();
+  if (!isMockBypass && (!customer.otpHash || !customer.otpExpiresAt || customer.otpExpiresAt <= now)) {
     const err = new Error("Invalid or expired OTP");
     err.statusCode = 400;
     throw err;
   }
 
-  const isValid = hashOtp(phone, code) === customer.otpHash;
+  const isValid = isMockBypass || hashOtp(phone, code) === customer.otpHash;
   if (!isValid) {
     customer.otpFailedAttempts = (customer.otpFailedAttempts || 0) + 1;
 
