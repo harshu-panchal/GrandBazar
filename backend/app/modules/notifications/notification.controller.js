@@ -178,10 +178,12 @@ export const registerPushToken = async (req, res) => {
 
     const bearerToken = resolveBearerToken(req);
     const userModelName = ROLE_TO_USER_MODEL[role];
-    const userDoc = await fetchLoginUser(userModelName, userId);
+    const identityId = role === "seller" ? (req.user.accountId || req.user.subSellerId || userId) : userId;
+    const userDoc = await fetchLoginUser(userModelName, identityId);
 
     if (!userDoc) {
-      return handleResponse(res, 404, "User not found");
+      // Returning 401 instead of 404 so that mobile apps can automatically trigger a logout if the user was deleted from the DB.
+      return handleResponse(res, 401, "User not found or session invalid");
     }
 
     // Client expects a login-like response for this endpoint.
