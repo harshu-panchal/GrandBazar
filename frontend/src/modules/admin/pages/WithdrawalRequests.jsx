@@ -392,11 +392,20 @@ const WithdrawalRequests = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                            <Card className="p-5 border-none bg-slate-50 ring-1 ring-slate-100 rounded-xl">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card className="p-5 border-none bg-slate-50 ring-1 ring-slate-100 rounded-xl flex flex-col justify-center">
                                 <p className="ds-label mb-2">Request Amount</p>
                                 <h4 className="text-2xl font-black text-slate-900">₹{Math.abs(selectedRequest.amount).toLocaleString()}</h4>
                                 <p className="text-[10px] font-semibold text-slate-400 mt-1">Reference: {selectedRequest.reference}</p>
+                            </Card>
+                            <Card className="p-5 border-none bg-slate-50 ring-1 ring-slate-100 rounded-xl flex flex-col justify-center">
+                                <p className="ds-label mb-2 flex items-center gap-2"><CreditCard className="h-3 w-3" /> Payout Intel</p>
+                                <div className="space-y-1 mt-1">
+                                    {selectedRequest.user?.bankName && <p className="text-[11px] font-bold text-slate-700"><span className="text-slate-400">Bank:</span> {selectedRequest.user.bankName}</p>}
+                                    <p className="text-[11px] font-bold text-slate-700"><span className="text-slate-400">A/C Number:</span> {selectedRequest.user?.accountNumber || 'Not Provided'}</p>
+                                    <p className="text-[11px] font-bold text-slate-700"><span className="text-slate-400">IFSC:</span> {selectedRequest.user?.ifsc || 'Not Provided'}</p>
+                                    <p className="text-[11px] font-bold text-slate-700"><span className="text-slate-400">A/C Holder:</span> {selectedRequest.user?.accountHolder || 'Not Provided'}</p>
+                                </div>
                             </Card>
                         </div>
 

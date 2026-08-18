@@ -910,6 +910,7 @@ export async function deliveryAcceptAtomic(deliveryId, orderId, idempotencyKey) 
       deliveryBoyId: deliveryOid.toString(),
     },
     updated.customer,
+    updated.seller,
   );
 
   return { order: updated, duplicate: false };
@@ -1028,6 +1029,7 @@ export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
       deliveryBoyId: deliveryOid.toString(),
     },
     updated.customer,
+    updated.seller,
   );
 
   let distanceKm = null;
@@ -1593,6 +1595,7 @@ export async function markArrivedAtStoreAtomic(deliveryId, orderId, lat, lng) {
     orderId,
     { workflowStatus: WORKFLOW_STATUS.PICKUP_READY },
     updated.customer,
+    updated.seller,
   );
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PACKED, {
     orderId: updated.orderId,
@@ -1686,6 +1689,7 @@ export async function confirmPickupAtomic(deliveryId, orderId, lat, lng) {
       workflowStatus: WORKFLOW_STATUS.OUT_FOR_DELIVERY,
     },
     updated.customer,
+    updated.seller,
   );
   emitNotificationEvent(NOTIFICATION_EVENTS.OUT_FOR_DELIVERY, {
     orderId: updated.orderId,
@@ -1925,7 +1929,7 @@ export async function verifyHandoffOtpAndDeliver(deliveryId, orderId, code) {
 
   await applyDeliveredSettlement(updated, orderId);
 
-  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.DELIVERED }, updated.customer);
+  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.DELIVERED }, updated.customer, updated.seller);
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
     orderId: updated.orderId,
     customerId: updated.customer,

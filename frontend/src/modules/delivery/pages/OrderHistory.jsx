@@ -11,14 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Card from "@/shared/components/ui/Card";
 import { deliveryApi } from "../services/deliveryApi";
 import { toast } from "sonner";
-
-const displayOrderStatus = (order) => {
-  if (order?.workflowStatus === "DELIVERED" || order?.status === "delivered")
-    return "delivered";
-  if (order?.workflowStatus === "CANCELLED" || order?.status === "cancelled")
-    return "cancelled";
-  return order?.status || "active";
-};
+import { getLegacyStatusFromOrder, getOrderStatusLabel } from "@/shared/utils/orderStatus";
 
 /** Real rider earning for this order (delivery commission + tip), not a flat % guess. */
 const resolveOrderEarnings = (order) =>
@@ -216,7 +209,9 @@ const OrderHistory = () => {
           </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {filteredOrders.length > 0 ? filteredOrders.map((order) => (
+            {filteredOrders.length > 0 ? filteredOrders.map((order) => {
+              const legacyStatus = getLegacyStatusFromOrder(order);
+              return (
               <motion.div
                 key={order._id}
                 layout
@@ -243,13 +238,13 @@ const OrderHistory = () => {
                             #{order.orderId}
                           </span>
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${displayOrderStatus(order) === "delivered"
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${legacyStatus === "delivered"
                               ? "bg-brand-100 text-brand-700"
-                              : displayOrderStatus(order) === "cancelled"
+                              : legacyStatus === "cancelled"
                                 ? "bg-red-100 text-red-700"
                                 : "bg-brand-100 text-brand-700"
                               }`}>
-                            {displayOrderStatus(order)}
+                            {getOrderStatusLabel(order)}
                           </span>
                         </div>
                         <div className="flex items-center text-gray-400 text-xs">
@@ -304,7 +299,8 @@ const OrderHistory = () => {
                   </div>
                 </Card>
               </motion.div>
-            )) : (
+              );
+            }) : (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

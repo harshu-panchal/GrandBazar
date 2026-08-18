@@ -68,6 +68,7 @@ const Auth = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [maskedForgotEmail, setMaskedForgotEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const { login } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
@@ -373,6 +374,10 @@ const Auth = () => {
 
     try {
       if (!isLogin) {
+        if (!agreed) {
+          toast.error("Please agree to the Terms & Conditions and Privacy Policy.");
+          return;
+        }
         const email = formData.email || "";
         const phone = formData.phone || "";
         if (!formData.name?.trim()) {
@@ -1052,8 +1057,25 @@ const Auth = () => {
                     )}
 
                     {!isLogin && (
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 leading-relaxed text-left">
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 leading-relaxed text-left mb-2">
                         Shop location, categories, KYC documents, and bank details are collected when you add each shop from <span className="font-bold text-slate-800">My Stores</span> after creating your admin account.
+                      </div>
+                    )}
+
+                    {!isLogin && (
+                      <div className="flex items-start gap-3 bg-slate-50 rounded-xl p-4 border border-slate-100 mb-2">
+                        <input
+                          id="terms"
+                          type="checkbox"
+                          checked={agreed}
+                          onChange={(e) => setAgreed(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-slate-900 cursor-pointer shrink-0"
+                        />
+                        <label htmlFor="terms" className="text-xs text-slate-600 leading-relaxed cursor-pointer text-left">
+                          I agree to the{" "}
+                          <span className="text-slate-900 font-bold hover:underline">Terms of Service</span> and{" "}
+                          <span className="text-slate-900 font-bold hover:underline">Privacy Policy</span>.
+                        </label>
                       </div>
                     )}
 

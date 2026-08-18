@@ -21,6 +21,7 @@ import {
   HiOutlineInboxStack,
   HiOutlineMegaphone,
   HiOutlineGift,
+  HiOutlineSquare3Stack3D,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -33,6 +34,7 @@ const StockManagement = React.lazy(() => import("../pages/StockManagement"));
 const AddProduct = React.lazy(() => import("../pages/AddProduct"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const Earnings = React.lazy(() => import("../pages/Earnings"));
+const BulkSettlements = React.lazy(() => import("../pages/BulkSettlements"));
 const Invoices = React.lazy(() => import("../pages/Invoices"));
 const Analytics = React.lazy(() => import("../pages/Analytics"));
 const Transactions = React.lazy(() => import("../pages/Transactions"));
@@ -86,6 +88,12 @@ const navItems = [
     label: "Earnings",
     path: "/seller/earnings",
     icon: HiOutlineCurrencyDollar,
+    permission: "withdrawals",
+  },
+  {
+    label: "Bulk Settlements",
+    path: "/seller/bulk-settlements",
+    icon: HiOutlineSquare3Stack3D,
     permission: "withdrawals",
   },
   {
@@ -176,6 +184,7 @@ const SellerRoutes = () => {
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="earnings" element={<Earnings />} />
+            <Route path="bulk-settlements" element={<BulkSettlements />} />
             <Route path="invoices" element={<Invoices />} />
           </>
         )}

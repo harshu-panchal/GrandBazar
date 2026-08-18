@@ -87,7 +87,9 @@ const CustomerAuth = () => {
         phone: '',
         otp: '',
         name: '',
-        email: ''
+        email: '',
+        password: '',
+        confirmPassword: ''
     });
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [authMode, setAuthMode] = useState('phone'); // 'phone' | 'email' (email login only, no signup)
@@ -125,6 +127,20 @@ const CustomerAuth = () => {
             toast.error('Enter a valid email address, or leave it blank');
             return;
         }
+        if (!isLogin && formData.password) {
+            if (!formData.email.trim()) {
+                toast.error('Add your email above to set a password');
+                return;
+            }
+            if (formData.password.length < 6) {
+                toast.error('Password must be at least 6 characters');
+                return;
+            }
+            if (formData.password !== formData.confirmPassword) {
+                toast.error('Passwords do not match');
+                return;
+            }
+        }
         setIsLoading(true);
         try {
             if (isLogin) {
@@ -134,6 +150,7 @@ const CustomerAuth = () => {
                     name: formData.name,
                     phone: formData.phone,
                     email: formData.email.trim(),
+                    password: formData.password || undefined,
                     agreedToTerms,
                 });
             }
@@ -508,6 +525,46 @@ const CustomerAuth = () => {
                                                     />
                                                 </div>
                                                 <p className="text-[10px] font-bold text-gray-400 px-1">For order receipts and updates.</p>
+                                            </div>
+                                        )}
+
+                                        {!isLogin && (
+                                            <div className="space-y-1.5">
+                                                <div className="relative group">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                        <Lock size={18} />
+                                                    </div>
+                                                    <input
+                                                        type="password"
+                                                        name="password"
+                                                        placeholder="Password (optional)"
+                                                        value={formData.password}
+                                                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                                        onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                        onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                    />
+                                                </div>
+                                                {formData.password && (
+                                                    <div className="relative group">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                            <Lock size={18} />
+                                                        </div>
+                                                        <input
+                                                            type="password"
+                                                            name="confirmPassword"
+                                                            placeholder="Confirm Password"
+                                                            value={formData.confirmPassword}
+                                                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                                            onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                            onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                        />
+                                                    </div>
+                                                )}
+                                                <p className="text-[10px] font-bold text-gray-400 px-1">
+                                                    Optional — set a password to also log in with Email + Password next time.
+                                                </p>
                                             </div>
                                         )}
 

@@ -150,18 +150,15 @@ export const getAdminFinancePayoutsController = async (req, res) => {
 // gives admin the actual per-order commission/packaging/tax breakdown.
 export const getAdminBulkSettlementsController = async (req, res) => {
   try {
-    const { status, sellerId, orderId, page = 1, limit = 25 } = req.query;
+    const { status, sellerId, orderId, from, to, page = 1, limit = 25 } = req.query;
 
-    const query = {};
-    if (status) query.status = status;
-    if (sellerId) query.sellerId = sellerId;
-    if (orderId) query.orderId = { $regex: String(orderId).trim(), $options: "i" };
+    const query = buildBulkSettlementQuery({ status, sellerId, orderId, from, to });
 
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
     const skip = (safePage - 1) * safeLimit;
 
-    const [items, total] = await Promise.all([
+    const [items, total, totals] = await Promise.all([
       BulkSettlement.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -171,6 +168,7 @@ export const getAdminBulkSettlementsController = async (req, res) => {
         .populate("order", "orderId status")
         .lean(),
       BulkSettlement.countDocuments(query),
+      getBulkSettlementTotals(query),
     ]);
 
     return handleResponse(res, 200, "Bulk settlements fetched", {
@@ -179,10 +177,86 @@ export const getAdminBulkSettlementsController = async (req, res) => {
       limit: safeLimit,
       total,
       totalPages: Math.ceil(total / safeLimit) || 1,
+      totals,
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
+};
+
+// Same read-side as above, scoped to the logged-in seller's own store — the
+// BulkSettlement collection was admin-only until now, so sellers had no way
+// to see the commission/packaging/tax split behind their "Bulk" order badge.
+export const getSellerBulkSettlementsController = async (req, res) => {
+  try {
+    const sellerId = req.user?.id;
+    const { status, orderId, from, to, page = 1, limit = 25 } = req.query;
+
+    const query = buildBulkSettlementQuery({ status, sellerId, orderId, from, to });
+
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 200);
+    const skip = (safePage - 1) * safeLimit;
+
+    const [items, total, totals] = await Promise.all([
+      BulkSettlement.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .populate("payout", "status amount")
+        .populate("order", "orderId status")
+        .lean(),
+      BulkSettlement.countDocuments(query),
+      getBulkSettlementTotals(query),
+    ]);
+
+    return handleResponse(res, 200, "Bulk settlements fetched", {
+      items,
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.ceil(total / safeLimit) || 1,
+      totals,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+const buildBulkSettlementQuery = ({ status, sellerId, orderId, from, to }) => {
+  const query = {};
+  if (status) query.status = status;
+  if (sellerId) query.sellerId = sellerId;
+  if (orderId) query.orderId = { $regex: String(orderId).trim(), $options: "i" };
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(from);
+    if (to) query.createdAt.$lte = new Date(to);
+  }
+  return query;
+};
+
+const getBulkSettlementTotals = async (query) => {
+  const [row] = await BulkSettlement.aggregate([
+    { $match: query },
+    {
+      $group: {
+        _id: null,
+        count: { $sum: 1 },
+        sellerPayoutAmount: { $sum: "$sellerPayoutAmount" },
+        commissionAmount: { $sum: "$commissionAmount" },
+        packagingAmount: { $sum: "$packagingAmount" },
+        taxAmount: { $sum: "$taxAmount" },
+      },
+    },
+  ]);
+  return {
+    count: row?.count || 0,
+    sellerPayoutAmount: roundCurrency(row?.sellerPayoutAmount || 0),
+    commissionAmount: roundCurrency(row?.commissionAmount || 0),
+    packagingAmount: roundCurrency(row?.packagingAmount || 0),
+    taxAmount: roundCurrency(row?.taxAmount || 0),
+  };
 };
 
 // Read-side for Refund: the model is correctly written on every return,

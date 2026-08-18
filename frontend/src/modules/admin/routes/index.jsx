@@ -59,6 +59,7 @@ const PendingDeliveryBoys = React.lazy(
 );
 const DeliveryFunds = React.lazy(() => import("../pages/DeliveryFunds"));
 const AdminWallet = React.lazy(() => import("../pages/AdminWallet"));
+const BulkSettlements = React.lazy(() => import("../pages/BulkSettlements"));
 const WithdrawalRequests = React.lazy(
   () => import("../pages/WithdrawalRequests"),
 );
@@ -218,6 +219,13 @@ const navItems = [
     icon: Receipt,
     color: "orange",
     permission: "seller_payments",
+  },
+  {
+    label: "Bulk Settlements",
+    path: "/admin/bulk-settlements",
+    icon: Library,
+    color: "amber",
+    permission: "bulk_settlements",
   },
   {
     label: "Collect Cash",
@@ -408,6 +416,7 @@ const AdminRoutes = () => {
         {hasPermission("wallet") && <Route path="/wallet" element={<AdminWallet />} />}
         {hasPermission("withdrawals") && <Route path="/withdrawals" element={<WithdrawalRequests />} />}
         {hasPermission("seller_payments") && <Route path="/seller-transactions" element={<SellerTransactions />} />}
+        {hasPermission("bulk_settlements") && <Route path="/bulk-settlements" element={<BulkSettlements />} />}
         {hasPermission("cash_collection") && <Route path="/cash-collection" element={<CashCollection />} />}
         {hasPermission("customers") && (
           <>

@@ -3,6 +3,7 @@ import { ChevronRight, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
+import { getLegacyStatusFromOrder } from '@/shared/utils/orderStatus';
 
 const ActiveOrderPill = ({ order }) => {
     if (!order) return null;
@@ -57,7 +58,7 @@ const ActiveOrderPill = ({ order }) => {
                         {/* Text Section */}
                         <div className="flex-1 flex flex-col justify-center min-w-0 relative z-10">
                             <h4 className="text-[11px] font-black leading-tight truncate uppercase tracking-tight">
-                                {order.status === 'delivered' ? 'Delivered' : 'Order Tracking'}
+                                {getLegacyStatusFromOrder(order) === 'delivered' ? 'Delivered' : 'Order Tracking'}
                             </h4>
                             <p className="text-[9px] text-slate-400 font-bold leading-tight">
                                 {cartCount} {cartCount === 1 ? 'item' : 'items'} • ₹{order.pricing.total}

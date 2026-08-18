@@ -1,50 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { CheckCircle, Circle, Clock, PackageCheck, Bike, Truck, Home, ClipboardList, Wallet, XCircle } from "lucide-react";
-import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
-
-// Maps every v2 workflow status to a 0-6 position in STEPS below. Hold/side
-// states (scheduled, awaiting extra payment, searching for a rider, etc.)
-// stay at the last real milestone they've actually reached — e.g. a rider
-// search in progress still shows "Order Accepted" as the last completed
-// step, with "Logistics Assigned" pending, rather than inventing a state.
-const WORKFLOW_STAGE_INDEX = {
-  CREATED: 0,
-  PREORDER_HOLD: 0,
-  SELLER_PENDING: 1,
-  SELLER_ACCEPTED: 2,
-  SCHEDULED_HOLD: 2,
-  AWAITING_EXTRA_PAYMENT: 2,
-  DELIVERY_SEARCH: 2,
-  EXTERNAL_LOGISTICS_PENDING: 2,
-  DELIVERY_ASSIGNED: 3,
-  PICKUP_READY: 4,
-  CUSTOMER_PICKUP_READY: 4,
-  OUT_FOR_DELIVERY: 5,
-  DELIVERED: 6,
-  DISPUTED: 5,
-};
-
-// Pre-v2 orders have no workflowStatus — approximate from legacy fields,
-// mirroring getLegacyStatusFromOrder's own fallback heuristic.
-function legacyStageIndex(order, legacyStatus) {
-  if (legacyStatus === "delivered") return 6;
-  if (legacyStatus === "out_for_delivery") return 5;
-  if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
-  if (order?.deliveryBoy || order?.assignedAt) return 3;
-  if (legacyStatus === "confirmed") return 2;
-  if (legacyStatus === "pending") return 1;
-  return 0;
-}
-
-function resolveStageIndex(order, legacyStatus) {
-  const workflowVersion = Number(order?.workflowVersion) || 0;
-  const workflowStatus = String(order?.workflowStatus || "").toUpperCase();
-  if (workflowVersion >= 2 && workflowStatus in WORKFLOW_STAGE_INDEX) {
-    return WORKFLOW_STAGE_INDEX[workflowStatus];
-  }
-  return legacyStageIndex(order, legacyStatus);
-}
+import { getLegacyStatusFromOrder, getOrderTrackerStep } from "@/shared/utils/orderStatus";
 
 const OrderProgressTracker = ({
   order,
@@ -106,10 +63,10 @@ const OrderProgressTracker = ({
   ];
   const steps = allSteps.filter((s) => !s.hidden);
 
-  // Stage indexes in WORKFLOW_STAGE_INDEX/legacyStageIndex are defined against
-  // the full 7-slot timeline (0=placed .. 6=delivered) — re-map onto whichever
-  // steps are actually shown for this order's fulfillment method.
-  const fullIndex = resolveStageIndex(order, status);
+  // Stage indexes from getOrderTrackerStep are defined against the full
+  // 7-slot timeline (0=placed .. 6=delivered) — re-map onto whichever steps
+  // are actually shown for this order's fulfillment method.
+  const fullIndex = getOrderTrackerStep(order);
   const stepFullIndexMap = { placed: 0, received: 1, accepted: 2, logistics: 3, packed: 4, out_for_delivery: 5, delivered: 6 };
   const currentStepPosition = steps.reduce((closest, step, idx) => {
     return stepFullIndexMap[step.id] <= fullIndex ? idx : closest;

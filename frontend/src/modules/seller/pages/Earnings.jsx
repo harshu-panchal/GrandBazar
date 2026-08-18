@@ -11,8 +11,11 @@ import {
   Building2,
   Search,
   Receipt,
+  Clock,
+  History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 import { BlurFade } from "@/components/ui/blur-fade";
@@ -23,6 +26,7 @@ import { useSellerEarnings } from "../context/SellerEarningsContext";
 import { useStoreContext } from "../context/StoreContext";
 import { sellerApi } from "../services/sellerApi";
 import Pagination from "@shared/components/ui/Pagination";
+import { getStatusVariant } from "@/shared/utils/orderStatus";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -57,6 +61,7 @@ const payoutStatusVariant = (row) => {
 };
 
 const Earnings = () => {
+  const navigate = useNavigate();
   const { earningsData: data, earningsLoading: loading, refreshEarnings } = useSellerEarnings();
   const { activeStore } = useStoreContext();
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -70,7 +75,9 @@ const Earnings = () => {
   React.useEffect(() => {
     if (data?.balances != null && withdrawAmount === "") {
       const settled = Number(data.balances?.settledBalance ?? 0);
-      setWithdrawAmount(settled > 0 ? String(settled) : "");
+      const pending = Math.abs(Number(data.balances?.pendingPayouts ?? 0));
+      const available = Math.max(0, settled - pending);
+      setWithdrawAmount(available > 0 ? String(available) : "");
     }
   }, [data?.balances]);
 
@@ -205,7 +212,7 @@ const Earnings = () => {
                   type: txn.type ?? "",
                   status: txn.status ?? "",
                   paymentMethod: txn.paymentMethod ?? "",
-                  orderStatus: txn.orderStatus ?? "",
+                  orderStatus: txn.displayStatus?.label || txn.orderStatus || "",
                 }));
                 exportToCSV(exportData, "Seller_Earnings_Detailed", {
                   date: "Date",
@@ -245,7 +252,7 @@ const Earnings = () => {
         </div>
       </BlurFade>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <BlurFade delay={0.2}>
           <Card className="bg-gradient-to-br from-brand-600 to-teal-700 text-white border-none shadow-lg h-full">
             <div className="flex justify-between items-start">
@@ -281,19 +288,45 @@ const Earnings = () => {
                 <Banknote className="h-6 w-6 text-brand-500" />
               </div>
             </div>
-            <div className="mt-4">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs">
-                  <ArrowDownToLine className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-600 uppercase">
-                    Available to Withdraw
-                  </p>
-                  <p className="text-xs font-black text-slate-900">
-                    {formatMoney(data?.balances?.settledBalance)}
-                  </p>
-                </div>
+            <div className="mt-4 flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs">
+                <History className="h-4 w-4" />
+              </div>
+              <p className="text-xs text-slate-500">Paid out to your bank account so far</p>
+            </div>
+          </Card>
+        </BlurFade>
+
+        <BlurFade delay={0.4}>
+          <Card className="h-full border-none shadow-md bg-white p-6 flex flex-col justify-between group hover:shadow-xl transition-all duration-300">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-1">
+                  Available to Withdraw
+                </p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+                  {formatMoney(
+                    Math.max(
+                      0,
+                      Number(data?.balances?.settledBalance ?? 0) -
+                        Math.abs(Number(data?.balances?.pendingPayouts ?? 0)),
+                    ),
+                  )}
+                </h2>
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-lg group-hover:scale-110 transition-transform duration-300">
+                <ArrowDownToLine className="h-6 w-6 text-emerald-600" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-bold text-xs">
+                <Clock className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-amber-700 uppercase">On Hold (Return Window)</p>
+                <p className="text-xs font-black text-slate-900">
+                  {formatMoney(data?.balances?.onHoldBalance)} — releases automatically once the return window closes
+                </p>
               </div>
             </div>
           </Card>
@@ -372,14 +405,23 @@ const Earnings = () => {
                         </p>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {row.orderStatus && (
-                            <Badge variant={statusVariant(row.orderStatus)} className="uppercase">
-                              {row.orderStatus}
+                            <Badge
+                              variant={getStatusVariant(row.displayStatus?.legacyStatus || row.orderStatus)}
+                              className="uppercase"
+                            >
+                              {row.displayStatus?.label || row.orderStatus}
                             </Badge>
                           )}
                           {row.isBulkOrder && (
-                            <Badge variant="info" className="uppercase">
-                              Bulk
-                            </Badge>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/seller/bulk-settlements?orderId=${row.orderId || ""}`)}
+                              title="View bulk settlement breakdown"
+                            >
+                              <Badge variant="info" className="uppercase hover:bg-brand-100 cursor-pointer">
+                                Bulk
+                              </Badge>
+                            </button>
                           )}
                         </div>
                       </td>

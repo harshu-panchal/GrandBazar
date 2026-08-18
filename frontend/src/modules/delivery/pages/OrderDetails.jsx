@@ -34,27 +34,12 @@ import {
   leaveOrderRoom,
   onOrderStatusUpdate,
 } from "@/core/services/orderSocket";
+import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 
 const getPublicStatusStage = (internalStep) => {
   if (internalStep >= 4) return 3;
   if (internalStep >= 3) return 2;
   return 1;
-};
-
-// Maps return backend status → 5-step UI
-// Step 1: Accepted, navigate to customer
-// Step 2: At customer, upload proof + customer OTP
-// Step 3: In transit, navigate to seller
-// Step 4: At seller, request seller OTP
-// Step 5: Completed
-const orderOfReturn = (s) => {
-  if (!s || s === "none") return 1;
-  const lower = s.toLowerCase();
-  if (["returned", "qc_passed", "qc_failed", "refund_completed"].includes(lower)) return 5;
-  if (lower === "return_drop_pending") return 4;
-  if (lower === "return_in_transit") return 3;
-  if (lower === "return_pickup_assigned") return 1;
-  return 1; // return_approved also = 1
 };
 
 const PUBLIC_STATUS_STEPS = [
@@ -63,10 +48,23 @@ const PUBLIC_STATUS_STEPS = [
   { id: 3, label: "Delivered" },
 ];
 
+// Maps a backend order to this component's rider-facing step (1-4, or 1-5
+// for returns) — the local 1-4 numbering is rider-app-specific (pickup /
+// at store / start delivery / delivered), distinct from the 0-6 tracker
+// index the shared util exposes for other modules, so it isn't a drop-in
+// replacement. Only called once on initial fetch — after that `step` is
+// local wizard state the rider advances themselves as they complete each
+// action, not re-derived from `order` on every render.
+//
+// Return flow (5-step UI):
+// Step 1: Accepted, navigate to customer
+// Step 2: At customer, upload proof + customer OTP
+// Step 3: In transit, navigate to seller
+// Step 4: At seller, request seller OTP
+// Step 5: Completed
 const getPersistedRiderStep = (order) => {
   if (!order) return 1;
 
-  // Handle Return Flow Steps (5-step UI)
   if (order.returnStatus && order.returnStatus !== "none") {
     const rs = order.returnStatus.toLowerCase();
     if (["returned", "qc_passed", "qc_failed", "refund_completed"].includes(rs)) return 5;
@@ -75,36 +73,19 @@ const getPersistedRiderStep = (order) => {
     if (rs === "return_pickup_assigned" || rs === "return_approved") return 1;
   }
 
-  const workflowStatus = String(order.workflowStatus || "").toUpperCase();
-  const legacyStatus = String(order.status || "").toLowerCase();
+  // legacyStatus is now the single-source-of-truth primary signal (was
+  // previously re-derived independently from raw workflowStatus/status
+  // comparisons). riderStep/timestamp checks stay as defensive fallbacks
+  // for the case where a rider reopens this screen right after their own
+  // action incremented deliveryRiderStep server-side but before
+  // workflowStatus had persisted — a genuine race this app-specific bootstrap
+  // needs to survive, unlike a plain display-status read elsewhere.
+  const legacyStatus = getLegacyStatusFromOrder(order);
   const riderStep = Number(order.deliveryRiderStep) || 0;
 
-  if (
-    riderStep >= 4 ||
-    workflowStatus === "DELIVERED" ||
-    legacyStatus === "delivered"
-  ) {
-    return 4;
-  }
-
-  if (
-    riderStep >= 3 ||
-    workflowStatus === "OUT_FOR_DELIVERY" ||
-    legacyStatus === "out_for_delivery" ||
-    order.outForDeliveryAt
-  ) {
-    return 3;
-  }
-
-  if (
-    riderStep >= 2 ||
-    workflowStatus === "PICKUP_READY" ||
-    legacyStatus === "packed" ||
-    order.pickupReadyAt
-  ) {
-    return 2;
-  }
-
+  if (riderStep >= 4 || legacyStatus === "delivered") return 4;
+  if (riderStep >= 3 || legacyStatus === "out_for_delivery" || order.outForDeliveryAt) return 3;
+  if (riderStep >= 2 || legacyStatus === "packed" || order.pickupReadyAt) return 2;
   return 1;
 };
 
@@ -202,7 +183,14 @@ const OrderDetails = () => {
     return () => clearInterval(iv);
   }, []);
 
-  // Listen for order:status:update — immediately hide map when delivered
+  // Listen for order:status:update — immediately hide map when delivered,
+  // and (previously missing) tell the rider if the order was cancelled out
+  // from under them mid-delivery so they don't stay stuck on a stale
+  // screen. Deliberately does NOT blindly refetch-and-recompute `step` for
+  // every event — `step` is local wizard state the rider is actively
+  // advancing (mid-OTP-flow), and re-deriving it from a fresh order on an
+  // unrelated event (e.g. a price adjustment on this same order) risks
+  // resetting/racing that in-progress flow.
   useEffect(() => {
     if (!orderId) return undefined;
     const getToken = () => localStorage.getItem("auth_delivery");
@@ -214,6 +202,9 @@ const OrderDetails = () => {
       if (ws === "DELIVERED") {
         setStep(4);
         setOrder((prev) => prev ? { ...prev, status: "delivered", workflowStatus: "DELIVERED" } : prev);
+      } else if (ws === "CANCELLED") {
+        toast.error("This order was cancelled — it's no longer available for delivery.");
+        navigate("/delivery/dashboard");
       }
     });
 
@@ -221,7 +212,7 @@ const OrderDetails = () => {
       off();
       leaveOrderRoom(orderId, getToken);
     };
-  }, [orderId]);
+  }, [orderId, navigate]);
 
   const steps = useMemo(() => {
 

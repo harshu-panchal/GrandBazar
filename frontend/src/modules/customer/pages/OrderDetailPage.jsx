@@ -351,14 +351,15 @@ const OrderDetailPage = () => {
       if (ws) {
         setOrder((prev) => {
           if (!prev) return prev;
+          const patched = { ...prev, workflowStatus: ws };
           return {
-            ...prev,
-            workflowStatus: ws,
-            // Keep legacy status in sync for components that read order.status
-            ...(ws === "DELIVERED" && { status: "delivered" }),
-            ...(ws === "DELIVERY_SEARCH" && { status: "confirmed" }),
-            ...(ws === "OUT_FOR_DELIVERY" && { status: "out_for_delivery" }),
-            ...(ws === "CUSTOMER_PICKUP_READY" && { status: "ready_for_pickup" }),
+            ...patched,
+            // Keep legacy status in sync for components that read
+            // order.status — derived via the same resolver every other
+            // module uses instead of a hand-maintained list that only
+            // covered 4 of ~14 workflow states (every other transition left
+            // order.status stale until the throttled refresh() below landed).
+            status: getLegacyStatusFromOrder(patched),
             ...(payload?.customerPickupOtp && { customerPickupOtp: payload.customerPickupOtp }),
           };
         });
@@ -976,7 +977,7 @@ const OrderDetailPage = () => {
             className="rounded-3xl overflow-hidden shadow-lg border border-slate-200/50"
           >
             <LiveTrackingMap
-              status={order.workflowStatus || order.status}
+              status={getLegacyStatusFromOrder(order)}
               eta={estimatedArrival.arrivingInText}
               riderName={order.deliveryBoy?.name || "Delivery Partner"}
               riderLocation={liveLocation}

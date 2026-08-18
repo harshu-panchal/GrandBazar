@@ -72,6 +72,7 @@ const DeliveryAuth = () => {
   // OTP state
   const [otp, setOtp] = useState(["", "", "", ""]);
   const [agreed, setAgreed] = useState(false);
+  const [registrationAgreed, setRegistrationAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(30);
 
@@ -111,6 +112,7 @@ const DeliveryAuth = () => {
         if (!signupName.trim()) { toast.error("Please enter your name"); return; }
         if (!signupPhone || signupPhone.length < 10) { toast.error("Please enter a valid 10-digit phone number"); return; }
         if (!profileImageFile) { toast.error("Please upload your profile photo"); return; }
+        if (!registrationAgreed) { toast.error("Please agree to the Terms & Conditions and Privacy Policy"); return; }
 
         const formData = new FormData();
         formData.append("name", signupName.trim());
@@ -202,6 +204,7 @@ const DeliveryAuth = () => {
     setPanFile(null);
     setDlFile(null);
     setAgreed(false);
+    setRegistrationAgreed(false);
     setProfileImageFile(null);
     setProfileImagePreview("");
   };
@@ -715,13 +718,21 @@ const DeliveryAuth = () => {
                           </div>
                         </motion.div>
                       )}
-
-                      <p className="text-center text-xs text-gray-400 font-semibold pt-1">
-                        By joining, you agree to our{" "}
-                        <span className="text-brand-500 font-bold cursor-pointer hover:underline">Terms</span>{" "}
-                        &amp;{" "}
-                        <span className="text-brand-500 font-bold cursor-pointer hover:underline">Privacy Policy</span>
-                      </p>
+                      
+                      <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4 mb-2">
+                        <input
+                          id="signup-terms"
+                          type="checkbox"
+                          checked={registrationAgreed}
+                          onChange={(e) => setRegistrationAgreed(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-brand-600 cursor-pointer shrink-0"
+                        />
+                        <label htmlFor="signup-terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer text-left">
+                          I agree to the{" "}
+                          <span className="text-brand-600 font-bold hover:underline">Terms of Service</span> &amp;{" "}
+                          <span className="text-brand-600 font-bold hover:underline">Privacy Policy</span>.
+                        </label>
+                      </div>
                     </div>
                   )}
 

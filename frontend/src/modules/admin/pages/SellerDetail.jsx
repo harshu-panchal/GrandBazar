@@ -4,6 +4,7 @@ import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
 import Pagination from '@shared/components/ui/Pagination';
 import { adminApi, unwrapList } from '../services/adminApi';
+import { getLegacyStatusFromOrder, getOrderStatusLabel, getStatusVariant } from '@/shared/utils/orderStatus';
 import {
     ChevronLeft,
     Building2,
@@ -711,10 +712,10 @@ const SellerDetail = () => {
                                                     </td>
                                                     <td className="px-4 py-5 text-center">
                                                         <Badge
-                                                            variant={order.status === 'delivered' ? 'success' : order.status === 'cancelled' ? 'danger' : 'warning'}
+                                                            variant={getStatusVariant(getLegacyStatusFromOrder(order))}
                                                             className="text-[9px] font-black"
                                                         >
-                                                            {(order.status || 'pending').toUpperCase()}
+                                                            {getOrderStatusLabel(order).toUpperCase()}
                                                         </Badge>
                                                     </td>
                                                     <td className="px-4 py-5 text-right font-black text-slate-900">

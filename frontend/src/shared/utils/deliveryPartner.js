@@ -1,15 +1,18 @@
 import { resolveFulfillmentMethod } from "./orderFulfillment.js";
+import { getLegacyStatusFromOrder } from "./orderStatus.js";
 
 const DEFAULT_PARTNER_IMAGE =
   "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop";
 
+// "RIDER_AT_STORE"/"CUSTOMER_CONFIRMATION" were previously listed here but
+// don't exist in WORKFLOW_STATUS on either the frontend
+// (shared/utils/orderStatus.js) or backend (constants/orderWorkflow.js) —
+// dead conditions that could never match, removed.
 const PLATFORM_ASSIGNED_WORKFLOWS = new Set([
   "DELIVERY_ASSIGNED",
   "PICKUP_READY",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
-  "RIDER_AT_STORE",
-  "CUSTOMER_CONFIRMATION",
 ]);
 
 function getRawPartnerId(partner) {
@@ -130,11 +133,16 @@ export function getTrackingUiStatus(order = {}) {
   const status = String(order.status || "").toLowerCase();
   const workflow = String(order.workflowStatus || "").toUpperCase();
   const method = resolveFulfillmentMethod(order);
+  // The two lifecycle-terminus checks below delegate to the same resolver
+  // every other module uses, instead of re-deriving from raw fields — the
+  // rest of this function's tracking-specific vocabulary (blending
+  // fulfillment method with lifecycle stage into labels like "Seller
+  // Delivery"/"Picked Up") stays as-is since it's a genuinely different,
+  // more specific concern than a plain lifecycle-status label.
+  const legacyStatus = getLegacyStatusFromOrder(order);
 
-  if (status === "delivered" || workflow === "DELIVERED") return "Delivered";
-  if (status === "out_for_delivery" || workflow === "OUT_FOR_DELIVERY") {
-    return "On the Way";
-  }
+  if (legacyStatus === "delivered") return "Delivered";
+  if (legacyStatus === "out_for_delivery") return "On the Way";
 
   if (method === "customer_pickup" || String(order.logisticsMode || "").toLowerCase() === "pickup") {
     return "Pickup";

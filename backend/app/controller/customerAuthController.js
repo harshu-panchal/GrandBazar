@@ -33,6 +33,7 @@ export const signupCustomer = async (req, res) => {
             name: payload.name,
             rawPhone: payload.phone,
             email: payload.email,
+            password: payload.password,
             flow: "signup",
             ipAddress: req.ip,
             agreedToTerms: Boolean(payload.agreedToTerms),

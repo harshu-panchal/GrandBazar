@@ -93,6 +93,7 @@ export async function issueCustomerOtp({
   name = "",
   rawPhone,
   email = "",
+  password = "",
   flow,
   ipAddress = "unknown",
   agreedToTerms = false,
@@ -152,6 +153,7 @@ export async function issueCustomerOtp({
         name: name || "Customer",
         phone,
         email: normalizedEmail || undefined,
+        password: flow === "signup" && password ? password : undefined,
         isVerified: false,
         termsAcceptedAt: flow === "signup" && agreedToTerms ? now : null,
       });

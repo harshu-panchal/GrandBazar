@@ -19,7 +19,7 @@ import {
     updateSellerStaff,
     deleteSellerStaff
 } from "../controller/seller/staffController.js";
-import { getSellerWalletSummaryController } from "../controller/adminFinanceController.js";
+import { getSellerWalletSummaryController, getSellerBulkSettlementsController } from "../controller/adminFinanceController.js";
 import {
     createSellerCoupon,
     getSellerCoupons,
@@ -169,6 +169,7 @@ router.get("/dashboard", ...sellerOpsChain, checkSubSellerPermission("analytics"
 router.get("/stats", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerStats);
 router.get("/earnings", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerEarnings);
 router.get("/wallet/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerWalletSummaryController);
+router.get("/finance/bulk-settlements", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerBulkSettlementsController);
 router.post("/request-withdrawal", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), requestWithdrawal);
 
 // Coupons

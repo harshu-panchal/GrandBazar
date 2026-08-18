@@ -38,7 +38,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
-import { getOrderStoreReassignment } from '@/shared/utils/orderStatus';
+import { getOrderStoreReassignment, getLegacyStatusFromOrder, getOrderStatusLabel } from '@/shared/utils/orderStatus';
 import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/services/orderSocket';
 
 const REASSIGNABLE_WORKFLOW = new Set([
@@ -453,6 +453,13 @@ const OrderDetail = () => {
 
     const fulfillment = getFulfillmentDisplay(order);
     const storeReassignment = getOrderStoreReassignment(order);
+    // Was previously read as raw order.status (or an inconsistent
+    // order.status||order.workflowStatus guess) throughout this file —
+    // getLegacyStatusFromOrder is the same resolver every other screen
+    // uses, so this page now agrees with customer/seller/delivery instead
+    // of independently re-deriving (and drifting from) its own answer.
+    const legacyStatus = getLegacyStatusFromOrder(order);
+    const statusLabel = getOrderStatusLabel(order);
 
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -470,11 +477,11 @@ const OrderDetail = () => {
                             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Order #{order.orderId}</h1>
                             <div className="relative inline-block w-44">
                                 <select
-                                    value={order.status}
+                                    value={legacyStatus}
                                     onChange={(e) => handleStatusUpdate(e.target.value)}
                                     className={cn(
                                         "w-full text-[10px] pl-3 pr-8 py-1.5 rounded-xl font-black uppercase tracking-widest border appearance-none cursor-pointer focus:ring-2 focus:ring-offset-1 transition-all outline-none shadow-sm",
-                                        getStatusStyles(order.status)
+                                        getStatusStyles(legacyStatus)
                                     )}
                                 >
                                     <option value="pending">Pending</option>
@@ -534,7 +541,7 @@ const OrderDetail = () => {
                 {/* Left Column */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Live Order Tracking Google Map Card - Only shown when order is active / in-transit */}
-                    {!['delivered', 'completed', 'cancelled', 'returned'].includes((order.status || order.workflowStatus || '').toLowerCase()) && (
+                    {!['delivered', 'completed', 'cancelled', 'returned'].includes(legacyStatus) && (
                         <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-2xl overflow-hidden p-0 text-left">
                             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3 flex-wrap">
                                 <div className="flex items-center gap-3">
@@ -576,13 +583,13 @@ const OrderDetail = () => {
                             {/* Interactive Google Map Component */}
                             <div className="h-[380px] w-full relative bg-slate-100">
                                 <LiveTrackingMap
-                                    status={order.status || order.workflowStatus || "out_for_delivery"}
+                                    status={legacyStatus}
                                     eta={order.deliveryEta?.label || "10-20 mins"}
                                     riderName={order.deliveryBoy?.name || order.deliveryPartner?.name || "Rider"}
                                     riderLocation={riderLocation}
                                     sellerLocation={sellerLocation}
                                     destinationLocation={destinationLocation}
-                                    routePhase={['out_for_delivery', 'delivered'].includes((order.status || '').toLowerCase()) ? 'delivery' : 'pickup'}
+                                    routePhase={['out_for_delivery', 'delivered'].includes(legacyStatus) ? 'delivery' : 'pickup'}
                                     onOpenInMaps={({ destinationLocation: dest }) => {
                                         const target = dest || destinationLocation || sellerLocation;
                                         if (target) {
@@ -644,7 +651,7 @@ const OrderDetail = () => {
                                 <Badge className="bg-brand-50 text-brand-700 border-none text-[9px] font-black">{order.items.length} ITEMS</Badge>
                                 {(() => {
                                     const canCancelItems =
-                                        !['delivered', 'cancelled', 'out_for_delivery', 'returned'].includes((order.status || '').toLowerCase())
+                                        !['delivered', 'cancelled', 'out_for_delivery', 'returned'].includes(legacyStatus)
                                         && !order.deliveryBoy
                                         && order.items.length > 1;
                                     if (!canCancelItems) return null;
@@ -920,11 +927,11 @@ const OrderDetail = () => {
                                 <div className="flex-1 pb-4">
                                     <div className="flex items-center justify-between mb-1">
                                         <h4 className="text-xs font-black uppercase tracking-tight text-slate-900">
-                                            Status: {order.status.replace(/_/g, ' ')}
+                                            Status: {statusLabel}
                                         </h4>
                                         <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(order.updatedAt).toLocaleTimeString()}</span>
                                     </div>
-                                    <p className="text-[11px] font-bold text-slate-400 leading-relaxed italic">"System verified current logistical state as {order.status}."</p>
+                                    <p className="text-[11px] font-bold text-slate-400 leading-relaxed italic">"System verified current logistical state as {statusLabel}."</p>
                                 </div>
                             </div>
                         </div>
@@ -1050,7 +1057,7 @@ const OrderDetail = () => {
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         {hasInternalRider ? (
                                             <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">
-                                                {order.status === "out_for_delivery" ? "OUT FOR DELIVERY" : order.status === "delivered" ? "DELIVERED" : "ASSIGNED"}
+                                                {legacyStatus === "out_for_delivery" ? "OUT FOR DELIVERY" : legacyStatus === "delivered" ? "DELIVERED" : "ASSIGNED"}
                                             </Badge>
                                         ) : hasExternalLogistics ? (
                                             <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">

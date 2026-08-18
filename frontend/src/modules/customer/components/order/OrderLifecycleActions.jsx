@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { customerApi } from "../../services/customerApi";
 import DeliverySlotPicker from "../checkout/DeliverySlotPicker";
 import AddOrderItemsModal from "./AddOrderItemsModal";
-import { canCustomerAddItems } from "@/shared/utils/orderStatus";
+import { canCustomerAddItems, getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 import { toast } from "sonner";
 
 // Complaints share the exact same post-delivery window as returns/refunds
@@ -17,7 +17,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const [disputeCountdown, setDisputeCountdown] = useState(null);
   const [showAddItems, setShowAddItems] = useState(false);
 
-  const isDelivered = order?.status === "delivered" || order?.workflowStatus === "DELIVERED";
+  const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
 
   useEffect(() => {
     if (!order || !isDelivered) {
@@ -43,12 +43,11 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
 
   if (!order) return null;
 
+  const legacyStatus = getLegacyStatusFromOrder(order);
   const canReschedule = ["pending", "confirmed", "reschedule_requested", "preorder_confirmed"].includes(
-    String(order.status || "").toLowerCase(),
+    legacyStatus,
   );
-  const awaitingExtra =
-    order.status === "awaiting_extra_payment" ||
-    order.workflowStatus === "AWAITING_EXTRA_PAYMENT";
+  const awaitingExtra = legacyStatus === "awaiting_extra_payment";
   // The server is always the source of truth and will reject a late
   // request regardless — this just keeps the button from inviting a
   // complaint the backend is going to refuse anyway.

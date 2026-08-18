@@ -46,7 +46,7 @@ function normalizeDeliveryId(deliveryId) {
  * and optionally to the customer’s personal room so the app updates even before
  * opening order details (e.g. checkout success overlay).
  */
-export function emitOrderStatusUpdate(orderId, payload, customerId) {
+export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
   const s = getIo();
   if (!s) return;
   const body = {
@@ -63,6 +63,20 @@ export function emitOrderStatusUpdate(orderId, payload, customerId) {
       : customerId;
   if (cid) {
     s.to(`customer:${cid}`).emit("order:status:update", body);
+  }
+  // Optional — most emitOrderStatusUpdate call sites are seller-initiated
+  // (the seller's own UI already has the result), so this is only passed at
+  // the rider/admin-driven transitions (pickup, out-for-delivery, delivered,
+  // rider assignment) where a seller would otherwise have a stale order list
+  // until they manually refresh.
+  const sid =
+    sellerId != null &&
+    typeof sellerId === "object" &&
+    typeof sellerId.toString === "function"
+      ? sellerId.toString()
+      : sellerId;
+  if (sid) {
+    s.to(`seller:${sid}`).emit("order:status:update", body);
   }
   // Every admin socket auto-joins "admin:orders" on connect (see
   // socketManager.js) — admins need live visibility across ALL orders, not

@@ -4,7 +4,15 @@ export const sendSignupOtpSchema = Joi.object({
   name: Joi.string().trim().min(2).max(80).required(),
   phone: Joi.string().trim().min(7).max(24).required(),
   email: Joi.string().trim().lowercase().email().allow("", null).optional(),
+  password: Joi.string().min(6).max(72).allow("", null).optional(),
   agreedToTerms: Joi.boolean().optional(),
+}).custom((value, helpers) => {
+  if (value.password && !value.email) {
+    return helpers.error("password.requiresEmail");
+  }
+  return value;
+}).messages({
+  "password.requiresEmail": "Email is required to set a password",
 });
 
 export const sendLoginOtpSchema = Joi.object({

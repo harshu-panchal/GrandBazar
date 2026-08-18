@@ -25,6 +25,7 @@ import {
   resolveWorkflowStatus,
 } from "../services/orderWorkflowService.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
+import { attachDisplayStatus, attachDisplayStatusToList } from "../services/orderStatusResolver.js";
 import {
   freezeFinancialSnapshot,
   reverseOrderFinanceOnCancellation,
@@ -252,7 +253,7 @@ export const getMyOrders = async (req, res) => {
         const [orders, total] = await Promise.all([
           Order.find({ customer: customerId })
             .select(
-              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus timeSlot createdAt",
+              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus disputeRef timeSlot createdAt",
             )
             .sort({ createdAt: -1, _id: -1 })
             .skip(skip)
@@ -263,7 +264,7 @@ export const getMyOrders = async (req, res) => {
         ]);
 
         return {
-          items: orders,
+          items: attachDisplayStatusToList(orders),
           page,
           limit,
           total,
@@ -566,7 +567,7 @@ export const getOrderDetails = async (req, res) => {
     }
     // -----------------------------
 
-    return handleResponse(res, 200, "Order details fetched", order);
+    return handleResponse(res, 200, "Order details fetched", attachDisplayStatus(order));
   } catch (error) {
     console.error(`[ORDER_ERROR] Error fetching order details:`, error);
     return handleResponse(res, 500, error.message);
@@ -1203,6 +1204,62 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     return handleResponse(res, 200, "Order status updated", order);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   BULK ACCEPT/REJECT (Seller only)
+   Scoped to the pending -> confirmed/cancelled step deliberately — it's the
+   one transition every order needs regardless of fulfillment method, so it's
+   the highest-value "select many, act once" case. Reuses sellerUpdateStatusAtomic
+   per order (same function the single-order endpoint above calls) so all the
+   existing accept/reject business logic — timeouts, fulfillment resolution,
+   admin-approval fallback for already-accepted orders, notifications, socket
+   emits — is exercised identically instead of being re-implemented here.
+================================ */
+export const bulkUpdateOrderStatus = async (req, res) => {
+  try {
+    const { id: sellerId, role } = req.user;
+    if (role !== "seller") {
+      return handleResponse(res, 403, "Bulk status updates are available to sellers only");
+    }
+
+    const { orderIds, status, cancelReason } = req.body || {};
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return handleResponse(res, 400, "Provide at least one order ID");
+    }
+    if (orderIds.length > 100) {
+      return handleResponse(res, 400, "You can update at most 100 orders at once");
+    }
+
+    const targetStatus = String(status || "").toLowerCase();
+    if (!["confirmed", "cancelled"].includes(targetStatus)) {
+      return handleResponse(res, 400, "Bulk update only supports accepting or cancelling pending orders");
+    }
+
+    const results = [];
+    for (const orderId of orderIds) {
+      try {
+        const updated = await sellerUpdateStatusAtomic(sellerId, orderId, targetStatus, { cancelReason });
+        results.push({
+          orderId,
+          success: true,
+          pendingApproval: Boolean(updated?.__pendingApproval),
+        });
+      } catch (e) {
+        results.push({ orderId, success: false, message: e.message || "Failed to update" });
+      }
+    }
+
+    const succeeded = results.filter((r) => r.success).length;
+    return handleResponse(
+      res,
+      200,
+      `${succeeded} of ${orderIds.length} order(s) updated`,
+      { results, succeeded, failed: orderIds.length - succeeded },
+    );
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

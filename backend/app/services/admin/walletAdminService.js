@@ -137,7 +137,7 @@ export async function getDeliveryWithdrawalsData({ page, limit, skip }) {
 
   const [transactions, total] = await Promise.all([
     Transaction.find(query)
-      .populate("user", "name phone")
+      .populate("user", "name phone accountHolder accountNumber ifsc")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

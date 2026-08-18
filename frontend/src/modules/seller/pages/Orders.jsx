@@ -38,7 +38,7 @@ import { getSellerOrderPayout, getCustomerOrderTotal, formatInr } from '@/shared
 import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
-import { onSellerOrderNew } from "@core/services/orderSocket";
+import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocket";
 
 function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
     const method = resolveFulfillmentMethod(order);
@@ -232,6 +232,13 @@ const Orders = () => {
     const [cancelReasonTarget, setCancelReasonTarget] = useState(null);
     const [cancelReasonText, setCancelReasonText] = useState('');
     const [isSubmittingCancelReason, setIsSubmittingCancelReason] = useState(false);
+    // Bulk accept/reject — scoped to "pending" orders only, since that's the
+    // one transition every order needs regardless of fulfillment method.
+    const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+    const [isBulkAccepting, setIsBulkAccepting] = useState(false);
+    const [isBulkRejecting, setIsBulkRejecting] = useState(false);
+    const [isBulkRejectModalOpen, setIsBulkRejectModalOpen] = useState(false);
+    const [bulkRejectReason, setBulkRejectReason] = useState('');
     const { showToast } = useToast();
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -375,11 +382,31 @@ const Orders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page]);
 
+    // Live updates for status changes made by someone else (rider pickup/
+    // out-for-delivery/delivered, admin rider assignment) — previously the
+    // seller's list only refreshed on their own actions or a brand-new order,
+    // so these went stale until a manual reload. Debounced so a burst of
+    // events across many orders coalesces into one refetch, mirroring the
+    // admin OrdersList.jsx pattern.
+    useEffect(() => {
+        const getToken = () => localStorage.getItem("auth_seller");
+        let debounceTimer = null;
+        const unsubscribe = onOrderStatusUpdate(getToken, () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => fetchOrders(page, false), 800);
+        });
+        return () => {
+            clearTimeout(debounceTimer);
+            unsubscribe();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page]);
+
     // Lock page scroll while any order modal is open; keep scrolling inside the modal.
     useEffect(() => {
         const modalOpen =
             isDetailsModalOpen || isQuickViewModalOpen || isPickupModalOpen || isRescheduleModalOpen
-            || isCancelReasonModalOpen || isReplacementModalOpen || isSplitModalOpen;
+            || isCancelReasonModalOpen || isBulkRejectModalOpen || isReplacementModalOpen || isSplitModalOpen;
         if (!modalOpen) return undefined;
 
         const prevBodyOverflow = document.body.style.overflow;
@@ -391,7 +418,7 @@ const Orders = () => {
             document.body.style.overflow = prevBodyOverflow;
             document.documentElement.style.overflow = prevHtmlOverflow;
         };
-    }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen, isRescheduleModalOpen, isCancelReasonModalOpen, isReplacementModalOpen, isSplitModalOpen]);
+    }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen, isRescheduleModalOpen, isCancelReasonModalOpen, isBulkRejectModalOpen, isReplacementModalOpen, isSplitModalOpen]);
 
     const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
     const todayStr = new Date().toISOString().split('T')[0];
@@ -413,6 +440,90 @@ const Orders = () => {
         });
     }, [safeOrders, searchTerm, activeTab]);
 
+    const visiblePendingOrderIds = useMemo(() => {
+        return filteredOrders
+            .slice((page - 1) * pageSize, page * pageSize)
+            .filter((o) => o.status === 'pending')
+            .map((o) => o.id);
+    }, [filteredOrders, page, pageSize]);
+
+    // Clear any selection that's no longer on the visible pending list (page
+    // change, status change from elsewhere, live socket refresh, etc.).
+    useEffect(() => {
+        setSelectedOrderIds((prev) => prev.filter((id) => visiblePendingOrderIds.includes(id)));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [visiblePendingOrderIds]);
+
+    const toggleOrderSelection = (orderId) => {
+        setSelectedOrderIds((prev) =>
+            prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId],
+        );
+    };
+
+    const toggleSelectAllVisiblePending = () => {
+        setSelectedOrderIds((prev) =>
+            visiblePendingOrderIds.length > 0 && visiblePendingOrderIds.every((id) => prev.includes(id))
+                ? []
+                : visiblePendingOrderIds,
+        );
+    };
+
+    const handleBulkAccept = async () => {
+        if (selectedOrderIds.length === 0) return;
+        setIsBulkAccepting(true);
+        try {
+            const res = await sellerApi.bulkUpdateOrderStatus({ orderIds: selectedOrderIds, status: 'confirmed' });
+            const { succeeded = 0, failed = 0 } = res.data?.result || {};
+            showToast(
+                failed > 0
+                    ? `${succeeded} order(s) accepted, ${failed} failed`
+                    : `${succeeded} order(s) accepted`,
+                failed > 0 ? 'error' : 'success',
+            );
+            setSelectedOrderIds([]);
+            fetchOrders(page, false);
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Bulk accept failed', 'error');
+        } finally {
+            setIsBulkAccepting(false);
+        }
+    };
+
+    const openBulkRejectModal = () => {
+        if (selectedOrderIds.length === 0) return;
+        setBulkRejectReason('');
+        setIsBulkRejectModalOpen(true);
+    };
+
+    const handleConfirmBulkReject = async () => {
+        if (bulkRejectReason.trim().length < 10) {
+            showToast('Please provide a cancellation reason (at least 10 characters)', 'error');
+            return;
+        }
+        setIsBulkRejecting(true);
+        try {
+            const res = await sellerApi.bulkUpdateOrderStatus({
+                orderIds: selectedOrderIds,
+                status: 'cancelled',
+                cancelReason: bulkRejectReason.trim(),
+            });
+            const { succeeded = 0, failed = 0 } = res.data?.result || {};
+            showToast(
+                failed > 0
+                    ? `${succeeded} order(s) rejected, ${failed} failed`
+                    : `${succeeded} order(s) rejected`,
+                failed > 0 ? 'error' : 'success',
+            );
+            setSelectedOrderIds([]);
+            setIsBulkRejectModalOpen(false);
+            fetchOrders(page, false);
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Bulk reject failed', 'error');
+        } finally {
+            setIsBulkRejecting(false);
+        }
+    };
+
     const stats = useMemo(() => [
         {
             label: 'Total Orders',
@@ -430,7 +541,12 @@ const Orders = () => {
         },
         {
             label: 'Scheduled',
-            value: safeOrders.filter((o) => o.status === 'scheduled').length,
+            // o.status was previously (buggily) set to a "scheduled" bucket
+            // value that never actually existed on the backend — this count
+            // would have silently gone to 0 once that mapping got fixed to
+            // match the backend's real "confirmed" collapse. isScheduledHoldOrder
+            // reads workflowStatus directly, so it doesn't depend on the bug.
+            value: safeOrders.filter((o) => isScheduledHoldOrder(o)).length,
             icon: HiOutlineCalendarDays,
             color: 'text-blue-600',
             bg: 'bg-blue-50'
@@ -514,7 +630,7 @@ const Orders = () => {
             return;
         }
 
-        if (normalizedStatus === 'delivered' && isSelfDelivery && !additionalData.deliveryProofImages) {
+        if (normalizedStatus === 'delivered' && !additionalData.deliveryProofImages) {
             setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'deliveryProofImages' });
             setPickupImage(null);
             setIsPickupModalOpen(true);
@@ -1277,11 +1393,56 @@ const Orders = () => {
                                 )}
                             </div>
 
+                            {/* Bulk accept/reject bar — appears once a pending order is checked */}
+                            {selectedOrderIds.length > 0 && (
+                                <div className="hidden md:flex items-center justify-between gap-3 px-4 lg:px-6 py-3 bg-brand-50 border-b border-brand-100">
+                                    <p className="text-xs font-bold text-brand-800">
+                                        {selectedOrderIds.length} order{selectedOrderIds.length === 1 ? '' : 's'} selected
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedOrderIds([])}
+                                            className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-800"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={isBulkRejecting}
+                                            onClick={openBulkRejectModal}
+                                            className="px-4 py-1.5 rounded-lg bg-white text-rose-600 ring-1 ring-rose-200 text-xs font-black uppercase hover:bg-rose-50 transition-all disabled:opacity-50"
+                                        >
+                                            Reject Selected
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={isBulkAccepting}
+                                            onClick={handleBulkAccept}
+                                            className="px-4 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-black uppercase hover:bg-brand-700 transition-all disabled:opacity-50"
+                                        >
+                                            {isBulkAccepting ? 'Accepting…' : 'Accept Selected'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Desktop: Table */}
                             <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full text-left border-collapse min-w-[640px]">
                                     <thead>
                                         <tr className="bg-slate-50/50 border-b border-slate-100">
+                                            <th className="px-4 lg:px-3 py-3 lg:py-4 w-8">
+                                                {visiblePendingOrderIds.length > 0 && (
+                                                    <input
+                                                        type="checkbox"
+                                                        title="Select all pending orders"
+                                                        checked={visiblePendingOrderIds.every((id) => selectedOrderIds.includes(id))}
+                                                        onChange={toggleSelectAllVisiblePending}
+                                                        className="h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-600"
+                                                    />
+                                                )}
+                                            </th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Order Details</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Customer</th>
                                             <th className="px-4 lg:px-6 py-3 lg:py-4 text-xs font-bold text-slate-600 uppercase tracking-widest">Earnings</th>
@@ -1302,6 +1463,16 @@ const Orders = () => {
                                                     key={order.id}
                                                     className="hover:bg-slate-50/50 transition-colors group"
                                                 >
+                                                    <td className="px-4 lg:px-3 py-3 lg:py-4" onClick={(e) => e.stopPropagation()}>
+                                                        {order.status === 'pending' && (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedOrderIds.includes(order.id)}
+                                                                onChange={() => toggleOrderSelection(order.id)}
+                                                                className="h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-600"
+                                                            />
+                                                        )}
+                                                    </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
                                                         <div>
                                                             <span className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors cursor-pointer" onClick={() => handleViewDetails(order)}>
@@ -1367,21 +1538,23 @@ const Orders = () => {
                                                             >
                                                                 <HiOutlineEye className="h-4 w-4" />
                                                             </button>
-                                                            {order.status === 'Pending' && (
+                                                            {order.status === 'pending' && (
                                                                 <>
                                                                     <button
+                                                                        title="Accept order"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            handleStatusUpdate(order.id, 'Processing');
+                                                                            handleStatusUpdate(order.id, 'confirmed');
                                                                         }}
                                                                         className="p-1.5 hover:bg-brand-50 hover:text-brand-600 rounded-lg transition-all text-slate-600 shadow-sm ring-1 ring-slate-100"
                                                                     >
                                                                         <HiOutlineCheck className="h-4 w-4" />
                                                                     </button>
                                                                     <button
+                                                                        title="Reject order"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            handleStatusUpdate(order.id, 'Cancelled');
+                                                                            handleStatusUpdate(order.id, 'cancelled');
                                                                         }}
                                                                         className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-all text-slate-600 shadow-sm ring-1 ring-slate-100"
                                                                     >
@@ -1746,6 +1919,71 @@ const Orders = () => {
                                             className="flex-1 text-xs bg-rose-600 hover:bg-rose-700"
                                         >
                                             {isSubmittingCancelReason ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CONFIRM CANCELLATION'}
+                                        </Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                        {isBulkRejectModalOpen && (
+                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                                    onClick={() => !isBulkRejecting && setIsBulkRejectModalOpen(false)}
+                                />
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className="w-full max-w-sm relative z-10 bg-white rounded-3xl shadow-2xl overflow-hidden"
+                                >
+                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <HiOutlineXMark className="h-5 w-5 text-rose-600" />
+                                            Reject {selectedOrderIds.length} Order{selectedOrderIds.length === 1 ? '' : 's'}
+                                        </h3>
+                                        <button
+                                            onClick={() => setIsBulkRejectModalOpen(false)}
+                                            disabled={isBulkRejecting}
+                                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                                        >
+                                            <HiOutlineXMark className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                    <div className="p-5 space-y-3">
+                                        <p className="text-xs font-semibold text-slate-600">
+                                            This reason will be sent to every customer whose order is rejected. Each order is processed individually — if one fails, the rest still go through.
+                                        </p>
+                                        <textarea
+                                            value={bulkRejectReason}
+                                            onChange={(e) => setBulkRejectReason(e.target.value)}
+                                            rows={3}
+                                            autoFocus
+                                            placeholder="e.g. Item out of stock, unable to fulfill this order…"
+                                            className="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                                        />
+                                        <p className="text-[10px] font-bold text-slate-400">{bulkRejectReason.trim().length}/10 characters minimum</p>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setIsBulkRejectModalOpen(false)}
+                                            className="flex-1 text-xs"
+                                            disabled={isBulkRejecting}
+                                        >
+                                            BACK
+                                        </Button>
+                                        <Button
+                                            onClick={handleConfirmBulkReject}
+                                            disabled={bulkRejectReason.trim().length < 10 || isBulkRejecting}
+                                            className="flex-1 text-xs bg-rose-600 hover:bg-rose-700"
+                                        >
+                                            {isBulkRejecting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'CONFIRM REJECTION'}
                                         </Button>
                                     </div>
                                 </motion.div>

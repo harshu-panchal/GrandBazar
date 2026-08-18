@@ -3,6 +3,7 @@ import Delivery from "../models/delivery.js";
 import Store from "../models/store.js";
 import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
 import { distanceMeters } from "../utils/geoUtils.js";
+import { attachDisplayStatusToList } from "./orderStatusResolver.js";
 import mongoose from "mongoose";
 
 function getPartnerRefId(partner) {
@@ -196,7 +197,7 @@ export async function fetchSellerOrdersPage({
     ]),
   ]);
 
-  const orders = await attachDeliveryPartners(ordersRaw);
+  const orders = attachDisplayStatusToList(await attachDeliveryPartners(ordersRaw));
 
   const rawSummary = summaryRows?.[0] || {};
   const summary = {
@@ -329,7 +330,7 @@ export async function fetchAvailableOrdersForDelivery({
   ) {
     return {
       requiresLocation: showDeliveries && assignedReturnPickups.length === 0,
-      orders: assignedReturnPickups,
+      orders: attachDisplayStatusToList(assignedReturnPickups),
       limit,
     };
   }
@@ -403,11 +404,13 @@ export async function fetchAvailableOrdersForDelivery({
     }));
   }
 
-  const orders = mergeAvailableOrders(
-    v2Orders,
-    legacyOrders,
-    [...assignedReturnPickups, ...returnPickups],
-    limit,
+  const orders = attachDisplayStatusToList(
+    mergeAvailableOrders(
+      v2Orders,
+      legacyOrders,
+      [...assignedReturnPickups, ...returnPickups],
+      limit,
+    ),
   );
 
   return {

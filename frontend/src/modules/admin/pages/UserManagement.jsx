@@ -26,6 +26,7 @@ const PERMISSIONS_LIST = [
   { key: 'wallet', label: 'Wallet', desc: 'Platform balances & commission ledgers' },
   { key: 'withdrawals', label: 'Money Requests', desc: 'Approve seller/rider payouts' },
   { key: 'seller_payments', label: 'Seller Payments', desc: 'Settle merchant accounts' },
+  { key: 'bulk_settlements', label: 'Bulk Settlements', desc: 'View wholesale/bulk-order settlement breakdowns' },
   { key: 'cash_collection', label: 'Collect Cash', desc: 'Receive cash-on-delivery dues' },
   { key: 'customers', label: 'Customers', desc: 'View end-user registry & logs' },
   { key: 'faqs', label: 'FAQs', desc: 'Publish static FAQ lists' },

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Star, CheckCircle2 } from "lucide-react";
 import { customerApi } from "../../services/customerApi";
 import { toast } from "sonner";
+import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 
 /**
  * "Rate your order" — shown once an order is delivered. Submits one review
@@ -107,7 +108,7 @@ function ItemRatingRow({ item, orderId, onRated }) {
 
 export default function RateOrderItems({ order }) {
   const [ratedCount, setRatedCount] = useState(0);
-  const isDelivered = order?.status === "delivered" || order?.workflowStatus === "DELIVERED";
+  const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
   const items = Array.isArray(order?.items) ? order.items : [];
 
   if (!isDelivered || !items.length) return null;

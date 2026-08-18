@@ -3,6 +3,7 @@ import Order from "../../models/order.js";
 import handleResponse from "../../utils/helper.js";
 import getPagination from "../../utils/pagination.js";
 import { adminAssignRiderAtomic } from "../../services/orderWorkflowService.js";
+import { resolveOrderStatus } from "../../services/orderStatusResolver.js";
 
 export const getDeliveryPartners = async (req, res) => {
   try {
@@ -153,34 +154,45 @@ export const getActiveFleet = async (req, res) => {
       Order.countDocuments(query),
     ]);
 
-    const fleetData = activeOrders.map((order) => ({
-      id: order.orderId,
-      status:
-        order.status === "out_for_delivery"
-          ? "On the Way"
-          : order.status === "packed"
-            ? "At Pickup"
-            : order.status === "shipped"
-              ? "In Transit"
-              : "Assigned",
-      deliveryBoy: {
-        name: order.deliveryBoy?.name || "Unknown",
-        phone: order.deliveryBoy?.phone || "N/A",
-        id: order.deliveryBoy?._id || "N/A",
-        vehicle: order.deliveryBoy?.vehicleType || "N/A",
-        image:
-          order.deliveryBoy?.documents?.profileImage ||
-          "https://via.placeholder.com/200",
-      },
-      seller: {
-        name: order.seller?.shopName || order.seller?.name || "Unknown",
-      },
-      customer: {
-        name: order.customer?.name || "Guest",
-        phone: order.customer?.phone || "N/A",
-      },
-      lastUpdate: order.updatedAt,
-    }));
+    const fleetData = activeOrders.map((order) => {
+      // NOTE: `status` here is a bespoke, partially-dead label mapping
+      // ("shipped" isn't a legal Order.status value) — left as-is because
+      // frontend/src/modules/admin/pages/FleetTracking.jsx string-matches
+      // these exact label values ("On the Way"/"At Pickup") for badge
+      // styling. Fixing this properly means switching that comparison to
+      // `displayStatus` too, which belongs in the Phase 4 frontend
+      // migration, not this backend-only additive pass. `displayStatus` is
+      // exposed below so that migration has the correct data to switch to.
+      return {
+        id: order.orderId,
+        status:
+          order.status === "out_for_delivery"
+            ? "On the Way"
+            : order.status === "packed"
+              ? "At Pickup"
+              : order.status === "shipped"
+                ? "In Transit"
+                : "Assigned",
+        displayStatus: resolveOrderStatus(order),
+        deliveryBoy: {
+          name: order.deliveryBoy?.name || "Unknown",
+          phone: order.deliveryBoy?.phone || "N/A",
+          id: order.deliveryBoy?._id || "N/A",
+          vehicle: order.deliveryBoy?.vehicleType || "N/A",
+          image:
+            order.deliveryBoy?.documents?.profileImage ||
+            "https://via.placeholder.com/200",
+        },
+        seller: {
+          name: order.seller?.shopName || order.seller?.name || "Unknown",
+        },
+        customer: {
+          name: order.customer?.name || "Guest",
+          phone: order.customer?.phone || "N/A",
+        },
+        lastUpdate: order.updatedAt,
+      };
+    });
 
     return handleResponse(res, 200, "Active fleet fetched successfully", {
       items: fleetData,

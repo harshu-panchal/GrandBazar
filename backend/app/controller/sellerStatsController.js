@@ -5,6 +5,7 @@ import Setting from "../models/setting.js";
 import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import Wallet from "../models/wallet.js";
+import { resolveOrderStatus } from "../services/orderStatusResolver.js";
 
 const PERIOD_COMPARE_LABEL = {
     daily: "vs prev 7d",
@@ -427,12 +428,20 @@ export const getSellerEarnings = async (req, res) => {
             });
         }
 
-        const transactions = await Transaction.find({ user: sellerId, userModel: 'Seller' })
+        // Withdrawal-request Transactions are stored with userModel: "Store"
+        // (sellerController.js's requestWithdrawal), not "Seller" — querying
+        // "Seller" alone silently excludes every withdrawal this seller has
+        // ever made or has pending, so pendingPayouts/totalWithdrawn below
+        // always computed as 0 and "available balance" never reflected money
+        // already tied up or paid out. requestWithdrawal's own balance check
+        // already queries both models; mirror that here so what the seller
+        // sees matches what withdrawal submission actually enforces.
+        const transactions = await Transaction.find({ user: sellerId, userModel: { $in: ['Seller', 'Store'] } })
             .sort({ createdAt: -1 })
             .populate({
                 path: "order",
                 select:
-                    "orderId status pricing payment address paymentBreakdown items createdAt customer settlementStatus financeFlags",
+                    "orderId status workflowStatus workflowVersion returnStatus disputeRef cancellationRequest pricing payment address paymentBreakdown items createdAt customer settlementStatus financeFlags",
                 populate: {
                     path: "customer",
                     select: "name phone email",
@@ -585,6 +594,11 @@ export const getSellerEarnings = async (req, res) => {
                     orderId: order?.orderId || null,
                     orderMongoId: order?._id ? String(order._id) : null,
                     orderStatus: order?.status || null,
+                    // Additive — was previously the only status signal here,
+                    // showing the raw legacy field verbatim (no return/dispute
+                    // overlay, no consistent label). Same resolver every other
+                    // module's order list/detail view now reads.
+                    displayStatus: order ? resolveOrderStatus(order) : null,
                     orderTotal,
                     sellerPayout,
                     commissionAmount,

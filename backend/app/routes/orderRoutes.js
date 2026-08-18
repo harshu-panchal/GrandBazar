@@ -8,6 +8,7 @@ import {
   approveCancelOrderRequest,
   rejectCancelOrderRequest,
   updateOrderStatus,
+  bulkUpdateOrderStatus,
   getSellerOrders,
   getAvailableOrders,
   acceptOrder,
@@ -193,6 +194,12 @@ router.get(
   "/seller-orders",
   ...sellerOrdersReadChain,
   getSellerOrders,
+);
+// Registered before "/status/:orderId" so "bulk" isn't swallowed as an :orderId param.
+router.put(
+  "/status/bulk",
+  ...sellerOrdersWriteChain,
+  bulkUpdateOrderStatus,
 );
 router.put(
   "/status/:orderId",

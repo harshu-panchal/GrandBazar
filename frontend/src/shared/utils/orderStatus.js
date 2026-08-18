@@ -1,6 +1,14 @@
 /**
  * Single source of truth for order status across customer, seller, delivery, and admin UIs.
- * Mirrors backend `legacyStatusFromWorkflow` (see backend/app/constants/orderWorkflow.js).
+ * Mirrors backend `legacyStatusFromWorkflow` (see backend/app/constants/orderWorkflow.js)
+ * and backend/app/services/orderStatusResolver.js's resolveOrderStatus().
+ *
+ * Every function below prefers `order.displayStatus` (the backend-resolved,
+ * authoritative object attached by resolveOrderStatus/attachDisplayStatus)
+ * when present, and only falls back to local derivation for orders fetched
+ * before that field existed (older cached responses, offline data). This is
+ * the fix for the historical "customer sees X, seller sees Y" drift — once
+ * displayStatus is present, every module reads the exact same answer.
  */
 
 export const WORKFLOW_STATUS = {
@@ -52,7 +60,11 @@ function legacyFromWorkflow(workflowStatus) {
     case WORKFLOW_STATUS.PREORDER_HOLD:
       return "preorder_confirmed";
     case WORKFLOW_STATUS.SCHEDULED_HOLD:
-      return "scheduled";
+      // Matches backend legacyStatusFromWorkflow exactly — "scheduled" was
+      // never a legal Order.status enum value, this bucket collapses into
+      // "confirmed" like the backend does; use isScheduledHoldOrder(order)
+      // below when the distinct "scheduled" nuance is needed.
+      return "confirmed";
     case WORKFLOW_STATUS.SELLER_ACCEPTED:
     case WORKFLOW_STATUS.DELIVERY_SEARCH:
     case WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING:
@@ -85,6 +97,10 @@ function legacyFromWorkflow(workflowStatus) {
 export function getLegacyStatusFromOrder(order) {
   if (!order) return "pending";
 
+  if (order.displayStatus?.legacyStatus) {
+    return order.displayStatus.legacyStatus;
+  }
+
   const explicit = String(order.status ?? "").toLowerCase();
   if (
     [
@@ -111,7 +127,6 @@ export function getLegacyStatusFromOrder(order) {
     if (workflowStatus === WORKFLOW_STATUS.OUT_FOR_DELIVERY) return "out_for_delivery";
     if (workflowStatus === WORKFLOW_STATUS.DELIVERED) return "delivered";
     if (workflowStatus === WORKFLOW_STATUS.PICKUP_READY) return "packed";
-    if (workflowStatus === WORKFLOW_STATUS.SCHEDULED_HOLD) return "scheduled";
     if (
       workflowStatus === WORKFLOW_STATUS.DELIVERY_ASSIGNED ||
       workflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH ||
@@ -359,24 +374,112 @@ export function isOrderStoreReassigned(order) {
   return Boolean(getOrderStoreReassignment(order));
 }
 
+// Reconciles the return-status label sets previously duplicated (with
+// drift) across the shared util, customer's ReturnProgressTracker.jsx, and
+// seller/admin's Returns.jsx — matches
+// backend/app/services/orderStatusResolver.js's RETURN_STATUS_LABELS
+// exactly, so backend-attached displayStatus.returnLabel and this
+// client-side fallback always agree.
+const RETURN_STATUS_LABELS = {
+  return_requested: "Return Requested",
+  return_approved: "Return Approved",
+  return_rejected: "Return Rejected",
+  return_pickup_assigned: "Pickup Assigned",
+  return_pickup_verified: "Pickup Verified",
+  return_in_transit: "In Transit",
+  return_drop_pending: "In Transit",
+  returned: "Return Delivered to Seller",
+  qc_passed: "Return QC Passed",
+  qc_failed: "Return QC Failed",
+  refund_initiated: "Refund Initiated",
+  refund_completed: "Returned & Refunded",
+};
+
+export function getReturnStatusLabel(returnStatus) {
+  if (!returnStatus || returnStatus === "none") return null;
+  return (
+    RETURN_STATUS_LABELS[returnStatus] ||
+    returnStatus.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+  );
+}
+
 export function getOrderStatusLabel(order) {
-  const rs = order?.returnStatus;
-  if (rs && rs !== "none") {
-    switch (rs) {
-      case "return_requested": return "Return Requested";
-      case "return_approved": return "Return Approved";
-      case "return_pickup_assigned": return "Pickup Assigned";
-      case "return_pickup_verified": return "Pickup Verified";
-      case "returned": return "Return Delivered to Seller";
-      case "qc_passed": return "Return QC Passed";
-      case "qc_failed": return "Return QC Failed";
-      case "refund_completed": return "Returned & Refunded";
-      default: return rs.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-    }
+  if (order?.displayStatus?.label) {
+    return order.displayStatus.label;
   }
+
+  const returnLabel = getReturnStatusLabel(order?.returnStatus);
+  if (returnLabel) return returnLabel;
 
   const bucket = getLegacyStatusFromOrder(order);
   return DISPLAY_LABELS[bucket] || bucket.replace(/_/g, " ");
+}
+
+// Centralized color/badge variant mapping — replaces the four independent
+// copies previously found in seller Orders.jsx, admin OrdersList.jsx,
+// admin OrderDetail.jsx, and admin SellerDetail.jsx. Variant names match
+// what this codebase's Badge components already expect
+// (success/warning/error/info/primary/secondary).
+export function getStatusVariant(legacyStatus) {
+  const s = String(legacyStatus || "").toLowerCase();
+  switch (s) {
+    case "pending": return "warning";
+    case "confirmed": return "info";
+    case "packed": return "primary";
+    case "ready_for_pickup": return "primary";
+    case "out_for_delivery": return "secondary";
+    case "delivered": return "success";
+    case "cancelled": return "error";
+    case "disputed": return "error";
+    case "preorder_confirmed": return "info";
+    default: return "secondary";
+  }
+}
+
+// Mirrors the 0-6 tracker position previously locked inside customer's
+// OrderProgressTracker.jsx (WORKFLOW_STAGE_INDEX/legacyStageIndex) and
+// backend/app/services/orderStatusResolver.js's identical table — moved
+// here so every module (including delivery, which had no tracker concept
+// at all) can share one step index instead of guessing independently.
+const WORKFLOW_STAGE_INDEX = {
+  CREATED: 0,
+  PREORDER_HOLD: 0,
+  SELLER_PENDING: 1,
+  SELLER_ACCEPTED: 2,
+  SCHEDULED_HOLD: 2,
+  AWAITING_EXTRA_PAYMENT: 2,
+  DELIVERY_SEARCH: 2,
+  EXTERNAL_LOGISTICS_PENDING: 2,
+  DELIVERY_ASSIGNED: 3,
+  PICKUP_READY: 4,
+  CUSTOMER_PICKUP_READY: 4,
+  OUT_FOR_DELIVERY: 5,
+  DELIVERED: 6,
+  DISPUTED: 5,
+};
+
+function legacyStageIndex(order, legacyStatus) {
+  if (legacyStatus === "delivered") return 6;
+  if (legacyStatus === "out_for_delivery") return 5;
+  if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
+  if (order?.deliveryBoy || order?.assignedAt) return 3;
+  if (legacyStatus === "confirmed") return 2;
+  if (legacyStatus === "pending") return 1;
+  return 0;
+}
+
+export function getOrderTrackerStep(order) {
+  if (typeof order?.displayStatus?.step === "number") {
+    return order.displayStatus.step;
+  }
+
+  const legacyStatus = getLegacyStatusFromOrder(order);
+  const workflowVersion = Number(order?.workflowVersion) || 0;
+  const workflowStatus = String(order?.workflowStatus || "").toUpperCase();
+  if (workflowVersion >= 2 && workflowStatus in WORKFLOW_STAGE_INDEX) {
+    return WORKFLOW_STAGE_INDEX[workflowStatus];
+  }
+  return legacyStageIndex(order, legacyStatus);
 }
 
 export function adminRouteMatchesOrder(routeStatus, order) {
@@ -386,7 +489,10 @@ export function adminRouteMatchesOrder(routeStatus, order) {
   if (routeStatus === "processed") {
     return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
   }
-  if (routeStatus === "scheduled") return legacy === "scheduled";
+  // "scheduled" was never a legal legacy-status value (see legacyFromWorkflow
+  // above) — isScheduledHoldOrder reads workflowStatus directly instead of
+  // relying on a bucket string that could never actually equal "scheduled".
+  if (routeStatus === "scheduled") return isScheduledHoldOrder(order);
   if (routeStatus === "out-for-delivery") return legacy === "out_for_delivery";
   if (routeStatus === "delivered") return legacy === "delivered";
   if (routeStatus === "cancelled") return legacy === "cancelled";
