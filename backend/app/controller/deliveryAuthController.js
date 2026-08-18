@@ -43,9 +43,9 @@ export const signupDelivery = async (req, res) => {
         let dlUrl = delivery?.documents?.drivingLicense || "";
         let profileImageUrl = delivery?.profileImage || "";
 
-        // Handle File Uploads via Multer
+        // Handle File Uploads via Multer concurrently
         if (req.files && Array.isArray(req.files)) {
-            for (const file of req.files) {
+            const uploadPromises = req.files.map(async (file) => {
                 if (file.fieldname === "profileImage") {
                     profileImageUrl = await uploadToCloudinary(file.buffer, "delivery/profiles");
                 } else if (file.fieldname === "aadhar") {
@@ -55,7 +55,8 @@ export const signupDelivery = async (req, res) => {
                 } else if (file.fieldname === "dl") {
                     dlUrl = await uploadToCloudinary(file.buffer, "delivery/documents");
                 }
-            }
+            });
+            await Promise.all(uploadPromises);
         }
 
         const normalizedAadhar = String(req.body?.aadharUrl || req.body?.aadhar || "").trim();
