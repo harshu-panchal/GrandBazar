@@ -30,7 +30,7 @@ const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClo
                 )}
             </div>
 
-            <div className="flex-1 md:max-h-[400px] overflow-y-auto custom-scrollbar">
+            <div className="flex-1 md:max-h-[400px] overflow-y-auto custom-scrollbar" data-lenis-prevent>
                 {notifications.length > 0 ? (
                     <div className="divide-y divide-gray-50">
                         {notifications.map((notif) => {

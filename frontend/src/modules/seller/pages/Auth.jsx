@@ -547,7 +547,7 @@ const Auth = () => {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative z-10 w-full max-w-[1000px] min-h-[100dvh] md:min-h-[600px] md:max-h-[90vh] bg-white rounded-none md:rounded-lg shadow-none md:shadow-[0_50px_120px_rgba(0,0,0,0.04)] border-0 md:border md:border-white flex flex-col md:flex-row overflow-hidden">
+        className="relative z-10 w-full max-w-[1000px] min-h-[100dvh] md:min-h-[600px] md:max-h-[90vh] bg-white rounded-none md:rounded-lg shadow-none md:shadow-[0_50px_120px_rgba(0,0,0,0.04)] border-0 md:border md:border-white flex flex-col md:flex-row md:overflow-hidden">
         {/* Visual Side Panel */}
         <div className="hidden md:flex w-[45%] bg-linear-to-br from-slate-900 via-slate-950 to-black relative flex-col items-center justify-center p-10 overflow-hidden">
           {/* Abstract Decorative Circles */}
@@ -626,7 +626,7 @@ const Auth = () => {
 
         {/* Form Content Side */}
         <div
-          className="w-full md:w-[55%] min-h-0 flex-1 p-5 pb-10 sm:p-8 md:p-12 md:pt-16 flex flex-col justify-start md:justify-center bg-white overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar relative"
+          className="w-full md:w-[55%] min-h-0 flex-1 p-5 pb-10 sm:p-8 md:p-12 md:pt-16 flex flex-col justify-start md:justify-center bg-white md:overflow-y-auto overscroll-contain touch-pan-y md:custom-scrollbar relative"
           onWheelCapture={handlePanelWheel}
           style={{ WebkitOverflowScrolling: "touch" }}>
           {/* Desktop logo */}

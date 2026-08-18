@@ -11,7 +11,7 @@ const BecomeSellerButton = ({ className = "", fullWidth = false }) => {
       type="button"
       onClick={() => navigate("/seller/auth")}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-bold text-white",
+        "relative z-10 inline-flex items-center justify-center gap-2 rounded-xl font-bold text-white cursor-pointer",
         "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500",
         "shadow-md shadow-violet-500/30 hover:shadow-lg hover:shadow-violet-500/40 hover:brightness-105",
         "active:scale-[0.98] transition-all",

@@ -225,8 +225,8 @@ const AdminAuth = () => {
                     : 'Start managing your platform today';
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#f3f6ff] p-6 font-['Outfit',_sans-serif]">
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="flex flex-col min-h-screen items-center justify-center bg-[#f3f6ff] p-6 font-['Outfit',_sans-serif] relative">
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-brand-50 opacity-40 rounded-full blur-[120px]"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-white opacity-60 rounded-full blur-[100px]"></div>
             </div>
@@ -236,7 +236,7 @@ const AdminAuth = () => {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, type: "spring", bounce: 0.3 }}
-                className="relative w-full max-w-[1050px] min-h-[650px] bg-white rounded-[50px] shadow-[0_40px_120px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col md:flex-row border border-white"
+                className="relative z-10 w-full max-w-[1050px] min-h-[650px] bg-white rounded-[50px] shadow-[0_40px_120px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col md:flex-row border border-white"
             >
                 <div className="w-full md:w-[45%] p-12 md:p-20 flex flex-col justify-center relative z-10 bg-white">
                     <AnimatePresence mode="wait">
@@ -552,7 +552,7 @@ const AdminAuth = () => {
                 </div>
             </motion.div>
 
-            <div className="absolute bottom-8 text-gray-400 font-bold text-[10px] tracking-[5px] uppercase flex items-center gap-3">
+            <div className="mt-8 text-gray-400 font-bold text-[10px] tracking-[5px] uppercase flex items-center gap-3 relative z-10">
                 <div className="w-8 h-[1px] bg-gray-200"></div>
                 {`Protected by ${appName} Security`}
                 <div className="w-8 h-[1px] bg-gray-200"></div>

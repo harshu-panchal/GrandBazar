@@ -374,13 +374,7 @@ const LocationDrawer = ({ isOpen, onClose }) => {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={needsLocationSetup}
-                  className="h-10 w-10 bg-black/5 hover:bg-black/10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 disabled:pointer-events-none">
-                  <X size={20} className="text-[#1A1A1A]" />
-                </button>
+
               </div>
 
               {/* Search Bar */}
