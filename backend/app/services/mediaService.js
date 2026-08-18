@@ -4,8 +4,8 @@ import MediaMetadata from "../models/mediaMetadata.js";
 import logger from "./logger.js";
 
 function getMaxUploadBytes() {
-  const raw = parseInt(process.env.MEDIA_MAX_FILE_SIZE || "10485760", 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : 10485760;
+  const raw = parseInt(process.env.MEDIA_MAX_FILE_SIZE || "26214400", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 26214400;
 }
 
 function getSignedUrlExpirySeconds() {
