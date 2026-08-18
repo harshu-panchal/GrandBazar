@@ -17,6 +17,15 @@ async function resolveSellerStoreRecord(req) {
     .map((value) => String(value || "").trim())
     .filter(Boolean);
 
+  // resolveActiveStore (runs earlier in the seller middleware chain) may
+  // have already fetched this exact store — when it did, it stashed the
+  // full lean doc on req._resolvedStoreDoc. Reusing it here avoids a
+  // second Store.findById for the same document on the same request.
+  const cached = req._resolvedStoreDoc;
+  if (cached && candidateIds.includes(String(cached._id))) {
+    return { store: cached, storeId: String(cached._id) };
+  }
+
   for (const storeId of candidateIds) {
     const store = await Store.findById(storeId)
       .select("isVerified isActive applicationStatus rejectionReason shopName ownerId")
@@ -185,6 +194,10 @@ export const resolveActiveStore = async (req, res, next) => {
       return next();
     }
 
+    // requireApprovedSeller (runs immediately after this in the seller
+    // chain) would otherwise re-fetch this exact document — stash it so it
+    // can reuse this fetch instead of querying again.
+    req._resolvedStoreDoc = store;
     applyResolvedStoreContext(req, store._id);
     next();
   } catch (error) {
@@ -244,6 +257,24 @@ export const requireStoreOwner = (req, res, next) => {
   next();
 };
 
+// requireBusinessModelChosen and requireSellerOperational are always used
+// back-to-back in every route chain that uses either (verified across
+// orderRoutes.js/productRoutes.js/catalogRoutes.js/sellerAuth.js) and both
+// independently fetched the same Seller document with overlapping
+// projections. Stashing it on req after the first fetch lets the second
+// middleware reuse it instead of querying again.
+async function getSellerBusinessModelDoc(req, ownerId) {
+  if (req._sellerBusinessModelDoc && req._sellerBusinessModelDoc._ownerId === ownerId) {
+    return req._sellerBusinessModelDoc;
+  }
+  const seller = await Seller.findById(ownerId)
+    .select("businessModel businessModelChosenAt")
+    .lean();
+  const doc = seller ? { ...seller, _ownerId: ownerId } : null;
+  req._sellerBusinessModelDoc = doc;
+  return doc;
+}
+
 export const requireBusinessModelChosen = async (req, res, next) => {
   try {
     if (req.user?.role !== "seller") {
@@ -259,9 +290,7 @@ export const requireBusinessModelChosen = async (req, res, next) => {
       return next();
     }
 
-    const seller = await Seller.findById(ownerId)
-      .select("businessModel businessModelChosenAt")
-      .lean();
+    const seller = await getSellerBusinessModelDoc(req, ownerId);
 
     if (!seller?.businessModel) {
       return handleResponse(res, 403, "Please choose a business model before continuing.", {
@@ -286,7 +315,7 @@ export const requireSellerOperational = async (req, res, next) => {
       return next();
     }
 
-    const seller = await Seller.findById(ownerId).select("businessModel").lean();
+    const seller = await getSellerBusinessModelDoc(req, ownerId);
     if (!seller?.businessModel) {
       return next();
     }

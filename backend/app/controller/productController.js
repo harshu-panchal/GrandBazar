@@ -806,27 +806,36 @@ export const createProduct = async (req, res) => {
       return handleResponse(res, limitError.statusCode || 403, limitError.message);
     }
 
-    // Handle multipart files (mainImage and galleryImages)
+    // Handle multipart files (mainImage and galleryImages) — uploads are
+    // independent external Cloudinary calls with no ordering dependency
+    // between them (unlike the stock-reservation DB writes elsewhere in
+    // this pass), so unlike that case Promise.all is safe here. Each
+    // upload still independently catches/logs its own failure exactly as
+    // before; Promise.all preserves input order in its results array, so
+    // multiple galleryImages files still land in the same order.
     const files = req.files || [];
     if (files.length > 0) {
       const galleryUrls = [];
-      for (const file of files) {
-        try {
-          if (file.fieldname === "mainImage") {
+      const uploadResults = await Promise.all(
+        files.map(async (file) => {
+          try {
             const url = await uploadToCloudinary(file.buffer, "products", {
               mimeType: file.mimetype,
               resourceType: "image",
             });
-            productData.mainImage = url;
-          } else if (file.fieldname === "galleryImages") {
-            const url = await uploadToCloudinary(file.buffer, "products", {
-              mimeType: file.mimetype,
-              resourceType: "image",
-            });
-            galleryUrls.push(url);
+            return { fieldname: file.fieldname, url };
+          } catch (err) {
+            console.error("Cloudinary upload failed:", err);
+            return null;
           }
-        } catch (err) {
-          console.error("Cloudinary upload failed:", err);
+        }),
+      );
+      for (const result of uploadResults) {
+        if (!result) continue;
+        if (result.fieldname === "mainImage") {
+          productData.mainImage = result.url;
+        } else if (result.fieldname === "galleryImages") {
+          galleryUrls.push(result.url);
         }
       }
       if (galleryUrls.length > 0) {
@@ -1004,27 +1013,32 @@ export const updateProduct = async (req, res) => {
       delete productData.sellerId;
     }
 
-    // Handle multipart files (mainImage and galleryImages)
+    // Handle multipart files (mainImage and galleryImages) — see createProduct
+    // above for why Promise.all is safe here (independent external uploads,
+    // no shared-session/ordering dependency).
     const files = req.files || [];
     if (files.length > 0) {
       const galleryUrls = [];
-      for (const file of files) {
-        try {
-          if (file.fieldname === "mainImage") {
+      const uploadResults = await Promise.all(
+        files.map(async (file) => {
+          try {
             const url = await uploadToCloudinary(file.buffer, "products", {
               mimeType: file.mimetype,
               resourceType: "image",
             });
-            productData.mainImage = url;
-          } else if (file.fieldname === "galleryImages") {
-            const url = await uploadToCloudinary(file.buffer, "products", {
-              mimeType: file.mimetype,
-              resourceType: "image",
-            });
-            galleryUrls.push(url);
+            return { fieldname: file.fieldname, url };
+          } catch (err) {
+            console.error("Cloudinary upload failed during update:", err);
+            return null;
           }
-        } catch (err) {
-          console.error("Cloudinary upload failed during update:", err);
+        }),
+      );
+      for (const result of uploadResults) {
+        if (!result) continue;
+        if (result.fieldname === "mainImage") {
+          productData.mainImage = result.url;
+        } else if (result.fieldname === "galleryImages") {
+          galleryUrls.push(result.url);
         }
       }
       if (galleryUrls.length > 0) {

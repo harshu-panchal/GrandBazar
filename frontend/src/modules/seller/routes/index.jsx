@@ -2,7 +2,6 @@ import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import { StoreProvider } from "../context/StoreContext";
-import Orders from "../pages/Orders";
 import { useAuth } from "@core/context/AuthContext";
 import { hasSellerModuleAccess } from "../constants/sellerPermissions";
 import {
@@ -25,6 +24,7 @@ import {
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
+const Orders = React.lazy(() => import("../pages/Orders"));
 const ProductManagement = React.lazy(
   () => import("../pages/ProductManagement"),
 );

@@ -61,7 +61,6 @@ const LiveTrackingMap = memo(({
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
   const isSearching = SEARCHING_STATUSES.includes(status?.toLowerCase());
-  const [progress, setProgress] = useState(0);
   const [dots, setDots] = useState("");
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -203,13 +202,6 @@ const LiveTrackingMap = memo(({
 
     return () => clearInterval(intervalId);
   }, [isLoaded, riderLocation?.lat, riderLocation?.lng, focusOnRider500m]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress((prev) => (prev + 0.5) % 100);
-    }, 100);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (!isSearching) return;

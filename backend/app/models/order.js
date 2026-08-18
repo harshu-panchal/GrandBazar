@@ -812,6 +812,16 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ status: 1, seller: 1, deliveryBoy: 1, createdAt: -1 });
+// backend/app/services/databaseIndexManager.js separately (and already,
+// per its startup.js wiring) creates {seller:1,status:1,createdAt:-1} and
+// {seller:1,workflowStatus:1,createdAt:-1} — good for the seller's
+// status-filtered tabs, but neither can serve a sorted, unfiltered
+// {seller}-only query (the seller's default "All Orders" view, and
+// sellerStatsController's {seller, status:{$ne:"cancelled"}} dashboard
+// $match) without an in-memory sort, since status/workflowStatus sits
+// between seller and createdAt in the index key order. This one fills
+// that specific gap.
+orderSchema.index({ seller: 1, createdAt: -1 });
 orderSchema.index({ customer: 1, status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, expiresAt: 1 });
 orderSchema.index({ seller: 1, returnStatus: 1, returnRequestedAt: -1 });

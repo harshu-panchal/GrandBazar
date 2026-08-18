@@ -35,8 +35,26 @@ export const recordLogin = async (user, userModel, ipAddress, userAgent) => {
   }
 };
 
+// Was firing an unawaited write on literally every authenticated request
+// (called from authMiddleware.js's verifyToken, i.e. every request, every
+// role, app-wide). "Last active" only needs minute-level freshness, so
+// throttle actual DB writes per user — in-memory, per-process, so worst
+// case under multiple instances is a slightly-more-frequent write, never a
+// correctness issue. Map stays small (userId string -> timestamp number
+// per active user), acceptable to leave unpruned for a process's lifetime.
+const LAST_ACTIVE_THROTTLE_MS = 3 * 60 * 1000;
+const lastActiveWriteCache = new Map();
+
 export const updateLastActive = async (userId) => {
   try {
+    const key = String(userId);
+    const now = Date.now();
+    const lastWrite = lastActiveWriteCache.get(key);
+    if (lastWrite && now - lastWrite < LAST_ACTIVE_THROTTLE_MS) {
+      return;
+    }
+    lastActiveWriteCache.set(key, now);
+
     await LoginActivity.updateOne(
       { userId, status: "active" },
       { $set: { lastActiveAt: new Date() } }

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
-import BgImage from '@/assets/image.png';
+import BgImage from '@/assets/image.jpg';
 
 const CATEGORIES = [
     {

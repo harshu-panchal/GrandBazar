@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
-import SellerOrdersContext from '@/modules/seller/context/SellerOrdersContext';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
 import { getOrderSocket, onSellerOrderNew, onReturnDropOtp } from '@/core/services/orderSocket';
 import orderAlertSound from '@/assets/sounds/order_alert.mp3';
@@ -119,9 +118,6 @@ const DashboardLayout = ({ children, navItems, title }) => {
         return (user.stores || []).some(isApprovedStore);
     }, [role, user]);
 
-    // Shared data for seller – single source, avoids duplicate API calls
-    const [sellerOrders, setSellerOrders] = useState([]);
-    const [ordersLoading, setOrdersLoading] = useState(false);
     const [sellerEarningsData, setSellerEarningsData] = useState(defaultEarnings);
     const [earningsLoading, setEarningsLoading] = useState(false);
 
@@ -214,11 +210,8 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
     useEffect(() => {
         if (role !== 'seller' || !canPollSellerOrders) {
-            setSellerOrders([]);
-            setOrdersLoading(false);
             return;
         }
-        setOrdersLoading(true);
 
         const fetchOrders = async () => {
             if (isOrdersFetchInFlightRef.current) return;
@@ -232,7 +225,6 @@ const DashboardLayout = ({ children, navItems, title }) => {
                     ? payload.items
                     : (res.data.results || []);
                 const allOrders = Array.isArray(rawOrders) ? rawOrders : [];
-                setSellerOrders(allOrders);
 
                 const pendingOrders = allOrders.filter(isSellerAlertEligible);
 
@@ -266,7 +258,6 @@ const DashboardLayout = ({ children, navItems, title }) => {
                 console.error("Polling Error:", error);
             } finally {
                 isOrdersFetchInFlightRef.current = false;
-                setOrdersLoading(false);
             }
         };
 
@@ -369,9 +360,6 @@ const DashboardLayout = ({ children, navItems, title }) => {
             .finally(() => setEarningsLoading(false));
     }, [role, location.pathname]);
 
-    const refreshOrders = () => {
-        if (fetchOrdersRef.current) fetchOrdersRef.current();
-    };
     const refreshEarnings = () => {
         earningsFetchedRef.current = false;
         setEarningsLoading(true);
@@ -488,21 +476,14 @@ const DashboardLayout = ({ children, navItems, title }) => {
                 <Topbar onMenuClick={() => setIsSidebarOpen(true)} />
                 <main className={cn("p-4 md:p-6 min-h-screen", (role === "admin" || role === "seller") ? "pt-20 md:pt-6 pb-24 md:pb-6" : "pt-20")}>
                     <div className="w-full pb-12">
-                        <SellerOrdersContext.Provider
+                        <SellerEarningsContext.Provider
                             value={{
-                                orders: role === 'seller' ? sellerOrders : [],
-                                ordersLoading: role === 'seller' ? ordersLoading : false,
-                                refreshOrders,
+                                earningsData: role === 'seller' ? sellerEarningsData : defaultEarnings,
+                                earningsLoading: role === 'seller' ? earningsLoading : false,
+                                refreshEarnings,
                             }}>
-                            <SellerEarningsContext.Provider
-                                value={{
-                                    earningsData: role === 'seller' ? sellerEarningsData : defaultEarnings,
-                                    earningsLoading: role === 'seller' ? earningsLoading : false,
-                                    refreshEarnings,
-                                }}>
-                                {children}
-                            </SellerEarningsContext.Provider>
-                        </SellerOrdersContext.Provider>
+                            {children}
+                        </SellerEarningsContext.Provider>
                     </div>
                 </main>
             </div>

@@ -77,6 +77,10 @@ export async function getAdminDashboardStats() {
   ]);
 
   const topProducts = await Order.aggregate([
+    // Was scanning and unwinding every item of every order ever placed with
+    // no bound at all — reuse the same 30-day window historyAggregation
+    // above already uses, rather than the full collection history.
+    { $match: { createdAt: { $gte: thirtyDaysAgo } } },
     { $unwind: "$items" },
     {
       $group: {

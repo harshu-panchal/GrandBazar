@@ -32,6 +32,16 @@ export async function reserveStockForItems({
 }) {
   const stockType = String(paymentMode || "").toUpperCase() === "ONLINE" ? "Reservation" : "Sale";
   const lowStockAlerts = [];
+  // Stock decrements below MUST stay sequential — they share one
+  // transaction session (a MongoDB ClientSession can't run concurrent
+  // operations) and each $gte-guarded decrement needs to see the effect of
+  // any prior decrement in this same order (e.g. the same product
+  // appearing across two line items). StockHistory audit rows have no such
+  // dependency, so they're collected here and written in a single
+  // insertMany after the loop instead of one create() per item —
+  // roughly halves the round-trips for a multi-item cart without touching
+  // the correctness-critical decrement ordering.
+  const stockHistoryRows = [];
 
   for (const item of items) {
     const variantSku = String(item.variantSku || "").trim();
@@ -78,18 +88,13 @@ export async function reserveStockForItems({
       throw err;
     }
 
-    await StockHistory.create(
-      [
-        {
-          product: item.productId,
-          seller: sellerId,
-          type: stockType,
-          quantity: -item.quantity,
-          note: `Order #${orderId} ${stockType.toLowerCase()}${variantSku ? ` [variant: ${variantSku}]` : ""}`,
-        },
-      ],
-      { session },
-    );
+    stockHistoryRows.push({
+      product: item.productId,
+      seller: sellerId,
+      type: stockType,
+      quantity: -item.quantity,
+      note: `Order #${orderId} ${stockType.toLowerCase()}${variantSku ? ` [variant: ${variantSku}]` : ""}`,
+    });
 
     const previousStock = Number(updated.stock || 0) + Number(item.quantity || 0);
     let previousVariantStock = null;
@@ -119,6 +124,10 @@ export async function reserveStockForItems({
     if (alertCandidate) {
       lowStockAlerts.push(alertCandidate);
     }
+  }
+
+  if (stockHistoryRows.length > 0) {
+    await StockHistory.insertMany(stockHistoryRows, { session, ordered: true });
   }
 
   return lowStockAlerts;

@@ -83,6 +83,31 @@ export default defineConfig({
           if (id.includes('framer-motion')) return 'vendor-motion'
           if (id.includes('firebase')) return 'vendor-firebase'
           if (id.includes('recharts')) return 'vendor-charts'
+
+          // Previously everything below fell into the shared default chunk
+          // (confirmed via a bundle audit: only the 4 groups above were
+          // split out, leaving react-router/axios/date-fns/socket.io/maps/
+          // lottie/tesseract/confetti/radix all bundled into one ~1.38MB
+          // chunk). None of these are needed on every page, so isolating
+          // them lets the browser cache each independently and lets pages
+          // that don't use e.g. Google Maps or OCR skip downloading them.
+          if (id.includes('react-router-dom')) return 'vendor-router'
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+          if (id.includes('@react-google-maps/api') || id.includes('/@googlemaps/')) {
+            return 'vendor-maps'
+          }
+          if (id.includes('tesseract.js')) return 'vendor-tesseract'
+          if (id.includes('lottie-react') || id.includes('lottie-web')) return 'vendor-lottie'
+          if (id.includes('canvas-confetti')) return 'vendor-confetti'
+          if (id.includes('socket.io-client') || id.includes('engine.io-client')) return 'vendor-socket'
+          if (id.includes('@radix-ui')) return 'vendor-radix'
+          if (id.includes('date-fns') || id.includes('react-day-picker')) return 'vendor-dates'
         },
       },
     },

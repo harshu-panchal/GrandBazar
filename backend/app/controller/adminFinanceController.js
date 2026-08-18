@@ -7,6 +7,7 @@ import BulkSettlement from "../models/bulkSettlement.js";
 import Refund from "../models/refund.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
+import { buildKey, getOrSet, getTTL } from "../services/cacheService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
 import { bulkProcessPayouts } from "../services/finance/payoutService.js";
 import { exportFinanceStatement } from "../services/finance/statementService.js";
@@ -48,7 +49,14 @@ function validateWithJoi(schema, payload) {
 
 export const getAdminFinanceSummaryController = async (req, res) => {
   try {
-    const summary = await getAdminFinanceSummary();
+    // 6 parallel Order/Payout aggregations, all unbounded full-collection
+    // scans, previously recomputed from scratch on every load — same
+    // rationale as the admin dashboard stats cache.
+    const summary = await getOrSet(
+      buildKey("admin", "financeSummary"),
+      () => getAdminFinanceSummary(),
+      getTTL("dashboard"),
+    );
     return handleResponse(res, 200, "Admin finance summary fetched", summary);
   } catch (error) {
     return handleResponse(res, 500, error.message);
