@@ -787,8 +787,8 @@ export const createProduct = async (req, res) => {
     stripRestrictedModerationFields(productData);
 
     if (role === "admin") {
-      if (!productData.sellerId) {
-        return handleResponse(res, 400, "sellerId is required for admin-created products");
+      if (!productData.sellerId || productData.sellerId === "undefined" || productData.sellerId === "null" || productData.sellerId === "") {
+        delete productData.sellerId;
       }
     } else {
       productData.sellerId = req.user.id;

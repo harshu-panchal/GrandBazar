@@ -1,0 +1,233 @@
+﻿D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:113:     const sellerIds = rawItems
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:121:       Store.find({ _id: { $in: sellerIds } })
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:161:     const { status, sellerId, orderId, from, to, page = 1, limit = 25 } = req.query;
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:163:     const query = buildBulkSettlementQuery({ status, sellerId, orderId, from, to });
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:174:         .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:200:     const sellerId = req.user?.id;
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:203:     const query = buildBulkSettlementQuery({ status, sellerId, orderId, from, to });
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:234: const buildBulkSettlementQuery = ({ status, sellerId, orderId, from, to }) => {
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:237:   if (sellerId) query.sellerId = sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:655:     const sellerId = req.user?.id;
+D:\AppZeto\GrandBazar\backend\app\controller\adminFinanceController.js:656:     const wallet = await Wallet.findOne({ ownerType: "SELLER", ownerId: sellerId }).lean();
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:14:   "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:35:     .select("_id name sellerId price salePrice stock variants")
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:39: function toSellerIdString(value) {
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:48: async function keepOnlySellerItems(cart, sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:49:   if (!cart?.items?.length || !sellerId) return { removed: 0 };
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:52:     .select("_id sellerId")
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:55:     products.map((product) => [String(product._id), toSellerIdString(product.sellerId)]),
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:59:     const lineSellerId = sellerByProductId.get(String(item.productId));
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:60:     return lineSellerId && lineSellerId === String(sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:188:     const incomingSellerId = toSellerIdString(customerVisibleProduct.sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:189:     if (!incomingSellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:193:     const store = await Store.findById(incomingSellerId)
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:212:     const { removed } = await keepOnlySellerItems(cart, incomingSellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:224:       cart.items[itemIndex].sellerId = incomingSellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\cartController.js:232:         sellerId: incomingSellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\catalogBundleController.js:99:     const accountId = req.user.accountId || req.user.subSellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:242:         sellerId: req.user.id,
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:485:     const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:498:     const alreadyClaimed = await Product.findOne({ catalogProductId, sellerId });
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:551:     let distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}`;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:555:       distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}-${slugCounter}`;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:593:       sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:651:     const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:669:       const alreadyClaimed = await Product.findOne({ catalogProductId, sellerId });
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:682:       let distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}`;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:686:         distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}-${slugCounter}`;
+D:\AppZeto\GrandBazar\backend\app\controller\catalogController.js:703:         sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:18:     const { status, search, sellerIds } = req.query;
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:33:     const requestedSellerIds = toObjectIds(
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:34:       String(sellerIds || "")
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:41:     if (requestedSellerIds.length > 0) {
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:46:             { sellerId: null },
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:47:             { sellerId: { $exists: false } },
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:49:             { sellerId: { $in: requestedSellerIds } },
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:65:       .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\couponController.js:84:     if (data.sponsor === "admin") data.sellerId = null;
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:20:     const { sellerId, lat, lng, fulfillmentType } = req.query;
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:21:     if (!sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:22:       return handleResponse(res, 400, "sellerId is required");
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:24:     const store = await loadStoreForDeliveryPolicy(sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:261:     const sellerId = req.user?.id;
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:262:     const result = await markOrderReadyForCustomerPickup(sellerId, orderId);
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:308:     const sellerId = req.user?.id;
+D:\AppZeto\GrandBazar\backend\app\controller\deliveryPolicyController.js:309:     const result = await resendPickupOtpBySeller(sellerId, orderId);
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:204:     const validItems = items.filter((a) => a && a.sellerId && a.imageUrl);
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:209:     const sellerIds = [...new Set(validItems.map((a) => String(a.sellerId)))];
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:213:       Store.find({ _id: { $in: sellerIds } }).select("_id"),
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:216:     const validSellerIds = new Set(sellers.map((s) => String(s._id)));
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:220:       .filter((a) => validSellerIds.has(String(a.sellerId)))
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:226:         sellerId: a.sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:236:       throw new Error("Provided sellerId(s) are invalid");
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:244:     const sellerIds = Array.isArray(config.sellerIds) ? config.sellerIds.filter(Boolean) : [];
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:245:     if (!sellerIds.length) {
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:246:       throw new Error("At least one sellerId is required");
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:249:     const sellers = await Store.find({ _id: { $in: sellerIds } }).select("_id");
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:251:       throw new Error("Provided sellerIds are invalid");
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:254:     normalized.sellerHighlights = { sellerIds: sellers.map((s) => s._id) };
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:450:           .populate("config.superAds.items.sellerId", "shopName slug")
+D:\AppZeto\GrandBazar\backend\app\controller\experienceController.js:461:           .populate("config.sellerHighlights.sellerIds", "shopName slug avgRating category")
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:5:   getNearbySellerIdsForCustomer,
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:31:         const nearbySellerIds = await getNearbySellerIdsForCustomer(
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:35:         const nearbySellerSet = new Set(nearbySellerIds.map(String));
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:41:           .populate("sellerIds", "shopName name logo")
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:44:             select: "name slug price salePrice mainImage stock unit sellerId status approvalStatus",
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:55:           const sellerIds = Array.isArray(section.sellerIds)
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:56:             ? section.sellerIds.filter((seller) => {
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:64:                 const sid = String(product?.sellerId?._id || product?.sellerId || "");
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:71:             sellerIds,
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:95:       .populate("sellerIds", "shopName name")
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:111:       sellerIds = [],
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:131:       sellerIds: Array.isArray(sellerIds) ? sellerIds.filter(Boolean) : [],
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:157:     if (Array.isArray(payload.sellerIds))
+D:\AppZeto\GrandBazar\backend\app\controller\offerSectionController.js:158:       section.sellerIds = payload.sellerIds.filter(Boolean);
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:114: async function deriveDistanceKm({ sellerId, addressLocation }) {
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:120:     !sellerId
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:125:   const seller = await Store.findById(sellerId).select("location").lean();
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:520:     const sellerIdStr =
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:532:     const isOwnerSeller = role === "seller" && sellerIdStr === uid;
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:665:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:900:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1135:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1153:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1175:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1184:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1191:           sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1201:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1224:     const { id: sellerId, role } = req.user;
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1245:         const updated = await sellerUpdateStatusAtomic(sellerId, orderId, targetStatus, { cancelReason });
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1338:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1392:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1457:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1620:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1663:         sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1781:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:1914:     sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:2066:     sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderController.js:2318:       sellerId: order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderFinanceController.js:66:       sellerId: entry.sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\orderFinanceController.js:73:           sellerId: item.sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:102:     const { sellerId, deliveryDate, campaignId } = req.query;
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:104:     const store = await Store.findById(sellerId).lean();
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:142:           sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:245:       sellerId: isSeller ? req.user.id : null,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:268:       sellerId: isSeller ? req.user.id : null,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:308:       actorRole: req.user?.role === "admin" ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:341:       actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:343:       sellerId: isAdmin ? null : req.user?.id,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:359:       actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:361:       sellerId: isAdmin ? null : req.user?.id,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:464:       sellerId: req.query?.sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\orderLifecycleController.js:600:       sellerId: updated.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\orderWorkflowController.js:394:     const sellerId = order.seller?._id?.toString() || order.seller?.toString();
+D:\AppZeto\GrandBazar\backend\app\controller\orderWorkflowController.js:398:       if (sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\orderWorkflowController.js:399:         emitToSeller(sellerId, {
+D:\AppZeto\GrandBazar\backend\app\controller\orderWorkflowController.js:476:         sellerId: order.seller?._id || order.seller,
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:8:   getNearbySellerIdsForCustomer,
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:85: function parseSellerIdFilters({ sellerId, sellerIds }) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:86:   if (typeof sellerIds === "string" && sellerIds.trim()) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:87:     return sellerIds
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:94:   if (sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:95:     return [String(sellerId)];
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:254:       sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:260:       sellerIds,
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:307:     const requestedSellerIds = parseSellerIdFilters({ sellerId, sellerIds });
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:323:       const nearbySellerIds = nearbySellers.map((entry) => entry.id);
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:328:       if (!nearbySellerIds.length) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:338:       const nearbySet = new Set(nearbySellerIds.map(String));
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:339:       const finalSellerIds = requestedSellerIds.length
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:340:         ? requestedSellerIds.filter((id) => nearbySet.has(String(id)))
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:341:         : nearbySellerIds;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:343:       if (!finalSellerIds.length) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:353:       query.sellerId = { $in: finalSellerIds };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:363:     // Multiple sellers: sellerIds=id1,id2 (or single sellerId)
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:364:     if (!query.sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:365:       if (sellerIds && typeof sellerIds === "string") {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:366:         const ids = sellerIds
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:370:         if (ids.length) query.sellerId = { $in: ids };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:371:       } else if (sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:372:         query.sellerId = sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:414:     const defaultSort = sellerId ? "display-asc" : "newest";
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:421:             "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:433:       const sellerIdSet = new Set();
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:438:         if (p.sellerId) sellerIdSet.add(String(p.sellerId));
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:447:           [...sellerIdSet].map(async (id) => [id, await resolveSellerName(id)]),
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:456:         const sellerKey = p.sellerId ? String(p.sellerId) : "";
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:469:           sellerId: p.sellerId
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:470:             ? { _id: p.sellerId, shopName: nameMap[String(p.sellerId)] ?? null }
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:545:   "name slug price salePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:566:       const nearbySellerIds = await getNearbySellerIdsForCustomer(coords.lat, coords.lng);
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:567:       if (!nearbySellerIds.length) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:570:       sellerFilter = { $in: nearbySellerIds };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:578:       ...(sellerFilter ? { sellerId: sellerFilter } : {}),
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:589:         .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:607:         .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:624:     const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:631:     const baseSellerQuery = { sellerId };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:679:           "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:684:         .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:790:       if (!productData.sellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:791:         return handleResponse(res, 400, "sellerId is required for admin-created products");
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:794:       productData.sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:804:       await assertCanCreateFreeTierProduct(productData.sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1008:     const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1012:     if (Object.prototype.hasOwnProperty.call(productData, "sellerId")) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1013:       delete productData.sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1100:     // Admin bypasses sellerId check
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1101:     const query = role === "admin" ? { _id: id } : { _id: id, sellerId };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1242:     const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1245:     const query = role === "admin" ? { _id: id } : { _id: id, sellerId };
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1287:       const nearbySellerIds = await getNearbySellerIdsForCustomer(
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1291:       nearbySellerSet = new Set(nearbySellerIds.map(String));
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1300:             "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1305:           .populate("sellerId", "shopName")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1332:       const sellerIdForProduct = String(product?.sellerId?._id || product?.sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1333:       if (!nearbySellerSet || !nearbySellerSet.has(sellerIdForProduct)) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1374:       const owned = await Product.findById(id).select("sellerId").lean();
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1375:       if (!owned || String(owned.sellerId) !== String(req.user.id)) {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1396:       sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1414:     if (sellerId && sellerId !== "all") {
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1415:       baseQuery.sellerId = sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1455:       "seller-asc": { sellerId: 1, createdAt: -1 },
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1463:             "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1468:           .populate("sellerId", "shopName name")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1532:       .populate("sellerId", "shopName name")
+D:\AppZeto\GrandBazar\backend\app\controller\productController.js:1584:       .populate("sellerId", "shopName name")
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:73:         sellerId: { $in: storeIds },
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:76:         .select("sellerId headerId categoryId")
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:91:           storeCategoryMap[p.sellerId.toString()].add(p.headerId.name);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:94:           storeCategoryMap[p.sellerId.toString()].add(p.categoryId.name);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:103:         sellerId: { $in: storeIds },
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:110:           (p) => p.sellerId.toString() === s._id.toString(),
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:263:     if (req.user.subSellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:264:       const subSeller = await Seller.findById(req.user.subSellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:270:         result.subSellerId = subSeller._id;
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:321:     if (req.user.accountId && !req.user.subSellerId) {
+D:\AppZeto\GrandBazar\backend\app\controller\sellerController.js:459:       sellerId: id,
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:13: const resolveSellerId = (sellerId) => {
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:14:   const id = sellerId?.toString?.() || sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:15:   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : sellerId;
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:23:         const sellerId = resolveSellerId(req.user.id || req.user._id);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:48:             sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:60:             sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:93:         const sellerId = resolveSellerId(req.user.id || req.user._id);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:94:         const coupons = await Coupon.find({ sellerId }).sort({ createdAt: -1 });
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:108:         const sellerId = resolveSellerId(req.user.id || req.user._id);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:124:                 sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:154:             { _id: couponId, sellerId },
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:185:         const sellerId = resolveSellerId(req.user.id || req.user._id);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerCouponController.js:188:         const coupon = await Coupon.findOneAndDelete({ _id: couponId, sellerId });
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:63:         const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:64:         const sellerOid = new mongoose.Types.ObjectId(sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:298:             { $match: { sellerId: sellerOid } },
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:417:         const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:418:         const sellerOid = new mongoose.Types.ObjectId(sellerId);
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:439:         const transactions = await Transaction.find({ user: sellerId, userModel: { $in: ['Seller', 'Store'] } })
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:460:         const wallet = await Wallet.findOne({ ownerType: 'SELLER', ownerId: sellerId });
+D:\AppZeto\GrandBazar\backend\app\controller\sellerStatsController.js:493:                     user: new mongoose.Types.ObjectId(sellerId),
+D:\AppZeto\GrandBazar\backend\app\controller\stockController.js:17:         const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\stockController.js:19:         const product = await Product.findOne({ _id: productId, sellerId });
+D:\AppZeto\GrandBazar\backend\app\controller\stockController.js:39:             seller: sellerId,
+D:\AppZeto\GrandBazar\backend\app\controller\stockController.js:77:         const sellerId = req.user.id;
+D:\AppZeto\GrandBazar\backend\app\controller\stockController.js:79:         const history = await StockHistory.find({ seller: sellerId })

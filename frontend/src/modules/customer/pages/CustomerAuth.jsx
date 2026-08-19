@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
 import BgImage from '@/assets/image.jpg';
+import ZintoLogo from '@/assets/zinto_logo.png';
 
 const CATEGORIES = [
     {
@@ -68,9 +69,23 @@ const CATEGORIES = [
 ];
 
 const CustomerAuth = () => {
-    const [isLogin, setIsLogin] = useState(true);
+    const [isLogin, setIsLogin] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('auth_isLogin');
+            return saved !== null ? JSON.parse(saved) : true;
+        } catch {
+            return true;
+        }
+    });
     const [isLoading, setIsLoading] = useState(false);
-    const [showOtp, setShowOtp] = useState(false);
+    const [showOtp, setShowOtp] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('auth_showOtp');
+            return saved !== null ? JSON.parse(saved) : false;
+        } catch {
+            return false;
+        }
+    });
     const [timer, setTimer] = useState(0);
     const [carouselIndex, setCarouselIndex] = useState(0);
     const { login } = useAuth();
@@ -83,20 +98,78 @@ const CustomerAuth = () => {
     const [searchParams] = useSearchParams();
     const referralCode = searchParams.get('ref') || '';
 
-    const [formData, setFormData] = useState({
-        phone: '',
-        otp: '',
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
+    const [formData, setFormData] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('auth_formData');
+            return saved !== null ? JSON.parse(saved) : {
+                phone: '',
+                otp: '',
+                name: '',
+                email: '',
+                password: '',
+                confirmPassword: ''
+            };
+        } catch {
+            return {
+                phone: '',
+                otp: '',
+                name: '',
+                email: '',
+                password: '',
+                confirmPassword: ''
+            };
+        }
     });
     const [agreedToTerms, setAgreedToTerms] = useState(false);
-    const [authMode, setAuthMode] = useState('phone'); // 'phone' | 'email' (email login only, no signup)
-    const [emailLoginData, setEmailLoginData] = useState({ email: '', password: '' });
+    const [authMode, setAuthMode] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('auth_authMode');
+            return saved !== null ? JSON.parse(saved) : 'phone';
+        } catch {
+            return 'phone';
+        }
+    });
+    const [emailLoginData, setEmailLoginData] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('auth_emailLoginData');
+            return saved !== null ? JSON.parse(saved) : { email: '', password: '' };
+        } catch {
+            return { email: '', password: '' };
+        }
+    });
     const [isEmailLoading, setIsEmailLoading] = useState(false);
+    const [otpExpiryTimer, setOtpExpiryTimer] = useState(300);
 
     const activeCategory = CATEGORIES[carouselIndex];
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_formData', JSON.stringify(formData));
+    }, [formData]);
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_isLogin', JSON.stringify(isLogin));
+    }, [isLogin]);
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_authMode', JSON.stringify(authMode));
+    }, [authMode]);
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_emailLoginData', JSON.stringify(emailLoginData));
+    }, [emailLoginData]);
+
+    useEffect(() => {
+        sessionStorage.setItem('auth_showOtp', JSON.stringify(showOtp));
+    }, [showOtp]);
+
+    const clearAuthSessionStorage = () => {
+        sessionStorage.removeItem('auth_formData');
+        sessionStorage.removeItem('auth_isLogin');
+        sessionStorage.removeItem('auth_authMode');
+        sessionStorage.removeItem('auth_emailLoginData');
+        sessionStorage.removeItem('auth_showOtp');
+        sessionStorage.removeItem('auth_otpExpiryTime');
+    };
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -113,10 +186,64 @@ const CustomerAuth = () => {
         return () => clearInterval(interval);
     }, [timer]);
 
+    useEffect(() => {
+        if (!showOtp) return;
+        
+        const savedExpiryTime = sessionStorage.getItem('auth_otpExpiryTime');
+        let targetTime = savedExpiryTime ? parseInt(savedExpiryTime, 10) : 0;
+        
+        if (!targetTime || targetTime < Date.now()) {
+            targetTime = Date.now() + 300 * 1000;
+            sessionStorage.setItem('auth_otpExpiryTime', String(targetTime));
+        }
+        
+        const updateTimer = () => {
+            const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+            setOtpExpiryTimer(remaining);
+            if (remaining === 0) {
+                toast.error('OTP has expired. Please request a new code.');
+            }
+        };
+        
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [showOtp]);
+
+    useEffect(() => {
+        // Trap hardware back button (especially for Flutter WebView APK)
+        if (!window.history.state?.isAuthTrap) {
+            window.history.pushState({ isAuthTrap: true }, document.title, window.location.href);
+        }
+
+        const handlePopState = (e) => {
+            if (showOtp) {
+                setShowOtp(false);
+                // Keep the back button trapped so next back goes to home
+                window.history.pushState({ isAuthTrap: true }, document.title, window.location.href);
+            } else {
+                clearAuthSessionStorage();
+                navigate('/', { replace: true });
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [navigate, showOtp]);
+
+    const handlePhoneChange = (e) => {
+        const val = e.target.value.replace(/\D/g, '');
+        if (val.length > 0 && !/^[6-9]/.test(val)) {
+            toast.error('Indian mobile numbers must start with 6, 7, 8, or 9');
+            return;
+        }
+        setFormData({ ...formData, phone: val });
+    };
+
     const handleSendOtp = async (e) => {
         e?.preventDefault();
-        if (formData.phone.length !== 10) {
-            toast.error('Enter valid 10-digit number');
+        if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+            toast.error('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9');
             return;
         }
         if (!isLogin && !agreedToTerms) {
@@ -143,6 +270,7 @@ const CustomerAuth = () => {
         }
         setIsLoading(true);
         try {
+            sessionStorage.removeItem('auth_otpExpiryTime');
             if (isLogin) {
                 await customerApi.sendLoginOtp({ phone: formData.phone });
             } else {
@@ -156,6 +284,7 @@ const CustomerAuth = () => {
             }
             setShowOtp(true);
             setTimer(30);
+            setOtpExpiryTimer(300);
             toast.success('OTP sent!');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
@@ -176,6 +305,7 @@ const CustomerAuth = () => {
             const response = await customerApi.loginWithEmail(emailLoginData);
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
+            clearAuthSessionStorage();
             toast.success('Successfully Logged In!');
             navigate('/');
         } catch (error) {
@@ -188,6 +318,10 @@ const CustomerAuth = () => {
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
+        if (otpExpiryTimer <= 0) {
+            toast.error('OTP has expired. Please request a new code.');
+            return;
+        }
         if (formData.otp.length !== 4) {
             toast.error('Enter 4-digit code');
             return;
@@ -201,6 +335,7 @@ const CustomerAuth = () => {
             });
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
+            clearAuthSessionStorage();
             toast.success('Successfully Logged In!');
             navigate('/');
         } catch (error) {
@@ -213,6 +348,17 @@ const CustomerAuth = () => {
 
     return (
         <div className="min-h-screen w-full relative flex items-center justify-center font-['Outfit',_sans-serif] overflow-hidden">
+
+            {/* Completely independent floating back button */}
+            <button
+                onClick={() => {
+                    clearAuthSessionStorage();
+                    navigate('/');
+                }}
+                className="absolute top-1.5 left-3 md:top-3 md:left-4 z-[100] w-10 h-10 md:w-12 md:h-12 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
+            >
+                <ChevronLeft size={24} />
+            </button>
 
             {/* Dynamic Atmospheric Background */}
             <div 
@@ -295,18 +441,11 @@ const CustomerAuth = () => {
                         <div className="absolute top-8 left-0 w-full px-6 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <div className="w-10 h-10 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center border border-white/30 overflow-hidden p-1.5 shadow-sm">
-                                    {faviconUrl ? (
-                                        <img
-                                            src={faviconUrl}
-                                            alt={`${appName} favicon`}
-                                            className="w-full h-full object-contain rounded-lg"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                            }}
-                                        />
-                                    ) : (
-                                        <ShoppingBag size={20} className="text-white" />
-                                    )}
+                                    <img
+                                        src={ZintoLogo}
+                                        alt={`${appName} logo`}
+                                        className="w-full h-full object-contain rounded-lg"
+                                    />
                                 </div>
                                 <span className="text-white font-black tracking-tighter text-xl">{appName.toUpperCase()}</span>
                             </div>
@@ -480,7 +619,8 @@ const CustomerAuth = () => {
                                                     required
                                                     name="name"
                                                     placeholder="Full Name"
-                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
+                                                    value={formData.name}
+                                                    className="w-full bg-gray-50 border border-gray-105 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
                                                     style={{ '--theme-color': activeCategory.theme }}
                                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                                     onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
@@ -500,8 +640,9 @@ const CustomerAuth = () => {
                                                 name="phone"
                                                 maxLength={10}
                                                 placeholder="Mobile Number"
-                                                className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-20 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
-                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '') })}
+                                                value={formData.phone}
+                                                className="w-full bg-gray-50 border border-gray-105 rounded-2xl pl-20 pr-4 py-4 text-sm font-bold text-gray-805 outline-none focus:bg-white transition-all"
+                                                onChange={handlePhoneChange}
                                                 onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
                                                 onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
                                             />
@@ -675,10 +816,19 @@ const CustomerAuth = () => {
                                         </div>
 
                                         <div className="space-y-4">
+                                            {/* OTP Expiration countdown */}
+                                            <div className="text-center text-[11px] font-bold text-gray-500">
+                                                {otpExpiryTimer > 0 ? (
+                                                    <span>OTP valid for: <strong className="font-black" style={{ color: activeCategory.theme }}>{Math.floor(otpExpiryTimer / 60)}:{(otpExpiryTimer % 60).toString().padStart(2, '0')}</strong></span>
+                                                ) : (
+                                                    <span className="text-red-500 font-black uppercase tracking-wider">OTP Expired!</span>
+                                                )}
+                                            </div>
+
                                             <button
                                                 type="submit"
-                                                disabled={isLoading}
-                                                className="w-full bg-gray-900 text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] shadow-2xl flex items-center justify-center gap-3 uppercase active:scale-95 transition-all"
+                                                disabled={isLoading || otpExpiryTimer <= 0}
+                                                className="w-full bg-gray-900 text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] shadow-2xl flex items-center justify-center gap-3 uppercase active:scale-95 transition-all disabled:opacity-50"
                                             >
                                                 {isLoading ? 'Authenticating...' : `Enter ${appName}`}
                                             </button>

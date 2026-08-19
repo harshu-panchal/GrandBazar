@@ -1,0 +1,21 @@
+﻿89:         sellerId: '',
+102:     const fetchSellerProductsForAddons = async (sellerId, excludeProductId) => {
+103:         if (!sellerId) {
+108:             const response = await adminApi.getProductModerationList({ sellerId, limit: 200 });
+253:         if (!editingItem && !formData.sellerId) {
+324:                 data.append('sellerId', formData.sellerId);
+464:                 sellerId: item.sellerId?._id || item.sellerId || '',
+480:             fetchSellerProductsForAddons(item.sellerId?._id || item.sellerId, item._id);
+495:                 sellerId: '',
+512:     //   ?newForSeller=<sellerId> opens the create form pre-scoped to that seller
+520:             setFormData((prev) => ({ ...prev, sellerId: newForSeller }));
+758:                                 const prevSellerId = idx > 0 ? (productsList[idx - 1].sellerId?._id || productsList[idx - 1].sellerId) : null;
+759:                                 const currentSellerId = p.sellerId?._id || p.sellerId;
+760:                                 const showSellerHeader = isGrouped && currentSellerId !== prevSellerId;
+766:                                                 {p.sellerId?.shopName || 'Admin'}
+768:                                                     {productsList.filter((item) => (item.sellerId?._id || item.sellerId) === currentSellerId).length} product(s) on this page
+801:                                             <span className="truncate text-[13px] font-medium text-slate-700" title={p.sellerId?.shopName || 'Admin'}>
+802:                                                 {p.sellerId?.shopName || 'Admin'}
+1021:                                                         value={formData.sellerId}
+1023:                                                             setFormData({ ...formData, sellerId: e.target.value, addons: [] });
+1239:                                             {!formData.sellerId ? (

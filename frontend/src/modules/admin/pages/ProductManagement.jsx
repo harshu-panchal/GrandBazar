@@ -231,12 +231,29 @@ const ProductManagement = () => {
     }, [searchTerm, filterCategory, filterStatus, filterApprovalStatus, sortBy, pageSize]);
 
     const handleSave = async () => {
-        if (!formData.name || !formData.price || !formData.stock || !formData.header || !formData.categoryId || !formData.subcategoryId) {
+        const isEmpty = (v) => v === "" || v === null || v === undefined;
+        const firstVariant = (formData.variants && formData.variants[0]) || {};
+
+        if (isEmpty(formData.name) || String(formData.name).trim() === "") {
+            return toast.error('Product name is required');
+        }
+
+        if (isEmpty(firstVariant.price) || Number(firstVariant.price) <= 0) {
+            return toast.error('Set a price greater than 0 on the main/default variant (Item Variants tab)');
+        }
+
+        if (isEmpty(firstVariant.stock) || Number(firstVariant.stock) < 0) {
+            return toast.error('Set a valid stock on the main/default variant (Item Variants tab)');
+        }
+
+        if (!formData.header || !formData.categoryId || !formData.subcategoryId) {
             return toast.error('Please fill all required fields, including categories');
         }
-        if (!editingItem && !formData.sellerId) {
-            return toast.error('Please select which seller this product belongs to');
-        }
+
+
+        const derivedPrice = Number(firstVariant.price);
+        const derivedSalePrice = Number(firstVariant.salePrice) || 0;
+        const derivedStock = Number(firstVariant.stock);
 
         setIsSaving(true);
         try {
@@ -245,9 +262,9 @@ const ProductManagement = () => {
             data.append('slug', formData.slug);
             data.append('sku', formData.sku);
             data.append('description', formData.description);
-            data.append('price', Number(formData.price));
-            data.append('salePrice', Number(formData.salePrice) || 0);
-            data.append('stock', Number(formData.stock));
+            data.append('price', derivedPrice);
+            data.append('salePrice', derivedSalePrice);
+            data.append('stock', derivedStock);
             data.append('lowStockAlert', Number(formData.lowStockAlert) || 5);
             data.append('unit', formData.unit);
             data.append('headerId', formData.header);
@@ -1005,13 +1022,13 @@ const ProductManagement = () => {
                                                         }}
                                                         className="w-full px-4 py-2.5 bg-amber-50 ring-1 ring-amber-200 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                                                     >
-                                                        <option value="">Select the seller this product belongs to…</option>
+                                                        <option value="">Select the seller this product belongs to (optional)…</option>
                                                         {sellers.map((s) => (
                                                             <option key={s._id} value={s._id}>{s.shopName} {s.category ? `· ${s.category}` : ''}</option>
                                                         ))}
                                                     </select>
                                                     <span className="text-[10px] text-slate-400 font-medium ml-1">
-                                                        This product will be created directly under the selected seller's store and auto-approved.
+                                                        This product will be created directly under the selected seller's store. If left unselected, it will be added as a generic platform product.
                                                     </span>
                                                 </div>
                                             )}

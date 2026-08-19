@@ -66,7 +66,12 @@ export default defineConfig({
   build: {
     minify: 'esbuild',
     sourcemap: false,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'EVAL') return;
+        warn(warning);
+      },
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return

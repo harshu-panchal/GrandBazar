@@ -1,0 +1,11 @@
+﻿104:     syncToSellers: false,
+391:         syncToSellers: false,
+411:         syncToSellers: false,
+476:             Create standard catalog items that sellers can pick, price, and sell.
+938:                     {/* Sync to Sellers Checkbox (Only on Edit) */}
+942:                           id="syncToSellers"
+944:                           checked={formData.syncToSellers}
+945:                           onChange={(e) => setFormData(prev => ({ ...prev, syncToSellers: e.target.checked }))}
+948:                         <label htmlFor="syncToSellers" className="text-xs font-bold text-brand-700 cursor-pointer">
+949:                           Sync updates to all active seller product listings linked to this catalog item.
+1227:             Are you sure you want to delete this catalog item? This will remove the item from the master catalog, and unlink any sellers actively listing this product.

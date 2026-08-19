@@ -1,0 +1,12 @@
+﻿
+> frontend@0.0.0 build
+> node node_modules/vite/bin/vite.js build
+
+[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[32mâœ“[39m 4729 modules transformed.
+rendering chunks...
+computing gzip size...

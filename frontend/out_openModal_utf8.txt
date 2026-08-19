@@ -1,0 +1,5 @@
+﻿433:     const openModal = (item = null) => {
+519:             openModal(null);
+536:                     openModal(product);
+596:                     onClick={() => openModal(null)}
+877:                                                 onClick={() => openModal(p)}

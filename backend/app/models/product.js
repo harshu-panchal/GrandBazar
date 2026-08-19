@@ -83,7 +83,7 @@ const productSchema = new mongoose.Schema(
         sellerId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Store",
-            required: true,
+            required: false,
         },
         catalogProductId: {
             type: mongoose.Schema.Types.ObjectId,

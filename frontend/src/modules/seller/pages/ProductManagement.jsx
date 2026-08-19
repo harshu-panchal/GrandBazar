@@ -607,6 +607,7 @@ const ProductManagement = () => {
         lowStockAlert: 5,
         category: "",
         header: "",
+        subcategory: "",
         status: "active",
         tags: "",
         weight: "",
