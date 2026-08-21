@@ -38,7 +38,7 @@ const BottomNav = ({ navItems }) => {
 
     return (
         <div className={cn(
-            "fixed bottom-0 left-0 right-0 h-16 z-[60] md:hidden px-2 flex items-center justify-around",
+            "fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] z-[60] md:hidden px-2 flex items-center justify-around",
             isLightTheme 
                 ? "bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]" 
                 : "bg-[#0a0c10] border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.4)]"
