@@ -323,6 +323,9 @@ storeSchema.index({ location: "2dsphere" });
 storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1 });
 storeSchema.index({ favoriteCount: -1 });
 storeSchema.index({ city: 1, isActive: 1, isVerified: 1 });
+// Supports the top-rated-stores fallback sort (getRecommendedStoresForUser)
+// without falling back to an in-memory sort over every approved store.
+storeSchema.index({ isActive: 1, isVerified: 1, applicationStatus: 1, avgRating: -1, reviewCount: -1 });
 
 async function buildUniqueStoreSlug(doc, baseName) {
   const base = slugify(baseName || "store");
