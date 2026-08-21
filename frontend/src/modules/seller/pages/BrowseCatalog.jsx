@@ -447,7 +447,7 @@ const BrowseCatalog = () => {
       </div>
 
       {/* Filters & Search */}
-      <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
+      <div className="sm:border sm:border-slate-100 sm:shadow-sm sm:p-3 sm:bg-white/60 sm:rounded-2xl backdrop-blur-xl">
         <div className="flex flex-col lg:flex-row gap-3 items-center">
           <div className="relative flex-1 group w-full">
             <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-black transition-all" />
@@ -456,10 +456,10 @@ const BrowseCatalog = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search master catalog products..."
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-100/50 border-none rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 transition-all outline-none"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-100/50 sm:bg-slate-100/50 bg-white border border-slate-200 sm:border-none rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-black/5 transition-all outline-none"
             />
           </div>
-          <div className="flex gap-2 shrink-0 w-full lg:w-auto">
+          <div className="flex flex-row gap-2 shrink-0 w-full lg:w-auto">
             {catalogItems.length > 0 && catalogItems.some(i => !i.isClaimed) && (
               <button
                 onClick={() => {
@@ -470,7 +470,8 @@ const BrowseCatalog = () => {
                     setSelectedItems(claimableItems.map(item => item._id || item.id));
                   }
                 }}
-                className="px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                style={{ WebkitTapHighlightColor: "transparent" }}
               >
                 {selectedItems.length === catalogItems.filter(i => !i.isClaimed).length && catalogItems.filter(i => !i.isClaimed).length > 0 ? "Deselect All" : "Select All"}
               </button>
@@ -478,7 +479,7 @@ const BrowseCatalog = () => {
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="flex-1 lg:flex-none px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-black/5 outline-none appearance-none cursor-pointer"
+              className="flex-1 lg:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-black/5 outline-none appearance-none cursor-pointer"
             >
               <option value="all">All Categories</option>
               {categories.map((h) => (
@@ -494,38 +495,38 @@ const BrowseCatalog = () => {
             </select>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Products Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {[...Array(8)].map((_, i) => (
-            <Card key={i} className="animate-pulse border-none ring-1 ring-slate-100 p-4 space-y-4">
-              <div className="h-44 bg-slate-200 rounded-lg" />
+            <div key={i} className="animate-pulse bg-white border border-slate-100 rounded-2xl p-3 sm:p-4 space-y-4">
+              <div className="aspect-square sm:h-44 bg-slate-200 rounded-lg" />
               <div className="h-4 bg-slate-200 rounded w-2/3" />
               <div className="h-3 bg-slate-200 rounded w-1/2" />
               <div className="h-8 bg-slate-200 rounded" />
-            </Card>
+            </div>
           ))}
         </div>
       ) : catalogItems.length === 0 ? (
-        <Card className="p-12 text-center border-none shadow-sm ring-1 ring-slate-100 bg-white">
+        <div className="p-8 sm:p-12 text-center border border-slate-100 rounded-2xl bg-white">
           <HiOutlineInboxStack className="h-12 w-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-sm font-bold text-slate-800">No Catalog Products Available</h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
             There are currently no products in the master catalog matching your search filters.
           </p>
-        </Card>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {catalogItems.map((item) => (
-            <Card
+            <div
               key={item._id || item.id}
-              className="border-none shadow-sm hover:shadow-xl ring-1 ring-slate-100 p-4 flex flex-col justify-between group bg-white transition-all duration-300"
+              className="border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl p-2.5 sm:p-4 flex flex-col justify-between group bg-white transition-all duration-300 relative"
             >
               <div className="space-y-3">
                 {/* Image */}
-                <div className="h-40 rounded-lg overflow-hidden bg-slate-50 border border-slate-200 relative shrink-0">
+                <div className="aspect-square sm:aspect-auto sm:h-44 rounded-lg overflow-hidden bg-slate-50 border border-slate-200 relative shrink-0">
                   {!item.isClaimed && (
                     <input
                       type="checkbox"
@@ -543,7 +544,7 @@ const BrowseCatalog = () => {
                   <img
                     src={item.mainImage || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=200&h=200"}
                     alt={item.name}
-                    className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   {item.brand && (
                     <span className="absolute top-2 left-2 text-[9px] font-bold text-slate-900 bg-white px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">
@@ -554,20 +555,20 @@ const BrowseCatalog = () => {
 
                 {/* Info */}
                 <div>
-                  <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+                  <div className="text-[9px] sm:text-[10px] font-bold text-indigo-600 uppercase tracking-widest line-clamp-1">
                     {item.categoryId?.name || "Category"}
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-900 line-clamp-2 mt-0.5 group-hover:text-black transition-colors" title={item.name}>
+                  <h3 className="text-xs sm:text-sm font-semibold text-slate-900 line-clamp-2 mt-0.5 group-hover:text-black transition-colors" title={item.name}>
                     {item.name}
                   </h3>
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1" title={item.description}>
+                  <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-2 mt-1" title={item.description}>
                     {item.description}
                   </p>
                 </div>
               </div>
 
               {/* Action */}
-              <div className="pt-4 mt-auto">
+              <div className="pt-3 sm:pt-4 mt-auto">
                 <button
                   onClick={() => !item.isClaimed && openClaimModal(item)}
                   disabled={item.isClaimed}
@@ -577,11 +578,11 @@ const BrowseCatalog = () => {
                       : "bg-black text-white hover:bg-slate-800"
                   }`}
                 >
-                  {item.isClaimed ? <HiOutlineSparkles className="h-4 w-4" /> : <HiOutlinePlus className="h-4 w-4" />}
-                  <span>{item.isClaimed ? "Already Added" : "Add this product"}</span>
+                  {item.isClaimed ? <HiOutlineSparkles className="h-3 w-3 sm:h-4 sm:w-4" /> : <HiOutlinePlus className="h-3 w-3 sm:h-4 sm:w-4" />}
+                  <span>{item.isClaimed ? "Already Added" : "Add this"}</span>
                 </button>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
