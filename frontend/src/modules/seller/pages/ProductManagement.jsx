@@ -818,9 +818,9 @@ const ProductManagement = () => {
 
       {/* Product Table */}
 
-      <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden rounded-xl">
+      <div className="sm:bg-white sm:shadow-xl sm:ring-1 sm:ring-slate-100 sm:rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse mobile-table-card">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="px-6 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
@@ -860,7 +860,7 @@ const ProductManagement = () => {
                 <tr
                   key={p._id || p.id}
                   className="hover:bg-gray-50/50 transition-colors group border-b border-gray-100 last:border-b-0">
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" data-label="Product">
                     <div className="flex items-center gap-4">
                       <div className="h-14 w-14 rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200">
                         <img
@@ -890,34 +890,34 @@ const ProductManagement = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4 text-center" data-label="Order">
                     <span className="inline-flex min-w-[2rem] items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                       {p.displayOrder ?? 0}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" data-label="Product Code">
                     <span className="text-sm font-medium text-slate-900">
                       {displaySku(p)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-left">
+                  <td className="px-6 py-4 text-left" data-label="Header">
                     <div className="flex flex-col">
                       <span className="text-xs font-medium text-slate-900 uppercase tracking-tight bg-slate-100 px-3 py-0.5 rounded-full w-fit">
                         {p.headerId?.name || "N/A"}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" data-label="Category">
                     <span className="text-sm font-medium text-slate-900">
                       {p.categoryId?.name || "N/A"}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" data-label="Subcategory">
                     <span className="text-sm font-medium text-slate-900">
                       {p.subcategoryId?.name || "N/A"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4 text-center" data-label="Variant">
                     {p.variants?.length > 0 ? (
                       <div
                         onClick={() => {
@@ -939,9 +939,9 @@ const ProductManagement = () => {
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4 text-center" data-label="Approval">
                     <div className="flex flex-col items-center gap-1">
-                      <ApprovalBadge approvalStatus={p.approvalStatus} />
+                       <ApprovalBadge approvalStatus={p.approvalStatus} />
                       {p.isPublished === false && (
                         <Badge variant="warning" className="text-[10px] px-2 py-0.5">
                           Needs pricing
@@ -958,7 +958,7 @@ const ProductManagement = () => {
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" data-label="Availability">
                     <div className="flex flex-col items-center gap-1.5">
                       <button
                         type="button"
@@ -1018,7 +1018,7 @@ const ProductManagement = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right" data-label="Actions">
                     <div className="flex items-center justify-end space-x-2">
                       <button
                         onClick={() => openEditModal(p)}
@@ -1037,7 +1037,7 @@ const ProductManagement = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
 
       {isFilterOpen && (

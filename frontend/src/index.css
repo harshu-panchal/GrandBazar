@@ -432,3 +432,57 @@ select option:disabled {
   color: #94a3b8 !important;
 }
 
+
+/* Responsive Mobile Table Cards globally */
+@media (max-width: 767px) {
+  .mobile-table-card {
+    display: block !important;
+    width: 100% !important;
+  }
+  .mobile-table-card > thead {
+    display: none !important;
+  }
+  .mobile-table-card > tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  .mobile-table-card > tbody > tr {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    background: white;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 4px 15px -3px rgba(0,0,0,0.05);
+    border: 1px solid #f1f5f9;
+  }
+  .mobile-table-card > tbody > tr > td {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0.4rem 0 !important;
+    border-bottom: 1px solid #f8fafc !important;
+    text-align: right !important;
+    width: 100% !important;
+  }
+  .mobile-table-card > tbody > tr > td:last-child {
+    border-bottom: none !important;
+  }
+  .mobile-table-card > tbody > tr > td::before {
+    content: attr(data-label);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    text-align: left;
+    margin-right: 1rem;
+    flex-shrink: 0;
+  }
+  .mobile-table-card td > div {
+    text-align: right !important;
+    justify-content: flex-end;
+  }
+}
+
