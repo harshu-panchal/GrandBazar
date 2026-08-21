@@ -122,9 +122,39 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
     }
   };
 
+  // Surface a seller price adjustment to the customer regardless of payment
+  // mode/direction — previously only the online-payment "pay the difference"
+  // case (awaitingExtra, below) had any visible notice; a COD price increase
+  // or any price decrease was applied to the order silently.
+  const priceAdjustment = order.priceAdjustment;
+  const showPriceAdjustmentNotice =
+    priceAdjustment?.status === "applied" && priceAdjustment?.direction && priceAdjustment.direction !== "none";
+
   return (
     <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
       <h3 className="text-sm font-bold text-slate-800">Order actions</h3>
+
+      {showPriceAdjustmentNotice && (
+        <div
+          className={`rounded-xl border p-3 text-sm ${
+            priceAdjustment.direction === "decrease"
+              ? "border-brand-200 bg-brand-50 text-brand-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <p className="font-bold">
+            {priceAdjustment.direction === "decrease"
+              ? `The seller reduced your order total by ₹${priceAdjustment.deltaAmount || 0}`
+              : `The seller increased your order total by ₹${priceAdjustment.deltaAmount || 0}`}
+          </p>
+          {priceAdjustment.reason && (
+            <p className="mt-0.5 text-xs opacity-80">Reason: {priceAdjustment.reason}</p>
+          )}
+          {priceAdjustment.direction === "decrease" && (
+            <p className="mt-0.5 text-xs opacity-80">The difference has been credited to your wallet.</p>
+          )}
+        </div>
+      )}
 
       {awaitingExtra && (
         <button

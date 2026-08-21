@@ -1,14 +1,22 @@
 import React from 'react';
 import { X, MessageCircle, Phone, ChevronRight, AlertCircle, PackageX, Truck, PlusCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSettings } from '@core/context/SettingsContext';
 
-const HelpModal = ({ isOpen, onClose }) => {
+const HelpModal = ({ isOpen, onClose, orderId }) => {
+    const navigate = useNavigate();
+    const { settings } = useSettings();
     const issues = [
-        { icon: PackageX, label: 'Items missing or incorrect', sub: 'Get a refund or replacement' },
-        { icon: AlertCircle, label: 'Item quality issue', sub: 'Report damaged or expired items' },
-        { icon: Truck, label: 'Delivery delay', sub: 'Track your order status' },
+        { icon: PackageX, label: 'Items missing or incorrect', sub: 'Get a refund or replacement', category: 'missing_or_incorrect' },
+        { icon: AlertCircle, label: 'Item quality issue', sub: 'Report damaged or expired items', category: 'quality_issue' },
+        { icon: Truck, label: 'Delivery delay', sub: 'Track your order status', category: 'delivery_delay' },
     ];
+
+    const goToIssue = (category) => {
+        onClose?.();
+        navigate(`/support?category=${category}${orderId ? `&orderId=${orderId}` : ''}`);
+    };
 
     return (
         <AnimatePresence>
@@ -43,7 +51,11 @@ const HelpModal = ({ isOpen, onClose }) => {
 
                                 <div className="space-y-3 mb-8">
                                     {issues.map((item, idx) => (
-                                        <button key={idx} className="w-full flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-brand-200 hover:bg-brand-50/50 transition-all group">
+                                        <button
+                                            key={idx}
+                                            onClick={() => goToIssue(item.category)}
+                                            className="w-full flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-brand-200 hover:bg-brand-50/50 transition-all group"
+                                        >
                                             <div className="flex items-center gap-4">
                                                 <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:text-primary transition-colors">
                                                     <item.icon size={20} />
@@ -65,7 +77,10 @@ const HelpModal = ({ isOpen, onClose }) => {
                                     <Link to="/chat" className="py-3.5 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors">
                                         <MessageCircle size={18} /> Chat Us
                                     </Link>
-                                    <button className="py-3.5 rounded-xl border border-slate-200 text-slate-700 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors">
+                                    <button
+                                        onClick={() => { if (settings?.supportPhone) window.location.href = `tel:${settings.supportPhone}`; }}
+                                        className="py-3.5 rounded-xl border border-slate-200 text-slate-700 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+                                    >
                                         <Phone size={18} /> Call Us
                                     </button>
                                 </div>

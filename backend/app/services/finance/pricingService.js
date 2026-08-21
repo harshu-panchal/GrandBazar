@@ -910,7 +910,7 @@ export async function generateOrderPaymentBreakdown({
     : null;
   if (session && cityCommissionQuery) cityCommissionQuery.session(session);
   const cityCommission = cityCommissionQuery ? await cityCommissionQuery : null;
-  const packagingChargeAmount =
+  let packagingChargeAmount =
     storeDoc?.packagingChargeEnabled && Number(storeDoc.packagingCharge || 0) > 0
       ? roundCurrency(storeDoc.packagingCharge)
       : 0;
@@ -1180,6 +1180,15 @@ export async function generateOrderPaymentBreakdown({
     packingFeeStrategy: effectivePackingStrategy,
     categoryById,
   });
+  // These are two independently-configurable packaging fee mechanisms (a
+  // category-level packing fee and a store-level flat packaging charge) that
+  // customers previously saw stacked as two near-identically-labeled line
+  // items. Only one should ever be charged — the category/product-level fee
+  // (more granular) takes precedence over the store's flat fee when both
+  // would otherwise apply.
+  if (packagingChargeAmount > 0 && packing.packingFeeCharged > 0) {
+    packagingChargeAmount = 0;
+  }
   const delivery = skipDeliveryFee
     ? { deliveryFeeCharged: 0, distanceKmActual: 0, distanceKmRounded: 0 }
     : calculateCustomerDeliveryFee(distanceKm, effectiveSettings);

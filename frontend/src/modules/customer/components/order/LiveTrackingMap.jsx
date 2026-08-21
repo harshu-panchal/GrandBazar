@@ -8,7 +8,6 @@ import {
   MessageSquare,
   Shield,
   Clock,
-  Star,
   Search,
   Loader2,
 } from "lucide-react";
@@ -25,16 +24,14 @@ const containerStyle = {
 const RECENTER_INTERVAL_MS = 15000;
 const RIDER_FOCUS_RADIUS_M = 500;
 
-/** Delivery / rider search — not the same as waiting for seller acceptance */
+/** Order placed, waiting for the SELLER to accept — no rider search has started yet. */
+const AWAITING_SELLER_STATUSES = ["pending", "created"];
+
+/** Delivery / rider search — genuinely searching for a rider, after seller acceptance. */
 const SEARCHING_STATUSES = [
-  "pending",
   "confirmed",
   "delivery_search",
-  "DELIVERY_SEARCH",
   "seller_accepted",
-  "SELLER_ACCEPTED",
-  "created",
-  "CREATED",
 ];
 
 function hasValidLatLng(location) {
@@ -50,7 +47,9 @@ function hasValidLatLng(location) {
 const LiveTrackingMap = memo(({
   status = "out for delivery",
   eta = "8 mins",
-  riderName = "Ramesh Kumar",
+  riderName,
+  riderPhoto,
+  riderPhone,
   riderLocation,
   sellerLocation,
   destinationLocation,
@@ -60,7 +59,9 @@ const LiveTrackingMap = memo(({
 }) => {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
-  const isSearching = SEARCHING_STATUSES.includes(status?.toLowerCase());
+  const normalizedStatus = status?.toLowerCase();
+  const isAwaitingSeller = AWAITING_SELLER_STATUSES.includes(normalizedStatus);
+  const isSearching = SEARCHING_STATUSES.includes(normalizedStatus) || isAwaitingSeller;
   const [dots, setDots] = useState("");
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -280,10 +281,14 @@ const LiveTrackingMap = memo(({
         {/* Text */}
         <div className="relative z-10 text-center px-6">
           <h3 className="text-lg font-black text-gray-800">
-            Searching for delivery partner{dots}
+            {isAwaitingSeller
+              ? `Waiting for seller to accept${dots}`
+              : `Searching for delivery partner${dots}`}
           </h3>
           <p className="text-sm text-gray-500 mt-1 font-medium">
-            Hang tight! We're finding the best rider near you.
+            {isAwaitingSeller
+              ? "The seller is reviewing your order and will accept it shortly."
+              : "Hang tight! We're finding the best rider near you."}
           </p>
         </div>
 
@@ -294,9 +299,11 @@ const LiveTrackingMap = memo(({
           className="relative z-10 bg-white px-4 py-2 rounded-full shadow-md border border-brand-100 flex items-center gap-2">
           <div className="h-2 w-2 bg-brand-500 rounded-full animate-pulse" />
           <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
-            {status === "confirmed"
-              ? "Order Confirmed · Assigning Rider"
-              : "Order Placed · Finding Rider"}
+            {isAwaitingSeller
+              ? "Order Placed · Awaiting Seller"
+              : status === "confirmed"
+                ? "Order Confirmed · Assigning Rider"
+                : "Order Placed · Finding Rider"}
           </span>
         </motion.div>
       </div>
@@ -440,31 +447,39 @@ const LiveTrackingMap = memo(({
             className="bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-lg border border-white/50">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden border-2 border-white shadow-sm">
-                  <img
-                    src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=100&auto=format&fit=crop&q=60"
-                    alt="Rider"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="absolute -bottom-0.5 -right-0.5 bg-primary text-primary-foreground text-[7px] font-bold px-1 py-0.5 rounded-full flex items-center gap-0.5">
-                  4.8 <Star size={5} fill="white" />
+                <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden border-2 border-white shadow-sm flex items-center justify-center">
+                  {riderPhoto ? (
+                    <img
+                      src={riderPhoto}
+                      alt={riderName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Shield size={16} className="text-gray-300" />
+                  )}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-900 text-xs truncate">{riderName}</h3>
-                <p className="text-[10px] text-gray-500 flex items-center gap-1">
-                  <Shield size={8} />
-                  Vaccinated
-                </p>
+                <p className="text-[10px] text-gray-500">Your delivery partner</p>
               </div>
               <div className="flex items-center gap-1.5">
-                <button className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-primary hover:bg-brand-100 transition-colors">
-                  <Phone size={14} />
-                </button>
-                <button className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 hover:bg-brand-100 transition-colors">
-                  <MessageSquare size={14} />
-                </button>
+                {riderPhone && (
+                  <>
+                    <button
+                      onClick={() => { window.location.href = `tel:${riderPhone}`; }}
+                      className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-primary hover:bg-brand-100 transition-colors"
+                    >
+                      <Phone size={14} />
+                    </button>
+                    <button
+                      onClick={() => { window.location.href = `sms:${riderPhone}`; }}
+                      className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 hover:bg-brand-100 transition-colors"
+                    >
+                      <MessageSquare size={14} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
@@ -493,6 +508,8 @@ const LiveTrackingMap = memo(({
     prevProps.status === nextProps.status &&
     prevProps.eta === nextProps.eta &&
     prevProps.riderName === nextProps.riderName &&
+    prevProps.riderPhoto === nextProps.riderPhoto &&
+    prevProps.riderPhone === nextProps.riderPhone &&
     prevProps.riderLocation?.lat === nextProps.riderLocation?.lat &&
     prevProps.riderLocation?.lng === nextProps.riderLocation?.lng &&
     prevProps.sellerLocation?.lat === nextProps.sellerLocation?.lat &&

@@ -288,6 +288,37 @@ export const updateQuantity = async (req, res) => {
     );
 
     if (itemIndex > -1) {
+      const requestedQuantity = Number(quantity) || 0;
+      if (requestedQuantity > 0) {
+        // Re-check stock on every quantity bump — addToCart only guards the
+        // initial add, so tapping "+" repeatedly could otherwise push past
+        // available stock with no error until checkout.
+        const product = await getCustomerVisibleProductById(cart.items[itemIndex].productId);
+        if (!product) {
+          return handleResponse(res, 404, "Product is no longer available");
+        }
+        if (normalizedVariantSku) {
+          const matchedVariant = Array.isArray(product.variants)
+            ? product.variants.find(
+                (variant) => String(variant?.sku || variant?.name || "").trim() === normalizedVariantSku,
+              )
+            : null;
+          const availableStock = Number(matchedVariant?.stock || 0);
+          if (requestedQuantity > availableStock) {
+            return handleResponse(
+              res,
+              400,
+              `Only ${availableStock} of ${product.name}${matchedVariant?.name ? ` (${matchedVariant.name})` : ""} left in stock`,
+            );
+          }
+        } else if (requestedQuantity > Number(product.stock || 0)) {
+          return handleResponse(
+            res,
+            400,
+            `Only ${Number(product.stock || 0)} of ${product.name} left in stock`,
+          );
+        }
+      }
       cart.items[itemIndex].quantity = quantity;
       if (cart.items[itemIndex].quantity <= 0) {
         cart.items.splice(itemIndex, 1);

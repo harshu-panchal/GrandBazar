@@ -8,6 +8,7 @@ import { useWishlist } from "../context/WishlistContext";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import { cn } from "@/lib/utils";
 import {
   MapPin,
   Clock,
@@ -74,6 +75,7 @@ import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommend
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
 import CheckoutOrderSuccess from "./checkout/components/CheckoutOrderSuccess";
 import FulfillmentMethodPicker from "../components/checkout/FulfillmentMethodPicker";
+import DeliverySlotPicker from "../components/checkout/DeliverySlotPicker";
 import {
   formatIndiaPhoneForDisplay,
   getCustomerDisplayName,
@@ -162,6 +164,7 @@ const CheckoutPage = () => {
     fulfillmentType,
     selectedTimeSlot,
     schedulePayload,
+    setSchedule,
   } = useCart();
   const { wishlist, addToWishlist, fetchFullWishlist, isFullDataFetched } =
     useWishlist();
@@ -211,6 +214,7 @@ const CheckoutPage = () => {
     updateLocation,
   } = useAppLocation();
   const [fulfillmentMethod, setFulfillmentMethod] = useState("platform_logistics");
+  const [isScheduleSheetOpen, setIsScheduleSheetOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState("cash");
   const [selectedTip, setSelectedTip] = useState(0);
   const [showAllCartItems, setShowAllCartItems] = useState(false);
@@ -1315,13 +1319,73 @@ const CheckoutPage = () => {
                       : "Scheduled"}
                 </p>
               </div>
-              <Link
-                to="/cart"
+              <button
+                type="button"
+                onClick={() => setIsScheduleSheetOpen(true)}
                 className="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
               >
                 Change
-              </Link>
+              </button>
             </div>
+
+            {isScheduleSheetOpen && (
+              <div
+                className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+                onClick={() => setIsScheduleSheetOpen(false)}
+              >
+                <div
+                  className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-5 space-y-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-black text-slate-900">Delivery mode</p>
+                    <button
+                      type="button"
+                      onClick={() => setIsScheduleSheetOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    {["instant", "scheduled"].map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSchedule({
+                          fulfillmentType: mode,
+                          timeSlot: mode === "instant" ? "now" : schedulePayload?.timeSlot,
+                          deliveryDate: schedulePayload?.deliveryDate,
+                          windowLabel: schedulePayload?.windowLabel,
+                        })}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold transition-all",
+                          fulfillmentType === mode
+                            ? "bg-primary text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                        )}
+                      >
+                        {mode === "instant" ? "Deliver now" : "Schedule"}
+                      </button>
+                    ))}
+                  </div>
+                  {primarySellerId && (
+                    <DeliverySlotPicker
+                      sellerId={primarySellerId}
+                      fulfillmentType={fulfillmentType}
+                      onChange={setSchedule}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsScheduleSheetOpen(false)}
+                    className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Payment Selector */}
             <CheckoutPaymentSelector
@@ -1344,7 +1408,7 @@ const CheckoutPage = () => {
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
               />
               <label htmlFor="policy-accept" className="text-xs text-slate-600 leading-snug cursor-pointer">
-                I agree to the <Link to="/return-policy" target="_blank" rel="noopener noreferrer" className="text-primary font-bold hover:underline">Return & Exchange Policy</Link> and understand that items can only be returned if they meet the criteria.
+                I agree to the <Link to="/return-policy" className="text-primary font-bold hover:underline">Return & Exchange Policy</Link> and understand that items can only be returned if they meet the criteria.
               </label>
             </div>
 

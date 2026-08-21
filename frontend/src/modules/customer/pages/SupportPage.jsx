@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageCircle, Phone, Mail, ChevronDown, ChevronUp, FileText, ChevronLeft, PlusCircle, X, Send } from 'lucide-react';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
@@ -12,16 +12,27 @@ import axiosInstance from '@core/api/axios';
 const FAQ_CACHE_KEY = 'customer_faqs_cache_v1';
 const FAQ_CACHE_TTL_MS = 5 * 60 * 1000;
 
+const ISSUE_CATEGORY_LABELS = {
+    missing_or_incorrect: 'Items missing or incorrect',
+    quality_issue: 'Item quality issue',
+    delivery_delay: 'Delivery delay',
+};
+
 const SupportPage = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
     const { settings } = useSettings();
     const supportEmail = settings?.supportEmail || '';
-    const supportEmailShort = supportEmail ? (supportEmail.length > 12 ? supportEmail.slice(0, 12) + '...' : supportEmail) : 'support@...';
-    const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
+    const supportPhone = settings?.supportPhone || '';
+    const [searchParams] = useSearchParams();
+    const prefillCategory = searchParams.get('category');
+    const prefillOrderId = searchParams.get('orderId');
+    const [isTicketModalOpen, setIsTicketModalOpen] = useState(Boolean(prefillCategory));
     const [ticketLoading, setTicketLoading] = useState(false);
     const [ticketData, setTicketData] = useState({
-        subject: '',
+        subject: prefillCategory
+            ? `${ISSUE_CATEGORY_LABELS[prefillCategory] || prefillCategory}${prefillOrderId ? ` — Order #${prefillOrderId}` : ''}`
+            : '',
         description: '',
         priority: 'medium'
     });
@@ -104,8 +115,18 @@ const SupportPage = () => {
                         sub="Formal Request"
                         onClick={() => setIsTicketModalOpen(true)}
                     />
-                    <ContactCard icon={Phone} label="Call Us" sub="+91 98765..." />
-                    <ContactCard icon={Mail} label="Email Us" sub={supportEmailShort} />
+                    <ContactCard
+                        icon={Phone}
+                        label="Call Us"
+                        sub={supportPhone || 'Not available'}
+                        onClick={supportPhone ? () => { window.location.href = `tel:${supportPhone}`; } : undefined}
+                    />
+                    <ContactCard
+                        icon={Mail}
+                        label="Email Us"
+                        sub={supportEmail || 'Not available'}
+                        onClick={supportEmail ? () => { window.location.href = `mailto:${supportEmail}`; } : undefined}
+                    />
                 </div>
 
                 {/* FAQ Section */}
@@ -251,9 +272,9 @@ const ContactCard = ({ icon: Icon, label, sub, to, onClick }) => {
             <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:text-slate-800 transition-colors">
                 <Icon size={20} />
             </div>
-            <div>
+            <div className="w-full min-w-0">
                 <h3 className="font-semibold text-slate-800 text-sm whitespace-nowrap">{label}</h3>
-                <p className="text-[10px] text-slate-500 font-medium">{sub}</p>
+                <p className="text-[10px] text-slate-500 font-medium truncate" title={sub}>{sub}</p>
             </div>
         </div>
     );

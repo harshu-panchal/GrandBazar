@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Cart from "../models/cart.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
 import Order from "../models/order.js";
+import Product from "../models/product.js";
 import Store from "../models/store.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
@@ -231,6 +232,60 @@ async function resolveOrderItemsInput({
   };
 }
 
+/**
+ * Checks every line item's current stock BEFORE the placement transaction
+ * does its all-or-nothing atomic reservation. Without this, one out-of-stock
+ * line (e.g. a variant that sold out) throws deep inside reserveStockForItems,
+ * aborting the whole multi-item order — including lines that DO have stock —
+ * with no way for the customer to see which item was the problem.
+ */
+async function assertAllItemsInStock(orderItemsInput, session) {
+  const productIds = [...new Set(orderItemsInput.map((item) => String(item.product)))];
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select("name stock variants")
+    .session(session)
+    .lean();
+  const productById = new Map(products.map((p) => [String(p._id), p]));
+
+  const insufficient = [];
+  for (const item of orderItemsInput) {
+    const product = productById.get(String(item.product));
+    if (!product) {
+      insufficient.push({ name: "Unknown item", reason: "no longer available" });
+      continue;
+    }
+    const requestedQuantity = Number(item.quantity) || 0;
+    if (item.variantSku) {
+      const variant = Array.isArray(product.variants)
+        ? product.variants.find((v) => String(v?.sku || v?.name || "").trim() === item.variantSku)
+        : null;
+      const availableStock = Number(variant?.stock || 0);
+      if (!variant || availableStock < requestedQuantity) {
+        insufficient.push({
+          name: `${product.name}${variant?.name ? ` (${variant.name})` : ""}`,
+          reason: availableStock > 0 ? `only ${availableStock} left` : "out of stock",
+        });
+      }
+    } else if (Number(product.stock || 0) < requestedQuantity) {
+      insufficient.push({
+        name: product.name,
+        reason: Number(product.stock || 0) > 0 ? `only ${product.stock} left` : "out of stock",
+      });
+    }
+  }
+
+  if (insufficient.length > 0) {
+    const err = new Error(
+      `These items are no longer available in the requested quantity: ${insufficient
+        .map((i) => `${i.name} (${i.reason})`)
+        .join(", ")}. Please update your cart and try again.`,
+    );
+    err.statusCode = 409;
+    err.insufficientStockItems = insufficient;
+    throw err;
+  }
+}
+
 async function consumeCartItems({
   customerId,
   source,
@@ -384,6 +439,11 @@ export async function placeOrderAtomic({
       customerId,
       session,
     });
+
+    // Fail fast and clearly if any single line item's stock has changed since
+    // it was added to the cart, rather than letting the whole multi-item
+    // order silently abort deep inside stock reservation later.
+    await assertAllItemsInStock(orderItemsInput, session);
 
     // Reconcile against the customer's actual cart — campaignId is only
     // ever written server-side on the cart (cartController.addToCart), so

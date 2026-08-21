@@ -850,8 +850,8 @@ const OrderDetailPage = () => {
       cancellationState === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED;
     const confirmed = window.confirm(
       isApprovalFlow
-        ? "Delivery partner assign hone se pehle cancellation request admin ke paas jayegi. Admin approve karega tabhi order cancel hoga. Kya aap request bhejna chahte ho?"
-        : "Seller accept karne se pehle tak hi order direct cancel ho sakta hai. Kya aap is order ko cancel karna chahte ho?",
+        ? "Since a delivery partner hasn't been assigned yet, your cancellation request will be sent to admin for approval. The order will only be cancelled once approved. Send the request?"
+        : "You can cancel directly only before the seller accepts this order. Cancel now?",
     );
     if (!confirmed) return;
 
@@ -869,7 +869,7 @@ const OrderDetailPage = () => {
       }
 
       if (cancelResponse?.status === 202 || isApprovalFlow) {
-        toast.success("Cancellation request admin ko bhej di gayi hai");
+        toast.success("Cancellation request sent to admin for approval");
       } else {
         setReturnDetails(null);
         setShowReturnModal(false);
@@ -980,6 +980,8 @@ const OrderDetailPage = () => {
               status={getLegacyStatusFromOrder(order)}
               eta={estimatedArrival.arrivingInText}
               riderName={order.deliveryBoy?.name || "Delivery Partner"}
+              riderPhoto={order.deliveryBoy?.profileImage}
+              riderPhone={order.deliveryBoy?.phone}
               riderLocation={liveLocation}
               sellerLocation={sellerLocation}
               destinationLocation={
@@ -1120,15 +1122,16 @@ const OrderDetailPage = () => {
           >
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="h-14 w-14 rounded-full bg-white/20 backdrop-blur-sm overflow-hidden border-2 border-white/40 shadow-lg">
-                  <img
-                    src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=100&auto=format&fit=crop&q=60"
-                    alt="Rider"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-white text-brand-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
-                  4.8 ★
+                <div className="h-14 w-14 rounded-full bg-white/20 backdrop-blur-sm overflow-hidden border-2 border-white/40 shadow-lg flex items-center justify-center">
+                  {order.deliveryBoy?.profileImage ? (
+                    <img
+                      src={order.deliveryBoy.profileImage}
+                      alt={order.deliveryBoy?.name || "Rider"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User size={24} className="text-white/80" />
+                  )}
                 </div>
               </div>
               <div className="flex-1">
@@ -1137,12 +1140,22 @@ const OrderDetailPage = () => {
                 <p className="text-xs text-white/90 mt-0.5">On the way to you</p>
               </div>
               <div className="flex items-center gap-2">
-                <button className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
-                  <MessageSquare size={20} className="text-white" />
-                </button>
-                <button className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30">
-                  <Phone size={20} className="text-white" />
-                </button>
+                {order.deliveryBoy?.phone && (
+                  <>
+                    <button
+                      onClick={() => { window.location.href = `sms:${order.deliveryBoy.phone}`; }}
+                      className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30"
+                    >
+                      <MessageSquare size={20} className="text-white" />
+                    </button>
+                    <button
+                      onClick={() => { window.location.href = `tel:${order.deliveryBoy.phone}`; }}
+                      className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors border border-white/30"
+                    >
+                      <Phone size={20} className="text-white" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
@@ -1268,7 +1281,7 @@ const OrderDetailPage = () => {
           <div className="space-y-2.5 text-sm">
             <div className="flex justify-between text-slate-600">
               <span>Item Total</span>
-              <span className="font-semibold">₹{order.pricing.subtotal}</span>
+              <span className="font-semibold">₹{order.paymentBreakdown?.productSubtotal ?? order.pricing.subtotal}</span>
             </div>
             <div className="flex justify-between text-slate-600">
               <span>Delivery Fee</span>
@@ -1281,10 +1294,73 @@ const OrderDetailPage = () => {
                   : `₹${order.pricing.deliveryFee}`}
               </span>
             </div>
+            {Number(order.paymentBreakdown?.handlingFeeCharged || 0) > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Handling Fee</span>
+                <span className="font-semibold">₹{order.paymentBreakdown.handlingFeeCharged}</span>
+              </div>
+            )}
+            {Number(order.paymentBreakdown?.packingFeeCharged || 0) > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Packing Charge</span>
+                <span className="font-semibold">₹{order.paymentBreakdown.packingFeeCharged}</span>
+              </div>
+            )}
+            {Number(order.paymentBreakdown?.packagingChargeAmount || 0) > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Packaging Charge</span>
+                <span className="font-semibold">₹{order.paymentBreakdown.packagingChargeAmount}</span>
+              </div>
+            )}
+            {(Number(order.paymentBreakdown?.oddHourSurchargeAmount || 0) +
+              Number(order.paymentBreakdown?.weatherSurchargeAmount || 0) +
+              Number(order.paymentBreakdown?.customerSurchargeAmount || 0)) > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Additional Charges</span>
+                <span className="font-semibold">
+                  ₹{
+                    Number(order.paymentBreakdown?.oddHourSurchargeAmount || 0) +
+                    Number(order.paymentBreakdown?.weatherSurchargeAmount || 0) +
+                    Number(order.paymentBreakdown?.customerSurchargeAmount || 0)
+                  }
+                </span>
+              </div>
+            )}
+            {order.paymentBreakdown?.taxJurisdiction === "inter_state"
+              ? Number(order.paymentBreakdown?.igstTotal || 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>IGST</span>
+                    <span className="font-semibold">₹{order.paymentBreakdown.igstTotal}</span>
+                  </div>
+                )
+              : (Number(order.paymentBreakdown?.cgstTotal || 0) > 0 || Number(order.paymentBreakdown?.sgstTotal || 0) > 0) && (
+                  <>
+                    <div className="flex justify-between text-slate-600">
+                      <span>CGST</span>
+                      <span className="font-semibold">₹{order.paymentBreakdown.cgstTotal}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>SGST</span>
+                      <span className="font-semibold">₹{order.paymentBreakdown.sgstTotal}</span>
+                    </div>
+                  </>
+                )}
+            {Number(order.paymentBreakdown?.discountTotal || 0) > 0 && (
+              <div className="flex justify-between text-brand-600">
+                <span>Coupon Discount</span>
+                <span className="font-semibold">-₹{order.paymentBreakdown.discountTotal}</span>
+              </div>
+            )}
             {order.pricing.tip > 0 && (
               <div className="flex justify-between text-slate-600">
                 <span>Tip</span>
                 <span className="font-semibold">₹{order.pricing.tip}</span>
+              </div>
+            )}
+            {Number(order.paymentBreakdown?.walletAmount || 0) > 0 && (
+              <div className="flex justify-between text-brand-600">
+                <span>Wallet Applied</span>
+                <span className="font-semibold">-₹{order.paymentBreakdown.walletAmount}</span>
               </div>
             )}
             <div className="border-t border-slate-100 mt-3 pt-3 flex justify-between items-center">
@@ -1612,7 +1688,7 @@ const OrderDetailPage = () => {
         onClose={() => setShowInvoice(false)}
         order={order}
       />
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} orderId={order?.orderId} />
 
       {/* Return Request Modal */}
       {showReturnModal && (
