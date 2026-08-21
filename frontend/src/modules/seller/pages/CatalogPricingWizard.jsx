@@ -206,7 +206,7 @@ const CatalogPricingWizard = () => {
         </div>
       </div>
 
-      <Card className="border-none shadow-sm ring-1 ring-slate-100 overflow-hidden">
+      <div className="sm:bg-white sm:shadow-sm sm:ring-1 sm:ring-slate-100 sm:rounded-3xl overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-sm text-slate-500">
             <HiOutlineArrowPath className="h-6 w-6 animate-spin mx-auto mb-3 text-slate-400" />
@@ -219,7 +219,7 @@ const CatalogPricingWizard = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left mobile-table-card">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Select</th>
@@ -236,14 +236,14 @@ const CatalogPricingWizard = () => {
                   const pricing = pricingMap[productId] || { price: "", salePrice: "", stock: "0" };
                   return (
                     <tr key={productId}>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Select">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(productId)}
                           onChange={() => toggleSelection(productId)}
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Product">
                         <div className="flex items-center gap-3">
                           {product.mainImage ? (
                             <img src={product.mainImage} alt="" className="h-12 w-12 rounded-lg object-cover" />
@@ -256,7 +256,7 @@ const CatalogPricingWizard = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Price">
                         <input
                           type="number"
                           min="0"
@@ -267,7 +267,7 @@ const CatalogPricingWizard = () => {
                           placeholder="0.00"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Sale price">
                         <input
                           type="number"
                           min="0"
@@ -278,7 +278,7 @@ const CatalogPricingWizard = () => {
                           placeholder="Optional"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Stock">
                         <input
                           type="number"
                           min="0"
@@ -288,7 +288,7 @@ const CatalogPricingWizard = () => {
                           className="w-24 px-3 py-2 rounded-lg bg-slate-50 text-sm font-semibold outline-none"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="You receive">
                         {commissionPreview[productId] ? (
                           <div className="text-xs">
                             <p className="font-bold text-emerald-700">
@@ -309,7 +309,7 @@ const CatalogPricingWizard = () => {
             </table>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };

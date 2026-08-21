@@ -233,7 +233,7 @@ const Transactions = () => {
       </div>
 
       <BlurFade delay={0.4}>
-        <Card className="border-none shadow-xl shadow-slate-200/50 overflow-hidden rounded-lg p-0 bg-white">
+        <div className="sm:bg-white sm:shadow-xl sm:shadow-slate-200/50 sm:rounded-lg overflow-hidden p-0">
           {/* Toolbar */}
           <div className="p-6 border-b border-slate-50 flex flex-col md:flex-row gap-4 items-center justify-between bg-white">
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shrink-0">
@@ -264,7 +264,7 @@ const Transactions = () => {
 
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[720px]">
+            <table className="w-full text-left min-w-[720px] mobile-table-card">
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">
@@ -303,7 +303,7 @@ const Transactions = () => {
                         setIsDetailModalOpen(true);
                       }}
                       className="group hover:bg-slate-50/50 transition-all cursor-pointer">
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5" data-label="Transaction Details">
                         <div className="flex items-center gap-4">
                           <div
                             className={cn(
@@ -328,7 +328,7 @@ const Transactions = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5" data-label="Reference">
                         <p className="text-xs font-bold text-slate-900">
                           {txn.customer ?? "—"}
                         </p>
@@ -341,7 +341,7 @@ const Transactions = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5" data-label="Amount">
                         <p
                           className={cn(
                             "text-sm font-black tracking-tight",
@@ -356,7 +356,7 @@ const Transactions = () => {
                           Settlement: {(txn.status ?? "") === "Settled" ? "Complete" : "T+2"}
                         </p>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5" data-label="Status">
                         <Badge
                           variant={
                             txn.status === "Settled"
@@ -374,7 +374,7 @@ const Transactions = () => {
                           {txn.status}
                         </Badge>
                       </td>
-                      <td className="px-6 py-5 text-right">
+                      <td className="px-6 py-5 text-right" data-label="Actions">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -407,7 +407,7 @@ const Transactions = () => {
               />
             </div>
           )}
-        </Card>
+        </div>
       </BlurFade>
 
       {/* Transaction Detail Modal */}

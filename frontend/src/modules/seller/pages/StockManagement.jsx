@@ -222,7 +222,7 @@ const StockManagement = () => {
                     </div>
 
                     <BlurFade delay={0.3}>
-                        <Card className="border-none shadow-xl shadow-slate-200/50 overflow-hidden rounded-3xl">
+                        <div className="sm:bg-white sm:shadow-xl sm:shadow-slate-200/50 sm:rounded-3xl overflow-hidden">
                             {/* Toolbox */}
                             <div className="p-4 border-b border-slate-50 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50/30">
                                 <div className="flex flex-col md:flex-row gap-3 items-center w-full">
@@ -268,7 +268,7 @@ const StockManagement = () => {
 
                             {/* Stock Table */}
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left">
+                                <table className="w-full text-left mobile-table-card">
                                     <thead>
                                         <tr className="bg-slate-50/50 border-b border-slate-100">
                                             <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">Product Information</th>
@@ -300,7 +300,7 @@ const StockManagement = () => {
                                                             exit={{ opacity: 0 }}
                                                             className="group hover:bg-slate-50/80 transition-all cursor-default"
                                                         >
-                                                            <td className="px-6 py-5">
+                                                            <td className="px-6 py-5" data-label="Product Information">
                                                                 <div className="flex items-center gap-4 group">
                                                                     <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 group-hover:scale-105 transition-transform overflow-hidden">
                                                                         {item.mainImage ? (
@@ -319,7 +319,7 @@ const StockManagement = () => {
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-5">
+                                                            <td className="px-6 py-5" data-label="Inventory Capacity">
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="flex flex-col">
                                                                         <span
@@ -338,7 +338,7 @@ const StockManagement = () => {
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-5">
+                                                            <td className="px-6 py-5" data-label="Stock Health">
                                                                 <Badge
                                                                     variant={item.status === 'In Stock' ? 'success' : 'destructive'}
                                                                     className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
@@ -346,10 +346,10 @@ const StockManagement = () => {
                                                                     {item.status}
                                                                 </Badge>
                                                             </td>
-                                                            <td className="px-6 py-5">
+                                                            <td className="px-6 py-5" data-label="Price">
                                                                 <p className="text-sm font-black text-slate-900">₹{item.price}</p>
                                                             </td>
-                                                            <td className="px-6 py-5 text-right">
+                                                            <td className="px-6 py-5 text-right" data-label="Actions">
                                                                 <button
                                                                     onClick={() => openAdjustModal(item)}
                                                                     className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-colors"
@@ -364,7 +364,7 @@ const StockManagement = () => {
                                     </tbody>
                                 </table>
                             </div>
-                        </Card>
+                        </div>
                     </BlurFade>
 
                     <div className="mt-4">

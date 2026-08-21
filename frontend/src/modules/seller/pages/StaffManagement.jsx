@@ -385,7 +385,7 @@ const StaffManagement = () => {
         </div>
       </Card>
 
-      <Card>
+      <div className="sm:bg-white sm:rounded-3xl sm:border sm:border-slate-100 sm:shadow-sm overflow-hidden">
         {loading && visibleAssistants.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
@@ -406,7 +406,7 @@ const StaffManagement = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse mobile-table-card">
               <thead>
                 <tr className="bg-slate-50/75 border-b border-slate-100">
                   <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">Assistant</th>
@@ -419,7 +419,7 @@ const StaffManagement = () => {
               <tbody className="divide-y divide-slate-100">
                 {visibleAssistants.map((assistant) => (
                   <tr key={assistant._id} className="hover:bg-slate-50/50 transition-colors align-top">
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-5" data-label="Assistant">
                       <div className="flex items-center gap-3">
                         <div className="h-11 w-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-700 text-sm font-black border border-indigo-100">
                           {assistant.name.charAt(0).toUpperCase()}
@@ -439,19 +439,19 @@ const StaffManagement = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-5" data-label="Store">
                       <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700">
                         <HiOutlineBuildingStorefront className="h-4 w-4 text-indigo-500" />
                         {assistant.storeName}
                       </span>
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-5" data-label="Role">
                       <Badge variant="indigo">
                         {(ROLES_LIST.find((role) => role.id === assistant.role)?.label || assistant.role).toUpperCase()}
                       </Badge>
                     </td>
-                    <td className="px-6 py-5">{renderPermissionBadges(assistant)}</td>
-                    <td className="px-6 py-5 text-right">
+                    <td className="px-6 py-5" data-label="Permissions">{renderPermissionBadges(assistant)}</td>
+                    <td className="px-6 py-5 text-right" data-label="Actions">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleOpenEdit(assistant)}
@@ -475,7 +475,7 @@ const StaffManagement = () => {
             </table>
           </div>
         )}
-      </Card>
+      </div>
 
       <AnimatePresence>
         {isOpen && (

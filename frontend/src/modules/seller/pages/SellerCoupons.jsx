@@ -201,8 +201,8 @@ const SellerCoupons = () => {
           </button>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="sm:bg-white sm:dark:bg-gray-800 sm:rounded-xl sm:border sm:border-gray-100 sm:dark:border-gray-700 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 mobile-table-card">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
                 {["Code", "Title", "Discount", "Usage", "Valid Till", "Status", "Actions"].map(
@@ -222,29 +222,29 @@ const SellerCoupons = () => {
                 const status = getCouponStatus(coupon);
                 return (
                 <tr key={coupon._id}>
-                  <td className="px-4 py-3 font-mono text-sm">{coupon.code}</td>
-                  <td className="px-4 py-3 text-sm">{coupon.title || "—"}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 font-mono text-sm" data-label="Code">{coupon.code}</td>
+                  <td className="px-4 py-3 text-sm" data-label="Title">{coupon.title || "—"}</td>
+                  <td className="px-4 py-3 text-sm" data-label="Discount">
                     {coupon.discountType === "percentage"
                       ? `${coupon.discountValue}%`
                       : coupon.discountType === "free_delivery"
                         ? "Free Delivery"
                         : `₹${coupon.discountValue}`}
                   </td>
-                  <td className="px-4 py-3 text-sm">{coupon.usedCount || 0}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 text-sm" data-label="Usage">{coupon.usedCount || 0}</td>
+                  <td className="px-4 py-3 text-sm" data-label="Valid Till">
                     {coupon.validTill
                       ? new Date(coupon.validTill).toLocaleDateString("en-IN")
                       : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label="Status">
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${getCouponStatusClassName(status)}`}
                     >
                       {getCouponStatusLabel(status)}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label="Actions">
                     <div className="flex gap-2">
                       <button
                         type="button"

@@ -96,9 +96,9 @@ const Invoices = () => {
         </div>
       </div>
 
-      <Card className="overflow-hidden">
+      <div className="sm:bg-white sm:shadow-sm sm:border sm:border-slate-100 sm:rounded-3xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse mobile-table-card">
             <thead>
               <tr className="bg-slate-50/60 border-b border-slate-100">
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</th>
@@ -122,21 +122,21 @@ const Invoices = () => {
               ) : (
                 filteredOrders.map((order) => (
                   <tr key={order._id || order.orderId} className="hover:bg-slate-50/40 transition-colors">
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4" data-label="Order ID">
                       <span className="text-sm font-bold text-slate-900">{order.orderId}</span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4" data-label="Customer">
                       <span className="text-sm text-slate-600">{order.customer?.name || "Customer"}</span>
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4" data-label="Delivered">
                       <span className="text-sm text-slate-500">{formatDate(order.deliveredAt || order.updatedAt)}</span>
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="px-5 py-4 text-right" data-label="Order Value">
                       <span className="text-sm font-bold text-slate-900">
                         {formatMoney(order.paymentBreakdown?.grandTotal ?? order.pricing?.total)}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="px-5 py-4 text-right" data-label="Invoice">
                       <button
                         onClick={() => handleDownload(order.orderId)}
                         disabled={downloadingId === order.orderId}
@@ -161,7 +161,7 @@ const Invoices = () => {
             <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };

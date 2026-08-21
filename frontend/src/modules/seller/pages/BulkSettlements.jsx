@@ -99,7 +99,7 @@ const BulkSettlements = () => {
         <StatCard label="Tax" value={formatMoney(totals.taxAmount)} icon={HiOutlineReceiptPercent} color="text-sky-600" bg="bg-sky-50" />
       </div>
 
-      <Card className="border-none shadow-sm">
+      <div className="sm:bg-white sm:shadow-sm sm:rounded-3xl sm:border sm:border-slate-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex gap-3 items-end flex-wrap">
           <div className="relative flex-1 min-w-[220px]">
             <label className="text-xs font-bold text-slate-500 block mb-1">Order ID</label>
@@ -131,7 +131,7 @@ const BulkSettlements = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full mobile-table-card">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Order</th>
@@ -152,18 +152,18 @@ const BulkSettlements = () => {
               ) : (
                 items.map((row) => (
                   <tr key={row._id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-3 px-4 text-sm font-bold text-gray-900">{row.orderId}</td>
-                    <td className="py-3 px-4 text-xs text-gray-500">{REASON_LABEL[row.bulkOrderReason] || "—"}</td>
-                    <td className="py-3 px-4 text-sm font-bold text-gray-900">{formatMoney(row.sellerPayoutAmount)}</td>
-                    <td className="py-3 px-4 text-sm text-gray-700">{formatMoney(row.commissionAmount)}</td>
-                    <td className="py-3 px-4 text-sm text-gray-700">{formatMoney(row.packagingAmount)}</td>
-                    <td className="py-3 px-4 text-sm text-gray-700">{formatMoney(row.taxAmount)}</td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-sm font-bold text-gray-900" data-label="Order">{row.orderId}</td>
+                    <td className="py-3 px-4 text-xs text-gray-500" data-label="Reason">{REASON_LABEL[row.bulkOrderReason] || "—"}</td>
+                    <td className="py-3 px-4 text-sm font-bold text-gray-900" data-label="You Receive">{formatMoney(row.sellerPayoutAmount)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700" data-label="Commission">{formatMoney(row.commissionAmount)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700" data-label="Packaging">{formatMoney(row.packagingAmount)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700" data-label="Tax">{formatMoney(row.taxAmount)}</td>
+                    <td className="py-3 px-4" data-label="Status">
                       <Badge variant={statusVariant(row.status)} className="text-[10px] font-bold uppercase px-2.5 py-1">
                         {row.status}
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-xs text-gray-500">{formatDate(row.settledAt)}</td>
+                    <td className="py-3 px-4 text-xs text-gray-500" data-label="Settled">{formatDate(row.settledAt)}</td>
                   </tr>
                 ))
               )}
@@ -182,7 +182,7 @@ const BulkSettlements = () => {
             loading={loading}
           />
         </div>
-      </Card>
+      </div>
     </div>
   );
 };

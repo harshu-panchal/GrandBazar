@@ -188,7 +188,7 @@ const Withdrawals = () => {
 
             {/* History Table */}
             <BlurFade delay={0.5}>
-                <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden bg-white rounded-3xl">
+                <div className="sm:bg-white sm:shadow-xl sm:ring-1 sm:ring-slate-100 sm:rounded-3xl overflow-hidden">
                     <div className="p-4 sm:p-6 border-b border-slate-50 flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4">
                         <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
                             <History className="h-5 w-5 text-brand-500" />
@@ -206,7 +206,7 @@ const Withdrawals = () => {
                         </div>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[640px]">
+                        <table className="w-full text-left min-w-[640px] mobile-table-card">
                             <thead>
                                 <tr className="bg-slate-50/50">
                                     <th className="px-8 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">Request Details</th>
@@ -224,14 +224,14 @@ const Withdrawals = () => {
                                     </tr>
                                 ) : paginatedHistory.map((item, idx) => (
                                     <tr key={item.id || item.ref || item.reference || `wd-${idx}`} className="group hover:bg-slate-50/50 transition-all">
-                                        <td className="px-8 py-5">
+                                        <td className="px-8 py-5" data-label="Request Details">
                                             <p className="text-sm font-black text-slate-900">{item.id}</p>
                                             <p className="text-xs font-bold text-slate-600 mt-0.5 uppercase tracking-tighter">{item.date} • {item.time}</p>
                                         </td>
-                                        <td className="px-8 py-5">
+                                        <td className="px-8 py-5" data-label="Amount">
                                             <p className="text-sm font-black text-slate-900">₹{Math.abs(item.amount).toLocaleString()}</p>
                                         </td>
-                                        <td className="px-8 py-5 text-center">
+                                        <td className="px-8 py-5 text-center" data-label="Status">
                                             <Badge
                                                 variant={item.status === 'Settled' ? 'success' : (item.status === 'Pending' || item.status === 'Processing') ? 'warning' : 'danger'}
                                                 className="text-[8px] font-black px-2.5 py-0.5 uppercase tracking-widest rounded-lg"
@@ -241,7 +241,7 @@ const Withdrawals = () => {
                                             </Badge>
                                             {item.reason && <p className="text-[9px] text-rose-500 font-bold mt-1 uppercase italic">{item.reason}</p>}
                                         </td>
-                                        <td className="px-8 py-5 text-right">
+                                        <td className="px-8 py-5 text-right" data-label="Method">
                                             <p className="text-xs font-bold text-slate-600">{item.customer}</p>
                                             <button
                                                 type="button"
@@ -273,7 +273,7 @@ const Withdrawals = () => {
                             />
                         </div>
                     )}
-                </Card>
+                </div>
             </BlurFade>
 
             {/* Request Modal */}
