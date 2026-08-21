@@ -38,10 +38,11 @@ const ProductDetailPage = () => {
     const canonicalPath = product ? buildProductPath(product) : `/product/${slugAndId || ""}`;
     const canonicalUrl = `${window.location.origin}${canonicalPath}`;
 
+    const appName = settings?.appName || 'our store';
     useSeoMeta({
-        title: product?.name ? `${product.name} | Grand Bazar` : "Product | Grand Bazar",
-        description: product?.description || "Browse product details, pricing, and delivery information on Grand Bazar.",
-        keywords: [product?.name, product?.brand, "Grand Bazar", "quick commerce"].filter(Boolean),
+        title: product?.name ? `${product.name} | ${appName}` : `Product | ${appName}`,
+        description: product?.description || `Browse product details, pricing, and delivery information on ${appName}.`,
+        keywords: [product?.name, product?.brand, appName, "quick commerce"].filter(Boolean),
         canonicalUrl,
         ogImage: activeImage || product?.mainImage || "",
         ogType: "product",
@@ -183,7 +184,7 @@ const ProductDetailPage = () => {
 
         const shareUrl = `${window.location.origin}${buildProductPath(product)}`;
         const shareTitle = product.name;
-        const shareText = `Check out ${product.name} on Grand Bazar!`;
+        const shareText = `Check out ${product.name} on ${appName}!`;
 
         if (navigator.share) {
             try {

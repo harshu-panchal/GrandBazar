@@ -34,7 +34,14 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
           : { data: { success: true, result: { items: [] } } };
         if (cancelled) return;
         const items = res.data?.result?.items || res.data?.result || [];
-        setProducts(Array.isArray(items) ? items : []);
+        const inStockOnly = (Array.isArray(items) ? items : []).filter((product) => {
+          const variants = Array.isArray(product?.variants) ? product.variants : [];
+          if (variants.length > 0) {
+            return variants.some((v) => Number(v?.stock || 0) > 0);
+          }
+          return Number(product?.stock || 0) > 0;
+        });
+        setProducts(inStockOnly);
       } catch {
         if (!cancelled) toast.error("Could not load items for this store");
       } finally {

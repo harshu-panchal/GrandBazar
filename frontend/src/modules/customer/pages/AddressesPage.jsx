@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
 import { useLocation } from '../context/LocationContext';
+import MapPicker from '@shared/components/MapPicker';
 
 /** Maps known technical error shapes (Mongo validation, duplicate-key, etc.) to plain-language copy. */
 function friendlyAddressErrorMessage(err) {
@@ -81,6 +82,8 @@ const AddressesPage = () => {
     }, [searchParams, loading]);
 
     const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+    const [pinnedLocation, setPinnedLocation] = useState(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     const [selectedAddress, setSelectedAddress] = useState(null);
@@ -108,7 +111,19 @@ const AddressesPage = () => {
             state: '',
             pincode: ''
         });
+        setPinnedLocation(null);
         setIsAddOpen(true);
+    };
+
+    const handleMapPinConfirmed = (loc) => {
+        setPinnedLocation({ lat: loc.lat, lng: loc.lng });
+        setAddForm((f) => ({
+            ...f,
+            city: f.city || loc.city || loc.locality || '',
+            state: f.state || loc.state || '',
+            pincode: f.pincode || loc.pincode || '',
+        }));
+        toast.success('Pinned exact location on map');
     };
 
     const handleSaveNewAddress = async () => {
@@ -132,22 +147,28 @@ const AddressesPage = () => {
         };
         setSaving(true);
         try {
-            // Best-effort: store coordinates + placeId so checkout can calculate distance-based delivery fees
-            // without repeated Maps calls.
-            try {
-                const query = [address, landmark, city, state, pincode].filter(Boolean).join(', ');
-                const geo = await customerApi.geocodeAddress(query);
-                const loc = geo.data?.result?.location;
-                if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-                    newAddr.location = { lat: loc.lat, lng: loc.lng };
-                    if (geo.data?.result?.placeId) newAddr.placeId = geo.data.result.placeId;
-                    if (geo.data?.result?.formattedAddress) newAddr.formattedAddress = geo.data.result.formattedAddress;
+            if (pinnedLocation) {
+                // The customer confirmed an exact pin on the map — use it directly
+                // rather than the approximate centroid a text geocode would return.
+                newAddr.location = pinnedLocation;
+            } else {
+                // Best-effort fallback: store coordinates + placeId from a text geocode
+                // so checkout can still calculate distance-based delivery fees.
+                try {
+                    const query = [address, landmark, city, state, pincode].filter(Boolean).join(', ');
+                    const geo = await customerApi.geocodeAddress(query);
+                    const loc = geo.data?.result?.location;
+                    if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                        newAddr.location = { lat: loc.lat, lng: loc.lng };
+                        if (geo.data?.result?.placeId) newAddr.placeId = geo.data.result.placeId;
+                        if (geo.data?.result?.formattedAddress) newAddr.formattedAddress = geo.data.result.formattedAddress;
+                    }
+                } catch (e) {
+                    toast.error(
+                        e.response?.data?.message ||
+                        'Could not fetch coordinates for this address. Delivery fees may be inaccurate.'
+                    );
                 }
-            } catch (e) {
-                toast.error(
-                    e.response?.data?.message ||
-                    'Could not fetch coordinates for this address. Delivery fees may be inaccurate.'
-                );
             }
 
             await customerApi.updateProfile({
@@ -430,6 +451,18 @@ const AddressesPage = () => {
                             <Label htmlFor="address">Address</Label>
                             <Textarea id="address" placeholder="Flat No, Building, Street" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))} />
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsMapPickerOpen(true)}
+                            className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                                pinnedLocation
+                                    ? 'border-primary bg-brand-50 text-primary'
+                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                        >
+                            <MapPin size={16} />
+                            {pinnedLocation ? 'Exact location pinned on map ✓' : 'Pin exact location on map'}
+                        </button>
                         <div className="grid gap-2">
                             <Label htmlFor="landmark">Nearest Landmark (optional)</Label>
                             <Input
@@ -547,6 +580,14 @@ const AddressesPage = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <MapPicker
+                isOpen={isMapPickerOpen}
+                onClose={() => setIsMapPickerOpen(false)}
+                onConfirm={handleMapPinConfirmed}
+                initialLocation={pinnedLocation}
+                preferCurrentLocationOnOpen={!pinnedLocation}
+            />
         </div>
     );
 };

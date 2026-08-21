@@ -111,8 +111,12 @@ const ProductCard = React.memo(
           )?.stock ?? 0,
         )
       : null;
-    const isOutOfStock = defaultVariant
-      ? !(variantStock > 0)
+    const hasVariants = Array.isArray(product?.variants) && product.variants.length > 0;
+    // Check across ALL variants, not just the one auto-picked as "default" —
+    // a product shouldn't show as fully out of stock when only the displayed
+    // variant happens to be at 0 while others still have stock.
+    const isOutOfStock = hasVariants
+      ? !product.variants.some((v) => Number(v?.stock || 0) > 0)
       : !(Number(product?.stock) > 0);
 
     const handleAddToCart = React.useCallback(
@@ -429,7 +433,11 @@ const ProductCard = React.memo(
                 </div>
               ) : (
                 <button
-                  onClick={handleAddToCart}
+                  onClick={
+                    hasVariants && product.variants.length > 1
+                      ? handleProductClick
+                      : handleAddToCart
+                  }
                   disabled={bookingLocked || isOutOfStock}
                   className={cn(
                     "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400",

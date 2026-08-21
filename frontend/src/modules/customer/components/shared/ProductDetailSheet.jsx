@@ -233,7 +233,7 @@ const ProductDetailSheet = () => {
 
         const shareUrl = `${window.location.origin}${buildProductPath(selectedProduct)}`;
         const shareTitle = selectedProduct.name;
-        const shareText = `Check out ${selectedProduct.name} on Grand Bazar!`;
+        const shareText = `Check out ${selectedProduct.name} on ${settings?.appName || 'our store'}!`;
 
         if (navigator.share) {
             try {

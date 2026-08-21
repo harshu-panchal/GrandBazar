@@ -156,9 +156,9 @@ const OrdersPage = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1 shrink-0 text-right">
+                                <div className="flex flex-col items-end gap-1 shrink-0 text-right max-w-[130px]">
                                     <span
-                                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] whitespace-normal text-right leading-tight ${
                                             legacy === 'delivered'
                                                 ? 'bg-brand-50 text-brand-700 border-brand-100'
                                                 : legacy === 'cancelled'

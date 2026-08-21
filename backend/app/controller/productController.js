@@ -1283,14 +1283,12 @@ export const getProductById = async (req, res) => {
 
     let nearbySellerSet = null;
     const coords = parseCustomerCoordinates(req.query || {});
-    if (enforceRadius) {
-      if (!coords.valid) {
-        return handleResponse(
-          res,
-          400,
-          "lat and lng are required for customer product visibility",
-        );
-      }
+    // A customer opening a shared product link cold (fresh session, before
+    // LocationContext has resolved GPS) has no lat/lng yet. Don't conflate
+    // "we don't know your location" with "this product isn't available" —
+    // still fetch and return the product below; only the serviceability
+    // check (nearbySellerSet) is skipped without coordinates.
+    if (enforceRadius && coords.valid) {
       const nearbySellerIds = await getNearbySellerIdsForCustomer(
         coords.lat,
         coords.lng,
@@ -1335,10 +1333,17 @@ export const getProductById = async (req, res) => {
       }
     }
 
+    let requiresLocation = false;
     if (enforceRadius) {
-      const sellerIdForProduct = String(product?.sellerId?._id || product?.sellerId);
-      if (!nearbySellerSet || !nearbySellerSet.has(sellerIdForProduct)) {
-        return handleResponse(res, 404, "Product not available in your area");
+      if (!coords.valid) {
+        // Genuinely unknown serviceability — let the frontend prompt for
+        // location rather than showing a blanket "unavailable" state.
+        requiresLocation = true;
+      } else {
+        const sellerIdForProduct = String(product?.sellerId?._id || product?.sellerId);
+        if (!nearbySellerSet || !nearbySellerSet.has(sellerIdForProduct)) {
+          return handleResponse(res, 404, "Product not available in your area");
+        }
       }
     }
 
@@ -1346,7 +1351,7 @@ export const getProductById = async (req, res) => {
       res,
       200,
       "Product details fetched",
-      normalizeProductDocumentModeration(product),
+      { ...normalizeProductDocumentModeration(product), requiresLocation },
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);

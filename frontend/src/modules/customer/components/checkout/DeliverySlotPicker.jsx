@@ -129,8 +129,14 @@ export default function DeliverySlotPicker({
       }
     };
     load();
+    // A slot that's valid at fetch time can pass while this picker stays
+    // open (e.g. customer leaves the tab open past a window's end time) —
+    // re-fetch periodically so an ended slot gets disabled live instead of
+    // staying selectable until something else re-triggers this effect.
+    const refreshInterval = setInterval(load, 90 * 1000);
     return () => {
       cancelled = true;
+      clearInterval(refreshInterval);
     };
   }, [sellerId, deliveryDate, isScheduled, fulfillmentType, campaignId]);
 

@@ -112,7 +112,7 @@ export default function DeliveryPolicyPage() {
   };
 
   return (
-    <div className="p-4 space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl mx-auto pb-24">
       <div>
         <h1 className="text-2xl font-black text-slate-900">Delivery Policy & Availability</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -120,7 +120,7 @@ export default function DeliveryPolicyPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+      <section className="-mx-4 sm:mx-0 sm:rounded-2xl border-y sm:border border-slate-100 sm:border-slate-200 bg-white p-5 sm:p-6 space-y-5">
         <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">Fulfillment Methods</h2>
         {[
           ["customerPickup", "Customer Pickup"],
@@ -159,7 +159,7 @@ export default function DeliveryPolicyPage() {
         </label>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+      <section className="-mx-4 sm:mx-0 sm:rounded-2xl border-y sm:border border-slate-100 sm:border-slate-200 bg-white p-5 sm:p-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">
@@ -203,7 +203,7 @@ export default function DeliveryPolicyPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+      <section className="-mx-4 sm:mx-0 sm:rounded-2xl border-y sm:border border-slate-100 sm:border-slate-200 bg-white p-5 sm:p-6 space-y-5">
         <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">Business Hours</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm">
@@ -255,7 +255,7 @@ export default function DeliveryPolicyPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+      <section className="-mx-4 sm:mx-0 sm:rounded-2xl border-y sm:border border-slate-100 sm:border-slate-200 bg-white p-5 sm:p-6 space-y-5">
         <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">Vacation & Temporary Closure</h2>
         <label className="flex items-center gap-2 text-sm font-semibold">
           <input
@@ -305,7 +305,7 @@ export default function DeliveryPolicyPage() {
         </select>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+      <section className="-mx-4 sm:mx-0 sm:rounded-2xl border-y sm:border border-slate-100 sm:border-slate-200 bg-white p-5 sm:p-6 space-y-5">
         <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">Scheduled Delivery</h2>
         <label className="flex items-center gap-2 text-sm font-semibold">
           <input
@@ -363,16 +363,18 @@ export default function DeliveryPolicyPage() {
         </div>
       </section>
 
-      {message && <p className="text-sm font-semibold text-slate-600">{message}</p>}
+      <div>
+        {message && <p className="text-sm font-semibold text-slate-600 mb-4">{message}</p>}
 
-      <button
-        type="button"
-        disabled={saving}
-        onClick={save}
-        className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white"
-      >
-        {saving ? "Saving..." : "Save delivery policy"}
-      </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={save}
+          className="w-full sm:w-auto rounded-xl bg-emerald-600 px-6 py-4 sm:py-3 text-sm font-black text-white uppercase tracking-wider"
+        >
+          {saving ? "Saving..." : "Save delivery policy"}
+        </button>
+      </div>
     </div>
   );
 }

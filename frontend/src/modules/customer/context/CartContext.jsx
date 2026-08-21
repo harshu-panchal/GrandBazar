@@ -193,10 +193,20 @@ export const CartProvider = ({ children }) => {
       existingSellerIds.some((sellerId) => sellerId && sellerId !== incomingSellerId);
 
     if (hasOtherStoreItems) {
-      const confirmed = window.confirm(
-        "Your cart has items from another store. Clear those items and add this product?",
-      );
-      if (!confirmed) return { ok: false };
+      let confirmed = false;
+      try {
+        confirmed = window.confirm(
+          "Your cart has items from another store. Clear those items and add this product?",
+        );
+      } catch {
+        // Some WebView shells throw/suppress window.confirm entirely — treat
+        // that the same as a decline rather than silently proceeding.
+        confirmed = false;
+      }
+      if (!confirmed) {
+        toast.error("Item not added — your cart still has items from another store.");
+        return { ok: false };
+      }
     }
 
     // Optimistic UI update for instant feedback (single-store cart only)
