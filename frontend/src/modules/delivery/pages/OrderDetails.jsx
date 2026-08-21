@@ -782,7 +782,7 @@ const OrderDetails = () => {
           </div>
         </motion.div>
 
-        <Card className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
           <div className="flex justify-between items-center px-2 mb-2 relative">
             <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -z-10 rounded-full" />
             <motion.div
@@ -817,7 +817,7 @@ const OrderDetails = () => {
               </span>
             ))}
           </div>
-        </Card>
+        </div>
 
         <AnimatePresence mode="wait">
           {/* Customer pickup card: show at return steps 1-2, standard delivery steps 1-2 */}
@@ -829,7 +829,7 @@ const OrderDetails = () => {
               animate="visible"
               exit={{ opacity: 0, height: 0 }}
             >
-              <Card className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-orange-50/50 flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="p-2 bg-white rounded-full shadow-sm mr-3">
@@ -877,7 +877,7 @@ const OrderDetails = () => {
                     {isReturn ? "Navigate to Customer" : "Navigate to Store"}
                   </Button>
                 </div>
-              </Card>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -891,7 +891,7 @@ const OrderDetails = () => {
               initial="hidden"
               animate="visible"
             >
-              <Card className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-brand-50/50 flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="p-2 bg-white rounded-full shadow-sm mr-3">
@@ -954,12 +954,12 @@ const OrderDetails = () => {
                     {isReturn ? "Navigate to Seller" : "Navigate to Customer"}
                   </Button>
                 </div>
-              </Card>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <Card className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
           <motion.div
             className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
             onClick={() => setItemsExpanded(!itemsExpanded)}
@@ -989,7 +989,7 @@ const OrderDetails = () => {
                 transition={{ duration: 0.3 }}
                 className="overflow-hidden"
               >
-                <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-3">
+                <div className="p-4 border-t border-gray-100 bg-white space-y-3">
                   {(isReturn ? order.returnItems : order.items)?.map((item, i) => (
                     <div key={i} className="flex justify-between items-center text-sm">
                       <div className="flex items-center">
@@ -1009,7 +1009,7 @@ const OrderDetails = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </Card>
+        </div>
 
         <motion.div
           className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200 flex items-start shadow-sm"
@@ -1032,7 +1032,7 @@ const OrderDetails = () => {
                 onSubmitted={() => setPickupProofSubmitted(true)}
               />
             ) : (
-              <Card className="p-6 rounded-3xl shadow-sm border border-slate-100">
+              <div className="p-6 rounded-3xl shadow-sm border border-slate-100">
                 <div className="flex items-center mb-4 text-gray-800">
                   <ShieldCheck className="mr-2 text-primary" size={24} />
                   <h3 className="font-bold text-lg">Request Pickup OTP</h3>
@@ -1049,7 +1049,7 @@ const OrderDetails = () => {
                   bgColorLight="bg-orange-50"
                   label="SLIDE TO SEND CUSTOMER OTP"
                 />
-              </Card>
+              </div>
             )}
           </motion.div>
         )}
@@ -1057,7 +1057,7 @@ const OrderDetails = () => {
         {/* Normal delivery Step 3: generate OTP for customer */}
         {!isReturn && step === 3 && !showOtpInput && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Card className="p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="p-6 rounded-3xl shadow-sm border border-slate-100">
               <div className="flex items-center mb-4 text-gray-800">
                 <ShieldCheck className="mr-2 text-primary" size={24} />
                 <h3 className="font-bold text-lg">Generate Delivery OTP</h3>
@@ -1071,14 +1071,14 @@ const OrderDetails = () => {
                 onError={handleOtpGenerationError}
                 isReturn={false}
               />
-            </Card>
+            </div>
           </motion.div>
         )}
 
         {/* Return Step 4: arrived at seller — request seller drop OTP */}
         {isReturn && step === 4 && !showDropOtpInput && isAssignedRider && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="p-6 rounded-3xl shadow-sm border border-green-100">
+            <div className="p-6 rounded-3xl shadow-sm border border-green-100">
               <div className="flex items-center mb-4 text-gray-800">
                 <ShieldCheck className="mr-2 text-green-600" size={24} />
                 <h3 className="font-bold text-lg">Request Seller OTP</h3>
@@ -1099,14 +1099,14 @@ const OrderDetails = () => {
                 }}
                 onError={(err) => toast.error(err?.message || "Failed to send seller OTP")}
               />
-            </Card>
+            </div>
           </motion.div>
         )}
 
         {/* Pickup OTP input */}
         {showOtpInput && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="p-6 rounded-3xl shadow-sm border border-slate-100">
               <OtpInput
                 orderId={orderId}
                 isReturn={isReturn}
@@ -1115,14 +1115,14 @@ const OrderDetails = () => {
                 onError={handleOtpValidationError}
                 onCancel={() => setShowOtpInput(false)}
               />
-            </Card>
+            </div>
           </motion.div>
         )}
 
         {/* Seller drop OTP input */}
         {isReturn && showDropOtpInput && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="p-6 rounded-3xl shadow-sm border border-green-100">
+            <div className="p-6 rounded-3xl shadow-sm border border-green-100">
               <OtpInput
                 orderId={orderId}
                 isReturn={false}
@@ -1137,7 +1137,7 @@ const OrderDetails = () => {
                 onError={handleOtpValidationError}
                 onCancel={() => setShowDropOtpInput(false)}
               />
-            </Card>
+            </div>
           </motion.div>
         )}
 

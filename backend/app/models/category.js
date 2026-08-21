@@ -168,7 +168,7 @@ function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-categorySchema.pre("save", function syncLegacyFinanceFields(next) {
+categorySchema.pre("save", function syncLegacyFinanceFields() {
   try {
     const adminType = this.adminCommissionType || "percentage";
     const handlingType = this.handlingFeeType || "fixed";
@@ -265,18 +265,16 @@ categorySchema.pre("save", function syncLegacyFinanceFields(next) {
       this.packingFeeValue = normalizeNonNegativeNumber(this.packingFeeValue);
       this.packingFees = 0;
     }
-
-    next();
   } catch (error) {
-    next(error);
+    throw error;
   }
 });
 
-categorySchema.pre("findOneAndUpdate", function syncLegacyFinanceFieldsOnUpdate(next) {
+categorySchema.pre("findOneAndUpdate", function syncLegacyFinanceFieldsOnUpdate() {
   try {
     const update = this.getUpdate();
     const set = getUpdateSet(update);
-    if (!set) return next();
+    if (!set) return;
 
     // If legacy fields are updated, also update new fields so pricing reads the correct values.
     if (hasOwn(set, "adminCommission") && !hasOwn(set, "adminCommissionValue")) {
@@ -322,9 +320,8 @@ categorySchema.pre("findOneAndUpdate", function syncLegacyFinanceFieldsOnUpdate(
     }
 
     this.setUpdate(update);
-    next();
   } catch (error) {
-    next(error);
+    throw error;
   }
 });
 

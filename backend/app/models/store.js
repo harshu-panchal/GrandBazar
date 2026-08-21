@@ -345,7 +345,7 @@ async function buildUniqueStoreSlug(doc, baseName) {
   return `${base}-${String(doc._id).slice(-6)}`;
 }
 
-storeSchema.pre("save", async function syncStoreSlug(next) {
+storeSchema.pre("save", async function syncStoreSlug() {
   try {
     const previousSlug = this.isModified("slug") ? this.get("slug") : this.slug;
     if (this.isNew || this.isModified("shopName") || !this.slug) {
@@ -363,13 +363,12 @@ storeSchema.pre("save", async function syncStoreSlug(next) {
       const history = new Set([...(this.slugHistory || []), String(previousSlug).toLowerCase()]);
       this.slugHistory = [...history];
     }
-    next();
   } catch (error) {
-    next(error);
+    throw error;
   }
 });
 
-storeSchema.pre("save", function syncStoreCommissionFields(next) {
+storeSchema.pre("save", function syncStoreCommissionFields() {
   try {
     const value = Math.max(0, Number(this.adminCommissionValue ?? this.adminCommission ?? 0) || 0);
     this.adminCommissionValue = value;
@@ -378,9 +377,8 @@ storeSchema.pre("save", function syncStoreCommissionFields(next) {
     } else {
       this.adminCommission = 0;
     }
-    next();
   } catch (error) {
-    next(error);
+    throw error;
   }
 });
 

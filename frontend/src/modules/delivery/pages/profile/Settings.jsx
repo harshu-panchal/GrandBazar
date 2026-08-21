@@ -91,7 +91,7 @@ const Settings = () => {
         {/* Notifications */}
         <section>
           <h2 className="text-sm uppercase font-bold text-gray-500 mb-3 tracking-wider ml-1">Notifications</h2>
-          <Card className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100">
             <div className="p-4 flex justify-between items-center cursor-pointer" onClick={() => toggleSetting('pushNotifications')}>
               <div className="flex items-center">
                 <Bell size={20} className="text-gray-400 mr-3" />
@@ -115,13 +115,13 @@ const Settings = () => {
                 <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${prefs.sound ? 'translate-x-6' : 'translate-x-0'}`} />
               </div>
             </div>
-          </Card>
+          </div>
         </section>
 
         {/* General */}
         <section>
           <h2 className="text-sm uppercase font-bold text-gray-500 mb-3 tracking-wider ml-1">General</h2>
-          <Card className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100">
             <div className="p-4 flex justify-between items-center">
               <div className="flex items-center">
                 <Globe size={20} className="text-gray-400 mr-3" />
@@ -147,7 +147,7 @@ const Settings = () => {
                 Coming soon
               </span>
             </div>
-          </Card>
+          </div>
         </section>
 
         <div className="text-center pt-8">

@@ -104,7 +104,7 @@ const SafetyPrivacy = () => {
             )}
 
             {contacts.map((contact, index) => (
-              <Card key={`${contact.phone}-${index}`} className="p-4 flex justify-between items-center">
+              <div key={`${contact.phone}-${index}`} className="p-4 flex justify-between items-center">
                 <div>
                   <h4 className="font-bold text-gray-800">
                     {contact.name}
@@ -123,11 +123,11 @@ const SafetyPrivacy = () => {
                 >
                   <Trash2 size={18} />
                 </Button>
-              </Card>
+              </div>
             ))}
 
             {showAddContact ? (
-              <Card className="p-4 border-dashed border-2 border-gray-200 bg-gray-50">
+              <div className="p-4 border-dashed border-2 border-gray-200 bg-gray-50">
                 <Input
                   placeholder="Name"
                   value={newContact.name}
@@ -167,7 +167,7 @@ const SafetyPrivacy = () => {
                     Cancel
                   </Button>
                 </div>
-              </Card>
+              </div>
             ) : (
               <Button
                 variant="outline"
@@ -187,7 +187,7 @@ const SafetyPrivacy = () => {
           <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center">
             <Lock size={20} className="mr-2 text-primary" /> Privacy Settings
           </h2>
-          <Card className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100">
             <div className="p-4 flex justify-between items-center">
               <div>
                 <h4 className="font-medium text-gray-800">Share Live Location</h4>
@@ -210,7 +210,7 @@ const SafetyPrivacy = () => {
                 Always On
               </span>
             </div>
-          </Card>
+          </div>
         </section>
 
         <div className="bg-brand-50 p-4 rounded-xl flex items-start">

@@ -121,7 +121,7 @@ const DeliveryConfirmation = () => {
   }
 
   return (
-    <div className="bg-gray-50/50 min-h-screen flex flex-col p-6">
+    <div className="bg-white min-h-screen flex flex-col p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6 pt-2">
         <h1 className="ds-h2 text-gray-900">Confirm Delivery</h1>
@@ -134,7 +134,7 @@ const DeliveryConfirmation = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}>
-          <Card
+          <div
             className={`p-6 border-l-4 ${isPrepaid ? "border-l-brand-500 bg-brand-50/30" : "border-l-orange-500 bg-orange-50/30"}`}>
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -189,7 +189,7 @@ const DeliveryConfirmation = () => {
                 )}
               </div>
             )}
-          </Card>
+          </div>
         </motion.div>
 
         {/* Security OTP */}
@@ -198,7 +198,7 @@ const DeliveryConfirmation = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.4 }}>
-            <Card className="p-6">
+            <div className="py-6 px-2 border-b border-gray-100">
               <div className="flex items-center mb-4 text-gray-800">
                 <ShieldCheck className="mr-2 text-primary" size={24} />
                 <h3 className="font-bold text-lg">Generate Delivery OTP</h3>
@@ -212,20 +212,20 @@ const DeliveryConfirmation = () => {
                 onSuccess={handleOtpGenerated}
                 onError={handleOtpGenerationError}
               />
-            </Card>
+            </div>
           </motion.div>
         ) : (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.4 }}>
-            <Card className="p-6">
+            <div className="py-6 px-2 border-b border-gray-100">
               <OtpInput
                 orderId={orderId}
                 onSuccess={handleOtpValidationSuccess}
                 onError={handleOtpValidationError}
               />
-            </Card>
+            </div>
           </motion.div>
         )}
 
@@ -234,14 +234,14 @@ const DeliveryConfirmation = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.4 }}>
-          <Card className="p-0 overflow-hidden">
+          <div className="p-0 overflow-hidden">
             <button className="w-full p-4 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
               <Camera size={32} className="mb-2 text-gray-400" />
               <span className="font-medium text-sm">
                 Upload Photo Proof (Optional)
               </span>
             </button>
-          </Card>
+          </div>
         </motion.div>
       </div>
     </div >

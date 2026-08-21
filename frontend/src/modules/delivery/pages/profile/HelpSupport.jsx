@@ -111,7 +111,7 @@ const HelpSupport = () => {
       <div className="p-4 max-w-lg mx-auto space-y-6">
         {/* Support Channels */}
         <section className="grid grid-cols-2 gap-4">
-          <Card
+          <div
             className="p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => setChatOpen((v) => !v)}
           >
@@ -120,8 +120,8 @@ const HelpSupport = () => {
             </div>
             <h4 className="font-bold text-gray-800">Chat Support</h4>
             <p className="text-xs text-gray-500 mt-1">Send us a message</p>
-          </Card>
-          <Card
+          </div>
+          <div
             className="p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-md transition-shadow"
             onClick={handleCallSupport}
           >
@@ -132,7 +132,7 @@ const HelpSupport = () => {
             <p className="text-xs text-gray-500 mt-1">
               {settings?.supportPhone || "Not available"}
             </p>
-          </Card>
+          </div>
         </section>
 
         <AnimatePresence>
@@ -142,7 +142,7 @@ const HelpSupport = () => {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
             >
-              <Card className="p-4 border-dashed border-2 border-gray-200 bg-gray-50">
+              <div className="p-4 border-dashed border-2 border-gray-200 bg-gray-50">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-bold text-gray-800 text-sm">Message Support</h4>
                   <button onClick={() => setChatOpen(false)} className="text-gray-400" aria-label="Close">
@@ -166,7 +166,7 @@ const HelpSupport = () => {
                   <Send size={14} className="mr-1" />
                   {sendingChat ? "Sending..." : "Send Message"}
                 </Button>
-              </Card>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -182,7 +182,7 @@ const HelpSupport = () => {
               <div className="text-center py-8 text-sm text-gray-400">Loading FAQs...</div>
             ) : faqs.length > 0 ? (
               faqs.map((faq, index) => (
-                <Card
+                <div
                   key={faq._id || index}
                   className="overflow-hidden cursor-pointer"
                   onClick={() => toggleAccordion(index)}>
@@ -209,7 +209,7 @@ const HelpSupport = () => {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </Card>
+                </div>
               ))
             ) : (
               <div className="text-center py-8 text-sm text-gray-400">

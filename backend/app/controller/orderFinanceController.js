@@ -14,6 +14,7 @@ import {
   reconcileCodCash,
   settleDeliveredOrder,
 } from "../services/finance/orderFinanceService.js";
+import { syncLegacyDeliveryTransactions } from "../services/orderSettlement.js";
 import { placeOrderAtomic } from "../services/orderPlacementService.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
 import { verifyClientPaymentCallback } from "../services/paymentService.js";
@@ -273,9 +274,11 @@ export const markOrderDeliveredAndSettle = async (req, res) => {
         deliveryPartnerId,
         actorId: req.user?.id || null,
       });
+      await syncLegacyDeliveryTransactions(updatedWithCod, updatedWithCod.orderId);
       return handleResponse(res, 200, "Order delivered and COD cash collected", updatedWithCod);
     }
 
+    await syncLegacyDeliveryTransactions(updated, updated.orderId);
     return handleResponse(res, 200, "Order delivered and settlement queued", updated);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);

@@ -128,7 +128,7 @@ const Documents = () => {
           const status = getStatus(doc.url);
           const isUploading = uploadingId === doc.id;
           return (
-            <Card key={doc.id} className="p-4 border border-gray-100">
+            <div key={doc.id} className="p-4 border border-gray-100">
               <div className="flex justify-between items-start mb-2">
                 <h4 className="font-bold text-gray-800">{doc.title}</h4>
                 {getStatusBadge(status)}
@@ -175,7 +175,7 @@ const Documents = () => {
                   </Button>
                 )}
               </div>
-            </Card>
+            </div>
           );
         })}
       </div>

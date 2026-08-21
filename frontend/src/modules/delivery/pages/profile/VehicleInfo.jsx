@@ -113,7 +113,7 @@ const VehicleInfo = () => {
 
       <div className="p-4 max-w-lg mx-auto space-y-6">
         {/* Vehicle Card */}
-        <Card className="p-5 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-xl">
+        <div className="p-5 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-xl">
           <div className="flex justify-between items-start mb-6">
             <div>
               <p className="text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Vehicle Details</p>
@@ -135,10 +135,10 @@ const VehicleInfo = () => {
               <p className="font-medium">{vehicleDetails.fuelType}</p>
             </div>
           </div>
-        </Card>
+        </div>
 
         {editing && (
-          <Card className="p-4 border border-gray-100">
+          <div className="p-4 border border-gray-100">
             <h3 className="font-bold text-gray-800 text-sm mb-3">Edit Vehicle Details</h3>
             <div className="space-y-3">
               <Input
@@ -189,7 +189,7 @@ const VehicleInfo = () => {
                 </Button>
               </div>
             </div>
-          </Card>
+          </div>
         )}
 
         {/* Documents List */}
@@ -197,7 +197,7 @@ const VehicleInfo = () => {
           <h3 className="ds-h4 text-gray-900 mb-3 px-1">Vehicle Documents</h3>
           <div className="space-y-3">
             {documents.map((doc, index) => (
-              <Card key={index} className="p-4 border border-gray-100">
+              <div key={index} className="p-4 border border-gray-100">
                 <div className="flex justify-between items-start">
                   <div className="flex items-start">
                     <div className="p-2 rounded-lg mr-3 bg-brand-50 text-brand-600">
@@ -222,7 +222,7 @@ const VehicleInfo = () => {
                     </div>
                   )}
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
         </div>

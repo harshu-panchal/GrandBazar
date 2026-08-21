@@ -73,14 +73,14 @@ const Earnings = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50/50">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24">
+    <div className="bg-white min-h-screen pb-24">
       {/* Header */}
       <div className="bg-white shadow-sm p-6 sticky top-0 z-30">
         <div className="flex justify-between items-center mb-4">
@@ -143,7 +143,7 @@ const Earnings = () => {
 
         {/* Chart */}
         <motion.div variants={itemVariants}>
-          <Card className="p-6 h-80">
+          <div className="p-6 h-80">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-gray-800 flex items-center">
                 <TrendingUp size={20} className="mr-2 text-brand-500" />
@@ -189,11 +189,11 @@ const Earnings = () => {
                 />
               </BarChart>
             </ResponsiveContainer>
-          </Card>
+          </div>
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="p-6">
+          <div className="py-6 px-2 border-b border-gray-100">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
@@ -277,13 +277,13 @@ const Earnings = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </motion.div>
 
         {/* Recent Transactions */}
         <motion.div variants={itemVariants}>
-          <Card className="overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white">
               <h3 className="font-bold text-gray-800">Recent Withdrawals</h3>
               <Button
                 variant="link"
@@ -322,7 +322,7 @@ const Earnings = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </motion.div>
       </motion.div>
     </div>

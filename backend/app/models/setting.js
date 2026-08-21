@@ -314,7 +314,7 @@ const settingSchema = new mongoose.Schema(
     }
 );
 
-settingSchema.pre("save", function syncFinanceAliases(next) {
+settingSchema.pre("save", function syncFinanceAliases() {
     if (!this.pricingMode && this.deliveryPricingMode) {
         this.pricingMode = this.deliveryPricingMode;
     }
@@ -343,8 +343,6 @@ settingSchema.pre("save", function syncFinanceAliases(next) {
     if (this.fixedDeliveryFee == null) {
         this.fixedDeliveryFee = this.baseDeliveryCharge ?? this.customerBaseDeliveryFee ?? 30;
     }
-
-    next();
 });
 
 export default mongoose.model("Setting", settingSchema);

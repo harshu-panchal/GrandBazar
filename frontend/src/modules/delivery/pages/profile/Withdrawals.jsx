@@ -87,7 +87,7 @@ const Withdrawals = () => {
     };
 
     return (
-        <div className="bg-gray-50/50 min-h-screen pb-24">
+        <div className="bg-white min-h-screen pb-24">
             {/* Top Header */}
             <div className="bg-white px-6 py-4 flex items-center shadow-sm sticky top-0 z-50">
                 <button
@@ -145,7 +145,7 @@ const Withdrawals = () => {
                 )}
 
                 {/* Withdrawal Form */}
-                <Card className="p-6">
+                <div className="py-6 px-2 border-b border-gray-100">
                     <div className="flex items-center gap-2 mb-4">
                         <div className="p-2 bg-brand-50 text-brand-600 rounded-lg">
                             <Wallet size={20} />
@@ -193,7 +193,7 @@ const Withdrawals = () => {
                             </p>
                         )}
                     </div>
-                </Card>
+                </div>
 
                 {/* History */}
                 <div className="space-y-4">

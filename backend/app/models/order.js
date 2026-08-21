@@ -857,7 +857,7 @@ orderSchema.index(
   }
 );
 
-orderSchema.pre('save', function(next) {
+orderSchema.pre('save', function() {
   if (!this.orderStatus) {
     this.orderStatus = this.status || "pending";
   }
@@ -895,24 +895,22 @@ orderSchema.pre('save', function(next) {
   if (!this.customer) {
     const error = new Error('Order must have a valid customer reference');
     error.name = 'ValidationError';
-    return next(error);
+    throw error;
   }
-  next();
 });
 
-orderSchema.pre('findOneAndUpdate', function(next) {
+orderSchema.pre('findOneAndUpdate', function() {
   const update = this.getUpdate();
   if (update.$unset && update.$unset.customer) {
     const error = new Error('Cannot unset customer field from order');
     error.name = 'ValidationError';
-    return next(error);
+    throw error;
   }
   if (update.$set && update.$set.customer === null) {
     const error = new Error('Cannot set customer field to null');
     error.name = 'ValidationError';
-    return next(error);
+    throw error;
   }
-  next();
 });
 
 export default mongoose.model("Order", orderSchema);

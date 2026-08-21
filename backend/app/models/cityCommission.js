@@ -55,15 +55,14 @@ const cityCommissionSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-cityCommissionSchema.pre("save", function normalizeCommission(next) {
+cityCommissionSchema.pre("save", function normalizeCommission() {
   try {
     this.cityKey = String(this.cityKey || "").trim().toLowerCase();
     const value = Math.max(0, Number(this.adminCommissionValue ?? this.adminCommission ?? 0) || 0);
     this.adminCommissionValue = value;
     this.adminCommission = this.adminCommissionType === "percentage" ? value : 0;
-    next();
   } catch (error) {
-    next(error);
+    throw error;
   }
 });
 

@@ -10,6 +10,7 @@ const Navigation = React.lazy(() => import("../pages/Navigation"));
 const DeliveryConfirmation = React.lazy(() => import("../pages/DeliveryConfirmation"));
 const EarningsPage = React.lazy(() => import("../pages/EarningsPage"));
 const CodCash = React.lazy(() => import("../pages/CodCash"));
+const CodPaymentStatus = React.lazy(() => import("../pages/CodPaymentStatus"));
 const OrderHistory = React.lazy(() => import("../pages/OrderHistory"));
 const Profile = React.lazy(() => import("../pages/Profile"));
 const PersonalDetails = React.lazy(() => import("../pages/profile/PersonalDetails"));
@@ -42,6 +43,7 @@ const DeliveryRoutes = () => {
           <Route path="confirm-delivery/:orderId" element={<DeliveryConfirmation />} />
           <Route path="earnings" element={<EarningsPage />} />
           <Route path="cod-cash" element={<CodCash />} />
+          <Route path="cod-payment-status" element={<CodPaymentStatus />} />
           <Route path="history" element={<OrderHistory />} />
           <Route path="profile" element={<Profile />} />
           <Route path="profile/personal-details" element={<PersonalDetails />} />

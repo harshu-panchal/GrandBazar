@@ -13,15 +13,11 @@ import {
     Phone,
     MapPin,
     CreditCard,
-    Facebook,
-    Twitter,
-    Instagram,
-    Linkedin,
-    Youtube,
     Loader2,
     X,
     Truck
 } from 'lucide-react';
+import { FaFacebook as Facebook, FaTwitter as Twitter, FaInstagram as Instagram, FaLinkedin as Linkedin, FaYoutube as Youtube } from 'react-icons/fa';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { adminApi } from '../services/adminApi';

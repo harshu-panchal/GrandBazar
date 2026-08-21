@@ -170,6 +170,19 @@ export const getDeliveryEarnings = async (req, res) => {
 
         const cashCollected = roundCurrency(wallet?.cashInHand || 0);
 
+        // Net withdrawable balance — must include ALL settled transactions
+        // (earnings AND already-completed withdrawals/cash settlements, which
+        // are negative amounts), not just the positive earning types above.
+        // Mirrors requestWithdrawal()'s own balance check so the Withdrawals
+        // page shows the same number the backend will actually honor.
+        const settledBalance = transactions
+            .filter(t => t.status === 'Settled')
+            .reduce((acc, t) => acc + t.amount, 0);
+        const pendingWithdrawals = transactions
+            .filter(t => (t.status === 'Pending' || t.status === 'Processing') && t.type === 'Withdrawal')
+            .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+        const availableBalance = roundCurrency(settledBalance - pendingWithdrawals);
+
         // Chart aggregation — granularity follows the selected range.
         // Defaults to the last 7 days (legacy behaviour) when no range is given.
         const chartRange = range || "weekly";
@@ -231,6 +244,8 @@ export const getDeliveryEarnings = async (req, res) => {
         return handleResponse(res, 200, "Earnings fetched", {
             range: chartRange,
             totalEarnings,
+            availableBalance,
+            pendingWithdrawals,
             onlinePay,
             incentives,
             tipsReceived,
@@ -1091,5 +1106,53 @@ export const validateDeliveryOtp = async (req, res) => {
                 message: error.message
             }
         });
+    }
+};
+
+export const initiateCodRemittancePhonePe = async (req, res) => {
+    try {
+        const rawId = req.user?.id ?? req.user?._id;
+        if (!rawId) return handleResponse(res, 401, "Unauthorized");
+        
+        const deliveryBoyId = new mongoose.Types.ObjectId(String(rawId));
+        const requestedRaw = req.body?.amount;
+        
+        if (!requestedRaw || !Number.isFinite(Number(requestedRaw)) || requestedRaw <= 0) {
+            return handleResponse(res, 400, "Enter a valid amount to submit");
+        }
+
+        const { createCodRemittanceCheckout } = await import('../services/codRemittanceService.js');
+        const result = await createCodRemittanceCheckout({
+            deliveryBoyId,
+            amount: Number(requestedRaw),
+        });
+
+        return handleResponse(res, 200, "Initiated successfully", {
+            redirectUrl: result.redirectUrl,
+            duplicate: result.duplicate,
+            paymentId: result.payment._id,
+        });
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
+
+export const checkCodRemittancePhonePeStatus = async (req, res) => {
+    try {
+        const rawId = req.user?.id ?? req.user?._id;
+        if (!rawId) return handleResponse(res, 401, "Unauthorized");
+        
+        const merchantOrderId = req.params.merchantOrderId;
+        if (!merchantOrderId) return handleResponse(res, 400, "Missing merchantOrderId");
+
+        const { verifyCodRemittancePhonePePayment } = await import('../services/codRemittanceService.js');
+        const result = await verifyCodRemittancePhonePePayment({
+            merchantOrderId,
+            deliveryBoyId: rawId,
+        });
+
+        return handleResponse(res, 200, "Status evaluated", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
     }
 };

@@ -19,6 +19,7 @@ import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import { computeSellerPendingExpiry } from "./orderSchedulingService.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
 import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
+import { processCodRemittancePhonePeWebhook, isCodRemittanceMerchantOrderId } from "./codRemittanceService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
@@ -733,6 +734,10 @@ export async function processPhonePeWebhook({
 
   if (isSubscriptionMerchantOrderId(merchantOrderId)) {
     return processSubscriptionPhonePeWebhook({ payload, correlationId });
+  }
+
+  if (isCodRemittanceMerchantOrderId(merchantOrderId)) {
+    return processCodRemittancePhonePeWebhook({ payload, correlationId });
   }
 
   const payment = await Payment.findOne({ gatewayOrderId: merchantOrderId });

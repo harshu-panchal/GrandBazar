@@ -15,6 +15,7 @@ import {
   IndianRupee,
   ChevronDown,
   ChevronUp,
+  Wallet,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -140,6 +141,13 @@ const Profile = () => {
         path: "/delivery/profile/withdrawals",
       },
       {
+        icon: Wallet,
+        label: "COD Cash",
+        sub: "Manage collected cash",
+        color: "text-orange-600 bg-orange-50",
+        path: "/delivery/cod-cash",
+      },
+      {
         icon: FileText,
         label: "Documents",
         sub: docsSub,
@@ -189,7 +197,7 @@ const Profile = () => {
     user?.profileImage || defaultAvatar(displayName);
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24">
+    <div className="bg-white min-h-screen pb-24">
       {/* Header */}
       <div className="bg-primary pt-12 pb-24 px-6 rounded-b-[2.5rem] relative shadow-lg">
         <div className="flex justify-between items-center mb-6">

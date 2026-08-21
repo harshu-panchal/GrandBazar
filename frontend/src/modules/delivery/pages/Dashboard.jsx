@@ -116,7 +116,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24 relative overflow-hidden font-sans">
+    <div className="bg-white min-h-screen pb-24 relative overflow-hidden font-sans">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 pt-12 pb-4 flex justify-between items-center sticky top-0 z-30 transition-all duration-300">
         <div className="flex items-center space-x-3">
@@ -286,7 +286,7 @@ const Dashboard = () => {
       {/* Main Content */}
       <div className="px-6 space-y-6">
         {/* Earnings Card */}
-        <Card className="bg-white shadow-sm border border-gray-100 overflow-hidden relative">
+        <div className="bg-white border-b border-gray-100 overflow-hidden relative py-4 px-2">
           {/* Background Decoration */}
           <div className="absolute -right-6 -top-6 w-24 h-24 bg-primary/5 rounded-full blur-2xl"></div>
 
@@ -346,7 +346,7 @@ const Dashboard = () => {
               </p>
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Active Order / Status */}
         <AnimatePresence mode="wait">
@@ -433,7 +433,7 @@ const Dashboard = () => {
               </div>
               {availableOrders.length > 0 ? (
                 availableOrders.map((order) => (
-                  <Card key={order._id} className="p-4 border-2 border-primary/5 hover:border-primary/20 transition-all shadow-sm">
+                  <div key={order._id} className="p-4 border-2 border-primary/5 hover:border-primary/20 transition-all shadow-sm">
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Return Task</span>
@@ -474,7 +474,7 @@ const Dashboard = () => {
                         View
                       </Button>
                     </div>
-                  </Card>
+                  </div>
                 ))
               ) : (
                 <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-100 flex flex-col items-center">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Instagram, Youtube, Mail, MapPin, Phone } from 'lucide-react';
+import { Mail, MapPin, Phone } from 'lucide-react';
+import { FaFacebook as Facebook, FaTwitter as Twitter, FaInstagram as Instagram, FaYoutube as Youtube } from 'react-icons/fa';
 import { useSettings } from '@core/context/SettingsContext';
 
 const Footer = () => {

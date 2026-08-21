@@ -88,7 +88,7 @@ const Notifications = () => {
   };
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24 font-sans">
+    <div className="bg-white min-h-screen pb-24 font-sans">
       {/* Header */}
       <div className="bg-white shadow-sm p-4 sticky top-0 z-30 backdrop-blur-md bg-white/90">
         <div className="flex items-center justify-between mb-2">
@@ -132,7 +132,7 @@ const Notifications = () => {
                   variants={itemVariants}
                   layout
                   onClick={() => !notification.isRead && handleMarkAsRead(notification._id)}>
-                  <Card
+                  <div
                     className={`p-4 border-none shadow-sm relative overflow-hidden transition-all duration-300 cursor-pointer ${!notification.isRead
                       ? "bg-brand-50/50 border-l-4 border-l-brand-500 shadow-brand-500/5 scale-[1.02]"
                       : "bg-white opacity-90"
@@ -164,7 +164,7 @@ const Notifications = () => {
                         </div>
                       </div>
                     </div>
-                  </Card>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>

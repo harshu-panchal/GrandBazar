@@ -156,7 +156,7 @@ const OrderHistory = () => {
   };
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24">
+    <div className="bg-white min-h-screen pb-24">
       {/* Header */}
       <div className="bg-white shadow-sm p-4 sticky top-0 z-30 backdrop-blur-md bg-white/90">
         <h1 className="ds-h2 text-gray-900 mb-4">Order History</h1>
@@ -219,7 +219,7 @@ const OrderHistory = () => {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}>
-                <Card
+                <div
                   role="button"
                   tabIndex={0}
                   onClick={() => openOrderDetail(order)}
@@ -297,7 +297,7 @@ const OrderHistory = () => {
                       </div>
                     </div>
                   </div>
-                </Card>
+                </div>
               </motion.div>
               );
             }) : (

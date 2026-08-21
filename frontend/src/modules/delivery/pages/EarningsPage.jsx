@@ -87,14 +87,14 @@ const EarningsPage = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50/50">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24">
+    <div className="bg-white min-h-screen pb-24">
       <div className="bg-white shadow-sm p-6 sticky top-0 z-30">
         <div className="flex justify-between items-center mb-4">
           <h1 className="ds-h2 text-gray-900">My Earnings</h1>
@@ -167,7 +167,7 @@ const EarningsPage = () => {
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="p-6">
+          <div className="py-6 px-2 border-b border-gray-100">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-gray-800 flex items-center">
                 <TrendingUp size={20} className="mr-2 text-brand-500" />
@@ -201,12 +201,12 @@ const EarningsPage = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </Card>
+          </div>
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white">
               <h3 className="font-bold text-gray-800">Recent Earnings</h3>
               <Button variant="link" className="text-primary text-xs font-bold h-auto p-0">
                 View All
@@ -272,7 +272,7 @@ const EarningsPage = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </motion.div>
       </motion.div>
     </div>

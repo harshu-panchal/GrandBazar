@@ -68,10 +68,7 @@ const CodCash = () => {
   const pendingOrdersCount =
     (Array.isArray(data.toCollect) ? data.toCollect.length : 0) +
     (Array.isArray(data.toRemit) ? data.toRemit.length : 0);
-  const payableNowAmount = (Array.isArray(data.toRemit) ? data.toRemit : []).reduce(
-    (sum, row) => sum + safeMoney(row.amountNetPending),
-    0,
-  );
+  const payableNowAmount = data.systemFloatCOD; // Allow paying up to float!
   const enteredPayAmount = safeMoney(payAmount);
 
   const handlePayNow = async () => {
@@ -87,23 +84,23 @@ const CodCash = () => {
 
     try {
       setPaying(true);
-      const res = await deliveryApi.payCodCashToAdmin({
+      const res = await deliveryApi.initiateCodRemittancePhonePe({
         amount: enteredPayAmount,
       });
-      const result = res.data?.result || {};
-      toast.success(
-        `Submitted ${RUPEE}${safeMoney(result.totalSubmitted).toLocaleString()} to admin`,
-      );
-      await fetchSummary();
+      if (res.data?.result?.redirectUrl) {
+        window.location.href = res.data.result.redirectUrl;
+      } else {
+        toast.error("Failed to get payment url");
+        setPaying(false);
+      }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to submit COD cash");
-    } finally {
+      toast.error(error?.response?.data?.message || "Failed to initiate payment");
       setPaying(false);
     }
   };
 
   return (
-    <div className="bg-gray-50/50 min-h-screen pb-24">
+    <div className="bg-white min-h-screen pb-24">
       <div className="bg-white shadow-sm p-6 sticky top-0 z-30">
         <div className="flex justify-between items-center">
           <div>
@@ -131,7 +128,7 @@ const CodCash = () => {
         animate="visible"
       >
         <motion.div variants={itemVariants}>
-          <Card className="p-6">
+          <div className="py-6 px-2 border-b border-gray-100">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
@@ -229,11 +226,11 @@ const CodCash = () => {
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="p-6">
+          <div className="py-6 px-2 border-b border-gray-100">
             <h3 className="font-bold text-gray-900 mb-1">To Collect From Customer</h3>
             <p className="text-xs text-gray-500 mb-4">
               These COD orders are not marked as collected yet.
@@ -265,11 +262,11 @@ const CodCash = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <Card className="p-6">
+          <div className="py-6 px-2 border-b border-gray-100">
             <h3 className="font-bold text-gray-900 mb-1">To Submit To Platform</h3>
             <p className="text-xs text-gray-500 mb-4">
               These orders are marked collected. Submit the net cash shown here.
@@ -298,7 +295,7 @@ const CodCash = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </motion.div>
       </motion.div>
     </div>
