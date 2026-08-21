@@ -138,6 +138,18 @@ const estimateMinutesFromDistance = (meters) => {
   return (meters * 60) / (DEFAULT_CITY_SPEED_KMPH * 1000);
 };
 
+/** Real distance stored on the order at checkout time, if available. No fabricated fallback. */
+const resolveDistanceKm = (order) => {
+  const raw =
+    order?.paymentBreakdown?.distanceKmRounded ??
+    order?.paymentBreakdown?.distanceKmActual ??
+    order?.distanceSnapshot?.distanceKmRounded ??
+    order?.distanceSnapshot?.distanceKmActual;
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return num;
+};
+
 const OrderDetails = () => {
   const { orderId } = useParams();
   const { user } = useAuth();
