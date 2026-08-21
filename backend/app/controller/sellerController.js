@@ -1,6 +1,7 @@
 import Seller from "../models/seller.js";
 import Store from "../models/store.js";
 import Transaction from "../models/transaction.js";
+import Wallet from "../models/wallet.js";
 import Product from "../models/product.js";
 import Setting from "../models/setting.js";
 import { handleResponse, calculateDistance } from "../utils/helper.js";
@@ -167,7 +168,15 @@ export const requestWithdrawal = async (req, res) => {
       )
       .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
-    const availableBalance = settledBalance - pendingPayouts;
+    // Prefer the Wallet ledger — it's built from real settlement events and
+    // reflects the seller's actual payout, unlike summing Transaction.amount
+    // (some "Order Payment" rows were historically created with the customer's
+    // full grand total rather than the seller's payout, which would let a
+    // seller withdraw more than they're actually owed).
+    const wallet = await Wallet.findOne({ ownerType: "SELLER", ownerId: storeId });
+    const availableBalance = wallet
+      ? Number(wallet.availableBalance || 0) - pendingPayouts
+      : settledBalance - pendingPayouts;
 
     if (amount > availableBalance) {
       return handleResponse(

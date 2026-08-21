@@ -749,7 +749,12 @@ export async function placeOrderAtomic({
       userModel: "Seller",
       order: order._id,
       type: "Order Payment",
-      amount: Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0),
+      // The seller's own payout — not the customer's grand total, which also
+      // includes delivery fee, platform fee, tax and tip that never belong to
+      // the seller. Earnings.jsx and the withdrawal-cap check both read this
+      // Transaction's amount, so an inflated figure here is a real
+      // over-withdrawal risk, not just a display bug.
+      amount: Number(order.paymentBreakdown?.sellerPayoutTotal ?? order.paymentBreakdown?.productSubtotal ?? 0),
       status: "Pending",
       reference: order.orderId,
       paymentMethod: order.paymentMode || null,

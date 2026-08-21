@@ -128,6 +128,10 @@ export async function resendPickupOtpBySeller(sellerId, orderId) {
   order.customerPickup.lastOtpSentAt = new Date();
   await order.save();
 
+  // customerPickupOtp/customerPickupQr are pushed only to the CUSTOMER's own
+  // socket room (order.customer) — the seller must never receive the code
+  // itself, since they're the party meant to check it against what the
+  // customer tells them in person.
   emitOrderStatusUpdate(
     orderId,
     {
@@ -139,7 +143,7 @@ export async function resendPickupOtpBySeller(sellerId, orderId) {
     order.customer,
   );
 
-  return { orderId, otp, qrToken, expiresAt };
+  return { orderId, expiresAt };
 }
 
 export async function verifyCustomerPickup({

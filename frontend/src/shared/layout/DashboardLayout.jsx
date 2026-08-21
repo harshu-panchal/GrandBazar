@@ -7,7 +7,7 @@ import BottomNav from './BottomNav';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { useAuth } from "@core/context/AuthContext";
 import { motion, AnimatePresence } from 'framer-motion';
-import { BellRing, Check, X, Clock, Truck } from 'lucide-react';
+import { BellRing, Check, X, Clock, Truck, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
@@ -97,6 +97,40 @@ const isEarningsRoute = (path) =>
 
 const DashboardLayout = ({ children, navItems, title }) => {
     const [newOrderAlert, setNewOrderAlert] = useState(null);
+    const [showDeclineReasonBox, setShowDeclineReasonBox] = useState(false);
+    const [declineReason, setDeclineReason] = useState('');
+    const [showNotifyBanner, setShowNotifyBanner] = useState(false);
+
+    // Prompt sellers to enable order-alert push notifications, since the loud
+    // in-tab ringtone can't sound once the tab is backgrounded/closed — a real
+    // OS push is the only thing that can reach them then.
+    useEffect(() => {
+        if (role !== 'seller') return;
+        const dismissed = sessionStorage.getItem('seller_notify_banner_dismissed');
+        if (dismissed) return;
+        const permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+        if (permission === 'default') setShowNotifyBanner(true);
+    }, [role]);
+
+    const handleEnableOrderNotifications = async () => {
+        try {
+            const { ensureFcmTokenRegistered } = await import('@core/firebase/pushClient');
+            await ensureFcmTokenRegistered({ role, platform: 'web' });
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                toast.success('New-order alerts enabled');
+            }
+        } catch (error) {
+            console.warn('[push] Manual registration failed:', error?.message || error);
+        } finally {
+            setShowNotifyBanner(false);
+            sessionStorage.setItem('seller_notify_banner_dismissed', '1');
+        }
+    };
+
+    const dismissNotifyBanner = () => {
+        setShowNotifyBanner(false);
+        sessionStorage.setItem('seller_notify_banner_dismissed', '1');
+    };
     const [newReturnAlert, setNewReturnAlert] = useState(null);
     const [shownOrderIds, setShownOrderIds] = useState(() => new Set());
     const [shownReturnOrderIds, setShownReturnOrderIds] = useState(() => new Set());
@@ -204,6 +238,11 @@ const DashboardLayout = ({ children, navItems, title }) => {
     useEffect(() => {
         newOrderAlertRef.current = newOrderAlert;
     }, [newOrderAlert]);
+
+    useEffect(() => {
+        setShowDeclineReasonBox(false);
+        setDeclineReason('');
+    }, [newOrderAlert?.orderId]);
     useEffect(() => {
         newReturnAlertRef.current = newReturnAlert;
     }, [newReturnAlert]);
@@ -247,8 +286,24 @@ const DashboardLayout = ({ children, navItems, title }) => {
                     return;
                 }
 
+                // If the order currently on-screen has been updated (e.g. the customer
+                // added items while it was still pending), refresh the displayed amount
+                // in place instead of leaving a stale snapshot up.
+                if (newOrderAlertRef.current) {
+                    const currentAlertId = newOrderAlertRef.current.orderId;
+                    const refreshed = allOrders.find((o) => o.orderId === currentAlertId);
+                    if (
+                        refreshed &&
+                        refreshed.paymentBreakdown?.sellerPayoutTotal !== newOrderAlertRef.current.paymentBreakdown?.sellerPayoutTotal
+                    ) {
+                        setNewOrderAlert(refreshed);
+                        newOrderAlertRef.current = refreshed;
+                    }
+                    return;
+                }
+
                 const newOrder = pendingOrders.find((o) => !shownOrderIdsRef.current.has(o.orderId));
-                if (!newOrder || newOrderAlertRef.current) return;
+                if (!newOrder) return;
 
                 setNewOrderAlert(newOrder);
                 setShownOrderIds((prev) => new Set(prev).add(newOrder.orderId));
@@ -441,12 +496,14 @@ const DashboardLayout = ({ children, navItems, title }) => {
         }
     };
 
-    const handleDeclineOrder = async (orderId) => {
+    const handleDeclineOrder = async (orderId, cancelReason) => {
         try {
-            await sellerApi.updateOrderStatus(orderId, { status: 'cancelled' });
+            await sellerApi.updateOrderStatus(orderId, { status: 'cancelled', cancelReason });
             toast.error(`Order #${orderId} Declined`);
             stopOrderRingtone();
             setNewOrderAlert(null);
+            setDeclineReason('');
+            setShowDeclineReasonBox(false);
         } catch (error) {
             const msg =
                 error?.response?.data?.message ||
@@ -476,6 +533,26 @@ const DashboardLayout = ({ children, navItems, title }) => {
                 <Topbar onMenuClick={() => setIsSidebarOpen(true)} />
                 <main className={cn("p-4 md:p-6 min-h-screen", (role === "admin" || role === "seller") ? "pt-20 md:pt-6 pb-24 md:pb-6" : "pt-20")}>
                     <div className="w-full pb-12">
+                        {showNotifyBanner && (
+                            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+                                <Bell className="h-5 w-5 text-primary shrink-0" />
+                                <p className="flex-1 min-w-[200px] text-sm font-semibold text-slate-700">
+                                    Enable notifications so you don't miss new orders when this tab isn't open.
+                                </p>
+                                <button
+                                    onClick={handleEnableOrderNotifications}
+                                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors"
+                                >
+                                    Enable
+                                </button>
+                                <button
+                                    onClick={dismissNotifyBanner}
+                                    className="px-3 py-2 rounded-xl text-slate-500 text-xs font-bold hover:bg-slate-100 transition-colors"
+                                >
+                                    Not now
+                                </button>
+                            </div>
+                        )}
                         <SellerEarningsContext.Provider
                             value={{
                                 earningsData: role === 'seller' ? sellerEarningsData : defaultEarnings,
@@ -524,12 +601,24 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                         </span>
                                     </div>
                                 )}
-                                <p className="text-slate-600 font-medium mb-6">
+                                <p className="text-slate-600 font-medium mb-3">
                                     You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span>.
-                                    <br />
-                                    <span className="text-slate-500 text-sm">You will receive</span>{' '}
-                                    <span className="text-slate-900 font-bold">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
                                 </p>
+
+                                <div className="w-full bg-slate-50 rounded-2xl p-4 mb-6 text-sm space-y-1.5">
+                                    <div className="flex items-center justify-between text-slate-500">
+                                        <span>Item total</span>
+                                        <span className="font-semibold text-slate-700">₹{formatInr(newOrderAlert.paymentBreakdown?.productSubtotal ?? 0)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-slate-500">
+                                        <span>Platform commission</span>
+                                        <span className="font-semibold text-slate-700">-₹{formatInr(newOrderAlert.paymentBreakdown?.adminProductCommissionTotal ?? 0)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
+                                        <span className="font-bold text-slate-700">You will receive</span>
+                                        <span className="text-slate-900 font-black">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
+                                    </div>
+                                </div>
 
                                 {/* Timer Bar — width from real server deadline */}
                                 <div className="w-full bg-slate-100 h-2 rounded-full mb-8 overflow-hidden">
@@ -551,9 +640,36 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                     </span>
                                 </div>
 
+                                {showDeclineReasonBox ? (
+                                    <div className="w-full space-y-3">
+                                        <textarea
+                                            autoFocus
+                                            value={declineReason}
+                                            onChange={(e) => setDeclineReason(e.target.value)}
+                                            placeholder="Reason for declining (at least 10 characters)…"
+                                            rows={3}
+                                            className="w-full rounded-2xl border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"
+                                        />
+                                        <div className="grid grid-cols-2 gap-4 w-full">
+                                            <button
+                                                onClick={() => setShowDeclineReasonBox(false)}
+                                                className="py-3 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
+                                            >
+                                                Back
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeclineOrder(newOrderAlert.orderId, declineReason.trim())}
+                                                disabled={declineReason.trim().length < 10}
+                                                className="py-3 rounded-2xl bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors disabled:opacity-50"
+                                            >
+                                                Confirm Decline
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
                                 <div className="grid grid-cols-2 gap-4 w-full">
                                     <button
-                                        onClick={() => handleDeclineOrder(newOrderAlert.orderId)}
+                                        onClick={() => setShowDeclineReasonBox(true)}
                                         disabled={acceptInFlight}
                                         className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
                                     >
@@ -569,6 +685,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                         {acceptInFlight ? 'Accepting…' : 'Accept'}
                                     </button>
                                 </div>
+                                )}
                             </div>
                         </motion.div>
                     </div>

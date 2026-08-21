@@ -316,6 +316,26 @@ const StockManagement = () => {
                                                                         <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
                                                                             Product Code: {item.sku || 'N/A'}
                                                                         </p>
+                                                                        {Array.isArray(item.variants) && item.variants.length > 0 && (
+                                                                            <div className="mt-1.5 flex flex-wrap gap-1">
+                                                                                {item.variants.map((v, idx) => (
+                                                                                    <span
+                                                                                        key={v._id || v.sku || idx}
+                                                                                        className={cn(
+                                                                                            "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                                                                                            Number(v.stock) === 0
+                                                                                                ? "bg-rose-50 text-rose-600"
+                                                                                                : Number(v.stock) <= item.threshold
+                                                                                                    ? "bg-amber-50 text-amber-600"
+                                                                                                    : "bg-slate-100 text-slate-500",
+                                                                                        )}
+                                                                                        title={`${v.name}: ${v.stock ?? 0} units`}
+                                                                                    >
+                                                                                        {v.name}: {v.stock ?? 0}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </td>

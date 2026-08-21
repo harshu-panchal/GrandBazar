@@ -59,6 +59,7 @@ export const sellerApi = {
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
     getOrderInvoice: (orderId) => axiosInstance.get(`/orders/${orderId}/invoice/seller`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
+    markOrderPacked: (orderId) => axiosInstance.put(`/orders/${orderId}/seller-packed`),
     bulkUpdateOrderStatus: (data) => axiosInstance.put('/orders/status/bulk', data),
     getEarnings: () => axiosInstance.get('/seller/earnings'),
     getWalletSummary: () => axiosInstance.get('/seller/wallet/summary'),

@@ -1409,6 +1409,7 @@ export async function generateOrderPaymentBreakdown({
     oddHourSurchargeAmount,
     weatherSurchargeAmount,
     packagingChargeAmount,
+    productPackagingChargeAmount: packing.productPackagingFeeCharged,
     grandTotal,
     sellerPayoutTotal,
     adminProductCommissionTotal,

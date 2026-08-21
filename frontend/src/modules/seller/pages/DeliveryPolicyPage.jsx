@@ -326,9 +326,9 @@ export default function DeliveryPolicyPage() {
         <div className="space-y-2">
           <p className="text-xs font-bold text-slate-500">Delivery windows</p>
           {schedulingSettings.deliveryWindows.map((window, index) => (
-            <div key={window.label} className="grid grid-cols-4 gap-2 items-center">
+            <div key={window.label} className="flex flex-col sm:grid sm:grid-cols-4 gap-2 sm:items-center">
               <input
-                className="rounded-lg border px-2 py-1 text-xs col-span-2"
+                className="rounded-lg border px-2 py-1 text-xs sm:col-span-2"
                 value={window.label}
                 onChange={(e) => {
                   const next = [...schedulingSettings.deliveryWindows];
@@ -336,9 +336,10 @@ export default function DeliveryPolicyPage() {
                   setSchedulingSettings({ ...schedulingSettings, deliveryWindows: next });
                 }}
               />
+              <div className="flex gap-2 sm:contents">
               <input
                 type="time"
-                className="rounded-lg border px-2 py-1 text-xs"
+                className="rounded-lg border px-2 py-1 text-xs flex-1 min-w-0"
                 value={window.start}
                 onChange={(e) => {
                   const next = [...schedulingSettings.deliveryWindows];
@@ -348,7 +349,7 @@ export default function DeliveryPolicyPage() {
               />
               <input
                 type="time"
-                className="rounded-lg border px-2 py-1 text-xs"
+                className="rounded-lg border px-2 py-1 text-xs flex-1 min-w-0"
                 value={window.end}
                 onChange={(e) => {
                   const next = [...schedulingSettings.deliveryWindows];
@@ -356,6 +357,7 @@ export default function DeliveryPolicyPage() {
                   setSchedulingSettings({ ...schedulingSettings, deliveryWindows: next });
                 }}
               />
+              </div>
             </div>
           ))}
         </div>

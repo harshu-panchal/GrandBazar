@@ -8,6 +8,7 @@ import {
   approveCancelOrderRequest,
   rejectCancelOrderRequest,
   updateOrderStatus,
+  markOrderPackedBySeller,
   bulkUpdateOrderStatus,
   getSellerOrders,
   getAvailableOrders,
@@ -205,6 +206,11 @@ router.put(
   "/status/:orderId",
   ...sellerOrdersWriteChain,
   updateOrderStatus,
+);
+router.put(
+  "/:orderId/seller-packed",
+  ...sellerOrdersWriteChain,
+  markOrderPackedBySeller,
 );
 router.get(
   "/seller-returns",

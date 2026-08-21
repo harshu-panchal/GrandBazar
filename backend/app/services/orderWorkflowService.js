@@ -802,6 +802,64 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   return updated;
 }
 
+/**
+ * Lets a seller signal "I've finished packing" on a platform-logistics order
+ * even though they don't own the PICKUP_READY transition itself (that still
+ * only flips once the assigned rider marks arrival at the store). This does
+ * NOT change workflowStatus or the dispatch/broadcast timing — it just records
+ * sellerPackedAt and, if a rider is already assigned, lets them know packing
+ * is done so they can plan their pickup.
+ */
+export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId, seller: sellerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const ws = String(order.workflowStatus || "").toUpperCase();
+  const packableStatuses = [
+    WORKFLOW_STATUS.DELIVERY_SEARCH,
+    WORKFLOW_STATUS.DELIVERY_ASSIGNED,
+  ];
+  if (!packableStatuses.includes(ws)) {
+    const err = new Error("This order isn't awaiting platform pickup right now");
+    err.statusCode = 409;
+    throw err;
+  }
+  if (order.sellerPackedAt) {
+    return order; // idempotent
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { orderId, seller: sellerId, workflowStatus: ws },
+    { $set: { sellerPackedAt: new Date() } },
+    { new: true },
+  );
+  if (!updated) {
+    const err = new Error("Unable to mark order as packed");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (updated.deliveryBoy) {
+    emitToDelivery(updated.deliveryBoy, {
+      event: "order:packed",
+      payload: { orderId: updated.orderId },
+    });
+  }
+  emitOrderStatusUpdate(
+    updated.orderId,
+    { sellerPackedAt: updated.sellerPackedAt },
+    updated.customer,
+    updated.seller,
+  );
+
+  return updated;
+}
+
 function toDeliveryObjectId(deliveryId) {
   if (deliveryId == null) return null;
   try {
@@ -1102,7 +1160,7 @@ export async function processSellerTimeoutJob({ orderId }) {
 
   await compensateOrderCancellation(updated, orderId);
 
-  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer);
+  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer, updated.seller);
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
     orderId: updated.orderId,
     customerId: updated.customer,

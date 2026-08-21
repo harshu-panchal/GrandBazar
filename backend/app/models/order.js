@@ -235,6 +235,7 @@ const orderSchema = new mongoose.Schema(
       bulkOrderReason: { type: String, enum: ["value_threshold", "qty_threshold", null], default: null },
       bulkOrderLineIndexes: { type: [Number], default: [] },
       packagingChargeAmount: { type: Number, default: 0 },
+      productPackagingChargeAmount: { type: Number, default: 0 },
       grandTotal: { type: Number, default: 0 },
       sellerPayoutTotal: { type: Number, default: 0 },
       adminProductCommissionTotal: { type: Number, default: 0 },
@@ -361,6 +362,11 @@ const orderSchema = new mongoose.Schema(
     },
     pickupConfirmedAt: Date,
     pickupReadyAt: Date,
+    // Seller-signaled "I've finished packing" for platform-logistics orders —
+    // distinct from the rider-driven PICKUP_READY workflow status, which still
+    // only flips once the rider physically arrives at the store. Lets the
+    // seller communicate readiness even though they don't own that transition.
+    sellerPackedAt: Date,
     outForDeliveryAt: Date,
     deliveryRiderStep: {
       type: Number,

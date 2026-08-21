@@ -21,18 +21,18 @@ const Pagination = ({
     const end = Math.min(page * pageSize, total);
 
     return (
-        <div className={cn("flex items-center justify-between gap-4", compact && "gap-2", className)}>
-            <p className="ds-caption text-gray-500">
+        <div className={cn("flex flex-wrap items-center justify-between gap-3 sm:gap-4", compact && "gap-2", className)}>
+            <p className="ds-caption text-gray-500 text-[10px] sm:text-xs">
                 Showing <span className="font-semibold text-gray-900">{start}-{end}</span> of {total}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 {onPageSizeChange && (
                     <select
                         value={pageSize}
                         onChange={(e) => onPageSizeChange(Number(e.target.value))}
                         disabled={loading}
                         className={cn(
-                            "rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-600",
+                            "rounded-lg border border-gray-200 bg-gray-50 px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest text-gray-600",
                             "focus:ring-2 focus:ring-primary/20 focus:outline-none disabled:opacity-50 cursor-pointer"
                         )}
                     >
@@ -45,7 +45,7 @@ const Pagination = ({
                     disabled={page <= 1 || loading}
                     onClick={() => onPageChange(page - 1)}
                     className={cn(
-                        "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest",
+                        "inline-flex items-center gap-1 rounded-lg px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest",
                         "bg-gray-50 text-gray-600 border border-gray-100 hover:bg-gray-100",
                         "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-50"
                     )}
@@ -53,14 +53,14 @@ const Pagination = ({
                     <ChevronLeft className="h-3.5 w-3.5" />
                     Prev
                 </button>
-                <span className="px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                <span className="px-1.5 sm:px-3 text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest text-gray-500 whitespace-nowrap">
                     Page {page} {totalPages > 0 && `of ${totalPages}`}
                 </span>
                 <button
                     disabled={page >= totalPages || loading}
                     onClick={() => onPageChange(page + 1)}
                     className={cn(
-                        "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest",
+                        "inline-flex items-center gap-1 rounded-lg px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest",
                         "bg-gray-50 text-gray-600 border border-gray-100 hover:bg-gray-100",
                         "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-50"
                     )}

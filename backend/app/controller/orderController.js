@@ -23,6 +23,7 @@ import {
   approveCustomerCancellationRequest,
   rejectCustomerCancellationRequest,
   resolveWorkflowStatus,
+  sellerMarkPackedSignalAtomic,
 } from "../services/orderWorkflowService.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { attachDisplayStatus, attachDisplayStatusToList } from "../services/orderStatusResolver.js";
@@ -1206,6 +1207,21 @@ export const updateOrderStatus = async (req, res) => {
     return handleResponse(res, 200, "Order status updated", order);
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   SELLER MARKS PLATFORM-LOGISTICS ORDER PACKED (signal only, doesn't
+   change workflowStatus — that transition still belongs to the rider)
+================================ */
+export const markOrderPackedBySeller = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { id: sellerId } = req.user;
+    const updated = await sellerMarkPackedSignalAtomic(sellerId, orderId);
+    return handleResponse(res, 200, "Order marked as packed", updated);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

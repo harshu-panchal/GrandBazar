@@ -17,7 +17,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-
 import { BlurFade } from "@/components/ui/blur-fade";
 import ShimmerButton from "@/components/ui/shimmer-button";
 import { toast } from "sonner";
@@ -29,6 +28,19 @@ import Pagination from "@shared/components/ui/Pagination";
 import { getStatusVariant } from "@/shared/utils/orderStatus";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
+
+/** Prefer the wallet-derived availableBalance (built from real settlement
+ * events, and already net of pending withdrawal requests) over summing raw
+ * Transaction amounts, which historically could include the customer's full
+ * grand total instead of the seller's payout. */
+function resolveAvailableBalance(balances) {
+  if (balances?.availableBalance != null) {
+    return Math.max(0, Number(balances.availableBalance));
+  }
+  const settled = Number(balances?.settledBalance ?? 0);
+  const pending = Math.abs(Number(balances?.pendingPayouts ?? 0));
+  return Math.max(0, settled - pending);
+}
 
 const statusVariant = (status) => {
   const s = String(status || "").toLowerCase();
@@ -74,9 +86,7 @@ const Earnings = () => {
 
   React.useEffect(() => {
     if (data?.balances != null && withdrawAmount === "") {
-      const settled = Number(data.balances?.settledBalance ?? 0);
-      const pending = Math.abs(Number(data.balances?.pendingPayouts ?? 0));
-      const available = Math.max(0, settled - pending);
+      const available = resolveAvailableBalance(data.balances);
       setWithdrawAmount(available > 0 ? String(available) : "");
     }
   }, [data?.balances]);
@@ -128,9 +138,7 @@ const Earnings = () => {
   }, [ledger]);
 
   const handleWithdraw = async () => {
-    const settled = Number(data?.balances?.settledBalance ?? 0);
-    const pending = Math.abs(Number(data?.balances?.pendingPayouts ?? 0));
-    const availableBalance = Math.max(0, settled - pending);
+    const availableBalance = resolveAvailableBalance(data?.balances);
     const amount = parseFloat(withdrawAmount);
     if (isNaN(amount) || amount <= 0 || amount > availableBalance) {
       toast.error(
@@ -305,13 +313,7 @@ const Earnings = () => {
                   Available to Withdraw
                 </p>
                 <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                  {formatMoney(
-                    Math.max(
-                      0,
-                      Number(data?.balances?.settledBalance ?? 0) -
-                        Math.abs(Number(data?.balances?.pendingPayouts ?? 0)),
-                    ),
-                  )}
+                  {formatMoney(resolveAvailableBalance(data?.balances))}
                 </h2>
               </div>
               <div className="p-3 bg-emerald-50 rounded-lg group-hover:scale-110 transition-transform duration-300">
@@ -334,7 +336,7 @@ const Earnings = () => {
       </div>
 
       <BlurFade delay={0.4}>
-        <Card className="border-none shadow-md bg-white overflow-hidden">
+        <div className="sm:bg-white sm:shadow-md sm:rounded-xl overflow-hidden">
           <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -371,7 +373,7 @@ const Earnings = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left">
+            <table className="min-w-full text-left mobile-table-card">
               <thead className="bg-slate-50/80">
                 <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3 whitespace-nowrap">Date</th>
@@ -395,11 +397,11 @@ const Earnings = () => {
                 ) : (
                   paginatedLedger.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Date">
                         <p className="text-sm font-bold text-slate-900">{row.date || "—"}</p>
                         <p className="text-xs text-slate-500">{row.time || ""}</p>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Order">
                         <p className="text-sm font-black text-slate-900">
                           {row.orderId ? `#${row.orderId}` : row.ref || "—"}
                         </p>
@@ -425,7 +427,7 @@ const Earnings = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 align-top min-w-[180px]">
+                      <td className="px-4 py-4 align-top min-w-[180px]" data-label="Customer">
                         <p className="text-sm font-bold text-slate-900">
                           {row.customerName || row.customer || "—"}
                         </p>
@@ -436,7 +438,7 @@ const Earnings = () => {
                           <p className="text-xs text-slate-400 mt-0.5">{row.customerEmail}</p>
                         )}
                       </td>
-                      <td className="px-4 py-4 align-top min-w-[200px] max-w-[280px]">
+                      <td className="px-4 py-4 align-top min-w-[200px] max-w-[280px]" data-label="Items">
                         <p className="text-xs font-semibold text-slate-700">
                           {row.itemCount ? `${row.itemCount} item(s)` : "—"}
                         </p>
@@ -446,39 +448,39 @@ const Earnings = () => {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Order Total">
                         <p className="text-sm font-bold text-slate-900">
                           {row.orderId ? formatMoney(row.orderTotal) : "—"}
                         </p>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
-                        {row.orderId && (row.commissionAmount || row.packagingAmount || row.taxAmount) ? (
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Deductions">
+                        {row.orderId && (row.commissionAmount || row.packagingAmount) ? (
                           <div className="space-y-0.5 text-[11px] text-slate-500">
                             {row.commissionAmount > 0 && <p>Commission: -{formatMoney(row.commissionAmount)}</p>}
                             {row.packagingAmount > 0 && <p>Packaging: +{formatMoney(row.packagingAmount)}</p>}
-                            {row.taxAmount > 0 && <p>Tax: {formatMoney(row.taxAmount)}</p>}
                           </div>
                         ) : (
                           <span className="text-xs text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
-                        <p
-                          className={cn(
-                            "text-sm font-black",
-                            Number(row.amount) < 0 ? "text-rose-600" : "text-emerald-600",
-                          )}
-                        >
-                          {Number(row.amount) < 0 ? "-" : "+"}
-                          {formatMoney(Math.abs(Number(row.amount || 0)))}
-                        </p>
-                        {row.sellerPayout > 0 && (
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Payout: {formatMoney(row.sellerPayout)}
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Your Earning">
+                        {row.orderId && row.sellerPayout > 0 ? (
+                          <p className="text-sm font-black text-emerald-600">
+                            +{formatMoney(row.sellerPayout)}
+                          </p>
+                        ) : (
+                          <p
+                            className={cn(
+                              "text-sm font-black",
+                              Number(row.amount) < 0 ? "text-rose-600" : "text-emerald-600",
+                            )}
+                          >
+                            {Number(row.amount) < 0 ? "-" : "+"}
+                            {formatMoney(Math.abs(Number(row.amount || 0)))}
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Payment">
                         <p className="text-xs font-bold text-slate-700 capitalize">
                           {row.paymentMethod || "—"}
                         </p>
@@ -486,7 +488,7 @@ const Earnings = () => {
                           <p className="text-[11px] text-slate-400 capitalize">{row.paymentStatus}</p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top">
+                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Status">
                         <Badge variant={payoutStatusVariant(row)} className="uppercase">
                           {payoutStatusLabel(row)}
                         </Badge>
@@ -514,7 +516,7 @@ const Earnings = () => {
               />
             </div>
           )}
-        </Card>
+        </div>
       </BlurFade>
 
       <AnimatePresence>
@@ -534,13 +536,7 @@ const Earnings = () => {
               <p className="text-sm text-slate-600 font-medium mb-8">
                 Available Balance:{" "}
                 <span className="text-brand-600 font-bold">
-                  {formatMoney(
-                    Math.max(
-                      0,
-                      Number(data?.balances?.settledBalance ?? 0) -
-                        Math.abs(Number(data?.balances?.pendingPayouts ?? 0)),
-                    ),
-                  )}
+                  {formatMoney(resolveAvailableBalance(data?.balances))}
                 </span>
               </p>
 

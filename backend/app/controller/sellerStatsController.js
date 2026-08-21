@@ -459,10 +459,17 @@ export const getSellerEarnings = async (req, res) => {
         // Fetch wallet for live pending balance (money on hold due to return window)
         const wallet = await Wallet.findOne({ ownerType: 'SELLER', ownerId: sellerId });
         const onHoldBalance = wallet ? wallet.pendingBalance : 0;
-        const liveAvailableBalance = wallet ? wallet.availableBalance : settledBalance;
+        // Net of pending/processing withdrawal requests, matching what requestWithdrawal
+        // actually allows a seller to withdraw right now.
+        const liveAvailableBalance = Math.max(
+            0,
+            (wallet ? Number(wallet.availableBalance || 0) : settledBalance) - pendingPayouts,
+        );
 
-        // Keep "Total Revenue" aligned with Dashboard definition:
-        // sum of non-cancelled seller orders from Order collection.
+        // "Total Revenue" here means the seller's own item revenue — the value of
+        // what they sold — not `pricing.total`, which is the customer's full grand
+        // total including delivery fee, platform fee, tax and tip (most of which
+        // never belongs to the seller).
         const [orderRevenueAgg] = await Order.aggregate([
             {
                 $match: {
@@ -473,7 +480,14 @@ export const getSellerEarnings = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: { $ifNull: ["$pricing.total", 0] } },
+                    totalRevenue: {
+                        $sum: {
+                            $ifNull: [
+                                "$paymentBreakdown.productSubtotal",
+                                { $ifNull: ["$pricing.subtotal", 0] },
+                            ],
+                        },
+                    },
                 },
             },
         ]);
@@ -556,7 +570,13 @@ export const getSellerEarnings = async (req, res) => {
                           .join(", ")
                     : "";
                 const commissionAmount = Number(order?.paymentBreakdown?.adminProductCommissionTotal ?? 0);
-                const packagingAmount = Number(order?.paymentBreakdown?.packagingChargeAmount ?? 0);
+                // Sum both packaging components that actually belong to the seller: the
+                // store's flat per-order packaging fee, and any product-level packaging
+                // override — the admin-configured category packing fee is platform
+                // revenue and is intentionally excluded here.
+                const packagingAmount =
+                    Number(order?.paymentBreakdown?.packagingChargeAmount ?? 0) +
+                    Number(order?.paymentBreakdown?.productPackagingChargeAmount ?? 0);
                 const taxAmount = Number(order?.paymentBreakdown?.taxTotal ?? 0);
                 const isBulkOrder = Boolean(order?.isBulkOrder || order?.paymentBreakdown?.isBulkOrder);
 

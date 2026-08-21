@@ -480,23 +480,23 @@ const SellerProfile = () => {
 
             <div className="space-y-6">
               <div className="bg-slate-50 p-6 rounded-2xl border-2 border-slate-100/50 space-y-6">
-                <div className="flex items-center justify-between gap-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
                   <div className="flex items-center gap-4">
                     <div
-                      className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all ${
+                      className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all shrink-0 ${
                         formData.lat
                           ? "bg-brand-100 text-brand-600 shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)]"
                           : "bg-white text-slate-400 shadow-sm"
                       }`}>
                       <MapPin size={24} />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <p className="text-sm font-black text-slate-900">
                         {formData.lat
                           ? "Store Location Pin"
                           : "Location Not Defined"}
                       </p>
-                      <p className="text-xs text-slate-500 font-medium max-w-[400px] leading-relaxed">
+                      <p className="text-xs text-slate-500 font-medium sm:max-w-[400px] leading-relaxed">
                         {formData.address ||
                           "Click change to precisely mark your shop location on the map for delivery accuracy."}
                       </p>
@@ -506,7 +506,7 @@ const SellerProfile = () => {
                     <Button
                       type="button"
                       onClick={() => setIsMapOpen(true)}
-                      className="bg-white text-slate-900 border-2 border-slate-200 hover:border-slate-900 rounded-lg px-8 py-3 text-[10px] font-black tracking-[2px] shadow-sm hover:shadow-md transition-all whitespace-nowrap">
+                      className="bg-white text-slate-900 border-2 border-slate-200 hover:border-slate-900 rounded-lg px-8 py-3 text-[10px] font-black tracking-[2px] shadow-sm hover:shadow-md transition-all whitespace-nowrap self-start sm:self-auto shrink-0">
                       CHANGE PIN
                     </Button>
                   )}

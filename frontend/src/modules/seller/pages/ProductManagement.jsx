@@ -125,6 +125,8 @@ const ProductManagement = () => {
   const [priceMax, setPriceMax] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterDropdownRef = useRef(null);
+  const filterButtonRef = useRef(null);
+  const [filterDropdownPos, setFilterDropdownPos] = useState({ top: 0, right: 0 });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -178,6 +180,27 @@ const ProductManagement = () => {
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isProductModalOpen]);
+
+  // Anchor the filter dropdown to its trigger button's real on-screen position
+  // instead of hardcoded pixel offsets, which don't track the button across
+  // viewport sizes or page-content height.
+  React.useEffect(() => {
+    if (!isFilterOpen || !filterButtonRef.current) return;
+    const updatePosition = () => {
+      const rect = filterButtonRef.current.getBoundingClientRect();
+      setFilterDropdownPos({
+        top: rect.bottom + 8,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isFilterOpen]);
 
   // Close filter dropdown on outside click
   React.useEffect(() => {
@@ -790,6 +813,7 @@ const ProductManagement = () => {
               <option value="rejected">Rejected</option>
             </select>
             <button
+              ref={filterButtonRef}
               onClick={() => setIsFilterOpen((prev) => !prev)}
               className="flex items-center space-x-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
             >
@@ -1043,7 +1067,8 @@ const ProductManagement = () => {
       {isFilterOpen && (
         <div
           ref={filterDropdownRef}
-          className="absolute z-[9999] right-36 top-[350px] w-64 rounded-xl border border-slate-200 bg-white shadow-xl p-4 space-y-3"
+          style={{ position: "fixed", top: filterDropdownPos.top, right: filterDropdownPos.right }}
+          className="z-[9999] w-64 max-w-[calc(100vw-16px)] rounded-xl border border-slate-200 bg-white shadow-xl p-4 space-y-3"
         >
           <div>
             <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-[0.18em] mb-1">

@@ -40,7 +40,24 @@ import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocket";
 
+const ORDER_EDITABLE_STATUSES = new Set([
+    'pending',
+    'confirmed',
+    'packed',
+    'out_for_delivery',
+    'delivered',
+    'cancelled',
+]);
+
+/** Whether OrderStatusControl will render its own read-only status pill for this order —
+ * used so callers can skip a redundant duplicate badge showing the same status text. */
+function orderStatusControlShowsOwnBadge(order) {
+    const normalizedStatus = String(order?.status || '').toLowerCase();
+    return !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
+}
+
 function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
+    const { showToast } = useToast();
     const method = resolveFulfillmentMethod(order);
     const normalizedStatus = String(order?.status || '').toLowerCase();
     const isPlatform = method === 'platform_logistics';
@@ -79,15 +96,7 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
             return o.value === normalizedStatus;
         });
 
-    const editableStatuses = new Set([
-        'pending',
-        'confirmed',
-        'packed',
-        'out_for_delivery',
-        'delivered',
-        'cancelled',
-    ]);
-    const requiresDisplayOnly = !editableStatuses.has(normalizedStatus);
+    const requiresDisplayOnly = !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
 
     if (readOnly || requiresDisplayOnly) {
         const isScheduled = isScheduledHoldOrder(order) || order.status === 'scheduled';
@@ -117,6 +126,29 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                     <p className="text-[10px] font-semibold text-slate-500 mt-1">
                         Updated by delivery partner
                     </p>
+                )}
+                {platformLocked && ['delivery_search', 'delivery_assigned'].includes(String(order.workflowStatus || '').toLowerCase()) && (
+                    order.sellerPackedAt ? (
+                        <p className="text-[10px] font-bold text-emerald-600 mt-1">Packed ✓</p>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                    await sellerApi.markOrderPacked(order.id || order._id || order.orderId);
+                                    showToast('Marked as packed — rider notified', 'success');
+                                    // The seller-room socket push from the backend triggers this page's
+                                    // existing order:status:update listener, which refetches the list.
+                                } catch (err) {
+                                    showToast(err?.response?.data?.message || 'Failed to mark as packed', 'error');
+                                }
+                            }}
+                            className="mt-1.5 px-2.5 py-1 rounded-lg bg-brand-600 text-white text-[9px] font-black uppercase tracking-wide hover:bg-brand-700 transition-colors"
+                        >
+                            Mark as Packed
+                        </button>
+                    )
                 )}
                 {requiresDisplayOnly && !isScheduled && !platformLocked && (
                     <p className="text-[10px] font-semibold text-slate-500 mt-1">
@@ -195,10 +227,10 @@ const Orders = () => {
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
-    const [customerPickupOtp, setCustomerPickupOtp] = useState('');
-    const [customerPickupQr, setCustomerPickupQr] = useState('');
     const [pickupOtpSending, setPickupOtpSending] = useState(false);
     const [pickupOtpCooldown, setPickupOtpCooldown] = useState(0);
+    const [pickupVerifyOtp, setPickupVerifyOtp] = useState('');
+    const [pickupOtpVerifying, setPickupOtpVerifying] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -1089,16 +1121,28 @@ const Orders = () => {
         if (pickupOtpSending || pickupOtpCooldown > 0) return;
         setPickupOtpSending(true);
         try {
-            const res = await sellerApi.resendPickupOtp(orderId);
-            const result = res.data?.result || {};
-            if (result.otp) setCustomerPickupOtp(result.otp);
-            if (result.qrToken) setCustomerPickupQr(result.qrToken);
-            showToast(customerPickupOtp ? 'New OTP sent to customer' : 'OTP sent to customer', 'success');
+            await sellerApi.resendPickupOtp(orderId);
+            showToast('Pickup code sent to the customer', 'success');
             setPickupOtpCooldown(30);
         } catch (err) {
             showToast(err?.response?.data?.message || 'Failed to send OTP', 'error');
         } finally {
             setPickupOtpSending(false);
+        }
+    };
+
+    const handleVerifyPickupOtp = async (orderId) => {
+        if (pickupOtpVerifying || pickupVerifyOtp.length < 4) return;
+        setPickupOtpVerifying(true);
+        try {
+            await sellerApi.verifyCustomerPickup(orderId, { otp: pickupVerifyOtp });
+            showToast('Pickup verified', 'success');
+            setPickupVerifyOtp('');
+            await fetchOrders();
+        } catch (err) {
+            showToast(err?.response?.data?.message || 'Incorrect or expired code', 'error');
+        } finally {
+            setPickupOtpVerifying(false);
         }
     };
 
@@ -1201,7 +1245,7 @@ const Orders = () => {
 
                     {/* Main Content Area */}
                     <BlurFade delay={0.3}>
-                        <Card className="border-none shadow-xl ring-1 ring-slate-100 rounded-lg bg-white overflow-visible">
+                        <div className="sm:bg-white sm:shadow-xl sm:ring-1 sm:ring-slate-100 sm:rounded-lg overflow-visible">
                             {/* Tabs */}
                             <div className="border-b border-slate-100 bg-slate-50/30 overflow-x-auto scrollbar-hide">
                                 <div className="flex px-3 sm:px-6 items-center min-w-max">
@@ -1365,10 +1409,12 @@ const Orders = () => {
                                                     </div>
                                                     <p className="text-sm font-black text-slate-900 mt-2">₹{order.total.toLocaleString()}</p>
                                                 </div>
-                                                <div className="flex flex-col items-end gap-2 shrink-0">
-                                                    <Badge variant={getStatusColor(order.status)} className="text-[10px] font-black uppercase px-2 py-0">
-                                                        {order.statusLabel || order.status}
-                                                    </Badge>
+                                                <div className="flex flex-col items-end gap-2 shrink-0 max-w-[140px]">
+                                                    {!orderStatusControlShowsOwnBadge(order) && (
+                                                        <Badge variant={getStatusColor(order.status)} className="text-[10px] font-black uppercase px-2 py-0 text-right whitespace-normal">
+                                                            {order.statusLabel || order.status}
+                                                        </Badge>
+                                                    )}
                                                     {order.storeReassignment && (
                                                         <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase px-2 py-0">
                                                             Reassigned
@@ -1590,7 +1636,7 @@ const Orders = () => {
                                     <button className="p-1.5 rounded-lg border border-slate-200 text-slate-600 opacity-50 cursor-not-allowed" aria-hidden><HiOutlineChevronRight className="h-3.5 w-3.5" /></button>
                                 </div>
                             </div>
-                        </Card>
+                        </div>
                     </BlurFade>
 
                     <div className="mt-3 sm:mt-4 px-2 sm:px-0">
@@ -2251,7 +2297,7 @@ const Orders = () => {
                     <AnimatePresence>
                         {isDetailsModalOpen && selectedOrder && (
                             <div
-                                className="fixed inset-0 z-[100] flex items-stretch sm:items-center justify-center p-3 sm:p-6 lg:p-12 overflow-hidden overscroll-none"
+                                className="fixed inset-0 z-[210] flex items-stretch sm:items-center justify-center p-3 pt-16 sm:p-6 sm:pt-6 lg:p-12 overflow-hidden overscroll-none"
                                 onWheel={(e) => e.stopPropagation()}
                                 onTouchMove={(e) => e.stopPropagation()}
                             >
@@ -2412,37 +2458,42 @@ const Orders = () => {
                                             && String(selectedOrder.workflowStatus || '').toUpperCase() === 'CUSTOMER_PICKUP_READY' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 space-y-2.5">
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                                                    Store Pickup OTP
+                                                    Verify Pickup
                                                 </p>
                                                 <p className="text-xs font-semibold text-slate-700">
-                                                    Send a pickup code to the customer, or resend a fresh one if they say they didn't get it or lost it.
+                                                    Ask the customer for their pickup code and enter it below to confirm their identity.
                                                 </p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        maxLength={6}
+                                                        value={pickupVerifyOtp}
+                                                        onChange={(e) => setPickupVerifyOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                                        placeholder="Enter code"
+                                                        className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-center text-lg font-black tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-300"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleVerifyPickupOtp(selectedOrder.id)}
+                                                        disabled={pickupOtpVerifying || pickupVerifyOtp.length < 4}
+                                                        className="rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {pickupOtpVerifying ? 'Verifying...' : 'Verify'}
+                                                    </button>
+                                                </div>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSendPickupOtp(selectedOrder.id)}
                                                     disabled={pickupOtpSending || pickupOtpCooldown > 0}
-                                                    className="w-full rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    className="w-full rounded-xl bg-white ring-1 ring-emerald-200 text-emerald-700 px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-emerald-50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                                 >
                                                     {pickupOtpSending
                                                         ? 'Sending...'
                                                         : pickupOtpCooldown > 0
-                                                            ? `Resend OTP in ${pickupOtpCooldown}s`
-                                                            : customerPickupOtp
-                                                                ? 'Resend OTP'
-                                                                : 'Send OTP'}
+                                                            ? `Resend code to customer in ${pickupOtpCooldown}s`
+                                                            : "Resend code to customer"}
                                                 </button>
-                                                {customerPickupOtp && (
-                                                    <div className="rounded-xl bg-white p-3 text-center">
-                                                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Current OTP</p>
-                                                        <p className="text-2xl font-black tracking-[0.3em] text-slate-900 mt-1">{customerPickupOtp}</p>
-                                                    </div>
-                                                )}
-                                                {customerPickupQr && (
-                                                    <div className="rounded-xl bg-white p-3 text-center">
-                                                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">QR Token</p>
-                                                        <p className="text-[11px] font-mono break-all text-slate-800 mt-1">{customerPickupQr}</p>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
                                         {selectedOrder.reschedule?.status === 'requested' && (
