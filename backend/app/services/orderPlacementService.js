@@ -17,6 +17,7 @@ import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
 import {
   generateUniqueCheckoutGroupId,
   generateUniquePublicOrderId,
+  generateUniqueShortOrderId,
 } from "./orderIdService.js";
 import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import {
@@ -553,6 +554,7 @@ export async function placeOrderAtomic({
     for (let index = 0; index < pricingSnapshot.sellerBreakdownEntries.length; index += 1) {
       const entry = pricingSnapshot.sellerBreakdownEntries[index];
       const orderId = await generateUniquePublicOrderId({ session });
+      const shortOrderId = await generateUniqueShortOrderId({ session });
       const orderReservation = computeStockReservationWindow(paymentMode);
 
       let scheduleFields = {};
@@ -639,6 +641,7 @@ export async function placeOrderAtomic({
 
       const order = new Order({
         orderId,
+        shortOrderId,
         customer: customerId,
         seller: entry.sellerId,
         items: mapOrderItemsForPersistence(entry.items),

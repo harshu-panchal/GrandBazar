@@ -474,7 +474,7 @@ const OrderDetail = () => {
                     </button>
                     <div>
                         <div className="flex items-center gap-3 flex-wrap">
-                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Order #{order.orderId}</h1>
+                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight" title={order.orderId}>Order #{order.shortOrderId || order.orderId}</h1>
                             <div className="relative inline-block w-44">
                                 <select
                                     value={legacyStatus}
@@ -504,6 +504,9 @@ const OrderDetail = () => {
                             <Calendar className="h-3.5 w-3.5" />
                             {new Date(order.createdAt).toLocaleDateString()} • <Clock className="h-3.5 w-3.5 ml-1" /> {new Date(order.createdAt).toLocaleTimeString()}
                         </p>
+                        {order.shortOrderId && (
+                            <p className="text-[10px] font-semibold text-slate-300 mt-0.5 tracking-tight">Ref: {order.orderId}</p>
+                        )}
                         {storeReassignment && (
                             <p className="mt-1.5 text-[11px] font-bold text-violet-700">
                                 Moved from {storeReassignment.fromShopName} → {storeReassignment.toShopName}

@@ -129,7 +129,10 @@ export const inviteSeller = async (req, res) => {
   try {
     const { email, phone } = req.body || {};
     const result = await inviteSellerByAdmin({ email, phone, invitedBy: req.user.id });
-    return handleResponse(res, 201, "Invite sent", result);
+    const message = result.emailDispatched
+      ? "Invite sent"
+      : "Invite created but the email failed to send — check SMTP config and resend from Invite History";
+    return handleResponse(res, 201, message, result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 400, error.message);
   }

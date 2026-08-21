@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import { useSupportUnread } from "@core/context/SupportUnreadContext";
 import { useAuth } from "@core/context/AuthContext";
+import { adminApi } from "../services/adminApi";
 import {
   LayoutDashboard,
   Tag,
@@ -135,9 +136,10 @@ const navItems = [
     permission: "products",
   },
   {
-    label: "Master Catalog", 
-    path: "/admin/catalog", 
-    icon: Library, 
+    label: "Master Catalog",
+    path: "/admin/catalog",
+    end: true,
+    icon: Library,
     color: "violet",
     permission: "products",
   },
@@ -321,6 +323,7 @@ const CityCommissions = React.lazy(() => import("../pages/CityCommissions"));
 const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
   const { user } = useAuth();
+  const [pendingDeliveryCount, setPendingDeliveryCount] = React.useState(0);
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
     const r = user?.role;
@@ -332,6 +335,27 @@ const AdminRoutes = () => {
     return user?.allowedPermissions?.includes(permissionKey);
   }, [isSuperAdminOrAdmin, user]);
 
+  React.useEffect(() => {
+    if (!hasPermission("delivery")) return undefined;
+    let cancelled = false;
+    const fetchPendingCount = async () => {
+      try {
+        const res = await adminApi.getDeliveryPartners({ verified: "false", limit: 1 });
+        const total = Number(res?.data?.result?.total ?? 0);
+        if (!cancelled) setPendingDeliveryCount(Number.isFinite(total) ? total : 0);
+      } catch {
+        // Non-fatal — badge just stays at its last known value.
+      }
+    };
+    fetchPendingCount();
+    const poll = setInterval(fetchPendingCount, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdminOrAdmin]);
+
   const navItemsWithBadges = React.useMemo(() => {
     const filteredItems = navItems.filter((item) => {
       if (item.label === "My Profile") return true;
@@ -340,13 +364,19 @@ const AdminRoutes = () => {
       return user?.allowedPermissions?.includes(item.permission);
     });
 
-    const count = Number.isFinite(totalUnread) ? totalUnread : 0;
-    if (count <= 0) return filteredItems;
+    const supportCount = Number.isFinite(totalUnread) ? totalUnread : 0;
+    const deliveryCount = Number.isFinite(pendingDeliveryCount) ? pendingDeliveryCount : 0;
+
     return filteredItems.map((item) => {
-      if (item?.label !== "Customer Support") return item;
-      return { ...item, badgeCount: count };
+      if (item?.label === "Customer Support" && supportCount > 0) {
+        return { ...item, badgeCount: supportCount };
+      }
+      if (item?.label === "Delivery Drivers" && deliveryCount > 0) {
+        return { ...item, badgeCount: deliveryCount, badgePath: "/admin/delivery-boys/pending" };
+      }
+      return item;
     });
-  }, [totalUnread, user, isSuperAdminOrAdmin]);
+  }, [totalUnread, pendingDeliveryCount, user, isSuperAdminOrAdmin]);
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">

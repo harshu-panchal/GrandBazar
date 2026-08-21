@@ -1,10 +1,35 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { HiOutlineBell, HiOutlineCheckCircle, HiOutlineExclamationCircle, HiOutlineClock } from 'react-icons/hi2';
 import { cn } from '@/lib/utils';
 import Button from '@shared/components/ui/Button';
 
+// Resolves a notification's `data.link` (an absolute or relative URL built by
+// the backend) into an in-app route the router can navigate to.
+const resolveNotificationPath = (notif) => {
+    const link = notif?.data?.link;
+    if (!link || typeof link !== 'string') return null;
+    try {
+        const url = new URL(link, window.location.origin);
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+        return null;
+    }
+};
+
 const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClose }) => {
+    const navigate = useNavigate();
+
+    const handleNotificationClick = (notif, notificationId) => {
+        if (!notif.isRead) onMarkAsRead(notificationId);
+        const path = resolveNotificationPath(notif);
+        if (path) {
+            navigate(path);
+            onClose?.();
+        }
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -43,7 +68,7 @@ const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClo
                                         "p-4 hover:bg-slate-50 transition-all cursor-pointer group relative",
                                         !notif.isRead && "bg-primary/[0.02]"
                                     )}
-                                    onClick={() => !notif.isRead && onMarkAsRead(notificationId)}
+                                    onClick={() => handleNotificationClick(notif, notificationId)}
                                 >
                                     {!notif.isRead && (
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full" />

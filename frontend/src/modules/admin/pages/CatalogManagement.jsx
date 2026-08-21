@@ -94,6 +94,7 @@ const CatalogManagement = () => {
     weightUnit: "kg",
     tags: "",
     alternativeNames: "",
+    variantOptions: "",
     headerId: "",
     categoryId: "",
     subcategoryId: "",
@@ -234,6 +235,7 @@ const CatalogManagement = () => {
         weight: formatWeightField(formData.weightValue, formData.weightUnit),
         tags: formData.tags.split(",").map(t => t.trim()).filter(Boolean),
         alternativeNames: formData.alternativeNames.split(",").map(n => n.trim()).filter(Boolean),
+        variants: formData.variantOptions.split(",").map(v => v.trim()).filter(Boolean).map(name => ({ name })),
         applyCommission,
         adminCommission: commissionValue,
         adminCommissionValue: commissionValue,
@@ -241,6 +243,7 @@ const CatalogManagement = () => {
       };
       delete payload.weightValue;
       delete payload.weightUnit;
+      delete payload.variantOptions;
 
       if (editingItem) {
         await adminApi.updateCatalogProduct(editingItem._id || editingItem.id, payload);
@@ -381,6 +384,7 @@ const CatalogManagement = () => {
         weightUnit: parsedWeight.weightUnit,
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
         alternativeNames: Array.isArray(item.alternativeNames) ? item.alternativeNames.join(", ") : "",
+        variantOptions: Array.isArray(item.variants) ? item.variants.map(v => v.name).filter(Boolean).join(", ") : "",
         headerId: item.headerId?._id || item.headerId || "",
         categoryId: item.categoryId?._id || item.categoryId || "",
         subcategoryId: item.subcategoryId?._id || item.subcategoryId || "",
@@ -401,6 +405,7 @@ const CatalogManagement = () => {
         weightUnit: "kg",
         tags: "",
         alternativeNames: "",
+        variantOptions: "",
         headerId: "",
         categoryId: "",
         subcategoryId: "",
@@ -829,9 +834,22 @@ const CatalogManagement = () => {
                           value={formData.alternativeNames}
                           onChange={(e) => setFormData({ ...formData, alternativeNames: e.target.value })}
                           className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5"
-                          placeholder="e.g. सेब, Fresh Apple, Washington Apple"
+                          placeholder="e.g. Apple, Fresh Apple, Washington Apple"
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-2 flex flex-col">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Variant Options (comma-separated)</label>
+                      <input
+                        value={formData.variantOptions}
+                        onChange={(e) => setFormData({ ...formData, variantOptions: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-black/5"
+                        placeholder="e.g. 500g, 1kg, 2kg, 5kg"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        Suggested variant names for sellers to pick from when they claim this item — price and stock are set by the seller per variant.
+                      </p>
                     </div>
 
                     {/* Commission */}

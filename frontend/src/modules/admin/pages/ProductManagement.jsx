@@ -230,6 +230,22 @@ const ProductManagement = () => {
         return () => clearTimeout(timer);
     }, [searchTerm, filterCategory, filterStatus, filterApprovalStatus, sortBy, pageSize]);
 
+    // Lock page scroll while the Add/Edit Product modal is open so the
+    // background doesn't scroll behind it.
+    useEffect(() => {
+        if (isProductModalOpen) {
+            const prevBody = document.body.style.overflow;
+            const prevHtml = document.documentElement.style.overflow;
+            document.body.style.overflow = "hidden";
+            document.documentElement.style.overflow = "hidden";
+            return () => {
+                document.body.style.overflow = prevBody;
+                document.documentElement.style.overflow = prevHtml;
+            };
+        }
+        return undefined;
+    }, [isProductModalOpen]);
+
     const handleSave = async () => {
         const isEmpty = (v) => v === "" || v === null || v === undefined;
         const firstVariant = (formData.variants && formData.variants[0]) || {};
@@ -276,7 +292,15 @@ const ProductManagement = () => {
             data.append('weight', formData.weight);
             data.append('packagingCharge', formData.packagingCharge);
             data.append('tags', formData.tags);
-            data.append('variants', JSON.stringify(formData.variants));
+            // Sanitize numeric variant fields so an empty string on a secondary
+            // variant row doesn't throw a Mongoose CastError on save.
+            const sanitizedVariants = (formData.variants || []).map((v) => ({
+                ...v,
+                price: isEmpty(v.price) ? 0 : Number(v.price) || 0,
+                salePrice: isEmpty(v.salePrice) ? 0 : Number(v.salePrice) || 0,
+                stock: isEmpty(v.stock) ? 0 : Number(v.stock) || 0,
+            }));
+            data.append('variants', JSON.stringify(sanitizedVariants));
             data.append('isPreorderEligible', formData.isPreorderEligible);
             if (formData.addons && formData.addons.length > 0) {
                 data.append('addons', JSON.stringify(formData.addons));
@@ -911,7 +935,7 @@ const ProductManagement = () => {
             <AnimatePresence>
                 {isProductModalOpen && (
                     <div
-                        className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-12 overflow-hidden overscroll-contain touch-pan-y"
+                        className="fixed inset-0 z-[1000] flex items-center justify-center p-4 lg:p-12 overflow-hidden overscroll-contain touch-pan-y"
                         onWheelCapture={(e) => e.stopPropagation()}
                     >
                         <motion.div
@@ -1369,6 +1393,15 @@ const ProductManagement = () => {
                                                         <option key={sc._id} value={sc._id}>{sc.name}</option>
                                                     ))}
                                                 </select>
+                                                {formData.categoryId && !categories.find(h => h._id === formData.header)?.children?.find(c => c._id === formData.categoryId)?.children?.length && (
+                                                    <p className="text-xs font-semibold text-amber-600 mt-1">
+                                                        This category has no sub-categories yet.{' '}
+                                                        <a href="/admin/categories/sub" target="_blank" rel="noreferrer" className="underline">
+                                                            Create one first
+                                                        </a>{' '}
+                                                        — a sub-category is required to save this product.
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     )}

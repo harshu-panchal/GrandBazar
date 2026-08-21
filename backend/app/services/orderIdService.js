@@ -5,6 +5,10 @@ import CheckoutGroup from "../models/checkoutGroup.js";
 const CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const TIMESTAMP_PART_LENGTH = 10;
 const RANDOM_PART_LENGTH = 16;
+// Short, human-friendly order number shown to customers/admin/seller/delivery
+// instead of the long sortable `orderId` above (which stays as the internal
+// unique lookup key everywhere it's already used).
+const SHORT_ORDER_ID_LENGTH = 8;
 
 function encodeTimePart(timestampMs) {
   let value = BigInt(timestampMs);
@@ -38,6 +42,10 @@ export function buildCheckoutGroupId() {
   return `CHK-${buildSortableToken()}`;
 }
 
+export function buildShortOrderId() {
+  return randomBase32(SHORT_ORDER_ID_LENGTH);
+}
+
 export async function generateUniquePublicOrderId({ session = null, maxAttempts = 8 } = {}) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const candidate = buildPublicOrderId();
@@ -47,6 +55,19 @@ export async function generateUniquePublicOrderId({ session = null, maxAttempts 
     if (!exists) return candidate;
   }
   const err = new Error("Unable to generate a unique public order id");
+  err.statusCode = 500;
+  throw err;
+}
+
+export async function generateUniqueShortOrderId({ session = null, maxAttempts = 8 } = {}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const candidate = buildShortOrderId();
+    const query = Order.exists({ shortOrderId: candidate });
+    if (session) query.session(session);
+    const exists = await query;
+    if (!exists) return candidate;
+  }
+  const err = new Error("Unable to generate a unique short order id");
   err.statusCode = 500;
   throw err;
 }

@@ -106,6 +106,7 @@ const OrdersList = () => {
                 const dbOrders = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
                 const formatted = dbOrders.map(o => ({
                     id: o.orderId || 'UNSET',
+                    shortId: o.shortOrderId || '',
                     _id: o._id,
                     customer: o.customer?.name || 'Unknown',
                     seller: o.seller?.shopName || 'Unknown',
@@ -246,6 +247,7 @@ const OrdersList = () => {
             const query = safeLower(searchTerm);
             const matchesSearch =
                 safeLower(order.id).includes(query) ||
+                safeLower(order.shortId).includes(query) ||
                 safeLower(order.customer).includes(query) ||
                 safeLower(order.seller).includes(query);
 
@@ -457,8 +459,8 @@ const OrdersList = () => {
                                                 <Package className="h-5 w-5" />
                                             </div>
                                             <div>
-                                                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                                                    #{order.id}
+                                                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2" title={order.id}>
+                                                    #{order.shortId || order.id}
                                                     <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-all text-slate-400" />
                                                 </h4>
                                                 <div className="flex items-center gap-2 mt-1">

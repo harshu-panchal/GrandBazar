@@ -1,6 +1,33 @@
 import nodemailer from "nodemailer";
+import Setting from "../models/setting.js";
 
 let transporter = null;
+
+// Cache the configured platform name briefly so every email send doesn't hit
+// the DB, while still staying in sync with admin-configured branding
+// (Settings > General > App Name) instead of a hardcoded string.
+let cachedAppName = null;
+let cachedAppNameAt = 0;
+const APP_NAME_CACHE_MS = 5 * 60 * 1000;
+
+async function getAppName() {
+  const now = Date.now();
+  if (cachedAppName && now - cachedAppNameAt < APP_NAME_CACHE_MS) {
+    return cachedAppName;
+  }
+  try {
+    const setting = await Setting.findOne({
+      $or: [{ tenantId: null }, { tenantId: { $exists: false } }],
+    })
+      .select("appName")
+      .lean();
+    cachedAppName = String(setting?.appName || process.env.APP_NAME || "Zinto").trim() || "Zinto";
+  } catch {
+    cachedAppName = String(process.env.APP_NAME || "Zinto").trim() || "Zinto";
+  }
+  cachedAppNameAt = now;
+  return cachedAppName;
+}
 
 function getTransporter() {
   if (!transporter) {
@@ -30,6 +57,7 @@ function getTransporter() {
  * @returns {Promise<Object>}
  */
 export async function sendVendorWelcomeEmail({ email, name, password, storeName }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
 
@@ -40,9 +68,9 @@ export async function sendVendorWelcomeEmail({ email, name, password, storeName 
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-      <h2 style="color: #2563eb; margin-top: 0;">Welcome to GrandBazar Seller Network!</h2>
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${appName} Seller Network!</h2>
       <p>Hello <strong>${name}</strong>,</p>
-      <p>Your seller account ${storeName ? `for <strong>${storeName}</strong>` : ''} has been created and approved on GrandBazar.</p>
+      <p>Your seller account ${storeName ? `for <strong>${storeName}</strong>` : ''} has been created and approved on ${appName}.</p>
       <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
         <p style="margin: 0 0 8px 0;"><strong>Portal Login Email:</strong> ${email}</p>
         ${passwordBlock}
@@ -61,9 +89,9 @@ export async function sendVendorWelcomeEmail({ email, name, password, storeName 
 
   try {
     const mailOptions = {
-      from: `GrandBazar Platform <${fromEmail}>`,
+      from: `${appName} Platform <${fromEmail}>`,
       to: email,
-      subject: "Welcome to GrandBazar — Your Seller Credentials & Access Link",
+      subject: `Welcome to ${appName} — Your Seller Credentials & Access Link`,
       html: htmlContent,
     };
 
@@ -100,12 +128,13 @@ export function useRealEmailOTP() {
  * Sends OTP email for password reset.
  */
 export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user" }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Password Reset Verification Code</h2>
       <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
-      <p>You requested to reset your password on GrandBazar. Use the following OTP code to complete your password reset:</p>
+      <p>You requested to reset your password on ${appName}. Use the following OTP code to complete your password reset:</p>
       <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
         ${otp}
       </div>
@@ -120,9 +149,9 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
 
   try {
     const mailOptions = {
-      from: `GrandBazar Platform <${fromEmail}>`,
+      from: `${appName} Platform <${fromEmail}>`,
       to: email,
-      subject: `Your GrandBazar Password Reset OTP: ${otp}`,
+      subject: `Your ${appName} Password Reset OTP: ${otp}`,
       html: htmlContent,
     };
     const info = await getTransporter().sendMail(mailOptions);
@@ -137,14 +166,15 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
  * Sends welcome email to newly created admin staff member (accountant/assistant).
  */
 export async function sendStaffWelcomeEmail({ email, name, password, role }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/admin";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-      <h2 style="color: #2563eb; margin-top: 0;">Welcome to GrandBazar Admin Team!</h2>
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${appName} Admin Team!</h2>
       <p>Hello <strong>${name}</strong>,</p>
-      <p>Your administrative staff account (${role}) has been created on GrandBazar.</p>
+      <p>Your administrative staff account (${role}) has been created on ${appName}.</p>
       <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
         <p style="margin: 0 0 8px 0;"><strong>Admin Login Email:</strong> ${email}</p>
         <p style="margin: 0 0 8px 0;"><strong>Role:</strong> ${role}</p>
@@ -165,9 +195,9 @@ export async function sendStaffWelcomeEmail({ email, name, password, role }) {
 
   try {
     const mailOptions = {
-      from: `GrandBazar Admin Platform <${fromEmail}>`,
+      from: `${appName} Admin Platform <${fromEmail}>`,
       to: email,
-      subject: "Welcome to GrandBazar Admin Team — Credentials & Access",
+      subject: `Welcome to ${appName} Admin Team — Credentials & Access`,
       html: htmlContent,
     };
     const info = await getTransporter().sendMail(mailOptions);
@@ -182,12 +212,13 @@ export async function sendStaffWelcomeEmail({ email, name, password, role }) {
  * Sends seller signup / verification OTP email.
  */
 export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Seller Verification OTP</h2>
       <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
-      <p>Thank you for registering on GrandBazar Seller Portal. Your verification OTP code is:</p>
+      <p>Thank you for registering on ${appName} Seller Portal. Your verification OTP code is:</p>
       <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
         ${otp}
       </div>
@@ -202,9 +233,9 @@ export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
 
   try {
     const mailOptions = {
-      from: `GrandBazar Seller Network <${fromEmail}>`,
+      from: `${appName} Seller Network <${fromEmail}>`,
       to: email,
-      subject: `GrandBazar Seller Verification OTP: ${otp}`,
+      subject: `${appName} Seller Verification OTP: ${otp}`,
       html: htmlContent,
     };
     const info = await getTransporter().sendMail(mailOptions);
@@ -221,13 +252,14 @@ export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
  * post-approval credentials email.
  */
 export async function sendSellerInviteEmail({ email, inviteLink }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-      <h2 style="color: #2563eb; margin-top: 0;">You're invited to sell on GrandBazar</h2>
+      <h2 style="color: #2563eb; margin-top: 0;">You're invited to sell on ${appName}</h2>
       <p>Hello,</p>
-      <p>The GrandBazar team would like to invite you to become a seller on our platform. Click below to start your application — it only takes a few minutes.</p>
+      <p>The ${appName} team would like to invite you to become a seller on our platform. Click below to start your application — it only takes a few minutes.</p>
       <p style="margin-top: 25px;">
         <a href="${inviteLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
           Start Your Application
@@ -243,9 +275,9 @@ export async function sendSellerInviteEmail({ email, inviteLink }) {
 
   try {
     const mailOptions = {
-      from: `GrandBazar Platform <${fromEmail}>`,
+      from: `${appName} Platform <${fromEmail}>`,
       to: email,
-      subject: "You're invited to sell on GrandBazar",
+      subject: `You're invited to sell on ${appName}`,
       html: htmlContent,
     };
 
@@ -270,12 +302,13 @@ export async function sendSellerInviteEmail({ email, inviteLink }) {
  * Sends welcome email to sub-seller staff / assistant member.
  */
 export async function sendSellerStaffWelcomeEmail({ email, name, password, storeName, roleTitle }) {
+  const appName = await getAppName();
   const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${storeName || 'GrandBazar Seller'} Team!</h2>
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${storeName || `${appName} Seller`} Team!</h2>
       <p>Hello <strong>${name}</strong>,</p>
       <p>You have been added as a team member (${roleTitle || 'Assistant'}) for <strong>${storeName || 'Store'}</strong>.</p>
       <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
@@ -297,9 +330,9 @@ export async function sendSellerStaffWelcomeEmail({ email, name, password, store
 
   try {
     const mailOptions = {
-      from: `GrandBazar Seller Platform <${fromEmail}>`,
+      from: `${appName} Seller Platform <${fromEmail}>`,
       to: email,
-      subject: `Welcome to ${storeName || 'Store'} on GrandBazar — Your Login Credentials`,
+      subject: `Welcome to ${storeName || 'Store'} on ${appName} — Your Login Credentials`,
       html: htmlContent,
     };
     const info = await getTransporter().sendMail(mailOptions);

@@ -291,6 +291,17 @@
   border-color: var(--primary);
 }
 
+/* Higher-specificity overrides so Tailwind's icon-clearance utilities aren't
+   silently beaten by .ds-input's own padding (unlayered CSS beats Tailwind's
+   layered utilities regardless of source order/specificity otherwise). */
+.ds-input.pl-9 {
+  padding-left: 2.25rem;
+}
+
+.ds-input.pr-9 {
+  padding-right: 2.25rem;
+}
+
 .ds-textarea {
   min-height: 4.375rem;
   padding: 0.375rem 0.625rem;

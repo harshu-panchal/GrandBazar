@@ -9,6 +9,7 @@ import {
     HiOutlineCheckCircle,
     HiOutlineXCircle,
     HiOutlineEye,
+    HiOutlineEyeSlash,
     HiOutlineEnvelope,
     HiOutlinePhone,
     HiOutlineDocumentText,
@@ -52,6 +53,7 @@ const PendingSellers = () => {
     const [isLoadingInvites, setIsLoadingInvites] = useState(false);
     const [viewingSeller, setViewingSeller] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [showCreatePassword, setShowCreatePassword] = useState(false);
     const [createForm, setCreateForm] = useState({
         name: '',
         email: '',
@@ -153,7 +155,12 @@ const PendingSellers = () => {
         setIsSendingInvite(true);
         try {
             const res = await adminApi.inviteSeller(inviteForm);
-            toast.success(res.data?.message || 'Invite sent');
+            const emailDispatched = res.data?.result?.emailDispatched;
+            if (emailDispatched === false) {
+                toast.error(res.data?.message || 'Invite created but the email failed to send');
+            } else {
+                toast.success(res.data?.message || 'Invite sent');
+            }
             setIsInviteModalOpen(false);
             setInviteForm({ email: '', phone: '' });
             if (showInvites) fetchInvites();
@@ -168,7 +175,8 @@ const PendingSellers = () => {
         setIsLoadingInvites(true);
         try {
             const res = await adminApi.listSellerInvites();
-            setInvites(Array.isArray(res.data?.result) ? res.data.result : []);
+            // handleResponse() puts array payloads under the plural `results` key.
+            setInvites(Array.isArray(res.data?.results) ? res.data.results : []);
         } catch (error) {
             toast.error('Failed to load invites');
         } finally {
@@ -947,6 +955,7 @@ const PendingSellers = () => {
                                             <input
                                                 type="email"
                                                 required
+                                                autoComplete="off"
                                                 value={createForm.email}
                                                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                                                 placeholder="ramesh@example.com"
@@ -968,13 +977,23 @@ const PendingSellers = () => {
 
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password (Leave blank for auto-generated)</label>
-                                        <input
-                                            type="password"
-                                            value={createForm.password}
-                                            onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                                            placeholder="Auto-generated if empty"
-                                            className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type={showCreatePassword ? "text" : "password"}
+                                                autoComplete="new-password"
+                                                value={createForm.password}
+                                                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                                                placeholder="Auto-generated if empty"
+                                                className="w-full px-4 py-3 pr-11 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/20"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCreatePassword(!showCreatePassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                                            >
+                                                {showCreatePassword ? <HiOutlineEyeSlash className="h-4.5 w-4.5" /> : <HiOutlineEye className="h-4.5 w-4.5" />}
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="space-y-1 pt-2 border-t border-slate-100">

@@ -93,6 +93,22 @@ export const createCatalogProduct = async (req, res) => {
         productData.galleryImages = JSON.parse(productData.galleryImages);
       } catch (e) {}
     }
+    if (typeof productData.variants === "string") {
+      try {
+        productData.variants = JSON.parse(productData.variants);
+      } catch (e) {
+        productData.variants = [];
+      }
+    }
+    if (Array.isArray(productData.variants)) {
+      productData.variants = productData.variants
+        .filter((v) => v && String(v.name || "").trim())
+        .map((v) => ({
+          name: String(v.name || "").trim(),
+          weight: String(v.weight || "").trim(),
+          sku: String(v.sku || "").trim(),
+        }));
+    }
 
     if (!productData.name) {
       return handleResponse(res, 400, "Catalog product name is required");
@@ -353,6 +369,22 @@ export const updateCatalogProduct = async (req, res) => {
       } catch (e) {
         updateData.alternativeNames = updateData.alternativeNames.split(",").map(n => n.trim()).filter(Boolean);
       }
+    }
+    if (typeof updateData.variants === "string") {
+      try {
+        updateData.variants = JSON.parse(updateData.variants);
+      } catch (e) {
+        updateData.variants = [];
+      }
+    }
+    if (Array.isArray(updateData.variants)) {
+      updateData.variants = updateData.variants
+        .filter((v) => v && String(v.name || "").trim())
+        .map((v) => ({
+          name: String(v.name || "").trim(),
+          weight: String(v.weight || "").trim(),
+          sku: String(v.sku || "").trim(),
+        }));
     }
 
     // Update slug if name is changing

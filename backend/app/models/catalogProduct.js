@@ -37,6 +37,16 @@ const catalogProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     }],
+    // Lightweight variant templates (e.g. "500g", "1kg", "Red") a seller can
+    // use as a starting point when claiming this catalog item — price/stock
+    // for each variant are set by the seller at claim time, not stored here.
+    variants: [
+      {
+        name: { type: String, trim: true },
+        weight: { type: String, trim: true },
+        sku: { type: String, trim: true },
+      },
+    ],
     mainImage: {
       type: String, // Cloudinary URL
       required: true,

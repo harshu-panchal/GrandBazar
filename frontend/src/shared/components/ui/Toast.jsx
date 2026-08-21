@@ -29,7 +29,10 @@ export const ToastProvider = ({ children }) => {
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
-            <Toaster position="bottom-right" richColors closeButton />
+            {/* top-center avoids overlapping the fixed bottom nav on mobile
+                admin/seller/customer views (delivery app already uses this
+                position for the same reason). */}
+            <Toaster position="top-center" richColors closeButton />
         </ToastContext.Provider>
     );
 };

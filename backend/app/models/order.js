@@ -14,6 +14,14 @@ const orderSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    // Short, human-friendly order number for display/search across all
+    // panels. `orderId` above remains the long internal lookup key used
+    // system-wide and must not be removed or replaced.
+    shortOrderId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

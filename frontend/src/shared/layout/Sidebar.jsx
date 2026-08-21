@@ -137,8 +137,9 @@ const SidebarItem = ({
         {isOpen && (
           <div className="pl-9 pr-3 py-1 space-y-1 animate-in slide-in-from-top-2 fade-in duration-500">
             {item.children.map((child) => {
+              const badgePath = item?.badgePath || "/admin/support-tickets";
               const showChildBadge =
-                badgeCount > 0 && String(child?.path || "") === "/admin/support-tickets";
+                badgeCount > 0 && String(child?.path || "") === badgePath;
 
               return (
               <NavLink

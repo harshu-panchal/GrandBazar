@@ -1,9 +1,17 @@
 import Delivery from "../models/delivery.js";
+import Admin from "../models/admin.js";
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
 import { generateOTP, useRealSMS, useMockOtpEnabled, getMockOtp } from "../utils/otp.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+
+async function getAdminIds() {
+    const admins = await Admin.find().select("_id").lean();
+    return (admins || []).map((a) => a?._id).filter(Boolean);
+}
 
 const generateToken = (delivery) =>
     jwt.sign(
@@ -171,12 +179,26 @@ export const verifyDeliveryOTP = async (req, res) => {
 
         // Confirms the phone number only — `isVerified` (admin document review)
         // and `isOnline` must not flip here or new signups skip approval entirely.
+        const isNewPendingApplication = !delivery.isPhoneVerified && !delivery.isVerified;
         delivery.isPhoneVerified = true;
         delivery.otp = undefined;
         delivery.otpExpiry = undefined;
         delivery.lastLogin = new Date();
 
         await delivery.save();
+
+        // Notify admins so a new application waiting for review isn't missed.
+        if (isNewPendingApplication) {
+            getAdminIds()
+                .then((adminIds) =>
+                    emitNotificationEvent(NOTIFICATION_EVENTS.NEW_DELIVERY_APPLICATION, {
+                        deliveryId: delivery._id,
+                        riderName: delivery.name,
+                        adminIds,
+                    }),
+                )
+                .catch(() => {});
+        }
 
         // Record active login session
         await recordLogin(delivery, "Delivery", req.ip, req.headers["user-agent"]);
