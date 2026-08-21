@@ -4,7 +4,7 @@ import Transaction from "../models/transaction.js";
 import Wallet from "../models/wallet.js";
 import Product from "../models/product.js";
 import Setting from "../models/setting.js";
-import { handleResponse, calculateDistance } from "../utils/helper.js";
+import { handleResponse } from "../utils/helper.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
 import { loadOwnerStores, getStoreCategoryList } from "../services/storeService.js";
@@ -12,10 +12,11 @@ import {
   getOwnerAccountApplicationStatus,
   isOwnerAccountApproved,
 } from "../services/sellerAccountService.js";
-import { formatBusinessModelPayload, filterStoreIdsByOwnerBusinessModel } from "../services/sellerBusinessModelService.js";
+import { formatBusinessModelPayload } from "../services/sellerBusinessModelService.js";
 import { getSellerSubscriptionSummary } from "../services/subscriptionService.js";
 import { getPlatformDeliveryProvider } from "../services/finance/financeSettingsService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance, computeStoreDistanceKm } from "../services/deliveryEtaService.js";
+import { getNearbySellersWithDistanceForCustomer } from "../services/customerVisibilityService.js";
 
 /* ===============================
    GET NEARBY STORES (public)
@@ -31,54 +32,42 @@ export const getNearbySellers = async (req, res) => {
     const customerLat = Number(lat);
     const customerLng = Number(lng);
 
-    const stores = await Store.find({
-      isActive: true,
-      isVerified: true,
-      applicationStatus: "approved",
-      location: {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [customerLng, customerLat],
-          },
-          $maxDistance: 100000,
-        },
-      },
-    }).lean();
+    // Reuses the Redis-cached geospatial lookup (same one /products and
+    // /offer-sections use) instead of re-running the $near query and the
+    // business-model filter on every request.
+    const [nearbyWithDistance, etaSettings] = await Promise.all([
+      getNearbySellersWithDistanceForCustomer(customerLat, customerLng),
+      getDeliveryEtaSettings(),
+    ]);
 
-    const nearbyStores = stores.filter((store) => {
-      const storeLng = store.location.coordinates[0];
-      const storeLat = store.location.coordinates[1];
-      const distance = calculateDistance(
-        customerLat,
-        customerLng,
-        storeLat,
-        storeLng,
-      );
-      store.distance = distance;
-      return distance <= (store.serviceRadius || 5);
-    });
+    if (nearbyWithDistance.length === 0) {
+      return handleResponse(res, 200, "Nearby stores fetched successfully", []);
+    }
 
-    const operationalStoreIds = await filterStoreIdsByOwnerBusinessModel(
-      nearbyStores.map((store) => String(store._id)),
+    const distanceById = new Map(
+      nearbyWithDistance.map((entry) => [entry.id, entry.distanceKm]),
     );
-    const operationalSet = new Set(operationalStoreIds);
-    const visibleStores = nearbyStores.filter((store) =>
-      operationalSet.has(String(store._id)),
-    );
+    const storeIds = nearbyWithDistance.map((entry) => entry.id);
 
-    if (visibleStores.length > 0) {
-      const storeIds = visibleStores.map((s) => s._id);
-
-      const activeProducts = await Product.find({
-        sellerId: { $in: storeIds },
-        status: "active",
-      })
+    const [visibleStores, activeProducts, signatureProducts] = await Promise.all([
+      Store.find({ _id: { $in: storeIds } }).lean(),
+      Product.find({ sellerId: { $in: storeIds }, status: "active" })
         .select("sellerId headerId categoryId")
         .populate("headerId", "name")
         .populate("categoryId", "name")
-        .lean();
+        .lean(),
+      Product.find({
+        sellerId: { $in: storeIds },
+        isSignatureProduct: true,
+        status: "active",
+      }).lean(),
+    ]);
 
+    visibleStores.forEach((s) => {
+      s.distance = distanceById.get(String(s._id)) ?? null;
+    });
+
+    if (visibleStores.length > 0) {
       const storeCategoryMap = {};
       visibleStores.forEach((s) => {
         storeCategoryMap[s._id.toString()] = new Set();
@@ -100,12 +89,6 @@ export const getNearbySellers = async (req, res) => {
         s.productCategories = Array.from(storeCategoryMap[s._id.toString()]);
       });
 
-      const signatureProducts = await Product.find({
-        sellerId: { $in: storeIds },
-        isSignatureProduct: true,
-        status: "active",
-      }).lean();
-
       visibleStores.forEach((s) => {
         s.signatureProduct = signatureProducts.find(
           (p) => p.sellerId.toString() === s._id.toString(),
@@ -121,7 +104,6 @@ export const getNearbySellers = async (req, res) => {
       return Number(a.distance || 0) - Number(b.distance || 0);
     });
 
-    const etaSettings = await getDeliveryEtaSettings();
     visibleStores.forEach((s) => {
       s.deliveryEta = computeEtaFromDistance(s.distance, etaSettings);
     });

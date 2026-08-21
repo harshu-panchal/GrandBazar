@@ -668,20 +668,35 @@ export const getRecommendedStoresForUser = async (req, res) => {
       }
     }
 
-    // Top-rated fallback if few or no order history stores
+    // Top-rated fallback if few or no order history stores. This shared,
+    // parameter-free pool is the same for every customer/guest, so it's
+    // cached — this is the path every guest home-page load hits (no order
+    // history), and it previously re-ran an unindexed avgRating/reviewCount
+    // sort on every request. Fetch a fixed, generous pool size (independent
+    // of any single request's exclude list) so cache hits stay correct
+    // regardless of how many stores that particular request needs to skip.
     if (recommendedStores.length < 8) {
-      const excludeIds = recommendedStores.map((s) => s._id);
-      const topRated = await Store.find({
-        _id: { $nin: excludeIds },
-        isActive: true,
-        isVerified: true,
-        applicationStatus: "approved",
-        excludeFromAlternatives: { $ne: true },
-      })
-        .select(storeSelect)
-        .sort({ avgRating: -1, reviewCount: -1 })
-        .limit(10 - recommendedStores.length)
-        .lean();
+      const TOP_RATED_POOL_SIZE = 40;
+      const excludeSet = new Set(recommendedStores.map((s) => String(s._id)));
+      const topRatedPool = await getOrSet(
+        buildKey("stores", "topRatedFallback", ""),
+        () =>
+          Store.find({
+            isActive: true,
+            isVerified: true,
+            applicationStatus: "approved",
+            excludeFromAlternatives: { $ne: true },
+          })
+            .select(storeSelect)
+            .sort({ avgRating: -1, reviewCount: -1 })
+            .limit(TOP_RATED_POOL_SIZE)
+            .lean(),
+        getTTL("homepage"),
+      );
+
+      const topRated = topRatedPool
+        .filter((s) => !excludeSet.has(String(s._id)))
+        .slice(0, 10 - recommendedStores.length);
 
       recommendedStores = [...recommendedStores, ...topRated];
     }
