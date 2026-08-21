@@ -6,6 +6,7 @@ import CouponRedemption from "./models/couponRedemption.model.js";
 import User from "../../models/customer.js";
 import handleResponse from "../../utils/helper.js";
 import { CAMPAIGN_STATUS } from "./reward.constants.js";
+import { validateCampaignPayload } from "./reward.validation.js";
 import { getAnalyticsSummary, getSettlementSummary } from "./services/settlementService.js";
 import { listCustomerCoupons } from "./services/couponService.js";
 import {
@@ -49,6 +50,9 @@ export const listCampaigns = async (req, res) => {
 
 export const createCampaign = async (req, res) => {
   try {
+    const { valid, message } = validateCampaignPayload(req.body);
+    if (!valid) return handleResponse(res, 400, message);
+
     const data = {
       ...req.body,
       createdBy: {
@@ -65,6 +69,20 @@ export const createCampaign = async (req, res) => {
 
 export const updateCampaign = async (req, res) => {
   try {
+    const existing = await RewardCampaign.findById(req.params.id).lean();
+    if (!existing) return handleResponse(res, 404, "Campaign not found");
+
+    const merged = {
+      ...existing,
+      ...req.body,
+      rewardConfig: { ...existing.rewardConfig, ...(req.body.rewardConfig || {}) },
+      rules: { ...existing.rules, ...(req.body.rules || {}) },
+    };
+    const { valid, message } = validateCampaignPayload(merged, {
+      isSellerCampaign: existing.createdBy?.role === "seller",
+    });
+    if (!valid) return handleResponse(res, 400, message);
+
     const campaign = await RewardCampaign.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
@@ -156,6 +174,8 @@ export const createSellerCampaign = async (req, res) => {
     if (req.body.budgetLimit > SELLER_CAMPAIGN_LIMITS.maxBudget) {
       return handleResponse(res, 400, `Budget limit cannot exceed ₹${SELLER_CAMPAIGN_LIMITS.maxBudget}`);
     }
+    const { valid, message } = validateCampaignPayload(req.body, { isSellerCampaign: true });
+    if (!valid) return handleResponse(res, 400, message);
 
     const rules = {
       ...(req.body.rules || {}),
@@ -183,6 +203,21 @@ export const createSellerCampaign = async (req, res) => {
 export const updateSellerCampaign = async (req, res) => {
   try {
     const sellerId = req.user.activeStoreId || req.user.id || req.user._id;
+    const existing = await RewardCampaign.findOne({
+      _id: req.params.id,
+      "createdBy.sellerId": sellerId,
+    }).lean();
+    if (!existing) return handleResponse(res, 404, "Campaign not found");
+
+    const merged = {
+      ...existing,
+      ...req.body,
+      rewardConfig: { ...existing.rewardConfig, ...(req.body.rewardConfig || {}) },
+      rules: { ...existing.rules, ...(req.body.rules || {}) },
+    };
+    const { valid, message } = validateCampaignPayload(merged, { isSellerCampaign: true });
+    if (!valid) return handleResponse(res, 400, message);
+
     const campaign = await RewardCampaign.findOneAndUpdate(
       { _id: req.params.id, "createdBy.sellerId": sellerId },
       req.body,

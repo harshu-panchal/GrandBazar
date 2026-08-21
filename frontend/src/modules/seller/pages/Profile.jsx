@@ -363,7 +363,7 @@ const SellerProfile = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Main Info Card */}
         <div className="md:col-span-2 space-y-8">
-          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-lg">
+          <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-2xl">
             <h3 className="text-xl font-black text-slate-900 mb-8 border-b border-slate-50 pb-4">
               Business Profile
             </h3>
@@ -461,10 +461,10 @@ const SellerProfile = () => {
                 />
               </div>
             </form>
-          </Card>
+          </div>
 
           {/* Location & Radius Settings Card */}
-          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-lg">
+          <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-2xl">
             <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-4">
               <h3 className="text-xl font-black text-slate-900">
                 Location & Service Settings
@@ -557,13 +557,13 @@ const SellerProfile = () => {
                 </p>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
 
         {/* Sidebar Card */}
         <div className="space-y-8">
           {isOwnerAccount && currentModel && (
-            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+            <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-[40px]">
               <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
                 Business Model
               </h4>
@@ -654,11 +654,11 @@ const SellerProfile = () => {
                   )}
                 </Button>
               )}
-            </Card>
+            </div>
           )}
 
           {isOwnerAccount && currentModel === "commission" && commissionSummary && (
-            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+            <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-[40px]">
               <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
                 Your Commission Rates
               </h4>
@@ -694,11 +694,11 @@ const SellerProfile = () => {
                   ))}
                 </div>
               )}
-            </Card>
+            </div>
           )}
 
           {isOwnerAccount && currentModel === "subscription" && (
-            <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+            <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-[40px]">
               <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-4">
                 Commission
               </h4>
@@ -706,10 +706,10 @@ const SellerProfile = () => {
               <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
                 On the subscription model you keep the full product sale amount. Your subscription fee covers platform access.
               </p>
-            </Card>
+            </div>
           )}
 
-          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px]">
+          <div className="p-5 md:p-8 bg-white -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-[40px]">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <h4 className="text-[10px] font-black uppercase tracking-[4px] text-slate-400 mb-2">
@@ -807,9 +807,9 @@ const SellerProfile = () => {
                 </Button>
               </div>
             )}
-          </Card>
+          </div>
 
-          <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[40px] bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-800 text-white">
+          <div className="p-5 md:p-8 -mx-4 md:mx-0 mb-6 md:mb-0 shadow-sm md:shadow-[0_20px_50px_rgba(0,0,0,0.05)] md:rounded-[40px] bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-800 text-white">
             <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white/40 mb-6">
               Security & Trust
             </h4>
@@ -852,7 +852,7 @@ const SellerProfile = () => {
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
 

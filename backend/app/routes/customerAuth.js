@@ -8,6 +8,7 @@ import {
     updateCustomerProfile,
     deleteCustomerAccount,
     getCustomerTransactions,
+    requestBecomeSeller,
 } from "../controller/customerAuthController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import {
@@ -25,6 +26,7 @@ router.post("/send-signup-otp", authRouteRateLimiter, otpRouteRateLimiter, small
 router.post("/send-login-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, loginCustomer);
 router.post("/login-email", authRouteRateLimiter, smallAuthPayload, loginCustomerWithEmail);
 router.post("/verify-otp", authRouteRateLimiter, otpRouteRateLimiter, smallAuthPayload, verifyCustomerOTP);
+router.post("/become-seller-lead", authRouteRateLimiter, smallAuthPayload, requestBecomeSeller);
 
 // Profile routes
 router.get("/profile", verifyToken, getCustomerProfile);

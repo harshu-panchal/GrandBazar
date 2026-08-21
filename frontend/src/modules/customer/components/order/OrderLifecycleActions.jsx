@@ -32,9 +32,16 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         setDisputeCountdown(0);
         return;
       }
-      const mins = Math.floor(remaining / 60000);
-      const secs = Math.floor((remaining % 60000) / 1000);
-      setDisputeCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
+      const totalSeconds = Math.floor(remaining / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+      
+      const formattedHours = hours.toString().padStart(2, "0");
+      const formattedMins = mins.toString().padStart(2, "0");
+      const formattedSecs = secs.toString().padStart(2, "0");
+      
+      setDisputeCountdown(`${formattedHours}:${formattedMins}:${formattedSecs}`);
     };
     tick();
     const iv = setInterval(tick, 1000);

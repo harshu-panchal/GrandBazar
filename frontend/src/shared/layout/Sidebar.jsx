@@ -5,7 +5,7 @@ import { useSettings } from "@core/context/SettingsContext";
 import { cn } from "@/lib/utils";
 import { HiChevronDown } from "react-icons/hi2";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, LogOut } from "lucide-react";
 import { StoreSwitcherSidebar } from "@/modules/seller/components/StoreSwitcher";
 
 const colorMap = {
@@ -260,7 +260,7 @@ const SidebarItem = ({
 const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hoveredIdx, setHoveredIdx }) => {
   const { settings } = useSettings();
   const appName = settings?.appName || 'App';
-  const { role } = useAuth();
+  const { role, logout } = useAuth();
   const location = useLocation();
   const isLightTheme =
     role === "admin" ||
@@ -360,13 +360,13 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
           : "border-white/5 bg-gradient-to-t from-white/[0.02] to-transparent"
       )}>
         <div className={cn(
-          "rounded-lg p-3 shadow-sm border transition-all group cursor-pointer",
+          "rounded-lg p-3 shadow-sm border transition-all flex items-center justify-between",
           isLightTheme
-            ? "bg-slate-50 border-slate-100 hover:bg-slate-100 hover:border-slate-200"
+            ? "bg-slate-50 border-slate-100 hover:bg-slate-100/80 hover:border-slate-200"
             : "bg-white/5 border-white/5 hover:bg-white/[0.08] hover:border-white/10"
         )}>
-          <div className="flex items-center space-x-2.5">
-            <div className="relative group">
+          <div className="flex items-center space-x-2.5 flex-1 min-w-0 cursor-default">
+            <div className="relative group shrink-0">
               {settings?.logoUrl ? (
                 <div className={cn(
                   "h-9 w-[6.5rem] rounded-lg overflow-hidden border shadow-lg flex items-center justify-center p-1",
@@ -386,7 +386,7 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
             </div>
             <div className="flex-1 min-w-0">
               <p className={cn(
-                "text-xs font-bold truncate group-hover:text-primary transition-colors",
+                "text-xs font-bold truncate transition-colors",
                 isLightTheme ? "text-slate-700" : "text-white"
               )}>
                 {title?.toLowerCase().includes('seller') ? 'Seller Console' : 'Admin Console'}
@@ -399,6 +399,19 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
               </p>
             </div>
           </div>
+          
+          <button
+            onClick={() => logout && logout()}
+            title="Logout"
+            className={cn(
+              "p-2 rounded-lg transition-colors border shadow-sm flex-shrink-0 ml-2 group",
+              isLightTheme 
+                ? "bg-white border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50" 
+                : "bg-white/5 border-white/10 text-gray-400 hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/10"
+            )}
+          >
+            <LogOut className="h-4 w-4 transition-transform group-hover:scale-110" />
+          </button>
         </div>
       </div>
     </div>

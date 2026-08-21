@@ -349,3 +349,59 @@ export async function sendSellerStaffWelcomeEmail({ email, name, password, store
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Sends an email with apps links and seller registration form.
+ */
+export async function sendBecomeSellerLinksEmail({ email, name }) {
+  const appName = await getAppName();
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  
+  const playstoreLink = process.env.PLAYSTORE_LINK || "https://play.google.com/store/apps";
+  const appstoreLink = process.env.APPSTORE_LINK || "https://apps.apple.com/";
+  const sellerAuthUrl = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://zinto.in/seller/auth";
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Welcome to ${appName}! Ready to become a seller?</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>Thank you for your interest in becoming a seller on ${appName}. Here are the links to get started:</p>
+      
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb;">
+        <p style="margin: 0 0 12px 0;"><strong>1. Register on the Seller Portal:</strong></p>
+        <a href="${sellerAuthUrl}" style="background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Seller Registration Form
+        </a>
+      </div>
+
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 12px 0;"><strong>2. Download our Seller Apps:</strong></p>
+        <p style="margin: 0 0 8px 0;"><a href="${playstoreLink}" style="color: #10b981; font-weight: bold; text-decoration: none;">Android (Google Play Store)</a></p>
+        <p style="margin: 0;"><a href="${appstoreLink}" style="color: #10b981; font-weight: bold; text-decoration: none;">iOS (Apple App Store)</a></p>
+      </div>
+
+      <p style="color: #64748b; font-size: 13px;">If you have any questions, feel free to contact our support team.</p>
+    </div>
+  `;
+
+  try {
+    const mailOptions = {
+      from: `${appName} Seller Network <${fromEmail}>`,
+      to: email,
+      subject: `Get Started as a Seller on ${appName}`,
+      html: htmlContent,
+    };
+    
+    if (!process.env.SMTP_USER && !process.env.EMAIL_FROM) {
+      console.log("[emailService] Mocking Become Seller Email (No SMTP Configured) to:", email);
+      return { success: true, mocked: true };
+    }
+
+    const info = await getTransporter().sendMail(mailOptions);
+    console.log("[emailService] Become Seller email sent:", info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send become seller email:", error.message);
+    return { success: false, error: error.message };
+  }
+}

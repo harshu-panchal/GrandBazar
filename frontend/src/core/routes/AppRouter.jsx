@@ -58,6 +58,7 @@ const PreOrderBrowsePage = lazy(() => import('../../modules/customer/pages/PreOr
 const PreOrderDetailPage = lazy(() => import('../../modules/customer/pages/PreOrderDetailPage'));
 const DiscoverCityPage = lazy(() => import('../../modules/customer/pages/DiscoverCityPage'));
 const DiscoverPincodePage = lazy(() => import('../../modules/customer/pages/DiscoverPincodePage'));
+const BecomeSellerForm = lazy(() => import('../../modules/customer/pages/BecomeSellerForm'));
 
 // Lazy load heavy modules
 const SellerModule = lazy(() => import('../../modules/seller/routes/index'));
@@ -95,11 +96,19 @@ const router = createBrowserRouter([
             children: [
                 {
                     path: 'login',
-                    element: <CustomerAuth />,
+                    element: (
+                        <LocationProvider>
+                            <CustomerAuth />
+                        </LocationProvider>
+                    ),
                 },
                 {
                     path: 'signup',
-                    element: <CustomerAuth />,
+                    element: (
+                        <LocationProvider>
+                            <CustomerAuth />
+                        </LocationProvider>
+                    ),
                 },
                 {
                     path: 'seller/auth',
@@ -175,6 +184,7 @@ const router = createBrowserRouter([
                         { path: 'returns', element: <ReturnPolicyPage /> },
                         { path: 'about', element: <AboutPage /> },
                         { path: 'offers', element: <OffersPage /> },
+                        { path: 'become-a-seller', element: <BecomeSellerForm /> },
                         { path: 'preorder', element: <PreOrderBrowsePage /> },
                         { path: 'preorder/:campaignId', element: <PreOrderDetailPage /> },
                         { path: 'discover/:citySlug', element: <DiscoverCityPage /> },

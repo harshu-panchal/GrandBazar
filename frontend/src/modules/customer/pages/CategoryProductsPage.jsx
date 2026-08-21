@@ -237,10 +237,10 @@ const CategoryProductsPage = () => {
                                     )}
                                 >
                                     <div className={cn(
-                                        "w-14 h-14 rounded-2xl flex items-center justify-center p-1.5 transition-all duration-300",
-                                        selectedSubCategory === cat.id ? "scale-110" : "opacity-100"
+                                        "w-[50px] h-[50px] rounded-full overflow-hidden bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] border transition-all duration-300",
+                                        selectedSubCategory === cat.id ? "scale-110 shadow-md border-primary ring-2 ring-primary/20" : "border-slate-100 opacity-90 hover:opacity-100"
                                     )}>
-                                        <img src={applyCloudinaryTransform(cat.icon)} alt={cat.name} loading="lazy" className="w-full h-full object-contain" />
+                                        <img src={applyCloudinaryTransform(cat.icon)} alt={cat.name} loading="lazy" className="w-full h-full object-cover" />
                                     </div>
                                     <span className={cn(
                                         "text-[10px] text-center font-bold font-sans leading-tight px-1",

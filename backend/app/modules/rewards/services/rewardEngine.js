@@ -34,7 +34,8 @@ async function ensurePersonalVoucherCoupon({ campaign, customerId, order }) {
   const validTill = new Date(Date.now() + validityDays * 86400000);
   const subtype = campaign.rewardConfig?.rewardSubtype;
   const discountType = couponDiscountTypeFromSubtype(subtype);
-  const code = `RV${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+  const prefix = campaign.rewardConfig?.couponCodePrefix || "RV";
+  const code = `${prefix}${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 
   return Coupon.create({
     code,
@@ -55,8 +56,8 @@ async function ensurePersonalVoucherCoupon({ campaign, customerId, order }) {
         campaign.rules?.minPurchase ||
         0,
     ),
-    usageLimit: 1,
-    perUserLimit: 1,
+    usageLimit: campaign.rewardConfig?.usageLimit ?? 1,
+    perUserLimit: campaign.rewardConfig?.perUserLimit ?? 1,
     validFrom,
     validTill,
     isActive: true,

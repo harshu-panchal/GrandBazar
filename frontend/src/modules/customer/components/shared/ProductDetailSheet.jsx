@@ -467,7 +467,7 @@ const ProductDetailSheet = () => {
                                                     transition={{ duration: 0.15 }}
                                                     src={applyCloudinaryTransform(allImages[activeImageIndex], "f_auto,q_auto:best,w_1200,dpr_auto")}
                                                     alt={`${selectedProduct.name} ${activeImageIndex + 1}`}
-                                                    className="w-full h-full object-contain mix-blend-multiply drop-shadow-2xl hover:scale-[1.03] transition-transform duration-500 absolute inset-0 m-auto p-12"
+                                                    className="w-full h-full object-contain hover:scale-[1.03] transition-transform duration-500 absolute inset-0 m-auto p-4 rounded-xl"
                                                 />
                                             </AnimatePresence>
                                         </div>
@@ -943,7 +943,7 @@ const ProductDetailSheet = () => {
                                                 transition={{ duration: 0.4 }}
                                                 src={applyCloudinaryTransform(img, "f_auto,q_auto:best,w_1200,dpr_auto")}
                                                 alt={`${selectedProduct.name} ${i + 1}`}
-                                                className="w-full h-full object-contain mix-blend-multiply drop-shadow-xl"
+                                                className="w-full h-full object-contain p-2 rounded-xl"
                                                 style={{ objectPosition: 'center calc(50% - 40px)' }}
                                             />
                                         </div>

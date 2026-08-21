@@ -22,6 +22,7 @@ import Card from "@shared/components/ui/Card";
 import { useToast } from "@shared/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { sellerApi } from "../services/sellerApi";
+import { getOfferConfig, SCOPE_FIELD_META, parseCsvIds } from "@modules/admin/pages/rewardCampaigns/offerConfig";
 
 const SELLER_CASHBACK_TYPES = [
   {
@@ -105,6 +106,8 @@ const emptyForm = () => ({
     customerType: "all",
     maxRewardPerCustomer: "",
     maxRewardsPerDay: "",
+    newShopMaxAgeDays: 30,
+    productIdsText: "",
   },
   rewardConfig: {
     rewardSubtype: "",
@@ -113,6 +116,9 @@ const emptyForm = () => ({
     maxRewardAmount: 50,
     creditTiming: "on_delivery",
     validityDays: 30,
+    festivalName: "",
+    usageLimit: 1,
+    perUserLimit: 1,
   },
 });
 
@@ -161,6 +167,12 @@ const SellerRewardCampaigns = () => {
     [form.rewardConfig.rewardSubtype],
   );
 
+  const offerConfig = useMemo(
+    () => getOfferConfig(form.rewardConfig.rewardSubtype),
+    [form.rewardConfig.rewardSubtype],
+  );
+  const scopeMeta = SCOPE_FIELD_META[offerConfig.scopeField];
+
   const openCreateModal = () => {
     setForm(emptyForm());
     setWizardStep(1);
@@ -203,6 +215,18 @@ const SellerRewardCampaigns = () => {
       showToast(`Budget cannot exceed ₹${PLATFORM_LIMITS.maxBudget.toLocaleString("en-IN")}`, "error");
       return;
     }
+    if (offerConfig.scopeField === "product" && !parseCsvIds(form.rules.productIdsText).length) {
+      showToast("Product Purchase Rewards requires at least one product ID", "error");
+      return;
+    }
+    if (offerConfig.requiresShopAge && !(Number(form.rules.newShopMaxAgeDays) > 0)) {
+      showToast("New Shop Rewards requires a max shop age (days) greater than 0", "error");
+      return;
+    }
+    if (offerConfig.requiresFestivalName && !String(form.rewardConfig.festivalName || "").trim()) {
+      showToast("Festival Rewards requires a festival name", "error");
+      return;
+    }
     setSaving(true);
     try {
       await sellerApi.createRewardCampaign({
@@ -217,6 +241,13 @@ const SellerRewardCampaigns = () => {
           maxRewardsPerDay: form.rules.maxRewardsPerDay
             ? Number(form.rules.maxRewardsPerDay)
             : null,
+          newShopMaxAgeDays: form.rules.newShopMaxAgeDays ? Number(form.rules.newShopMaxAgeDays) : null,
+          productIds: parseCsvIds(form.rules.productIdsText),
+        },
+        rewardConfig: {
+          ...form.rewardConfig,
+          usageLimit: form.rewardConfig.usageLimit ? Number(form.rewardConfig.usageLimit) : null,
+          perUserLimit: form.rewardConfig.perUserLimit ? Number(form.rewardConfig.perUserLimit) : null,
         },
       });
       showToast("Campaign created — activate from admin or set status to active", "success");
@@ -583,6 +614,73 @@ const SellerRewardCampaigns = () => {
                   />
                 </div>
               </div>
+
+              {(scopeMeta || offerConfig.requiresShopAge || offerConfig.requiresFestivalName || offerConfig.group === "coupon") && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  {scopeMeta && (
+                    <div className="col-span-2">
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">{scopeMeta.label} *</label>
+                      <input
+                        required
+                        value={form.rules[scopeMeta.key] || ""}
+                        onChange={(e) => setForm({ ...form, rules: { ...form.rules, [scopeMeta.key]: e.target.value } })}
+                        className={inputCls}
+                        placeholder={scopeMeta.placeholder}
+                      />
+                    </div>
+                  )}
+                  {offerConfig.requiresShopAge && (
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Max Shop Age (days) *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={form.rules.newShopMaxAgeDays}
+                        onChange={(e) => setForm({ ...form, rules: { ...form.rules, newShopMaxAgeDays: e.target.value } })}
+                        className={inputCls}
+                      />
+                    </div>
+                  )}
+                  {offerConfig.requiresFestivalName && (
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Festival Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Diwali, Holi, Eid…"
+                        value={form.rewardConfig.festivalName}
+                        onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, festivalName: e.target.value } })}
+                        className={inputCls}
+                      />
+                    </div>
+                  )}
+                  {offerConfig.group === "coupon" && (
+                    <>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">Total Usage Limit</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={form.rewardConfig.usageLimit}
+                          onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, usageLimit: e.target.value } })}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">Per-Customer Limit</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={form.rewardConfig.perUserLimit}
+                          onChange={(e) => setForm({ ...form, rewardConfig: { ...form.rewardConfig, perUserLimit: e.target.value } })}
+                          className={inputCls}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>

@@ -52,28 +52,22 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
               <div
                 key={cat.id}
                 onClick={() => onCategoryClick(cat.id)}
-                className="flex flex-col items-center gap-0.5 min-w-[74px] md:min-w-[104px] lg:min-w-[120px] cursor-pointer group/item snap-start transition-transform active:scale-95">
+                className="flex flex-col items-center gap-2 min-w-[68px] md:min-w-[84px] cursor-pointer group/item snap-start transition-transform active:scale-95 pb-1">
                 <div
-                  className="relative w-[74px] h-[84px] md:w-[104px] md:h-[116px] lg:w-[120px] lg:h-[132px] rounded-[18px] md:rounded-[22px] shadow-[0_8px_18px_rgba(15,23,42,0.10)] border flex items-start justify-center p-1.5 md:p-2 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_16px_30px_rgba(15,23,42,0.14)] overflow-hidden"
-                  style={{
-                    backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.6) 24%, rgba(255,255,255,0.15) 100%), linear-gradient(135deg, ${palette.bgFrom}, ${palette.bgVia}, ${palette.bgTo})`,
-                    borderColor: palette.frameColor,
-                  }}>
-                  <div
-                    className="absolute inset-0 opacity-40 pointer-events-none"
-                    style={{ backgroundColor: palette.glowColor }}
-                  />
-                  <img
-                    src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_150")}
-                    alt={cat.name}
-                    loading="lazy"
-                    className="absolute left-1/2 top-2.5 md:top-3 z-10 h-[56px] w-[56px] md:h-[64px] md:w-[64px] -translate-x-1/2 object-contain drop-shadow-[0_5px_12px_rgba(0,0,0,0.10)] mix-blend-multiply group-hover/item:scale-110 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-x-1.5 md:inset-x-2 bottom-1.5 z-20 text-center">
-                    <span className="block text-[9px] md:text-[10px] lg:text-[11px] font-semibold text-[#1f2b20] leading-tight whitespace-nowrap overflow-hidden text-ellipsis drop-shadow-[0_1px_0_rgba(255,255,255,0.65)] group-hover/item:text-primary transition-colors">
-                      {cat.name}
-                    </span>
+                  className="w-[64px] h-[64px] md:w-[76px] md:h-[76px] rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.06)] bg-white p-0.5 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_8px_16px_rgba(0,0,0,0.1)]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-slate-50 relative">
+                    <img
+                      src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_150")}
+                      alt={cat.name}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-500"
+                    />
                   </div>
+                </div>
+                <div className="w-full text-center px-0.5">
+                  <span className="block text-[10px] md:text-[11px] font-bold text-slate-800 leading-tight w-full line-clamp-2 transition-colors group-hover/item:text-primary">
+                    {cat.name}
+                  </span>
                 </div>
               </div>
             );

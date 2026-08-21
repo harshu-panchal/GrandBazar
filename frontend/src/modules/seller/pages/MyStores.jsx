@@ -591,157 +591,207 @@ const MyStores = () => {
               </div>
               <form
                 onSubmit={resubmitStoreId ? handleResubmitStore : handleCreateStore}
-                className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-4 min-h-0 custom-scrollbar-light"
+                className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-8 min-h-0 custom-scrollbar-light"
                 data-lenis-prevent
                 data-lenis-prevent-touch
                 data-lenis-prevent-wheel
               >
-                <input
-                  required
-                  placeholder="Store name *"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200"
-                  value={formData.shopName}
-                  onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
-                />
-                <div className="rounded-xl border border-slate-200 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-slate-700">Categories *</p>
-                    <span className="text-xs text-slate-400">
-                      {formData.categories.length} selected
-                    </span>
-                  </div>
-                  <div
-                    className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-1 custom-scrollbar-light"
-                    data-lenis-prevent
-                    data-lenis-prevent-touch
-                    data-lenis-prevent-wheel
-                  >
-                    {categoriesLoading ? (
-                      <p className="text-sm text-slate-400 py-2">Loading categories...</p>
-                    ) : categoryOptions.length === 0 ? (
-                      <p className="text-sm text-slate-400 py-2">No categories available</p>
-                    ) : (
-                      categoryOptions.map((name) => {
-                        const checked = formData.categories.includes(name);
-                        return (
-                          <label
-                            key={name}
-                            className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
-                              checked ? 'bg-primary/5 border border-primary/20' : 'hover:bg-slate-50 border border-transparent'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleCategory(name)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
-                            />
-                            <span className="text-sm text-slate-700">{name}</span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-                <textarea
-                  placeholder="Description"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setIsMapOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-primary/30 text-primary font-bold"
-                >
-                  <Navigation className="h-4 w-4" />
-                  {formData.lat ? formData.address || 'Location selected' : 'Pick store location *'}
-                </button>
-
-                <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                {/* 1. Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-slate-900 border-b border-slate-100 pb-2">1. Basic Information</h3>
                   <div>
-                    <p className="text-sm font-black text-slate-800">Delivery & Fulfillment *</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Choose how customers can receive orders from this shop. Enabled options appear at checkout.
-                    </p>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Store Name <span className="text-rose-500">*</span></label>
+                    <input
+                      required
+                      placeholder="e.g. Fresh Mart"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm"
+                      value={formData.shopName}
+                      onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
+                    />
                   </div>
-                  {FULFILLMENT_TOGGLES.map((toggle) => (
-                    <label
-                      key={toggle.key}
-                      className="flex items-start gap-3 rounded-lg border border-slate-100 px-3 py-2.5 cursor-pointer hover:bg-slate-50"
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block text-xs font-bold text-slate-600">Categories <span className="text-rose-500">*</span></label>
+                      <span className="text-xs text-slate-400">{formData.categories.length} selected</span>
+                    </div>
+                    <div
+                      className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pt-1 pb-2 custom-scrollbar-light bg-slate-50/50 p-3 rounded-xl border border-slate-100"
+                      data-lenis-prevent
+                      data-lenis-prevent-touch
+                      data-lenis-prevent-wheel
                     >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(formData[toggle.key])}
-                        onChange={(e) =>
-                          setFormData({ ...formData, [toggle.key]: e.target.checked })
-                        }
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-slate-800">{toggle.label}</span>
-                        <span className="block text-xs text-slate-500 mt-0.5">{toggle.hint}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {KYC_TEXT_FIELDS.map((field) => (
-                    <div key={field.id} className={field.id === 'gstNumber' ? 'sm:col-span-2' : ''}>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                        {field.label}
-                        <span className="text-rose-500"> *</span>
-                      </label>
-                      <input
-                        required
-                        placeholder={field.placeholder}
-                        maxLength={field.maxLength}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono text-sm uppercase"
-                        value={formData[field.id]}
-                        onChange={(e) => handleKycFieldChange(field, e.target.value, setFormData)}
-                      />
-                      {field.id === 'gstNumber' && (
-                        <p className={`mt-1.5 text-[11px] font-medium ${
-                          formData.gstNumber.length === 15 && GSTIN_REGEX.test(normalizeGstInput(formData.gstNumber))
-                            ? 'text-emerald-600'
-                            : 'text-slate-500'
-                        }`}>
-                          {formData.gstNumber.length}/15 characters
-                          {formData.gstNumber.length > 0 && formData.gstNumber.length < 15
-                            ? ' — add the final checksum digit'
-                            : ''}
-                        </p>
-                      )}
-                      {field.hint && field.id !== 'gstNumber' && (
-                        <p className="mt-1 text-[11px] text-slate-500">{field.hint}</p>
+                      {categoriesLoading ? (
+                        <p className="text-sm text-slate-400 py-2">Loading categories...</p>
+                      ) : categoryOptions.length === 0 ? (
+                        <p className="text-sm text-slate-400 py-2">No categories available</p>
+                      ) : (
+                        categoryOptions.map((name) => {
+                          const checked = formData.categories.includes(name);
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => toggleCategory(name)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                                checked
+                                  ? 'bg-primary text-white border-primary shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                              }`}
+                            >
+                              {name}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
-                  ))}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Description</label>
+                    <textarea
+                      placeholder="Tell customers about your store..."
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm min-h-[80px]"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-sm font-bold text-slate-700">Required documents</p>
-                  {REQUIRED_DOCS.map((doc) => (
-                    <label key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
-                      <Upload className="h-4 w-4 text-slate-400" />
-                      <span className="text-sm flex-1">{doc.label}</span>
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="text-xs"
-                        onChange={(e) => setDocuments({ ...documents, [doc.id]: e.target.files?.[0] || null })}
-                      />
-                    </label>
-                  ))}
+                {/* 2. Location & Fulfillment */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-slate-900 border-b border-slate-100 pb-2">2. Location & Fulfillment</h3>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Store Location <span className="text-rose-500">*</span></label>
+                    <button
+                      type="button"
+                      onClick={() => setIsMapOpen(true)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors ${
+                        formData.lat 
+                          ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100/50' 
+                          : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex flex-col items-start gap-1 flex-1 min-w-0 pr-4">
+                        <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                          <MapPin className="h-4 w-4" /> 
+                          {formData.lat ? 'Location Set' : 'Pick store location'}
+                        </span>
+                        {formData.lat ? (
+                          <span className="text-xs text-emerald-700 font-medium line-clamp-1 text-left w-full">
+                            {formData.address || `${formData.lat}, ${formData.lng}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-rose-500 font-medium">Click to drop pin on map</span>
+                        )}
+                      </div>
+                      <div className={`p-2 rounded-lg shrink-0 ${formData.lat ? 'bg-emerald-100 text-emerald-600' : 'bg-white shadow-sm border border-slate-200 text-slate-400'}`}>
+                        <Navigation className="h-4 w-4" />
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <div className="p-4 bg-slate-50 border-b border-slate-200">
+                      <p className="text-sm font-black text-slate-800">Delivery & Fulfillment <span className="text-rose-500">*</span></p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Choose how customers can receive orders from this shop. Enabled options appear at checkout.
+                      </p>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {FULFILLMENT_TOGGLES.map((toggle) => (
+                        <label
+                          key={toggle.key}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formData[toggle.key])}
+                            onChange={(e) =>
+                              setFormData({ ...formData, [toggle.key]: e.target.checked })
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold text-slate-800">{toggle.label}</span>
+                            <span className="block text-[11px] text-slate-500">{toggle.hint}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex gap-3 pt-2">
+                {/* 3. Legal & Bank Details */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-slate-900 border-b border-slate-100 pb-2">3. Legal & Bank Details</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {KYC_TEXT_FIELDS.map((field) => (
+                      <div key={field.id} className={field.id === 'gstNumber' ? 'sm:col-span-2' : ''}>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                          {field.label}
+                          <span className="text-rose-500"> *</span>
+                        </label>
+                        <input
+                          required
+                          placeholder={field.placeholder}
+                          maxLength={field.maxLength}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono text-sm uppercase bg-white focus:bg-slate-50 transition-colors"
+                          value={formData[field.id]}
+                          onChange={(e) => handleKycFieldChange(field, e.target.value, setFormData)}
+                        />
+                        {field.id === 'gstNumber' && (
+                          <p className={`mt-1.5 text-[11px] font-medium ${
+                            formData.gstNumber.length === 15 && GSTIN_REGEX.test(normalizeGstInput(formData.gstNumber))
+                              ? 'text-emerald-600'
+                              : 'text-slate-500'
+                          }`}>
+                            {formData.gstNumber.length}/15 characters
+                            {formData.gstNumber.length > 0 && formData.gstNumber.length < 15
+                              ? ' — add the final checksum digit'
+                              : ''}
+                          </p>
+                        )}
+                        {field.hint && field.id !== 'gstNumber' && (
+                          <p className="mt-1 text-[11px] text-slate-500">{field.hint}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. Required Documents */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black text-slate-900 border-b border-slate-100 pb-2">4. Required Documents</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {REQUIRED_DOCS.map((doc) => (
+                      <label key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all group">
+                        <div className={`p-2 rounded-lg ${documents[doc.id] ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                          {documents[doc.id] ? <CheckCircle className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="block text-sm font-bold text-slate-700">{doc.label} <span className="text-rose-500">*</span></span>
+                          <span className="block text-[10px] text-slate-500 truncate">
+                            {documents[doc.id] ? documents[doc.id].name : 'PDF or Image'}
+                          </span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => setDocuments({ ...documents, [doc.id]: e.target.files?.[0] || null })}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Submit Actions */}
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t border-slate-100 mt-8">
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1"
+                    className="w-full sm:w-1/3 py-3.5"
                     onClick={() => {
                       setFormData(INITIAL_FORM_DATA);
                       setDocuments(EMPTY_DOCUMENTS);
@@ -751,8 +801,8 @@ const MyStores = () => {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1" disabled={isSubmitting || !formData.lat}>
-                    {isSubmitting ? 'Submitting...' : resubmitStoreId ? 'Resubmit for Approval' : 'Submit for Approval'}
+                  <Button type="submit" className="w-full sm:w-2/3 py-3.5 text-base" disabled={isSubmitting || !formData.lat}>
+                    {isSubmitting ? 'Submitting...' : resubmitStoreId ? 'Resubmit for Admin Approval' : 'Submit for Admin Approval'}
                   </Button>
                 </div>
               </form>

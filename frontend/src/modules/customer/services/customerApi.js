@@ -12,6 +12,7 @@ export const customerApi = {
     invalidateCache("/customer/profile");
     return axiosInstance.put("/customer/profile", data);
   },
+  requestBecomeSeller: (data) => axiosInstance.post("/customer/become-seller-lead", data),
   deleteAccount: () => {
     invalidateCache("/customer/profile");
     return axiosInstance.delete("/customer/account");

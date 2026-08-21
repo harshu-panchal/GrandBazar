@@ -125,10 +125,6 @@ const Topbar = ({ onMenuClick }) => {
         }
     };
 
-    const handleLogout = () => {
-        logout();
-    };
-
     return (
         <header className={cn(
             "bg-white/70 backdrop-blur-xl border-b border-gray-100/50 flex items-center justify-between shadow-[0_4px_30px_rgba(0,0,0,0.02)] transition-all duration-300",
@@ -144,11 +140,11 @@ const Topbar = ({ onMenuClick }) => {
                     <HiOutlineMenu className="h-5 w-5" />
                 </button>
 
-                {/* Mobile Logo + store switcher */}
+                {/* Mobile Logo */}
                 <div className="flex items-center gap-2 mr-2 md:mr-4 min-w-0 flex-1 md:flex-none md:min-w-0">
                     <div className="flex items-center space-x-2 md:hidden shrink-0">
                         {logoUrl ? (
-                            <div className="h-9 w-[6.5rem] rounded-lg overflow-hidden shadow-md shadow-primary/10 border border-gray-100 bg-white flex items-center justify-center p-1">
+                            <div className="h-9 w-[6.5rem] rounded-lg overflow-hidden shadow-sm shadow-primary/10 border border-gray-100 bg-white flex items-center justify-center p-1">
                                 <img src={logoUrl} alt={appName} className="h-full w-full object-contain" />
                             </div>
                         ) : (
@@ -157,9 +153,6 @@ const Topbar = ({ onMenuClick }) => {
                             </div>
                         )}
                     </div>
-                    {isSeller && (
-                        <StoreSwitcher className="md:hidden min-w-0 flex-1" compact />
-                    )}
                 </div>
 
                 <form onSubmit={handleSearchSubmit} className="relative w-full md:w-[400px] group hidden md:block">
@@ -175,8 +168,8 @@ const Topbar = ({ onMenuClick }) => {
                 </form>
             </div>
 
-            <div className="flex items-center space-x-4">
-                {isSeller && <div className="hidden sm:block"><ShopStatusToggle /></div>}
+            <div className="flex items-center space-x-2 md:space-x-4">
+                {isSeller && <div><ShopStatusToggle /></div>}
                 {isSeller && <StoreSwitcher className="hidden md:block" />}
                 <div className="relative" ref={notificationRef}>
                     <button
@@ -217,7 +210,7 @@ const Topbar = ({ onMenuClick }) => {
                             navigate('/profile');
                         }
                     }}
-                    className="flex items-center space-x-2.5 p-1 pr-3 hover:bg-gray-50 rounded-xl transition-all duration-300 group ring-1 ring-transparent hover:ring-gray-100 shadow-sm hover:shadow-md"
+                    className="flex items-center sm:space-x-2.5 p-0 sm:p-1 sm:pr-3 hover:bg-gray-50 rounded-lg sm:rounded-xl transition-all duration-300 group sm:ring-1 ring-transparent hover:ring-gray-100 sm:shadow-sm hover:shadow-md"
                 >
                     <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-xs shadow-md group-hover:scale-105 transition-transform">
                         {(user?.subName || user?.name)?.[0] || 'A'}
@@ -226,13 +219,6 @@ const Topbar = ({ onMenuClick }) => {
                         <p className="text-xs font-bold text-gray-900 leading-tight truncate max-w-[110px]">{user?.subName || user?.name || 'Demo User'}</p>
                         <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider truncate max-w-[110px]">{user?.subRole || user?.role || 'Member'}</p>
                     </div>
-                </button>
-                <button
-                    onClick={handleLogout}
-                    className="flex items-center space-x-1.5 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all duration-300 font-bold text-xs shadow-sm hover:shadow-rose-100/50"
-                >
-                    <HiOutlineLogout className="h-4 w-4" />
-                    <span className="hidden lg:block">Sign Out</span>
                 </button>
             </div>
         </header>

@@ -311,7 +311,7 @@ const PreOrderCampaigns = () => {
       </div>
 
       {showForm && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-4">
+        <div className="bg-white dark:bg-gray-800 sm:rounded-xl sm:shadow-sm border-t border-b sm:border border-gray-100 dark:border-gray-700 p-4 sm:p-6 space-y-4 -mx-4 sm:mx-0 mt-4 sm:mt-0">
           {editingCampaignId && (
             <div className="text-xs font-semibold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-lg px-3 py-2">
               Editing campaign — changes apply to the existing campaign.
@@ -385,9 +385,9 @@ const PreOrderCampaigns = () => {
             </div>
             <div className="space-y-2">
               {form.products.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:items-center bg-gray-50/50 dark:bg-gray-800/50 sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-gray-100 dark:border-gray-700 mb-2 sm:mb-0">
                   <select
-                    className="col-span-6 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-2 py-2 text-sm"
+                    className="sm:col-span-5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-2 text-sm w-full"
                     value={row.product}
                     onChange={(e) => updateProductRow(idx, "product", e.target.value)}
                   >
@@ -398,29 +398,31 @@ const PreOrderCampaigns = () => {
                       </option>
                     ))}
                   </select>
-                  <Input
-                    className="col-span-3"
-                    type="number"
-                    min="1"
-                    placeholder="Cap"
-                    value={row.allocationCap}
-                    onChange={(e) => updateProductRow(idx, "allocationCap", e.target.value)}
-                  />
-                  <Input
-                    className="col-span-2"
-                    type="number"
-                    min="0"
-                    placeholder="Price"
-                    value={row.priceOverride}
-                    onChange={(e) => updateProductRow(idx, "priceOverride", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="col-span-1 flex justify-center text-red-500 hover:text-red-700"
-                    onClick={() => removeProductRow(idx)}
-                  >
-                    <HiOutlineTrash className="w-5 h-5" />
-                  </button>
+                  <div className="flex sm:contents items-center gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
+                    <Input
+                      className="flex-1 sm:col-span-3"
+                      type="number"
+                      min="1"
+                      placeholder="Cap"
+                      value={row.allocationCap}
+                      onChange={(e) => updateProductRow(idx, "allocationCap", e.target.value)}
+                    />
+                    <Input
+                      className="flex-1 sm:col-span-3"
+                      type="number"
+                      min="0"
+                      placeholder="Price"
+                      value={row.priceOverride}
+                      onChange={(e) => updateProductRow(idx, "priceOverride", e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="sm:col-span-1 flex items-center justify-center text-red-500 hover:text-red-700 p-2 sm:p-0 bg-white dark:bg-gray-800 sm:bg-transparent sm:dark:bg-transparent shadow-sm sm:shadow-none rounded-lg sm:rounded-none border border-gray-200 dark:border-gray-700 sm:border-none"
+                      onClick={() => removeProductRow(idx)}
+                    >
+                      <HiOutlineTrash className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               ))}
               {!form.products.length && (
@@ -446,40 +448,42 @@ const PreOrderCampaigns = () => {
             </p>
             <div className="space-y-2">
               {form.deliveryWindows.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:items-center bg-gray-50/50 dark:bg-gray-800/50 sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none border sm:border-0 border-gray-100 dark:border-gray-700 mb-2 sm:mb-0">
                   <Input
-                    className="col-span-4"
+                    className="sm:col-span-4"
                     placeholder="Label (e.g. 9 AM - 12 PM)"
                     value={row.label}
                     onChange={(e) => updateSlotRow(idx, "label", e.target.value)}
                   />
-                  <Input
-                    className="col-span-3"
-                    type="time"
-                    value={row.start}
-                    onChange={(e) => updateSlotRow(idx, "start", e.target.value)}
-                  />
-                  <Input
-                    className="col-span-3"
-                    type="time"
-                    value={row.end}
-                    onChange={(e) => updateSlotRow(idx, "end", e.target.value)}
-                  />
-                  <Input
-                    className="col-span-1"
-                    type="number"
-                    min="1"
-                    placeholder="Cap/day"
-                    value={row.capacityPerDay}
-                    onChange={(e) => updateSlotRow(idx, "capacityPerDay", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="col-span-1 flex justify-center text-red-500 hover:text-red-700"
-                    onClick={() => removeSlotRow(idx)}
-                  >
-                    <HiOutlineTrash className="w-5 h-5" />
-                  </button>
+                  <div className="flex sm:contents items-center gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
+                    <Input
+                      className="flex-1 sm:col-span-3"
+                      type="time"
+                      value={row.start}
+                      onChange={(e) => updateSlotRow(idx, "start", e.target.value)}
+                    />
+                    <Input
+                      className="flex-1 sm:col-span-3"
+                      type="time"
+                      value={row.end}
+                      onChange={(e) => updateSlotRow(idx, "end", e.target.value)}
+                    />
+                    <Input
+                      className="w-16 sm:w-auto sm:col-span-1"
+                      type="number"
+                      min="1"
+                      placeholder="Cap"
+                      value={row.capacityPerDay}
+                      onChange={(e) => updateSlotRow(idx, "capacityPerDay", e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="sm:col-span-1 flex items-center justify-center text-red-500 hover:text-red-700 p-2 sm:p-0 bg-white dark:bg-gray-800 sm:bg-transparent sm:dark:bg-transparent shadow-sm sm:shadow-none rounded-lg sm:rounded-none border border-gray-200 dark:border-gray-700 sm:border-none"
+                      onClick={() => removeSlotRow(idx)}
+                    >
+                      <HiOutlineTrash className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               ))}
               {!form.deliveryWindows.length && (
@@ -500,7 +504,7 @@ const PreOrderCampaigns = () => {
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 sm:rounded-xl sm:shadow-sm border-t border-b sm:border border-gray-100 dark:border-gray-700 overflow-hidden -mx-4 sm:mx-0">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-primary-500" />

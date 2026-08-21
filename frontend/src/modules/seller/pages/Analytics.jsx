@@ -408,7 +408,7 @@ const Analytics = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Sales Performance Chart */}
         <BlurFade delay={0.4} className="lg:col-span-2">
-          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-3xl p-6 bg-white overflow-hidden group h-full">
+          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-none sm:rounded-3xl p-4 sm:p-6 bg-white overflow-hidden group h-full -mx-4 sm:mx-0 border-t border-b sm:border border-slate-100">
             <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
               <div>
                 <h3 className="text-lg font-black text-slate-900">
@@ -499,7 +499,7 @@ const Analytics = () => {
 
         {/* Category Mix (Radar Chart) */}
         <BlurFade delay={0.5} className="lg:col-span-1">
-          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-lg p-6 bg-white flex flex-col items-center justify-center group h-full">
+          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-none sm:rounded-lg p-4 sm:p-6 bg-white flex flex-col items-center justify-center group h-full -mx-4 sm:mx-0 border-t border-b sm:border border-slate-100">
             <div className="w-full text-center mb-6">
               <h3 className="text-lg font-black text-slate-900">
                 Category Mix
@@ -560,7 +560,7 @@ const Analytics = () => {
         {/* Top Selling Products - Overview & Sales */}
         {(activeTab === "Overview" || activeTab === "Sales") && (
         <BlurFade delay={0.6}>
-          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-lg p-0 overflow-hidden bg-white">
+          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-none sm:rounded-lg p-0 overflow-hidden bg-white -mx-4 sm:mx-0 border-t border-b sm:border border-slate-100">
             <div className="p-6 border-b border-slate-50">
               <h3 className="text-lg font-black text-slate-900">
                 Top Performing Products
@@ -627,7 +627,7 @@ const Analytics = () => {
         {/* Traffic Sources & Customer Insights - Overview & Customers */}
         {(activeTab === "Overview" || activeTab === "Customers") && (
         <BlurFade delay={0.7} className={activeTab === "Customers" ? "lg:col-span-2" : undefined}>
-          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-3xl p-6 bg-white overflow-hidden group h-full">
+          <Card className="border-none shadow-xl shadow-slate-200/50 rounded-none sm:rounded-3xl p-4 sm:p-6 bg-white overflow-hidden group h-full -mx-4 sm:mx-0 border-t border-b sm:border border-slate-100">
             <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h3 className="text-lg font-black text-slate-900">

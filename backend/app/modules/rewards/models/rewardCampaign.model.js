@@ -59,6 +59,12 @@ const rewardConfigSchema = new mongoose.Schema(
     },
     /** Festival label e.g. Diwali, Holi — used with festival subtype date window */
     festivalName: { type: String, default: "", trim: true },
+    /** Referee-side reward amount for referral_first_purchase (referrer uses `value`) */
+    refereeValue: { type: Number, default: null },
+    /** Auto-issued coupon controls for coupon-family subtypes */
+    usageLimit: { type: Number, default: null },
+    perUserLimit: { type: Number, default: null },
+    couponCodePrefix: { type: String, default: "", trim: true },
   },
   { _id: false },
 );

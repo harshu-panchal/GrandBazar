@@ -100,7 +100,7 @@ const SellerSubscription = () => {
   if (activeSubscription) {
     return (
       <div className="max-w-3xl mx-auto space-y-6 p-4">
-        <Card className="p-6 border-emerald-200 bg-emerald-50/50">
+        <Card className="p-6 border-emerald-200 bg-emerald-50/50 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
           <div className="flex items-start gap-3">
             <CheckCircle className="h-6 w-6 text-emerald-600 shrink-0 mt-0.5" />
             <div>
@@ -129,7 +129,7 @@ const SellerSubscription = () => {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-6 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
           <h2 className="font-bold text-slate-900 mb-2">Renew or upgrade</h2>
           <p className="text-sm text-slate-500 mb-4">Pay with PhonePe to extend or change your plan.</p>
           <div className="grid md:grid-cols-2 gap-3">
@@ -184,7 +184,7 @@ const SellerSubscription = () => {
       </div>
 
       {pendingPhonePePayment && (
-        <Card className="p-4 border-amber-200 bg-amber-50 flex items-start gap-3">
+        <Card className="p-4 border-amber-200 bg-amber-50 flex items-start gap-3 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border">
           <Clock className="h-5 w-5 text-amber-600 shrink-0" />
           <div>
             <p className="font-semibold text-amber-900">Payment in progress</p>
@@ -210,7 +210,7 @@ const SellerSubscription = () => {
         {plans.map((plan) => (
           <Card
             key={plan._id}
-            className={`p-5 cursor-pointer transition-all ${
+            className={`p-5 cursor-pointer transition-all -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200 ${
               selectedPlanId === plan._id ? "ring-2 ring-primary-300 border-primary-200" : ""
             }`}
             onClick={() => setSelectedPlanId(plan._id)}
@@ -235,7 +235,7 @@ const SellerSubscription = () => {
       </div>
 
       {selectedPlanId && !pendingPhonePePayment && (
-        <Card className="p-5">
+        <Card className="p-5 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
           <div className="flex items-center gap-3 mb-4">
             <CreditCard className="h-5 w-5 text-primary-600" />
             <h2 className="font-bold text-slate-900">Pay with PhonePe</h2>

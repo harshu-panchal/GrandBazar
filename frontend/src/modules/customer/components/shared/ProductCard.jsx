@@ -269,15 +269,15 @@ const ProductCard = React.memo(
           <div
             className={cn(
               "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105",
-              compact ? "aspect-[4/3] p-1.5 sm:p-2" : "aspect-square p-2 sm:p-4",
-              compact || neutralBg ? "bg-white/70" : "bg-white/50"
+              compact ? "aspect-[4/3]" : "aspect-square",
+              compact || neutralBg ? "bg-white" : "bg-primary/5"
             )}>
             <img
               ref={imageRef}
               src={applyCloudinaryTransform(product.image)}
               alt={product.name}
               loading="lazy"
-              className="w-full h-full object-contain mix-blend-multiply"
+              className="w-full h-full object-cover"
             />
           </div>
         </div>
@@ -326,6 +326,14 @@ const ProductCard = React.memo(
               )}>
               {product.name}
             </h4>
+            {(product.sellerId?.shopName || product.sellerId?.name || product.shopName) && (
+              <p className={cn(
+                  "text-slate-500 font-medium truncate mt-0.5",
+                  compact ? "text-[9px]" : "text-[10px] sm:text-[11px]"
+              )}>
+                By <span className="text-primary font-semibold">{product.sellerId?.shopName || product.sellerId?.name || product.shopName}</span>
+              </p>
+            )}
           </div>
 
           {/* Delivery Time / Distance from seller */}

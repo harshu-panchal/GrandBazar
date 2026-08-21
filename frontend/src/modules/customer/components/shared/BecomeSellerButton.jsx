@@ -9,7 +9,7 @@ const BecomeSellerButton = ({ className = "", fullWidth = false }) => {
   return (
     <button
       type="button"
-      onClick={() => navigate("/seller/auth")}
+      onClick={() => navigate("/become-a-seller")}
       className={cn(
         "relative z-10 inline-flex items-center justify-center gap-2 rounded-xl font-bold text-white cursor-pointer",
         "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500",

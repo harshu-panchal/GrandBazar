@@ -14,6 +14,7 @@ import {
     validateSchema,
     verifyOtpSchema,
 } from "../validation/customerAuthValidation.js";
+import { sendBecomeSellerLinksEmail } from "../services/emailService.js";
 
 const generateToken = (customer) =>
     jwt.sign(
@@ -286,6 +287,27 @@ export const getCustomerTransactions = async (req, res) => {
             page: parseInt(page, 10),
             totalPages: Math.ceil(total / perPage) || 1,
         });
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
+/* ===============================
+   BECOME SELLER LEAD
+================================ */
+export const requestBecomeSeller = async (req, res) => {
+    try {
+        const { name, email, phone, category } = req.body || {};
+        if (!email) {
+            return handleResponse(res, 400, "Email is required");
+        }
+        
+        const result = await sendBecomeSellerLinksEmail({ email: String(email).trim(), name });
+        if (!result.success && !result.mocked) {
+             return handleResponse(res, 500, "Failed to send email");
+        }
+
+        return handleResponse(res, 200, "App links and registration details have been sent to your email!");
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }
