@@ -101,6 +101,10 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const [declineReason, setDeclineReason] = useState('');
     const [showNotifyBanner, setShowNotifyBanner] = useState(false);
 
+    const { user, logout, role } = useAuth();
+    const location = useLocation();
+    const navigate = useNavigate();
+
     // Prompt sellers to enable order-alert push notifications, since the loud
     // in-tab ringtone can't sound once the tab is backgrounded/closed — a real
     // OS push is the only thing that can reach them then.
@@ -140,9 +144,6 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const acceptWindowTotalRef = useRef(60);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [returnDropOtpAlert, setReturnDropOtpAlert] = useState(null); // { orderId, otp, expiresAt }
-    const { user, logout, role } = useAuth();
-    const location = useLocation();
-    const navigate = useNavigate();
 
     const canPollSellerOrders = React.useMemo(() => {
         if (role !== 'seller' || !user) return false;
