@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Plus, X, Image as ImageIcon, Save, Trash2, Video, Star } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
-import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 
 const getEmbedUrl = (url) => {
@@ -109,8 +108,8 @@ const Storefront = () => {
         <p className="text-slate-500 font-medium">Manage how your shop appears to customers.</p>
       </div>
 
-      <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-2xl">
-        <div className="flex justify-between items-center mb-6">
+      <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h3 className="text-xl font-black text-slate-900">Store Logo</h3>
             <p className="text-sm text-slate-500">Shown next to your shop name on your store page.</p>
@@ -124,33 +123,51 @@ const Storefront = () => {
           </Button>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="h-24 w-24 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 bg-slate-50/50 border border-slate-100 p-6 rounded-2xl w-full max-w-2xl">
+          <div className="relative group h-28 w-28 rounded-full overflow-hidden border-4 border-white bg-slate-100 flex items-center justify-center shrink-0 shadow-md">
             {logoUrl ? (
               <img src={logoUrl} alt="Store logo" className="w-full h-full object-cover" />
             ) : (
-              <ImageIcon size={28} className="text-slate-300" />
+              <ImageIcon size={32} className="text-slate-300" />
             )}
+            <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer">
+              <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer">
+                <ImageIcon size={20} className="text-white mb-1" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider">Update</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+              </label>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="cursor-pointer bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2.5 text-xs font-black tracking-[1px] transition-colors">
-              {logoUrl ? "Change Logo" : "Upload Logo"}
-              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-            </label>
-            {logoUrl && (
-              <button
-                onClick={() => setLogoUrl("")}
-                className="text-xs font-bold text-red-500 hover:text-red-600 px-3 py-2.5"
-              >
-                Remove
-              </button>
-            )}
+          <div className="flex flex-col gap-3 w-full">
+            <div>
+              <h4 className="text-base font-bold text-slate-800">Your Store Logo</h4>
+              <p className="text-sm text-slate-500 leading-relaxed mt-1">
+                Upload a high-resolution logo (512x512px).<br className="hidden sm:block" />
+                Valid formats: JPG, PNG. Max file size: 1MB.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center gap-2">
+                <ImageIcon size={14} />
+                {logoUrl ? "CHANGE LOGO" : "UPLOAD LOGO"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+              </label>
+              {logoUrl && (
+                <button
+                  onClick={() => setLogoUrl("")}
+                  className="bg-white border border-slate-200 text-red-500 hover:text-red-700 hover:border-red-200 hover:bg-red-50 rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center gap-2"
+                >
+                  <Trash2 size={14} />
+                  REMOVE
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-2xl">
-        <div className="flex justify-between items-center mb-6">
+      <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h3 className="text-xl font-black text-slate-900">Carousel Banners</h3>
             <p className="text-sm text-slate-500">Upload up to 5 promotional banners. These will auto-play on your shop page.</p>
@@ -193,11 +210,11 @@ const Storefront = () => {
             </label>
           )}
         </div>
-      </Card>
+      </div>
 
       {/* Store Video Section */}
-      <Card className="p-8 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-2xl">
-        <div className="flex justify-between items-center mb-6">
+      <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h3 className="text-xl font-black text-slate-900">Store Promotional Video</h3>
             <p className="text-sm text-slate-500">Add a YouTube link or MP4 URL to showcase your shop and products to customers.</p>
@@ -231,8 +248,8 @@ const Storefront = () => {
               )}
             </div>
           )}
-        </div>
-      </Card>
+      </div>
+      </div>
 
     </div>
   );
