@@ -15,15 +15,22 @@ async function getAppName() {
   if (cachedAppName && now - cachedAppNameAt < APP_NAME_CACHE_MS) {
     return cachedAppName;
   }
+  const fallback = String(process.env.APP_NAME || "Zinto").trim() || "Zinto";
   try {
-    const setting = await Setting.findOne({
-      $or: [{ tenantId: null }, { tenantId: { $exists: false } }],
-    })
-      .select("appName")
-      .lean();
-    cachedAppName = String(setting?.appName || process.env.APP_NAME || "Zinto").trim() || "Zinto";
+    // Mongoose buffers queries indefinitely while disconnected rather than
+    // rejecting, so a slow/absent DB connection must not be allowed to stall
+    // every email send — race against a short timeout and fall back.
+    const setting = await Promise.race([
+      Setting.findOne({
+        $or: [{ tenantId: null }, { tenantId: { $exists: false } }],
+      })
+        .select("appName")
+        .lean(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("getAppName timed out")), 2000)),
+    ]);
+    cachedAppName = String(setting?.appName || fallback).trim() || fallback;
   } catch {
-    cachedAppName = String(process.env.APP_NAME || "Zinto").trim() || "Zinto";
+    cachedAppName = fallback;
   }
   cachedAppNameAt = now;
   return cachedAppName;
