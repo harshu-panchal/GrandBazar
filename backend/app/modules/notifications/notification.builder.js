@@ -342,6 +342,14 @@ function eventDefinition(eventType) {
         body: (payload) =>
           `Product for order #${payload.orderId || ""} has been returned. Admin QC is pending.`,
       };
+    case NOTIFICATION_EVENTS.RETURN_QC_REQUESTED:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: () => "Return Awaiting QC",
+        body: (payload) =>
+          `Order #${payload.orderId || ""} was returned to the seller and is waiting for quality check before refund.`,
+      };
     case NOTIFICATION_EVENTS.RETURN_QC_PASSED:
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,

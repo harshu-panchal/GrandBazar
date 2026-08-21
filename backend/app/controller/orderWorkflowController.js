@@ -11,6 +11,7 @@ import { geocodeAddress } from "../services/mapsGeocodeService.js";
 import Order from "../models/order.js";
 import Customer from "../models/customer.js";
 import Transaction from "../models/transaction.js";
+import Admin from "../models/admin.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
 import {
   generateReturnPickupOtp,
@@ -468,7 +469,9 @@ export const verifyReturnDropOtp = async (req, res) => {
     await order.save();
     emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 
-    // Notify admin + seller + customer
+    // Notify seller + admin. RETURN_COMPLETED only reaches the seller — without a
+    // separate admin-targeted event here, nobody is ever prompted to run QC, so the
+    // order sits at "returned" indefinitely until an admin happens to check manually.
     try {
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_COMPLETED, {
         orderId: order.orderId,
@@ -478,6 +481,14 @@ export const verifyReturnDropOtp = async (req, res) => {
         deliveryId: userId,
         data: { message: "Product returned to seller. Admin QC pending." },
       });
+
+      const adminIds = (await Admin.find().select("_id").lean()).map((a) => a?._id).filter(Boolean);
+      if (adminIds.length > 0) {
+        emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_QC_REQUESTED, {
+          orderId: order.orderId,
+          adminIds,
+        });
+      }
     } catch (notifErr) {
       console.warn("[verifyReturnDropOtp] Notification failed:", notifErr.message);
     }

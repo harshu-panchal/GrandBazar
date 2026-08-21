@@ -7,6 +7,7 @@ import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import Setting from "../models/setting.js";
 import User from "../models/customer.js";
+import Admin from "../models/admin.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
 import Payout from "../models/payout.js";
 import OrderOtp from "../models/orderOtp.js";
@@ -2170,6 +2171,19 @@ export const updateReturnStatus = async (req, res) => {
       }
       await order.save();
       emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+
+      try {
+        const adminIds = (await Admin.find().select("_id").lean()).map((a) => a?._id).filter(Boolean);
+        if (adminIds.length > 0) {
+          emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_QC_REQUESTED, {
+            orderId: order.orderId,
+            adminIds,
+          });
+        }
+      } catch (notifErr) {
+        console.warn("[updateReturnStatus] Admin QC notification failed:", notifErr.message);
+      }
+
       return handleResponse(res, 200, "Return received", order);
     }
 
