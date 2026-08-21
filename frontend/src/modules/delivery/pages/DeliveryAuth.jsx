@@ -524,8 +524,16 @@ const DeliveryAuth = () => {
                                   toast.error("Please enter your vehicle plate number");
                                   return;
                                 }
+                                if (!/^[A-Z]{2}[ -]?[0-9]{1,2}[ -]?[A-Z]{1,3}[ -]?[0-9]{4}$/.test(signupVehicleNumber)) {
+                                  toast.error("Please enter a valid vehicle plate number (e.g. KA05MN8921)");
+                                  return;
+                                }
                                 if (!signupDLNumber) {
                                   toast.error("Please enter your driving license number");
+                                  return;
+                                }
+                                if (!/^[A-Z]{2}[ -]?[0-9]{2}[ -]?[0-9]{4,11}$/.test(signupDLNumber)) {
+                                  toast.error("Please enter a valid driving license number (e.g. DL1420110012345)");
                                   return;
                                 }
                                 setSignupStep(3);
@@ -695,10 +703,26 @@ const DeliveryAuth = () => {
                             </p>
                           </div>
 
+                          <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4 mb-2">
+                            <input
+                              id="signup-terms"
+                              type="checkbox"
+                              checked={registrationAgreed}
+                              onChange={(e) => setRegistrationAgreed(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 accent-brand-600 cursor-pointer shrink-0"
+                            />
+                            <label htmlFor="signup-terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer text-left">
+                              I agree to the{" "}
+                              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Terms of Service</a> &amp;{" "}
+                              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Privacy Policy</a>.
+                            </label>
+                          </div>
+
                           <div className="flex gap-3">
                             <button
                               onClick={() => setSignupStep(3)}
-                              className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+                              disabled={loading}
+                              className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               Back
                             </button>
@@ -718,21 +742,6 @@ const DeliveryAuth = () => {
                           </div>
                         </motion.div>
                       )}
-                      
-                      <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100 mt-4 mb-2">
-                        <input
-                          id="signup-terms"
-                          type="checkbox"
-                          checked={registrationAgreed}
-                          onChange={(e) => setRegistrationAgreed(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 accent-brand-600 cursor-pointer shrink-0"
-                        />
-                        <label htmlFor="signup-terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer text-left">
-                          I agree to the{" "}
-                          <span className="text-brand-600 font-bold hover:underline">Terms of Service</span> &amp;{" "}
-                          <span className="text-brand-600 font-bold hover:underline">Privacy Policy</span>.
-                        </label>
-                      </div>
                     </div>
                   )}
 
@@ -837,8 +846,8 @@ const DeliveryAuth = () => {
                     />
                     <label htmlFor="terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
                       I confirm my phone number is correct and I agree to the{" "}
-                      <span className="text-brand-600 font-bold">Terms of Service</span> &amp;{" "}
-                      <span className="text-brand-600 font-bold">Privacy Policy</span>.
+                      <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Terms of Service</a> &amp;{" "}
+                      <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Privacy Policy</a>.
                     </label>
                   </div>
 
