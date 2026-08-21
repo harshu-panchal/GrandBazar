@@ -17,6 +17,7 @@ import {
   validateReturnPickupOtp,
   generateReturnDropOtp,
   validateReturnDropOtp,
+  getActiveReturnDropOtp,
 } from "../services/deliveryOtpService.js";
 import { emitToCustomer, emitToSeller, emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
@@ -489,6 +490,31 @@ export const verifyReturnDropOtp = async (req, res) => {
     ]);
 
     return handleResponse(res, 200, "Return delivery complete! Admin will review the product.", order);
+  } catch (e) {
+    return handleResponse(res, e.statusCode || 500, e.message);
+  }
+};
+
+/**
+ * Seller-facing: fetch the currently active (unconsumed, unexpired) return drop OTP.
+ * The rider's request endpoint only pushes the code via a one-time socket event + SMS,
+ * so if the seller's app wasn't open/connected when it fired, they have no way to see
+ * it — this lets the seller's Returns page pull the still-valid code on demand.
+ */
+export const getReturnDropOtpStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { id: sellerId } = req.user;
+
+    const orderKey = orderMatchQueryFromRouteParam(orderId);
+    const order = await Order.findOne({ ...orderKey, seller: sellerId }).select("orderId returnStatus").lean();
+    if (!order) return handleResponse(res, 404, "Order not found");
+
+    const status = await getActiveReturnDropOtp(order.orderId);
+    return handleResponse(res, 200, "Return drop OTP status", {
+      returnStatus: order.returnStatus,
+      ...status,
+    });
   } catch (e) {
     return handleResponse(res, e.statusCode || 500, e.message);
   }

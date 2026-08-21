@@ -152,6 +152,26 @@ const Returns = () => {
     const openDetails = (ret) => {
         setSelectedReturn(ret);
         setIsDetailsOpen(true);
+
+        // Fallback for missed live OTP pushes: the rider's OTP request only fires a
+        // one-time socket event + SMS, so if the seller wasn't connected at that
+        // moment (page closed, mobile reconnect gap, page just refreshed), pull the
+        // still-active code from the server instead of waiting for another push.
+        if (ret?.returnStatus === "return_drop_pending" && ret?.orderId) {
+            sellerApi.getReturnDropOtpStatus(ret.orderId)
+                .then((res) => {
+                    const { otp, expiresAt } = res.data || {};
+                    if (otp) {
+                        setActiveOtps((prev) => ({
+                            ...prev,
+                            [ret.orderId]: { otp, expiresAt },
+                        }));
+                    }
+                })
+                .catch((error) => {
+                    console.error("Failed to fetch return drop OTP status", error);
+                });
+        }
     };
 
     const handleApprove = async (orderId) => {

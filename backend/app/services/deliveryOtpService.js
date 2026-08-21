@@ -555,3 +555,25 @@ export async function validateReturnDropOtp(orderId, enteredOtp) {
     return { valid: false, error: 'VALIDATION_FAILED', message: 'Internal error.' };
   }
 }
+
+/**
+ * Read-only lookup for the seller side: the OTP is generated once and pushed
+ * to the seller via a one-time socket event + SMS, with no persisted surface
+ * to check it again — if the seller's socket was disconnected/backgrounded
+ * at that moment (very common on mobile web) or the SMS didn't arrive, they
+ * have no way to see the code the rider is asking for. This lets the Returns
+ * page fetch the still-active code on demand instead of relying purely on
+ * having caught the live push.
+ */
+export async function getActiveReturnDropOtp(orderId) {
+  const otpRecord = await OrderOtp.findOne({ orderId, type: 'return_drop' }).sort({
+    lastGeneratedAt: -1,
+    createdAt: -1,
+  });
+
+  if (!otpRecord || otpRecord.consumedAt || isOtpExpired(otpRecord.expiresAt)) {
+    return { otp: null, expiresAt: null };
+  }
+
+  return { otp: otpRecord.code || null, expiresAt: otpRecord.expiresAt };
+}

@@ -45,6 +45,7 @@ import {
   verifyReturnPickupOtp,
   requestReturnDropOtp,
   verifyReturnDropOtp,
+  getReturnDropOtpStatus,
   getOrderRoute,
 } from "../controller/orderWorkflowController.js";
 import {
@@ -335,6 +336,13 @@ router.post(
   verifyToken,
   allowRoles("delivery", "admin"),
   verifyReturnDropOtp,
+);
+// Seller-facing fallback: fetch the currently active return drop OTP in case the
+// live socket push / SMS was missed (app backgrounded, reconnect gap, etc.)
+router.get(
+  "/workflow/:orderId/return-drop-otp",
+  ...sellerReturnsReadChain,
+  getReturnDropOtpStatus,
 );
 
 // Return pickup proof (images + condition)
