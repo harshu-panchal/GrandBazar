@@ -11,7 +11,7 @@ const Footer = () => {
     const primaryColor = settings?.primaryColor || 'var(--primary)';
 
     return (
-        <footer className="relative bg-[#051108] pt-20 pb-10 mt-20 text-slate-300 md:bg-gradient-to-br md:from-brand-700 md:via-brand-800 md:to-brand-900 md:pt-32 md:pb-16 md:mt-32 overflow-hidden">
+        <footer className="relative bg-gradient-to-br from-brand-700 via-brand-800 to-brand-900 pt-20 pb-10 mt-20 text-slate-300 md:pt-32 md:pb-16 md:mt-32 overflow-hidden">
             {/* Subtle Texture/Glow Overlay */}
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
                 <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-30 blur-[150px]" style={{ backgroundColor: primaryColor }} />

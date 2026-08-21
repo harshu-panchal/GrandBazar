@@ -407,6 +407,23 @@ const LocationDrawer = ({ isOpen, onClose }) => {
 
             {/* Options List */}
             <div className="px-4 flex flex-col gap-3">
+              {locationError && !isFetchingLocation && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-1">
+                  <p className="text-[13px] font-bold text-amber-800">
+                    Couldn't access your location
+                  </p>
+                  <p className="text-[12px] text-amber-700 font-medium leading-relaxed">
+                    {locationError}. Please enable location access for this site in your
+                    browser/device settings, then try again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSelectCurrentLocation}
+                    className="self-start mt-1 text-[12px] font-bold text-primary underline underline-offset-2">
+                    Retry
+                  </button>
+                </div>
+              )}
               {searchQuery.trim().length >= MIN_QUERY_LENGTH && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                   {isSearchingPlaces && placePredictions.length === 0 && (
