@@ -164,11 +164,11 @@ const homePageDataCache = new Map();
 const headerSectionsMemoryCache = {};
 const heroConfigMemoryCache = {};
 
-const getHomePageDataCacheKey = (location) => {
+const getHomePageDataCacheKey = (location, categoryId) => {
   const lat = Number(location?.latitude);
   const lng = Number(location?.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "home:no-location";
-  return `home:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  const base = !Number.isFinite(lat) || !Number.isFinite(lng) ? "home:no-location" : `home:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  return categoryId ? `${base}:cat:${categoryId}` : base;
 };
 
 const getCachedHomePageData = (location) =>
@@ -235,10 +235,18 @@ const Home = () => {
   const [offerSections, setOfferSections] = useState(() => cachedHomePageData?.offerSections || []);
   const [recommendedStores, setRecommendedStores] = useState(() => cachedHomePageData?.recommendedStores || []);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [hasFetchError, setHasFetchError] = useState(false);
 
   useEffect(() => {
     productsRef.current = products || [];
   }, [products]);
+
+  useEffect(() => {
+    const color = activeCategory?.theme;
+    if (!color) return;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', color);
+  }, [activeCategory?.theme]);
 
   useEffect(() => {
     if (products.length === 0 && !isLoading) {
@@ -275,7 +283,8 @@ const Home = () => {
   };
 
   const fetchData = async ({ forceRefresh = false } = {}) => {
-    const cacheKey = getHomePageDataCacheKey(currentLocation);
+    const activeHeaderId = activeCategory && activeCategory._id !== ALL_CATEGORY._id ? activeCategory._id : undefined;
+    const cacheKey = getHomePageDataCacheKey(currentLocation, activeHeaderId);
     if (!forceRefresh) {
       const cached = homePageDataCache.get(cacheKey);
       if (cached) {
@@ -285,12 +294,16 @@ const Home = () => {
       }
     }
     setIsLoading(true);
+    setHasFetchError(false);
     try {
       const hasValidLocation = Number.isFinite(currentLocation?.latitude) && Number.isFinite(currentLocation?.longitude);
       const productParams = { limit: 20 };
       if (hasValidLocation) {
         productParams.lat = currentLocation.latitude;
         productParams.lng = currentLocation.longitude;
+      }
+      if (activeHeaderId) {
+        productParams.headerId = activeHeaderId;
       }
       const [catRes, prodRes, expRes, sectionsRes, recommendedStoresRes] = await Promise.all([
         customerApi.getCategories(),
@@ -343,7 +356,7 @@ const Home = () => {
       const recommendedStoresList = recommendedStoresRes?.data?.results || recommendedStoresRes?.data?.result;
       nextHomeData.recommendedStores = Array.isArray(recommendedStoresList) ? recommendedStoresList : [];
       applyHomePageData(nextHomeData, { cacheKey });
-    } catch (error) { console.error("Error:", error); } finally { setIsLoading(false); }
+    } catch (error) { console.error("Error:", error); setHasFetchError(true); } finally { setIsLoading(false); }
   };
 
   const hydrateSelectedSectionProducts = async (sections = []) => {
@@ -365,7 +378,7 @@ const Home = () => {
     } catch (e) {}
   };
 
-  useEffect(() => { fetchData(); }, [currentLocation?.latitude, currentLocation?.longitude]);
+  useEffect(() => { fetchData(); }, [currentLocation?.latitude, currentLocation?.longitude, activeCategory?._id]);
   const headerSectionsCache = useRef(headerSectionsMemoryCache);
   const heroConfigCache = useRef(heroConfigMemoryCache);
 
@@ -513,6 +526,14 @@ const Home = () => {
           >
             Choose location
           </button>
+        </div>
+      ) : products.length === 0 && !isLoading && hasFetchError ? (
+        <div className="flex flex-col items-center justify-center pt-24 pb-48">
+          <h3 className="text-2xl md:text-4xl font-black text-slate-800 text-center uppercase">Something <span className="text-primary">went wrong</span></h3>
+          <p className="text-slate-500 font-bold max-w-md text-center px-10 text-sm md:text-lg opacity-80">We couldn't load products right now. Please check your connection and try again.</p>
+          <div className="flex flex-col gap-4 mt-12 w-full max-w-xs">
+            <button onClick={() => fetchData({ forceRefresh: true })} className="w-full py-4 bg-primary text-white font-black rounded-xl uppercase text-[13px] tracking-widest transition-all active:scale-95">Retry</button>
+          </div>
         </div>
       ) : products.length === 0 && !isLoading ? (
         <div className="flex flex-col items-center justify-center pt-24 pb-48">

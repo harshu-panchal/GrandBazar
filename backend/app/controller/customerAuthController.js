@@ -172,7 +172,7 @@ export const getCustomerProfile = async (req, res) => {
 ================================ */
 export const updateCustomerProfile = async (req, res) => {
     try {
-        const { name, email, addresses, dateOfBirth, notificationsEnabled } = req.body;
+        const { name, email, addresses, dateOfBirth, notificationsEnabled, profileImage } = req.body;
 
         const customer = await Customer.findById(req.user.id);
         if (!customer) {
@@ -180,8 +180,21 @@ export const updateCustomerProfile = async (req, res) => {
         }
 
         if (name) customer.name = name;
-        if (email) customer.email = email;
+        if (email) {
+            const normalizedEmail = String(email).trim().toLowerCase();
+            if (normalizedEmail !== (customer.email || "").toLowerCase()) {
+                const existing = await Customer.findOne({
+                    email: normalizedEmail,
+                    _id: { $ne: customer._id },
+                });
+                if (existing) {
+                    return handleResponse(res, 409, "This email is already registered to another account.");
+                }
+            }
+            customer.email = normalizedEmail;
+        }
         if (addresses) customer.addresses = addresses;
+        if (profileImage !== undefined) customer.profileImage = profileImage || null;
         if (notificationsEnabled !== undefined) {
             customer.notificationsEnabled = Boolean(notificationsEnabled);
         }
@@ -193,11 +206,21 @@ export const updateCustomerProfile = async (req, res) => {
                 if (Number.isNaN(parsed.getTime())) {
                     return handleResponse(res, 400, "Invalid date of birth");
                 }
+                if (parsed > new Date()) {
+                    return handleResponse(res, 400, "Date of birth cannot be in the future");
+                }
                 customer.dateOfBirth = parsed;
             }
         }
 
-        await customer.save();
+        try {
+            await customer.save();
+        } catch (saveError) {
+            if (saveError?.code === 11000 && saveError?.keyPattern?.email) {
+                return handleResponse(res, 409, "This email is already registered to another account.");
+            }
+            throw saveError;
+        }
 
         return handleResponse(res, 200, "Profile updated successfully", sanitizeCustomer(customer));
     } catch (error) {

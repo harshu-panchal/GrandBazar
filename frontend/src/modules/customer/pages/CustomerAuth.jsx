@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
+import { useLocation as useCustomerLocation } from '../context/LocationContext';
 import {
     Phone,
     ShieldCheck,
@@ -89,6 +90,7 @@ const CustomerAuth = () => {
     const [timer, setTimer] = useState(0);
     const [carouselIndex, setCarouselIndex] = useState(0);
     const { login } = useAuth();
+    const { refreshLocation } = useCustomerLocation();
     const { settings } = useSettings();
     const appName = settings?.appName || 'App';
     const logoUrl = settings?.logoUrl || '';
@@ -307,10 +309,16 @@ const CustomerAuth = () => {
             login({ ...customer, token, role: 'customer' });
             clearAuthSessionStorage();
             toast.success('Successfully Logged In!');
+            refreshLocation?.().catch(() => {});
             navigate('/');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
-            toast.error(apiMessage || 'Invalid email or password');
+            if (apiMessage?.toLowerCase().includes('password not set')) {
+                toast.error('This account was created with Mobile OTP and has no password set.');
+                setAuthMode('phone');
+            } else {
+                toast.error(apiMessage || 'Invalid email or password');
+            }
         } finally {
             setIsEmailLoading(false);
         }
@@ -337,6 +345,7 @@ const CustomerAuth = () => {
             login({ ...customer, token, role: 'customer' });
             clearAuthSessionStorage();
             toast.success('Successfully Logged In!');
+            refreshLocation?.().catch(() => {});
             navigate('/');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
@@ -744,29 +753,31 @@ const CustomerAuth = () => {
                                     </form>
                                     )}
 
-                                    {/* Legal Agreement Footer */}
-                                    <div className="pt-2 flex flex-col items-center gap-1">
-                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center">
-                                            By continuing, you agree to our
-                                        </p>
-                                        <div className="flex items-center gap-1.5 underline decoration-gray-200 underline-offset-4">
-                                            <button 
-                                                onClick={() => navigate('/terms')}
-                                                className="text-[10px] font-black uppercase tracking-widest hover:text-gray-900 transition-colors"
-                                                style={{ color: activeCategory.theme }}
-                                            >
-                                                Terms & Condition
-                                            </button>
-                                            <span className="text-[8px] text-gray-300">•</span>
-                                            <button 
-                                                onClick={() => navigate('/privacy-policy')}
-                                                className="text-[10px] font-black uppercase tracking-widest hover:text-gray-900 transition-colors"
-                                                style={{ color: activeCategory.theme }}
-                                            >
-                                                Privacy Policy
-                                            </button>
+                                    {/* Legal Agreement Footer — only shown on login, where there's no signup checkbox covering this already */}
+                                    {isLogin && (
+                                        <div className="pt-2 flex flex-col items-center gap-1">
+                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center">
+                                                By continuing, you agree to our
+                                            </p>
+                                            <div className="flex items-center gap-1.5 underline decoration-gray-200 underline-offset-4">
+                                                <button
+                                                    onClick={() => navigate('/terms')}
+                                                    className="text-[10px] font-black uppercase tracking-widest hover:text-gray-900 transition-colors"
+                                                    style={{ color: activeCategory.theme }}
+                                                >
+                                                    Terms & Condition
+                                                </button>
+                                                <span className="text-[8px] text-gray-300">•</span>
+                                                <button
+                                                    onClick={() => navigate('/privacy-policy')}
+                                                    className="text-[10px] font-black uppercase tracking-widest hover:text-gray-900 transition-colors"
+                                                    style={{ color: activeCategory.theme }}
+                                                >
+                                                    Privacy Policy
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </motion.div>
                             ) : (
                                 <motion.div

@@ -122,7 +122,7 @@ export async function issueCustomerOtp({
     throw err;
   }
 
-  if (flow === "signup" && customer && customer.isVerified) {
+  if (flow === "signup" && customer && customer.isVerified && customer.isActive !== false) {
     const err = new Error("Phone number is already registered. Please login.");
     err.statusCode = 409;
     throw err;
@@ -176,6 +176,13 @@ export async function issueCustomerOtp({
       customer.password = password;
     }
     customer.termsAcceptedAt = agreedToTerms ? now : customer.termsAcceptedAt;
+    // A soft-deleted account (isActive=false) is being re-signed-up on the same
+    // phone number — reactivate it and require fresh OTP verification, rather
+    // than leaving it permanently blocked as "already registered".
+    if (customer.isActive === false) {
+      customer.isActive = true;
+      customer.isVerified = false;
+    }
   }
 
   if (customer.otpLockedUntil && customer.otpLockedUntil > now) {

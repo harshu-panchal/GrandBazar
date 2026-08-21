@@ -22,6 +22,10 @@ const addressSchema = new mongoose.Schema({
         lat: Number,
         lng: Number,
     },
+    isDefault: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const userSchema = new mongoose.Schema(
@@ -132,6 +136,11 @@ const userSchema = new mongoose.Schema(
 
         dateOfBirth: {
             type: Date,
+            default: null,
+        },
+
+        profileImage: {
+            type: String,
             default: null,
         },
 

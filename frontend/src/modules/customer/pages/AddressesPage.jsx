@@ -17,6 +17,19 @@ import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
 import { useLocation } from '../context/LocationContext';
 
+/** Maps known technical error shapes (Mongo validation, duplicate-key, etc.) to plain-language copy. */
+function friendlyAddressErrorMessage(err) {
+    const raw = err?.response?.data?.message || err?.message || '';
+    if (!raw) return 'Failed to save address. Please try again.';
+    if (/E11000|duplicate key/i.test(raw)) {
+        return 'That address is already saved.';
+    }
+    if (/ValidationError|Cast to|validation failed/i.test(raw)) {
+        return "We couldn't verify that address — please check the details and try again.";
+    }
+    return raw;
+}
+
 const AddressesPage = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -44,7 +57,7 @@ const AddressesPage = () => {
                 state: addr.state,
                 pincode: addr.pincode,
                 phone: profile?.phone ?? '',
-                isDefault: idx === 0
+                isDefault: raw.some((a) => a.isDefault) ? Boolean(addr.isDefault) : idx === 0
             })));
         } catch {
             setAddresses([]);
@@ -148,7 +161,7 @@ const AddressesPage = () => {
             await fetchAddresses();
             await refreshAddresses?.();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Failed to save address');
+            toast.error(friendlyAddressErrorMessage(err));
         } finally {
             setSaving(false);
         }
@@ -241,7 +254,7 @@ const AddressesPage = () => {
             await fetchAddresses();
             await refreshAddresses?.();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Failed to update address');
+            toast.error(friendlyAddressErrorMessage(err));
         } finally {
             setUpdating(false);
         }
@@ -250,6 +263,28 @@ const AddressesPage = () => {
     const handleDelete = (addr) => {
         setSelectedAddress(addr);
         setIsDeleteOpen(true);
+    };
+
+    const [settingDefaultId, setSettingDefaultId] = useState(null);
+
+    const handleSetDefault = async (addr) => {
+        const idx = addresses.findIndex(a => a.id === addr.id);
+        if (idx < 0) return;
+        const updatedAddresses = rawAddresses.map((raw, i) => ({
+            ...(raw && typeof raw === 'object' ? raw : {}),
+            isDefault: i === idx,
+        }));
+        setSettingDefaultId(addr.id);
+        try {
+            await customerApi.updateProfile({ addresses: updatedAddresses });
+            toast.success('Default address updated');
+            await fetchAddresses();
+            await refreshAddresses?.();
+        } catch (err) {
+            toast.error(friendlyAddressErrorMessage(err));
+        } finally {
+            setSettingDefaultId(null);
+        }
     };
 
     const [deleting, setDeleting] = useState(false);
@@ -338,6 +373,15 @@ const AddressesPage = () => {
                             </div>
 
                             <div className="mt-4 flex items-center gap-2 pt-3 border-t border-slate-100">
+                                {!addr.isDefault && (
+                                    <button
+                                        onClick={() => handleSetDefault(addr)}
+                                        disabled={settingDefaultId === addr.id}
+                                        className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-xs hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
+                                    >
+                                        {settingDefaultId === addr.id ? 'Setting...' : 'Set as Default'}
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleEdit(addr)}
                                     className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-xs hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5"
@@ -380,7 +424,7 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="phone">Phone Number</Label>
-                            <Input id="phone" placeholder="+91 98765 43210" value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} />
+                            <Input id="phone" type="tel" inputMode="numeric" maxLength={10} placeholder="9876543210" value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="address">Address</Label>
@@ -407,7 +451,7 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="pincode">Pincode</Label>
-                            <Input id="pincode" placeholder="110075" value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value }))} />
+                            <Input id="pincode" type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
                         </div>
                     </div>
                     <DialogFooter>
@@ -441,7 +485,7 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-phone">Phone Number</Label>
-                            <Input id="edit-phone" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+                            <Input id="edit-phone" type="tel" inputMode="numeric" maxLength={10} value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-address">Address</Label>
@@ -468,7 +512,7 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-pincode">Pincode</Label>
-                            <Input id="edit-pincode" placeholder="110075" value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value }))} />
+                            <Input id="edit-pincode" type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
                         </div>
                     </div>
                     <DialogFooter>

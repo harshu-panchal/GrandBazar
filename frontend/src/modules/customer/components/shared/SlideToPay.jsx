@@ -85,19 +85,19 @@ const SlideToPay = ({
                 />
             </motion.div>
 
-            {/* Text Label */}
+            {/* Text Label — reserves space to the right of the drag handle so the
+                centered label never sits underneath it. */}
             <motion.div
-                className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+                className="absolute inset-y-0 left-16 right-10 flex items-center justify-center z-10 pointer-events-none"
                 style={{ opacity: textOpacity }}
             >
-                <span className="text-white font-black text-sm md:text-[13px] tracking-[0.25em] uppercase flex items-center gap-2">
+                <span className="text-white font-black text-sm md:text-[13px] tracking-[0.25em] uppercase flex items-center gap-2 truncate">
                     {text} <span className="text-white/40">|</span> <span className="text-brand-50 font-extrabold">₹{amount}</span>
                 </span>
-
-                <div className="absolute right-4 animate-pulse text-white/70">
-                    <ChevronsRight size={20} />
-                </div>
             </motion.div>
+            <div className="absolute right-4 top-0 bottom-0 flex items-center animate-pulse text-white/70 pointer-events-none z-10">
+                <ChevronsRight size={20} />
+            </div>
 
             {/* Success State Text */}
             {isCompleted && (

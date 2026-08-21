@@ -117,7 +117,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
                 </>
             )}
 
-            <main className={cn("flex-1 md:pb-0", !showHeader && "pt-0", !fullHeight && "pb-16")}>
+            <main className={cn("flex-1 md:pb-0", !showHeader && "pt-0", !fullHeight && "pb-[calc(70px+env(safe-area-inset-bottom))]")}>
                 {children}
             </main>
 
@@ -137,14 +137,12 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
                 {finalShowFooterMessageMobile && <MobileFooterMessage />}
             </div>
 
-            {/* Bottom Nav logic */}
-            <div className="md:hidden">
-                {finalShowBottomNavMobile && <BottomNav />}
-            </div>
-            {/* Desktop Bottom Nav doesn't exist usually, but just in case of future changes */}
-            <div className="hidden md:block">
-                {showBottomNav && <BottomNav />}
-            </div>
+            {/* Bottom Nav logic — BottomNav's own root already carries md:hidden, so this
+                is the sole visibility rule; a separate "desktop" wrapper here would be
+                self-defeating (BottomNav hides itself past the md breakpoint regardless
+                of an outer wrapper), and rotating past 768px would drop the nav with no
+                fallback. */}
+            {finalShowBottomNavMobile && <BottomNav />}
         </div>
     );
 };
