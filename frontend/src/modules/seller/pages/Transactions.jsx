@@ -263,23 +263,23 @@ const Transactions = () => {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[720px] mobile-table-card">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-left min-w-full sm:min-w-[720px] mobile-table-card">
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">
+                  <th className="px-4 py-4 sm:px-6 text-xs font-black text-slate-600 uppercase tracking-widest">
                     Transaction Details
                   </th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">
+                  <th className="px-4 py-4 sm:px-6 text-xs font-black text-slate-600 uppercase tracking-widest">
                     Reference
                   </th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">
+                  <th className="px-4 py-4 sm:px-6 text-xs font-black text-slate-600 uppercase tracking-widest">
                     Amount
                   </th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest">
+                  <th className="px-4 py-4 sm:px-6 text-xs font-black text-slate-600 uppercase tracking-widest">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-xs font-black text-slate-600 uppercase tracking-widest text-right">
+                  <th className="px-4 py-4 sm:px-6 text-xs font-black text-slate-600 uppercase tracking-widest text-right">
                     Actions
                   </th>
                 </tr>
@@ -303,11 +303,11 @@ const Transactions = () => {
                         setIsDetailModalOpen(true);
                       }}
                       className="group hover:bg-slate-50/50 transition-all cursor-pointer">
-                      <td className="px-6 py-5" data-label="Transaction Details">
-                        <div className="flex items-center gap-4">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5" data-label="Transaction Details">
+                        <div className="flex items-center gap-4 sm:justify-start justify-end text-right sm:text-left">
                           <div
                             className={cn(
-                              "h-10 w-10 rounded-lg flex items-center justify-center font-black transition-all group-hover:scale-110",
+                              "h-10 w-10 rounded-lg hidden sm:flex items-center justify-center font-black transition-all group-hover:scale-110 shrink-0",
                               txn.amount > 0
                                 ? "bg-brand-50 text-brand-600"
                                 : "bg-rose-50 text-rose-600",
@@ -328,11 +328,11 @@ const Transactions = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5" data-label="Reference">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5" data-label="Reference">
                         <p className="text-xs font-bold text-slate-900">
                           {txn.customer ?? "—"}
                         </p>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center gap-1.5 mt-1 sm:justify-start justify-end">
                           <Badge className="text-[10px] sm:text-xs px-1 py-0 bg-slate-100 text-slate-600 font-bold border-none">
                             {txn.ref ?? "—"}
                           </Badge>
@@ -341,7 +341,7 @@ const Transactions = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-5" data-label="Amount">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5" data-label="Amount">
                         <p
                           className={cn(
                             "text-sm font-black tracking-tight",
@@ -356,7 +356,7 @@ const Transactions = () => {
                           Settlement: {(txn.status ?? "") === "Settled" ? "Complete" : "T+2"}
                         </p>
                       </td>
-                      <td className="px-6 py-5" data-label="Status">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5" data-label="Status">
                         <Badge
                           variant={
                             txn.status === "Settled"
@@ -365,16 +365,16 @@ const Transactions = () => {
                                 ? "warning"
                                 : "default"
                           }
-                          className="text-[10px] sm:text-xs font-black uppercase tracking-widest px-2-5 py-0.5 rounded-lg">
+                          className="text-[10px] sm:text-xs font-black uppercase tracking-widest px-2.5 py-0.5 rounded-lg">
                           {txn.status === "Settled" ? (
-                            <HiOutlineCheckCircle className="mr-1 h-3 w-3" />
+                            <HiOutlineCheckCircle className="sm:mr-1 h-3 w-3 hidden sm:block" />
                           ) : (
-                            <HiOutlineClock className="mr-1 h-3 w-3" />
+                            <HiOutlineClock className="sm:mr-1 h-3 w-3 hidden sm:block" />
                           )}
                           {txn.status}
                         </Badge>
                       </td>
-                      <td className="px-6 py-5 text-right" data-label="Actions">
+                      <td className="px-4 py-4 sm:px-6 sm:py-5 text-right" data-label="Actions">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

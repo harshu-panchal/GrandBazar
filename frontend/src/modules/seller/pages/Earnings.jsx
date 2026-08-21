@@ -372,19 +372,19 @@ const Earnings = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left mobile-table-card">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-left min-w-full sm:min-w-[1000px] mobile-table-card">
               <thead className="bg-slate-50/80">
                 <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3 whitespace-nowrap">Date</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Order</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Customer</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Items</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Order Total</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Deductions</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Your Earning</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Payment</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Date</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Order</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Customer</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Items</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Order Total</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Deductions</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Your Earning</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Payment</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -397,15 +397,15 @@ const Earnings = () => {
                 ) : (
                   paginatedLedger.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Date">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Date">
                         <p className="text-sm font-bold text-slate-900">{row.date || "—"}</p>
                         <p className="text-xs text-slate-500">{row.time || ""}</p>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Order">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Order">
                         <p className="text-sm font-black text-slate-900">
                           {row.orderId ? `#${row.orderId}` : row.ref || "—"}
                         </p>
-                        <div className="mt-1 flex flex-wrap gap-1">
+                        <div className="mt-1 flex flex-wrap gap-1 sm:justify-start justify-end">
                           {row.orderStatus && (
                             <Badge
                               variant={getStatusVariant(row.displayStatus?.legacyStatus || row.orderStatus)}
@@ -427,7 +427,7 @@ const Earnings = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-4 align-top min-w-[180px]" data-label="Customer">
+                      <td className="px-4 py-4 sm:px-6 align-top sm:text-left text-right min-w-[180px]" data-label="Customer">
                         <p className="text-sm font-bold text-slate-900">
                           {row.customerName || row.customer || "—"}
                         </p>
@@ -438,7 +438,7 @@ const Earnings = () => {
                           <p className="text-xs text-slate-400 mt-0.5">{row.customerEmail}</p>
                         )}
                       </td>
-                      <td className="px-4 py-4 align-top min-w-[200px] max-w-[280px]" data-label="Items">
+                      <td className="px-4 py-4 sm:px-6 align-top sm:text-left text-right min-w-[200px] max-w-[280px]" data-label="Items">
                         <p className="text-xs font-semibold text-slate-700">
                           {row.itemCount ? `${row.itemCount} item(s)` : "—"}
                         </p>
@@ -448,12 +448,12 @@ const Earnings = () => {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Order Total">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Order Total">
                         <p className="text-sm font-bold text-slate-900">
                           {row.orderId ? formatMoney(row.orderTotal) : "—"}
                         </p>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Deductions">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Deductions">
                         {row.orderId && (row.commissionAmount || row.packagingAmount) ? (
                           <div className="space-y-0.5 text-[11px] text-slate-500">
                             {row.commissionAmount > 0 && <p>Commission: -{formatMoney(row.commissionAmount)}</p>}
@@ -463,7 +463,7 @@ const Earnings = () => {
                           <span className="text-xs text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Your Earning">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Your Earning">
                         {row.orderId && row.sellerPayout > 0 ? (
                           <p className="text-sm font-black text-emerald-600">
                             +{formatMoney(row.sellerPayout)}
@@ -480,7 +480,7 @@ const Earnings = () => {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Payment">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Payment">
                         <p className="text-xs font-bold text-slate-700 capitalize">
                           {row.paymentMethod || "—"}
                         </p>
@@ -488,7 +488,7 @@ const Earnings = () => {
                           <p className="text-[11px] text-slate-400 capitalize">{row.paymentStatus}</p>
                         )}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap align-top" data-label="Status">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Status">
                         <Badge variant={payoutStatusVariant(row)} className="uppercase">
                           {payoutStatusLabel(row)}
                         </Badge>
