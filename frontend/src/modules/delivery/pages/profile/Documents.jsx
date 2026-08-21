@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FileCheck, UploadCloud, Clock, RotateCw } from "lucide-react";
+import { ArrowLeft, FileCheck, UploadCloud, Clock, RotateCw, X } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
 import Card from "@/shared/components/ui/Card";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ const Documents = () => {
   const fileInputRef = useRef(null);
   const pendingDocIdRef = useRef(null);
   const [uploadingId, setUploadingId] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const docs = useMemo(
     () => [
@@ -169,7 +170,7 @@ const Documents = () => {
                     variant="outline"
                     size="sm"
                     className="w-full text-xs h-8"
-                    onClick={() => window.open(doc.url, "_blank", "noopener,noreferrer")}
+                    onClick={() => setPreviewUrl(doc.url)}
                   >
                     View File
                   </Button>
@@ -179,6 +180,27 @@ const Documents = () => {
           );
         })}
       </div>
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewUrl(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={previewUrl}
+            alt="Document preview"
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };

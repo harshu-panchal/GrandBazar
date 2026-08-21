@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   Bell,
   Star,
-  TrendingUp,
   Package,
   MapPin,
   CheckCircle,
@@ -86,6 +85,10 @@ const Dashboard = () => {
   }, [isOnline, activeTab]);
 
   const handleOnlineToggle = async () => {
+    if (user && !user.isVerified) {
+      toast.error("Your account is pending admin verification. You can go online once it's approved.");
+      return;
+    }
     const newStatus = !isOnline;
     try {
       await deliveryApi.updateProfile({ isOnline: newStatus });
@@ -307,9 +310,6 @@ const Dashboard = () => {
             <span className="text-2xl font-bold text-gray-400 mr-1">₹</span>
             <span className="text-4xl font-extrabold text-gray-900 tracking-tight">
               {earnings.today}
-            </span>
-            <span className="ml-3 text-brand-600 text-xs font-bold flex items-center bg-brand-50 border border-brand-100 px-2 py-1 rounded-full">
-              <TrendingUp size={12} className="mr-1" /> +12%
             </span>
           </div>
 

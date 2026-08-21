@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { createPortal } from "react-dom";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { BellRing, MapPin } from "lucide-react";
 import { deliveryApi } from "../services/deliveryApi";
@@ -30,6 +30,11 @@ const DeliveryLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const mainRef = useRef(null);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const [activeOrder, setActiveOrder] = useState(null);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -155,13 +160,14 @@ const DeliveryLayout = () => {
     shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(payload.orderId);
     const total = typeof p.total === "number" ? p.total : Number(p.total) || 0;
     const dropLabel = typeof p.drop === "string" ? p.drop : String(p.drop);
-    const earnings = typeof p.earnings === "number" ? p.earnings : Math.round(total * 0.1);
+    const earnings = typeof p.earnings === "number" ? p.earnings : null;
+    const distanceKm = typeof p.distanceKm === "number" ? p.distanceKm : null;
     setActiveOrder({
       id: payload.orderId,
       mongoId: undefined,
       pickup: p.pickup,
       drop: dropLabel,
-      distance: "Nearby",
+      distance: distanceKm != null ? `${distanceKm} km` : "Nearby",
       value: total,
       earnings: earnings,
       expiresAt: payload.deliverySearchExpiresAt || null,
@@ -192,17 +198,22 @@ const DeliveryLayout = () => {
     shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(newOrder.orderId);
     const total = newOrder.pricing?.total || 0;
     const isReturnPickup = newOrder.isReturnPickup || false;
-    const earnings = newOrder.riderEarnings || Math.round(total * 0.1);
+    const earnings = typeof newOrder.riderEarnings === "number" ? newOrder.riderEarnings : null;
+    const distanceKm = typeof newOrder.distanceKm === "number" ? newOrder.distanceKm : null;
     setActiveOrder({
       id: newOrder.orderId,
       mongoId: newOrder._id,
       pickup: isReturnPickup
         ? newOrder.address?.address || "Customer Address"
-        : newOrder.seller?.shopName || "Seller",
+        : newOrder.seller?.shopName
+          ? newOrder.seller?.address
+            ? `${newOrder.seller.shopName} - ${newOrder.seller.address}`
+            : newOrder.seller.shopName
+          : "Seller",
       drop: isReturnPickup
         ? newOrder.seller?.shopName || "Seller Store"
         : newOrder.address?.address || "Customer Address",
-      distance: "Nearby",
+      distance: distanceKm != null ? `${distanceKm} km` : "Nearby",
       value: total,
       earnings: earnings,
       expiresAt: newOrder.deliverySearchExpiresAt || null,
@@ -652,11 +663,20 @@ const DeliveryLayout = () => {
                         ? "Assigned by admin"
                         : activeOrder.isReturnPickup ? "Collect return item" : "Accept or reject"}
                     </p>
-                    <div className="flex items-center gap-2 mb-6">
-                      <span className="text-2xl font-black text-brand-600">₹{activeOrder.earnings}</span>
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-outfit">
-                        Earnings
-                      </span>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-black text-brand-600">
+                          {activeOrder.earnings != null ? `₹${activeOrder.earnings}` : "—"}
+                        </span>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-outfit">
+                          Est. earnings
+                        </span>
+                      </div>
+                      {activeOrder.distance && (
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                          {activeOrder.distance}
+                        </span>
+                      )}
                     </div>
 
                     <div className="w-full space-y-4 mb-6">
@@ -772,12 +792,12 @@ const DeliveryLayout = () => {
         )}
 
       <main
+        ref={mainRef}
         className={`h-full min-h-screen overflow-y-auto ${shouldShowBottomNav ? "pb-24" : ""} no-scrollbar`}>
         <Outlet />
       </main>
 
       {shouldShowBottomNav && <BottomNav />}
-      <Toaster position="top-center" />
     </div>
   );
 };

@@ -1,15 +1,34 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Home, IndianRupee, History, User } from "lucide-react";
 import { motion } from "framer-motion";
 
+/** Hides the fixed bottom nav while the on-screen keyboard is open, so it can't ride up over a focused input. */
+function useKeyboardOpen() {
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const handleResize = () => {
+      const shrink = window.innerHeight - vv.height;
+      setKeyboardOpen(shrink > 120);
+    };
+    vv.addEventListener("resize", handleResize);
+    return () => vv.removeEventListener("resize", handleResize);
+  }, []);
+  return keyboardOpen;
+}
+
 const BottomNav = () => {
+  const keyboardOpen = useKeyboardOpen();
   const navItems = [
     { path: "/delivery/dashboard", label: "Home", icon: Home },
     { path: "/delivery/earnings", label: "Earnings", icon: IndianRupee },
     { path: "/delivery/history", label: "History", icon: History },
     { path: "/delivery/profile", label: "Profile", icon: User },
   ];
+
+  if (keyboardOpen) return null;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200/50 py-2 px-6 flex justify-between items-center z-40 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)] max-w-md mx-auto">

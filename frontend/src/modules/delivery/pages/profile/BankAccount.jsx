@@ -30,7 +30,11 @@ const BankAccount = () => {
   };
 
   const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    let value = e.target.value;
+    if (field === "accountNumber") value = value.replace(/\D/g, "").slice(0, 18);
+    if (field === "ifsc") value = value.toUpperCase().slice(0, 11);
+    if (field === "accountHolder") value = value.replace(/[^a-zA-Z .]/g, "");
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async () => {
@@ -40,6 +44,18 @@ const BankAccount = () => {
 
     if (!holder || !accountNumber || !ifsc) {
       toast.error("Please fill in all fields before submitting");
+      return;
+    }
+    if (!/^[A-Za-z .]{2,}$/.test(holder)) {
+      toast.error("Account holder name should contain letters and spaces only");
+      return;
+    }
+    if (!/^\d{9,18}$/.test(accountNumber)) {
+      toast.error("Please enter a valid bank account number (9-18 digits)");
+      return;
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+      toast.error("Please enter a valid IFSC code (e.g. HDFC0001234)");
       return;
     }
 

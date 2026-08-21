@@ -411,12 +411,38 @@ export async function fetchAvailableOrdersForDelivery({
       [...assignedReturnPickups, ...returnPickups],
       limit,
     ),
-  );
+  ).map(attachDistanceAndEarningsPreview);
 
   return {
     requiresLocation: false,
     orders,
     limit,
+  };
+}
+
+/** Adds shop-to-customer distanceKm and a real riderEarnings estimate so the app's
+ * new-order popup shows the same figures the rider will actually get, instead of
+ * a "Nearby" placeholder and a naive 10%-of-total guess. */
+function attachDistanceAndEarningsPreview(order) {
+  const dropCoords = order.isReturnPickup
+    ? order.seller?.location?.coordinates
+    : order.address?.location?.coordinates;
+  const originCoords = order.isReturnPickup
+    ? order.address?.location?.coordinates
+    : order.seller?.location?.coordinates;
+  let distanceKm;
+  if (
+    Array.isArray(originCoords) && originCoords.length >= 2 &&
+    Array.isArray(dropCoords) && dropCoords.length >= 2
+  ) {
+    const meters = distanceMeters(originCoords[1], originCoords[0], dropCoords[1], dropCoords[0]);
+    if (Number.isFinite(meters)) distanceKm = Math.round((meters / 1000) * 10) / 10;
+  }
+  const riderEarnings = Number(order.paymentBreakdown?.riderPayoutTotal);
+  return {
+    ...order,
+    distanceKm,
+    riderEarnings: Number.isFinite(riderEarnings) ? riderEarnings : undefined,
   };
 }
 

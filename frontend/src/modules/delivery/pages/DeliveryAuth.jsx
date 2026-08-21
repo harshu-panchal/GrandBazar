@@ -621,8 +621,16 @@ const DeliveryAuth = () => {
                                   toast.error("Aadhar number must be 12 digits");
                                   return;
                                 }
-                                if (signupPanNumber.length !== 10) {
-                                  toast.error("PAN number must be 10 characters");
+                                if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(signupPanNumber)) {
+                                  toast.error("Please enter a valid PAN number (e.g. ABCDE1234F)");
+                                  return;
+                                }
+                                if (signupAccountNumber.length < 9 || signupAccountNumber.length > 18) {
+                                  toast.error("Please enter a valid bank account number (9-18 digits)");
+                                  return;
+                                }
+                                if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(signupIfsc)) {
+                                  toast.error("Please enter a valid IFSC code (e.g. HDFC0001234)");
                                   return;
                                 }
                                 setSignupStep(4);
@@ -654,7 +662,9 @@ const DeliveryAuth = () => {
                                   id={doc.id}
                                   className="hidden"
                                   accept="image/*"
+                                  disabled={loading}
                                   onChange={(e) => {
+                                    if (loading) return;
                                     const file = e.target.files[0];
                                     if (doc.id === "dl") handleDLUpload(file);
                                     else if (doc.id === "pan") handlePanUpload(file);
@@ -664,7 +674,7 @@ const DeliveryAuth = () => {
                                 />
                                 <label
                                   htmlFor={doc.id}
-                                  className={`flex items-center justify-between p-4 rounded-2xl border-2 border-dashed transition-all cursor-pointer ${doc.state
+                                  className={`flex items-center justify-between p-4 rounded-2xl border-2 border-dashed transition-all ${loading ? "opacity-50 pointer-events-none cursor-not-allowed" : "cursor-pointer"} ${doc.state
                                     ? "border-brand-200 bg-brand-50/50"
                                     : "border-gray-100 bg-gray-50 hover:border-brand-200 hover:bg-brand-50/30"
                                     }`}

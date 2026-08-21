@@ -317,10 +317,15 @@ const OrderDetails = () => {
     }
 
     if (publicStatusStage === 3) {
+      const storedDistanceKm = resolveDistanceKm(order);
       return {
         arrivalTimeText: "Arrived",
         arrivingInText: isReturn ? "Return Complete" : "Delivered",
-        totalDistanceText: "0 km",
+        totalDistanceText: Number.isFinite(storedDistanceKm)
+          ? `${storedDistanceKm} km`
+          : formatDistance(
+              Number(routeStats?.routeDistanceMeters ?? routeStats?.distanceMeters),
+            ),
       };
     }
 
@@ -920,9 +925,18 @@ const OrderDetails = () => {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="icon" className="h-9 w-9">
-                      <MessageSquare size={18} />
-                    </Button>
+                    {(isReturn ? order.seller?.phone : order.address?.phone) && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() =>
+                          (window.location.href = `sms:${isReturn ? order.seller?.phone : order.address?.phone}`)
+                        }
+                      >
+                        <MessageSquare size={18} />
+                      </Button>
+                    )}
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
                       <Button
                         variant="outline"

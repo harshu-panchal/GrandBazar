@@ -58,13 +58,35 @@ export function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
     order.seller && typeof order.seller === "object" && order.seller !== null
       ? order.seller
       : null;
-  const pickup = seller?.shopName || "Seller";
+  const sellerAddress =
+    typeof seller?.address === "string" && seller.address.trim()
+      ? seller.address.trim()
+      : null;
+  const pickup = seller?.shopName
+    ? sellerAddress
+      ? `${seller.shopName} - ${sellerAddress}`
+      : seller.shopName
+    : "Seller";
   const drop =
     typeof order.address?.address === "string" && order.address.address.trim()
       ? order.address.address.trim()
       : "Customer address";
   const meta = order.deliverySearchMeta || {};
   const sid = seller?._id ?? order.seller;
+
+  const sellerCoords = seller?.location?.coordinates;
+  const dropCoords = order.address?.location?.coordinates;
+  let distanceKm;
+  if (
+    Array.isArray(sellerCoords) && sellerCoords.length >= 2 &&
+    Array.isArray(dropCoords) && dropCoords.length >= 2
+  ) {
+    const meters = distanceMeters(sellerCoords[1], sellerCoords[0], dropCoords[1], dropCoords[0]);
+    if (Number.isFinite(meters)) distanceKm = Math.round((meters / 1000) * 10) / 10;
+  }
+
+  const earningsEstimate = Number(order.paymentBreakdown?.riderPayoutTotal);
+
   return {
     orderId: order.orderId,
     workflowStatus: order.workflowStatus || WORKFLOW_STATUS.DELIVERY_SEARCH,
@@ -74,6 +96,8 @@ export function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
       pickup,
       drop,
       total: order.pricing?.total ?? 0,
+      distanceKm,
+      earnings: Number.isFinite(earningsEstimate) ? earningsEstimate : undefined,
     },
     deliverySearchExpiresAt: order.deliverySearchExpiresAt,
     ...extra,
@@ -968,7 +992,7 @@ export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
       $inc: { assignmentVersion: 1 },
     },
     { new: true },
-  ).populate("seller", "location shopName");
+  ).populate("seller", "location shopName address");
 
   if (!updated) {
     const o = await Order.findOne({ orderId }).lean();

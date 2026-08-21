@@ -1649,7 +1649,7 @@ export const assignReturnDelivery = async (req, res) => {
           pickup: order.address?.completeAddress || "Customer Address",
           drop: order.sellerBranchArea || "Seller Store",
           total: order.pricing?.total || 0,
-          earnings: order.riderEarnings || 0,
+          earnings: order.paymentBreakdown?.riderPayoutTotal || 0,
         },
         deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
       };
