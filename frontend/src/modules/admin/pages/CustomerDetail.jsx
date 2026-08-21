@@ -162,7 +162,7 @@ const CustomerDetail = () => {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="ds-h1">Customer Profile</h1>
-                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">{customer.id}</Badge>
+                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest" title={customer.id}>{`CUS-${String(customer.id || '').slice(-6).toUpperCase()}`}</Badge>
                         </div>
                         <p className="ds-description mt-1">Full profile and shopping history for this customer.</p>
                     </div>

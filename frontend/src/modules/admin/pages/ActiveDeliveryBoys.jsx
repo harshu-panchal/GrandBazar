@@ -368,9 +368,10 @@ const ActiveDeliveryBoys = () => {
                     </table>
                 </div>
                 <Pagination
-                    currentPage={page}
+                    page={page}
+                    total={total}
+                    totalPages={Math.ceil(total / pageSize) || 1}
                     pageSize={pageSize}
-                    totalItems={total}
                     onPageChange={(newPage) => fetchRiders(newPage)}
                     onPageSizeChange={(newSize) => setPageSize(newSize)}
                 />

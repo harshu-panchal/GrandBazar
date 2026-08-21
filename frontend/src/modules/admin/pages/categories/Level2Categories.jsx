@@ -283,6 +283,7 @@ const Level2Categories = () => {
       refundWindowHours: item.refundWindowHours ?? "",
       restockFeePercent: item.restockFeePercent ?? "",
     });
+    setImageFile(null);
     setPreviewUrl(item.image || null);
     setIsAddModalOpen(true);
   };
@@ -802,17 +803,19 @@ const Level2Categories = () => {
                       <label className="text-sm font-medium text-gray-700">
                         GST Slab (%)
                       </label>
-                      <input
-                        type="number"
+                      <select
                         value={formData.gstSlab}
                         onChange={(e) =>
                           setFormData({ ...formData, gstSlab: e.target.value })
                         }
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                        placeholder="0"
-                        min="0"
-                        max="100"
-                      />
+                      >
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
                       <p className="text-xs text-gray-500">
                         GST is charged on checkout for products in this category. A product-level override, if set, wins over this.
                       </p>
