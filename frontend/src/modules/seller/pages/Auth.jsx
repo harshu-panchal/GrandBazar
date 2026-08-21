@@ -89,6 +89,18 @@ const Auth = () => {
     phone: "",
   });
 
+  // Signup is a client-side state toggle, not a real route, so the browser
+  // has no history entry to pop back to — without this trap, hardware/browser
+  // back from the signup form falls through to a native "exit app?" dialog
+  // instead of returning to the login form.
+  useEffect(() => {
+    if (isLogin) return;
+    window.history.pushState({ sellerAuthSignup: true }, "");
+    const handlePopState = () => setIsLogin(true);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isLogin]);
+
   // A prospective seller arriving via an admin-sent invite link
   // (?invite=<token>) — pre-fills and locks the email, and skips straight
   // to the signup form instead of the login form.
@@ -313,6 +325,7 @@ const Auth = () => {
     } catch (error) {
       updateVerificationState(field, {
         isSending: false,
+        isOtpVisible: false,
         status: "idle",
       });
       toast.error(error.response?.data?.message || "Failed to send OTP");
@@ -469,9 +482,9 @@ const Auth = () => {
         } else if (isOwner && !businessModel) {
           navigate("/seller/choose-model", { replace: true });
         } else if (hasApprovedStore === false && isOwner) {
-          navigate("/seller/stores");
+          navigate("/seller/stores", { replace: true });
         } else {
-          navigate("/seller");
+          navigate("/seller", { replace: true });
         }
       } else {
         const {
@@ -657,10 +670,14 @@ const Auth = () => {
                 <Store size={28} className="text-slate-700" />
               )}
             </div>
-            <p className="text-base font-black text-slate-900 tracking-tight">{appName}</p>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">
-              Seller Partner
-            </p>
+            {!logoUrl && (
+              <>
+                <p className="text-base font-black text-slate-900 tracking-tight">{appName}</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+                  Seller Partner
+                </p>
+              </>
+            )}
           </div>
 
           <AnimatePresence mode="wait">
@@ -1073,8 +1090,8 @@ const Auth = () => {
                         />
                         <label htmlFor="terms" className="text-xs text-slate-600 leading-relaxed cursor-pointer text-left">
                           I agree to the{" "}
-                          <span className="text-slate-900 font-bold hover:underline">Terms of Service</span> and{" "}
-                          <span className="text-slate-900 font-bold hover:underline">Privacy Policy</span>.
+                          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Terms of Service</a> and{" "}
+                          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Privacy Policy</a>.
                         </label>
                       </div>
                     )}

@@ -8,7 +8,6 @@ import {
 import { Search, MapPin, Navigation, Loader2 } from "lucide-react";
 import Modal from "./ui/Modal";
 import Button from "./ui/Button";
-import Input from "./ui/Input";
 import { getGoogleMapsJsApiLoaderOptions } from "@/core/services/googleMapsLoader";
 
 const mapContainerStyle = {
@@ -312,6 +311,7 @@ const MapPicker = ({
       <div className="space-y-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10 pointer-events-none" />
             {isLoaded && (
               <Autocomplete
                 onLoad={(ref) => (autocompleteRef.current = ref)}
@@ -320,13 +320,11 @@ const MapPicker = ({
                   componentRestrictions: { country: "IN" },
                   fields: ["geometry", "formatted_address"],
                 }}>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Search for your shop area..."
-                    className="pl-10"
-                  />
-                </div>
+                <input
+                  type="text"
+                  placeholder="Search for your shop area..."
+                  className="flex h-8 w-full rounded-md border border-input bg-transparent pl-10 pr-2.5 py-1 text-xs shadow-sm transition-all duration-300 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                />
               </Autocomplete>
             )}
           </div>
@@ -396,30 +394,6 @@ const MapPicker = ({
             Customers within this radius from your shop will be able to see and
             order from you.
           </p>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <Button variant="outline" type="button" onClick={onClose} className="rounded-xl font-bold">
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirm}
-              disabled={!marker || isGeocoding}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold px-6 shadow-md"
-            >
-              {isGeocoding ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <MapPin className="w-4 h-4 mr-1.5" />
-                  <span>Confirm Location & Radius ({radius}km)</span>
-                </>
-              )}
-            </Button>
-          </div>
         </div>
       </div>
     </Modal>

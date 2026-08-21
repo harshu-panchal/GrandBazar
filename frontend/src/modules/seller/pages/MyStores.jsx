@@ -86,7 +86,7 @@ const EMPTY_DOCUMENTS = { aadhar: null, pan: null, bankProof: null, gstCertifica
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const KYC_TEXT_FIELDS = [
-  { id: 'aadharNumber', label: 'Aadhaar Number', placeholder: '12-digit Aadhaar number' },
+  { id: 'aadharNumber', label: 'Aadhaar Number', placeholder: '12-digit Aadhaar number', maxLength: 12, digitsOnly: true },
   { id: 'panNumber', label: 'PAN Number', placeholder: 'e.g. ABCDE1234F', maxLength: 10, uppercase: true },
   {
     id: 'gstNumber',
@@ -97,10 +97,13 @@ const KYC_TEXT_FIELDS = [
     hint: 'Exactly 15 characters: 2-digit state + PAN + entity + Z + checksum digit.',
   },
   { id: 'accountHolder', label: 'Account Holder Name', placeholder: 'Name as per bank' },
-  { id: 'accountNumber', label: 'Account Number', placeholder: 'Bank account number' },
+  { id: 'accountNumber', label: 'Account Number', placeholder: 'Bank account number', maxLength: 18, digitsOnly: true },
   { id: 'ifsc', label: 'IFSC Code', placeholder: 'e.g. SBIN0001234', maxLength: 11, uppercase: true },
   { id: 'bankName', label: 'Bank Name', placeholder: 'e.g. State Bank of India' },
 ];
+
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 function normalizeGstInput(value) {
   return String(value || '').toUpperCase().replace(/\s/g, '').slice(0, 15);
@@ -118,10 +121,30 @@ function validateGstNumber(value) {
   return null;
 }
 
+function validateKycFields(formData) {
+  if (!/^\d{12}$/.test(formData.aadharNumber || '')) {
+    return 'Aadhaar Number must be exactly 12 digits.';
+  }
+  if (!PAN_REGEX.test(formData.panNumber || '')) {
+    return 'Invalid PAN format. Example: ABCDE1234F';
+  }
+  const accountNumber = formData.accountNumber || '';
+  if (accountNumber.length < 9 || accountNumber.length > 18) {
+    return 'Account Number must be 9-18 digits.';
+  }
+  if (!IFSC_REGEX.test(formData.ifsc || '')) {
+    return 'Invalid IFSC code. Example: SBIN0001234';
+  }
+  return null;
+}
+
 function handleKycFieldChange(field, rawValue, setFormData) {
   let value = rawValue;
   if (field.uppercase) {
     value = value.toUpperCase();
+  }
+  if (field.digitsOnly) {
+    value = value.replace(/\D/g, '');
   }
   if (field.id === 'gstNumber') {
     value = normalizeGstInput(value);
@@ -271,6 +294,11 @@ const MyStores = () => {
       toast.error(gstError);
       return;
     }
+    const kycError = validateKycFields(formData);
+    if (kycError) {
+      toast.error(kycError);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -343,6 +371,11 @@ const MyStores = () => {
     const gstError = validateGstNumber(formData.gstNumber);
     if (gstError) {
       toast.error(gstError);
+      return;
+    }
+    const kycError = validateKycFields(formData);
+    if (kycError) {
+      toast.error(kycError);
       return;
     }
 

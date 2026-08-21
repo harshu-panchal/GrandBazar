@@ -1017,8 +1017,8 @@ export const updateProduct = async (req, res) => {
     // above for why Promise.all is safe here (independent external uploads,
     // no shared-session/ordering dependency).
     const files = req.files || [];
+    let newGalleryUrls = [];
     if (files.length > 0) {
-      const galleryUrls = [];
       const uploadResults = await Promise.all(
         files.map(async (file) => {
           try {
@@ -1038,11 +1038,8 @@ export const updateProduct = async (req, res) => {
         if (result.fieldname === "mainImage") {
           productData.mainImage = result.url;
         } else if (result.fieldname === "galleryImages") {
-          galleryUrls.push(result.url);
+          newGalleryUrls.push(result.url);
         }
-      }
-      if (galleryUrls.length > 0) {
-        productData.galleryImages = galleryUrls;
       }
     }
 
@@ -1103,6 +1100,16 @@ export const updateProduct = async (req, res) => {
 
     if (!product) {
       return handleResponse(res, 404, "Product not found or unauthorized");
+    }
+
+    // Newly uploaded gallery photos are ADDED to the existing gallery, never
+    // used to replace it — the edit UI only ever submits freshly-picked files,
+    // so replacing here would silently delete every previously-saved photo.
+    if (newGalleryUrls.length > 0) {
+      productData.galleryImages = [
+        ...(Array.isArray(product.galleryImages) ? product.galleryImages : []),
+        ...newGalleryUrls,
+      ];
     }
 
     if (productData.name) {

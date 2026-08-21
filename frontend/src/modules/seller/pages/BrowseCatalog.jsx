@@ -35,6 +35,9 @@ const BrowseCatalog = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  const [isBulkReviewOpen, setIsBulkReviewOpen] = useState(false);
+  const [bulkReviewItems, setBulkReviewItems] = useState([]);
+  const [commissionInfo, setCommissionInfo] = useState(null);
 
   // Claim Form Inputs
   const [claimData, setClaimData] = useState({
@@ -113,26 +116,78 @@ const BrowseCatalog = () => {
     };
   }, [isClaimModalOpen]);
 
-  const handleBulkClaim = async () => {
+  useEffect(() => {
+    const categoryId = selectedProduct?.categoryId?._id || selectedProduct?.categoryId;
+    const price = Number(claimData.price);
+    if (!isClaimModalOpen || !categoryId || !Number.isFinite(price) || price <= 0) {
+      setCommissionInfo(null);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const response = await sellerApi.previewCommission({
+          price,
+          categoryId: String(categoryId),
+          quantity: 1,
+        });
+        setCommissionInfo(response.data.result);
+      } catch {
+        setCommissionInfo(null);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [isClaimModalOpen, selectedProduct, claimData.price]);
+
+  const openBulkReview = () => {
     if (selectedItems.length === 0) return;
+    const items = catalogItems
+      .filter(item => selectedItems.includes(item._id || item.id))
+      .map(item => ({
+        catalogProductId: item._id || item.id,
+        name: item.name,
+        mainImage: item.mainImage,
+        price: "",
+        stock: "10",
+      }));
+    setBulkReviewItems(items);
+    setIsBulkReviewOpen(true);
+  };
+
+  const updateBulkReviewItem = (catalogProductId, field, value) => {
+    setBulkReviewItems(prev =>
+      prev.map(item =>
+        item.catalogProductId === catalogProductId ? { ...item, [field]: value } : item,
+      ),
+    );
+  };
+
+  const handleBulkClaim = async () => {
+    if (bulkReviewItems.length === 0) return;
+    const invalidItem = bulkReviewItems.find(
+      item => !item.price || Number(item.price) <= 0 || item.stock === "" || Number(item.stock) < 0,
+    );
+    if (invalidItem) {
+      toast.error(`Please set a valid price and stock for "${invalidItem.name}"`);
+      return;
+    }
     setIsBulkSubmitting(true);
     try {
       const payload = {
-        products: catalogItems
-          .filter(item => selectedItems.includes(item._id || item.id))
-          .map(item => ({
-            catalogProductId: item._id || item.id,
-            price: 100, // Default price
-            stock: 10,  // Default stock
-            name: item.name,
-            mainImage: item.mainImage
-          }))
+        products: bulkReviewItems.map(item => ({
+          catalogProductId: item.catalogProductId,
+          price: Number(item.price),
+          stock: Number(item.stock),
+          name: item.name,
+          mainImage: item.mainImage,
+        })),
       };
-      
+
       const res = await sellerApi.bulkClaimCatalogProducts(payload);
       if (res.data.success) {
         toast.success(res.data.message || "Bulk clone successful!");
         setSelectedItems([]);
+        setBulkReviewItems([]);
+        setIsBulkReviewOpen(false);
         navigate("/seller/products");
       }
     } catch (err) {
@@ -381,11 +436,11 @@ const BrowseCatalog = () => {
         </div>
         {selectedItems.length > 0 && (
           <button
-            onClick={handleBulkClaim}
+            onClick={openBulkReview}
             disabled={isBulkSubmitting}
             className="px-5 py-2.5 bg-black text-white hover:bg-slate-800 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
           >
-            {isBulkSubmitting ? <HiOutlineArrowPath className="h-5 w-5 animate-spin" /> : <HiOutlineSquaresPlus className="h-5 w-5" />}
+            <HiOutlineSquaresPlus className="h-5 w-5" />
             <span>Clone {selectedItems.length} Products</span>
           </button>
         )}
@@ -591,9 +646,18 @@ const BrowseCatalog = () => {
                       <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold uppercase">
                         {selectedProduct.brand || "No Brand"}
                       </span>
-                      <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold">
-                        {selectedProduct.categoryId?.name}
-                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 font-bold uppercase tracking-wider">Category: </span>
+                        <span className="text-slate-700 font-semibold">{selectedProduct.categoryId?.name || "—"}</span>
+                      </div>
+                      {selectedProduct.weight && (
+                        <div>
+                          <span className="text-slate-400 font-bold uppercase tracking-wider">Weight/Pack: </span>
+                          <span className="text-slate-700 font-semibold">{selectedProduct.weight}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -736,6 +800,12 @@ const BrowseCatalog = () => {
                         min="1"
                       />
                     </div>
+                    {commissionInfo && (
+                      <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                        You'll receive <span className="font-bold text-emerald-600">₹{commissionInfo.sellerReceives?.toFixed(2)}</span>
+                        {" "}after ₹{commissionInfo.platformCommission?.toFixed(2)} platform commission
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col space-y-1.5">
@@ -981,6 +1051,95 @@ const BrowseCatalog = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Clone Review Modal */}
+      <AnimatePresence>
+        {isBulkReviewOpen && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 overflow-hidden overscroll-contain">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-md"
+              onClick={() => setIsBulkReviewOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-2xl relative z-10 bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Set price &amp; stock for {bulkReviewItems.length} products
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Review and set your selling price and starting stock before cloning.
+                  </p>
+                </div>
+                <button onClick={() => setIsBulkReviewOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                  <HiOutlineXMark className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {bulkReviewItems.map((item) => (
+                  <div key={item.catalogProductId} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
+                    <img
+                      src={item.mainImage}
+                      alt={item.name}
+                      className="h-12 w-12 rounded-lg object-cover bg-slate-50 flex-shrink-0"
+                    />
+                    <p className="flex-1 text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                    <div className="w-28">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Price</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.price}
+                        onChange={(e) => updateBulkReviewItem(item.catalogProductId, "price", e.target.value)}
+                        placeholder="Price"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Stock</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.stock}
+                        onChange={(e) => updateBulkReviewItem(item.catalogProductId, "stock", e.target.value)}
+                        placeholder="Stock"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-end border-t border-slate-100 p-5 space-x-3 bg-slate-50/50">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkReviewOpen(false)}
+                  className="px-4 py-2 border border-slate-200 bg-white rounded-lg hover:bg-slate-50 text-xs font-bold text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkClaim}
+                  disabled={isBulkSubmitting}
+                  className="px-5 py-2 bg-black text-white hover:bg-slate-800 rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isBulkSubmitting && <HiOutlineArrowPath className="h-4 w-4 animate-spin" />}
+                  <span>Clone {bulkReviewItems.length} Products</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -176,7 +176,7 @@ const Topbar = ({ onMenuClick }) => {
             </div>
 
             <div className="flex items-center space-x-4">
-                {isSeller && <ShopStatusToggle />}
+                {isSeller && <div className="hidden sm:block"><ShopStatusToggle /></div>}
                 {isSeller && <StoreSwitcher className="hidden md:block" />}
                 <div className="relative" ref={notificationRef}>
                     <button
@@ -222,9 +222,9 @@ const Topbar = ({ onMenuClick }) => {
                     <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-xs shadow-md group-hover:scale-105 transition-transform">
                         {(user?.subName || user?.name)?.[0] || 'A'}
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">{user?.subName || user?.name || 'Demo User'}</p>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">{user?.subRole || user?.role || 'Member'}</p>
+                    <div className="hidden sm:block text-left">
+                        <p className="text-xs font-bold text-gray-900 leading-tight truncate max-w-[110px]">{user?.subName || user?.name || 'Demo User'}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider truncate max-w-[110px]">{user?.subRole || user?.role || 'Member'}</p>
                     </div>
                 </button>
                 <button
