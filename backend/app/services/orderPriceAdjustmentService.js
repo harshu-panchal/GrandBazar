@@ -13,8 +13,9 @@ import {
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
-import { debitWallet } from "./finance/walletService.js";
-import { OWNER_TYPE } from "../constants/finance.js";
+import { debitWallet, creditWallet } from "./finance/walletService.js";
+import { createLedgerEntry } from "./finance/ledgerService.js";
+import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE } from "../constants/finance.js";
 import { roundCurrency } from "../utils/money.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
 import { releaseReservedStockForOrder, reserveStockForItems } from "./stockService.js";
@@ -661,10 +662,48 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
       paymentMethod: "WALLET",
       meta: { orderId, reason: "Items added to order" },
     });
+
+    // If this order's online payment was already captured, the admin wallet
+    // is holding the original grandTotal in escrow (handleOnlineOrderFinance)
+    // but has nothing for this new wallet-funded delta — without this, the
+    // customer's real money debited above is never reflected in admin's
+    // wallet, even though settleDeliveredOrder will later recognize the
+    // larger, merged-order platformTotalEarning as earned on top of it.
+    if (order.paymentMode === "ONLINE" && order.financeFlags?.onlinePaymentCaptured) {
+      await creditWallet({
+        ownerType: OWNER_TYPE.ADMIN,
+        ownerId: null,
+        amount: walletUse,
+        bucket: "available",
+      });
+      await createLedgerEntry({
+        orderId: order._id,
+        actorType: OWNER_TYPE.ADMIN,
+        actorId: null,
+        type: LEDGER_TRANSACTION_TYPE.ORDER_ONLINE_PAYMENT_CAPTURED,
+        amount: walletUse,
+        description: "Wallet-funded delta captured for items added to order",
+        reference: `ADDITEMS-${orderId}-${Date.now()}`,
+      });
+    }
   }
 
-  const isOnline = order.paymentMode === "ONLINE";
-  const hasExtraCashDue = isOnline && remainder > 0;
+  // ONLINE: the original amount was already captured via gateway, so only a
+  // genuinely-uncovered remainder from THIS delta needs collecting at the
+  // door. COD: nothing has been captured electronically at all — ANY wallet
+  // usage here (even if it fully covers this delta, remainder === 0) must
+  // still be netted out of what's collected as cash for the whole order at
+  // delivery, or the customer gets re-billed in cash for money they already
+  // paid via wallet. Previously this flag (and the codPendingAmount
+  // adjustment below) was gated on `order.paymentMode === "ONLINE"`
+  // regardless of remainder, so COD orders were never corrected at all.
+  const isCodOrder = order.paymentMode !== "ONLINE";
+  const hasExtraCashDue = isCodOrder ? walletUse > 0 : remainder > 0;
+  // Captured before freezeFinancialSnapshot below overwrites paymentBreakdown
+  // wholesale — the pricing engine has no notion of wallet usage, so without
+  // preserving this, any wallet amount already recorded on the order
+  // (original checkout or a prior add-items event) would simply vanish.
+  const previousWalletAmount = Number(order.paymentBreakdown?.walletAmount || 0);
 
   const updateSet = {
     items: sellerEntry.items.map((item) => ({
@@ -733,13 +772,26 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
 
   freezeFinancialSnapshot(updated, sellerEntry.breakdown);
   if (hasExtraCashDue) {
-    // The pricing engine always returns codPendingAmount: 0 (it has no
-    // notion of "already captured online, only the delta is cash-due") —
-    // freezeFinancialSnapshot just copied that 0 in. Layer the actual
-    // uncollected remainder back on top so the delivery side can see it.
-    updated.paymentBreakdown.codPendingAmount = roundCurrency(
-      (updated.paymentBreakdown.codPendingAmount || 0) + remainder,
-    );
+    if (!isCodOrder) {
+      // The pricing engine always returns codPendingAmount: 0 (it has no
+      // notion of "already captured online, only the delta is cash-due") —
+      // freezeFinancialSnapshot just copied that 0 in. Layer the actual
+      // uncollected remainder back on top so the delivery side can see it.
+      updated.paymentBreakdown.codPendingAmount = roundCurrency(
+        (updated.paymentBreakdown.codPendingAmount || 0) + remainder,
+      );
+    } else {
+      // COD: codPendingAmount must represent the TOTAL cash still owed for
+      // the whole order (not just this delta's remainder) net of cumulative
+      // wallet usage, since handleCodOrderFinance's extra-cash-only branch
+      // (triggered by financeFlags.hasExtraCashDue) uses it as the full
+      // collection amount, not an add-on to a separate normal collection.
+      const cumulativeWalletAmount = roundCurrency(previousWalletAmount + walletUse);
+      updated.paymentBreakdown.walletAmount = cumulativeWalletAmount;
+      updated.paymentBreakdown.codPendingAmount = roundCurrency(
+        Math.max(0, newGrandTotal - cumulativeWalletAmount),
+      );
+    }
   }
   await updated.save();
 

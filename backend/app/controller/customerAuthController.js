@@ -1,7 +1,6 @@
 import Customer from "../models/customer.js";
 import Transaction from "../models/transaction.js";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 import handleResponse from "../utils/helper.js";
 import {
     issueCustomerOtp,
@@ -9,12 +8,19 @@ import {
     verifyCustomerOtpCode,
 } from "../services/otpAuthService.js";
 import {
+    sendCustomerLoginOtp,
+    verifyCustomerLoginOtp,
+} from "../services/customerEmailOtpService.js";
+import {
+    sendLoginOtpEmailSchema,
     sendLoginOtpSchema,
     sendSignupOtpSchema,
     validateSchema,
+    verifyLoginOtpEmailSchema,
     verifyOtpSchema,
 } from "../validation/customerAuthValidation.js";
 import { sendBecomeSellerLinksEmail } from "../services/emailService.js";
+import { recordLogin } from "../services/loginActivityService.js";
 
 const generateToken = (customer) =>
     jwt.sign(
@@ -66,28 +72,32 @@ export const loginCustomer = async (req, res) => {
 };
 
 /* ===============================
-   LOGIN WITH EMAIL – Customer
+   LOGIN WITH EMAIL – Send OTP
 ================================ */
-export const loginCustomerWithEmail = async (req, res) => {
+export const sendCustomerLoginOtpEmail = async (req, res) => {
     try {
-        const { email, password } = req.body || {};
-        if (!email || !password) {
-            return handleResponse(res, 400, "Email and password are required");
-        }
+        const payload = validateSchema(sendLoginOtpEmailSchema, req.body || {});
+        const result = await sendCustomerLoginOtp({
+            email: payload.email,
+            ipAddress: req.ip,
+        });
+        return handleResponse(res, 200, "If the email is registered, OTP has been sent", result);
+    } catch (error) {
+        return handleResponse(res, error.statusCode || 500, error.message);
+    }
+};
 
-        const customer = await Customer.findOne({ email: String(email).toLowerCase() }).select("+password");
-        if (!customer) {
-            return handleResponse(res, 401, "Invalid email or password");
-        }
-
-        if (!customer.password) {
-            return handleResponse(res, 400, "Password not set for this account. Please log in via Mobile OTP.");
-        }
-
-        const isMatch = await bcrypt.compare(password, customer.password);
-        if (!isMatch) {
-            return handleResponse(res, 401, "Invalid email or password");
-        }
+/* ===============================
+   LOGIN WITH EMAIL – Verify OTP
+================================ */
+export const verifyCustomerLoginOtpEmail = async (req, res) => {
+    try {
+        const payload = validateSchema(verifyLoginOtpEmailSchema, req.body || {});
+        const customer = await verifyCustomerLoginOtp({
+            email: payload.email,
+            otp: payload.otp,
+            ipAddress: req.ip,
+        });
 
         if (customer.isActive === false) {
             return handleResponse(res, 403, "This account has been deleted. Please contact support.");
@@ -101,11 +111,9 @@ export const loginCustomerWithEmail = async (req, res) => {
             customer: sanitizeCustomer(customer),
         });
     } catch (error) {
-        return handleResponse(res, 500, error.message);
+        return handleResponse(res, error.statusCode || 500, error.message);
     }
 };
-
-import { recordLogin } from "../services/loginActivityService.js";
 
 /* ===============================
    VERIFY OTP – Login / Signup

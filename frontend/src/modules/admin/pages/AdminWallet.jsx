@@ -31,10 +31,14 @@ import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
 import { adminApi } from "../services/adminApi";
 import { toast } from "sonner";
+import EarningsBreakdownPanel from "../components/wallet/EarningsBreakdownPanel";
+import DeliveryEarningsPanel from "../components/wallet/DeliveryEarningsPanel";
+import SellerEarningsPanel from "../components/wallet/SellerEarningsPanel";
 
 const AdminWallet = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
+    const [activeSection, setActiveSection] = useState('overview'); // overview, breakdown, delivery, sellers
     const [walletData, setWalletData] = useState({ stats: {}, transactions: {} });
     const [txnPage, setTxnPage] = useState(1);
     const [txnPageSize, setTxnPageSize] = useState(25);
@@ -89,6 +93,7 @@ const AdminWallet = () => {
                         totalPlatformEarning: summary.totalPlatformEarning || 0,
                         totalAdminEarning: summary.totalAdminEarning || 0,
                         availableBalance: summary.availableBalance || 0,
+                        walletAvailableBalance: summary.walletAvailableBalance || 0,
                         systemFloat: summary.systemFloatCOD || 0,
                         sellerPendingPayouts: summary.sellerPendingPayouts || 0,
                         deliveryPendingPayouts: summary.deliveryPendingPayouts || 0,
@@ -231,9 +236,9 @@ const AdminWallet = () => {
 
     const stats = [
         {
-            label: 'Total Platform Earning',
+            label: 'Gross Collected',
             value: `₹${(walletData.stats?.totalPlatformEarning || 0).toLocaleString()}`,
-            description: 'Total money collected',
+            description: 'All order value placed (COD + Online), updates immediately on placement',
             icon: TrendingUp,
             color: 'blue',
             bg: 'bg-brand-50',
@@ -242,20 +247,29 @@ const AdminWallet = () => {
         {
             label: 'Total Admin Earning',
             value: `₹${(walletData.stats?.totalAdminEarning || 0).toLocaleString()}`,
-            description: 'Net profit for platform',
+            description: 'Commission + logistics margin, delivered Online orders only',
             icon: DollarSign,
             color: 'purple',
             bg: 'bg-purple-50',
             iconColor: 'text-purple-500'
         },
         {
-            label: 'Available Balance',
+            label: 'Net After Pending Payouts',
             value: `₹${(walletData.stats?.availableBalance || 0).toLocaleString()}`,
-            description: 'Available in business wallet',
+            description: 'Gross Collected minus what\'s still owed to sellers/riders (a projection, not a literal cash balance)',
             icon: Building2,
             color: 'emerald',
             bg: 'bg-brand-50',
             iconColor: 'text-brand-500'
+        },
+        {
+            label: 'Wallet Cash Balance',
+            value: `₹${(walletData.stats?.walletAvailableBalance || 0).toLocaleString()}`,
+            description: 'Actual admin wallet ledger balance — cash captured, not yet paid out to anyone',
+            icon: Wallet,
+            color: 'emerald',
+            bg: 'bg-emerald-50',
+            iconColor: 'text-emerald-500'
         },
         {
             label: 'System Float (COD)',
@@ -409,6 +423,33 @@ const AdminWallet = () => {
                 </div>
             </div>
 
+            {/* Section Switcher */}
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit overflow-x-auto">
+                {[
+                    { value: 'overview', label: 'Overview' },
+                    { value: 'breakdown', label: 'Earnings Breakdown' },
+                    { value: 'delivery', label: 'Delivery Earnings' },
+                    { value: 'sellers', label: 'Seller Earnings' },
+                ].map((section) => (
+                    <button
+                        key={section.value}
+                        onClick={() => setActiveSection(section.value)}
+                        className={cn(
+                            "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all whitespace-nowrap",
+                            activeSection === section.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        {section.label}
+                    </button>
+                ))}
+            </div>
+
+            {activeSection === 'breakdown' && <EarningsBreakdownPanel />}
+            {activeSection === 'delivery' && <DeliveryEarningsPanel />}
+            {activeSection === 'sellers' && <SellerEarningsPanel />}
+
+            {activeSection === 'overview' && (
+            <>
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {stats.map((stat, idx) => (
@@ -804,6 +845,8 @@ const AdminWallet = () => {
                     </div>
                 </div>
             </div>
+            </>
+            )}
 
             {/* Transaction Detail Modal */}
             <Modal

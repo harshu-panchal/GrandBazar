@@ -63,6 +63,13 @@ export const LEDGER_TRANSACTION_TYPE = {
   WITHDRAWAL: "WITHDRAWAL",
   CANCELLATION_REVERSAL: "CANCELLATION_REVERSAL",
   WALLET_REFUND: "WALLET_REFUND",
+  // Was missing despite payoutService.js referencing
+  // LEDGER_TRANSACTION_TYPE.PAYOUT_CANCELLED in cancelPendingPayoutForOrder
+  // (return/partial-return reversal path) — that reference evaluated to
+  // undefined and fell back to a literal string not in this enum, so every
+  // such ledger write threw a validation error. Adding it here fixes that
+  // pre-existing bug.
+  PAYOUT_CANCELLED: "PAYOUT_CANCELLED",
 };
 
 export const PAYOUT_TYPE = {

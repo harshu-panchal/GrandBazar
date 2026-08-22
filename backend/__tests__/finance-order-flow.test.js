@@ -266,6 +266,62 @@ describe("finance order flow", () => {
     );
   });
 
+  it("collects only the wallet-net amount for a COD order with a wallet-covered add-items delta, keeping full rider commission", async () => {
+    // Simulates addItemsToOrder's fix: customer added items to a COD order
+    // and part of the delta was paid via wallet, so codPendingAmount now
+    // holds the TOTAL cash still owed (not the full new grandTotal, and not
+    // just the delta remainder) and hasExtraCashDue is set even though this
+    // isn't an ONLINE order.
+    currentOrder.paymentMode = "COD";
+    currentOrder.status = "delivered";
+    currentOrder.orderStatus = "delivered";
+    currentOrder.financeFlags = { hasExtraCashDue: true };
+    currentOrder.paymentBreakdown.grandTotal = 500; // 300 original + 200 added
+    currentOrder.paymentBreakdown.codPendingAmount = 350; // 500 - 150 walletUse
+
+    const updated = await handleCodOrderFinance(
+      { _id: "order-1" },
+      { deliveryPartnerId: "rider-1" },
+    );
+
+    // Must collect codPendingAmount (350), not the wallet-inflated grandTotal
+    // (500) — and the rider must still keep their FULL riderPayoutTotal (50)
+    // out of it, exactly like a normal COD delivery, since this is still
+    // their one and only cash-collection event for the order.
+    expect(updated.paymentBreakdown.codCollectedAmount).toBe(300); // 350 - 50
+    expect(mockUpdateCashInHand).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerType: "DELIVERY_PARTNER", deltaAmount: 300 }),
+    );
+    // Cash-collection status must still be marked for COD, even though this
+    // went through the "extra cash only" branch.
+    expect(updated.paymentStatus).toBe(ORDER_PAYMENT_STATUS.CASH_COLLECTED);
+    expect(updated.financeFlags.codMarkedCollected).toBe(true);
+    expect(updated.financeFlags.hasExtraCashDue).toBe(false);
+  });
+
+  it("does not carve out rider commission for an ONLINE order's extra-cash-only top-up", async () => {
+    currentOrder.paymentMode = "ONLINE";
+    currentOrder.status = "delivered";
+    currentOrder.orderStatus = "delivered";
+    currentOrder.financeFlags = { onlinePaymentCaptured: true, hasExtraCashDue: true };
+    currentOrder.paymentBreakdown.codPendingAmount = 75;
+
+    const updated = await handleCodOrderFinance(
+      { _id: "order-1" },
+      { deliveryPartnerId: "rider-1" },
+    );
+
+    // Full 75 goes to cashInHand — no commission carve-out, since the
+    // rider's commission for this delivery was already queued separately.
+    expect(updated.paymentBreakdown.codCollectedAmount).toBe(75);
+    expect(mockUpdateCashInHand).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerType: "DELIVERY_PARTNER", deltaAmount: 75 }),
+    );
+    // ONLINE orders' paymentStatus must NOT be touched by this top-up collection.
+    expect(updated.paymentStatus).not.toBe(ORDER_PAYMENT_STATUS.CASH_COLLECTED);
+    expect(updated.financeFlags.hasExtraCashDue).toBe(false);
+  });
+
   it("keeps COD collection idempotent if already marked", async () => {
     currentOrder.paymentMode = "COD";
     currentOrder.status = "delivered";

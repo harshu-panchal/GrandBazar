@@ -170,13 +170,21 @@ export const getDeliveryEarnings = async (req, res) => {
 
         const cashCollected = roundCurrency(wallet?.cashInHand || 0);
 
-        // Net withdrawable balance — must include ALL settled transactions
-        // (earnings AND already-completed withdrawals/cash settlements, which
-        // are negative amounts), not just the positive earning types above.
+        // Net withdrawable balance — must include ALL settled EARNINGS
+        // transactions (earnings AND already-completed withdrawals, which are
+        // negative amounts), not just the positive earning types above.
         // Mirrors requestWithdrawal()'s own balance check so the Withdrawals
         // page shows the same number the backend will actually honor.
+        //
+        // "Cash Collection"/"Cash Settlement" rows are deliberately excluded:
+        // Cash Collection is written at the FULL GROSS grandTotal of a COD
+        // order (orderSettlement.js), not the rider's commission — it's the
+        // platform's cash the rider is temporarily holding, already tracked
+        // separately via wallet.cashInHand (see `cashCollected` above).
+        // Including it here would let a rider withdraw against COD cash they
+        // haven't remitted yet, i.e. money that isn't theirs.
         const settledBalance = transactions
-            .filter(t => t.status === 'Settled')
+            .filter(t => t.status === 'Settled' && t.type !== 'Cash Collection' && t.type !== 'Cash Settlement')
             .reduce((acc, t) => acc + t.amount, 0);
         const pendingWithdrawals = transactions
             .filter(t => (t.status === 'Pending' || t.status === 'Processing') && t.type === 'Withdrawal')
@@ -592,8 +600,12 @@ export const requestWithdrawal = async (req, res) => {
         // 1. Calculate current available balance
         const transactions = await Transaction.find({ user: deliveryBoyId, userModel: 'Delivery' });
 
+        // Exclude "Cash Collection"/"Cash Settlement" — pure COD cash-float
+        // pass-through (Cash Collection is the FULL GROSS order amount, not
+        // the rider's earnings), not money owed to the rider. See the
+        // matching comment in getDeliveryEarnings for the full rationale.
         const settledBalance = transactions
-            .filter(t => t.status === 'Settled')
+            .filter(t => t.status === 'Settled' && t.type !== 'Cash Collection' && t.type !== 'Cash Settlement')
             .reduce((acc, t) => acc + t.amount, 0);
 
         const pendingPayouts = transactions

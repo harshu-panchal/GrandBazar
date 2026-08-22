@@ -86,11 +86,31 @@ const DeliveryFunds = () => {
         if (!window.confirm("Are you sure you want to settle all pending transactions?")) return;
         setIsProcessing(true);
         try {
-            await adminApi.bulkSettleDelivery();
-            toast.success("Bulk settlement processed");
+            // Previously this called ONLY bulkSettleDelivery(), which flips
+            // every pending Transaction row to "Settled" via a blanket
+            // updateMany — that's what this page's table and a rider's own
+            // earnings view read, but it never touches a rider's
+            // Wallet.pendingBalance/availableBalance (the Payout/Wallet
+            // ledger the rest of the finance system, including the new
+            // admin Delivery Earnings dashboard, relies on) — so that side
+            // silently drifted further out of sync every time this button
+            // was used. Now does both: processes the real Payout records
+            // (source of truth for wallet balances) AND keeps the legacy
+            // Transaction rows this table displays in sync, the same way
+            // it always has.
+            const [payoutRes] = await Promise.all([
+                adminApi.processFinancePayouts({
+                    payoutType: 'DELIVERY_PARTNER',
+                    limit: 100,
+                    remarks: 'Bulk settlement from Delivery Funds panel',
+                }),
+                adminApi.bulkSettleDelivery(),
+            ]);
+            const result = payoutRes.data?.result || {};
+            toast.success(`Processed ${result.completed || 0} payouts`);
             fetchTransactions(page);
         } catch (error) {
-            toast.error("Bulk settlement failed");
+            toast.error(error.response?.data?.message || "Bulk settlement failed");
         } finally {
             setIsProcessing(false);
         }

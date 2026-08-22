@@ -18,8 +18,7 @@ import {
     Heart,
     Star,
     ChevronLeft,
-    Mail,
-    Lock
+    Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
@@ -107,18 +106,14 @@ const CustomerAuth = () => {
                 phone: '',
                 otp: '',
                 name: '',
-                email: '',
-                password: '',
-                confirmPassword: ''
+                email: ''
             };
         } catch {
             return {
                 phone: '',
                 otp: '',
                 name: '',
-                email: '',
-                password: '',
-                confirmPassword: ''
+                email: ''
             };
         }
     });
@@ -134,9 +129,9 @@ const CustomerAuth = () => {
     const [emailLoginData, setEmailLoginData] = useState(() => {
         try {
             const saved = sessionStorage.getItem('auth_emailLoginData');
-            return saved !== null ? JSON.parse(saved) : { email: '', password: '' };
+            return saved !== null ? JSON.parse(saved) : { email: '' };
         } catch {
-            return { email: '', password: '' };
+            return { email: '' };
         }
     });
     const [isEmailLoading, setIsEmailLoading] = useState(false);
@@ -256,20 +251,6 @@ const CustomerAuth = () => {
             toast.error('Enter a valid email address, or leave it blank');
             return;
         }
-        if (!isLogin && formData.password) {
-            if (!formData.email.trim()) {
-                toast.error('Add your email above to set a password');
-                return;
-            }
-            if (formData.password.length < 6) {
-                toast.error('Password must be at least 6 characters');
-                return;
-            }
-            if (formData.password !== formData.confirmPassword) {
-                toast.error('Passwords do not match');
-                return;
-            }
-        }
         setIsLoading(true);
         try {
             sessionStorage.removeItem('auth_otpExpiryTime');
@@ -280,7 +261,6 @@ const CustomerAuth = () => {
                     name: formData.name,
                     phone: formData.phone,
                     email: formData.email.trim(),
-                    password: formData.password || undefined,
                     agreedToTerms,
                 });
             }
@@ -296,33 +276,29 @@ const CustomerAuth = () => {
         }
     };
 
-    const handleEmailLogin = async (e) => {
+    const handleSendEmailOtp = async (e) => {
         e?.preventDefault();
-        if (!emailLoginData.email || !emailLoginData.password) {
-            toast.error('Enter both email and password');
+        if (!emailLoginData.email || !/^\S+@\S+\.\S+$/.test(emailLoginData.email)) {
+            toast.error('Enter a valid email address');
             return;
         }
         setIsEmailLoading(true);
         try {
-            const response = await customerApi.loginWithEmail(emailLoginData);
-            const { token, customer } = response.data.result;
-            login({ ...customer, token, role: 'customer' });
-            clearAuthSessionStorage();
-            toast.success('Successfully Logged In!');
-            refreshLocation?.().catch(() => {});
-            navigate('/');
+            sessionStorage.removeItem('auth_otpExpiryTime');
+            await customerApi.sendLoginOtpEmail({ email: emailLoginData.email.trim().toLowerCase() });
+            setShowOtp(true);
+            setTimer(30);
+            setOtpExpiryTimer(300);
+            toast.success('OTP sent to your email!');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
-            if (apiMessage?.toLowerCase().includes('password not set')) {
-                toast.error('This account was created with Mobile OTP and has no password set.');
-                setAuthMode('phone');
-            } else {
-                toast.error(apiMessage || 'Invalid email or password');
-            }
+            toast.error(apiMessage || 'Failed to send OTP');
         } finally {
             setIsEmailLoading(false);
         }
     };
+
+    const isEmailOtpChannel = isLogin && authMode === 'email';
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
@@ -336,11 +312,16 @@ const CustomerAuth = () => {
         }
         setIsLoading(true);
         try {
-            const response = await customerApi.verifyOtp({
-                phone: formData.phone,
-                otp: formData.otp,
-                ...(referralCode ? { referralCode } : {}),
-            });
+            const response = isEmailOtpChannel
+                ? await customerApi.verifyLoginOtpEmail({
+                    email: emailLoginData.email.trim().toLowerCase(),
+                    otp: formData.otp,
+                })
+                : await customerApi.verifyOtp({
+                    phone: formData.phone,
+                    otp: formData.otp,
+                    ...(referralCode ? { referralCode } : {}),
+                });
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
             clearAuthSessionStorage();
@@ -558,7 +539,7 @@ const CustomerAuth = () => {
                                             {isLogin ? 'Welcome Back!' : 'Create Account'}
                                         </h3>
                                         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                                            {authMode === 'email' ? 'Login with your email & password' : 'OTP will be sent for verification'}
+                                            OTP will be sent for verification
                                         </p>
                                     </div>
 
@@ -574,7 +555,7 @@ const CustomerAuth = () => {
                                     )}
 
                                     {isLogin && authMode === 'email' ? (
-                                        <form onSubmit={handleEmailLogin} className="space-y-4">
+                                        <form onSubmit={handleSendEmailOtp} className="space-y-4">
                                             <div className="relative group">
                                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
                                                     <Mail size={18} />
@@ -591,29 +572,13 @@ const CustomerAuth = () => {
                                                     onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
                                                 />
                                             </div>
-                                            <div className="relative group">
-                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
-                                                    <Lock size={18} />
-                                                </div>
-                                                <input
-                                                    required
-                                                    type="password"
-                                                    name="password"
-                                                    placeholder="Password"
-                                                    value={emailLoginData.password}
-                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
-                                                    onChange={(e) => setEmailLoginData({ ...emailLoginData, password: e.target.value })}
-                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
-                                                    onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
-                                                />
-                                            </div>
                                             <button
                                                 type="submit"
                                                 disabled={isEmailLoading}
                                                 className="w-full text-white py-5 rounded-[24px] text-xs font-black tracking-[4px] flex items-center justify-center gap-3 active:scale-95 transition-all uppercase disabled:opacity-50"
                                                 style={{ backgroundColor: activeCategory.theme, boxShadow: `0 20px 40px ${activeCategory.shadow}` }}
                                             >
-                                                {isEmailLoading ? 'Logging in...' : 'Login'}
+                                                {isEmailLoading ? 'Sending OTP...' : 'Send OTP'}
                                                 <ChevronRight size={18} />
                                             </button>
                                         </form>
@@ -675,46 +640,6 @@ const CustomerAuth = () => {
                                                     />
                                                 </div>
                                                 <p className="text-[10px] font-bold text-gray-400 px-1">For order receipts and updates.</p>
-                                            </div>
-                                        )}
-
-                                        {!isLogin && (
-                                            <div className="space-y-1.5">
-                                                <div className="relative group">
-                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
-                                                        <Lock size={18} />
-                                                    </div>
-                                                    <input
-                                                        type="password"
-                                                        name="password"
-                                                        placeholder="Password (optional)"
-                                                        value={formData.password}
-                                                        className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
-                                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                                        onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
-                                                        onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
-                                                    />
-                                                </div>
-                                                {formData.password && (
-                                                    <div className="relative group">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
-                                                            <Lock size={18} />
-                                                        </div>
-                                                        <input
-                                                            type="password"
-                                                            name="confirmPassword"
-                                                            placeholder="Confirm Password"
-                                                            value={formData.confirmPassword}
-                                                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all"
-                                                            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                                            onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
-                                                            onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
-                                                        />
-                                                    </div>
-                                                )}
-                                                <p className="text-[10px] font-bold text-gray-400 px-1">
-                                                    Optional — set a password to also log in with Email + Password next time.
-                                                </p>
                                             </div>
                                         )}
 
@@ -795,7 +720,9 @@ const CustomerAuth = () => {
                                         </button>
                                         <div>
                                             <h3 className="text-xl font-black text-gray-900 tracking-tight">Verify Device</h3>
-                                            <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">+91 {formData.phone}</p>
+                                            <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">
+                                                {isEmailOtpChannel ? emailLoginData.email : `+91 ${formData.phone}`}
+                                            </p>
                                         </div>
                                     </div>
 
@@ -847,7 +774,7 @@ const CustomerAuth = () => {
                                                 <button
                                                     type="button"
                                                     disabled={timer > 0}
-                                                    onClick={handleSendOtp}
+                                                    onClick={isEmailOtpChannel ? handleSendEmailOtp : handleSendOtp}
                                                     className={`text-[11px] font-black uppercase tracking-widest ${timer > 0 ? 'text-gray-500' : 'underline'}`}
                                                     style={{ color: timer > 0 ? undefined : activeCategory.theme }}
                                                 >

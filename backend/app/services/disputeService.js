@@ -178,7 +178,14 @@ export async function resolveDispute({
         user: dispute.customer,
         userModel: "User",
         order: order._id,
-        type: resolution === "refund" ? "Refund" : "Wallet Credit",
+        // "Wallet Credit" is not a valid Transaction.type enum value (the
+        // enum is: Order Payment, Delivery Earning, Withdrawal, Refund,
+        // Incentive, Bonus, Cash Collection, Cash Settlement) — that made
+        // this throw on every wallet_credit resolution, AFTER the customer's
+        // walletBalance had already been incremented above, so the money
+        // moved but the ledger write failed. Both resolutions are a refund
+        // credited to the customer's wallet, so both use "Refund".
+        type: "Refund",
         amount,
         status: "Settled",
         reference: `DSP-${disputeId}`,

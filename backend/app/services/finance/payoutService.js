@@ -14,8 +14,8 @@ import {
 } from "../../constants/finance.js";
 import { getOrCreateWallet } from "./walletService.js";
 import { createLedgerEntry } from "./ledgerService.js";
-
-const roundCurrency = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
+import { computeOverallSettlement } from "../../utils/settlementStatus.js";
+import { roundCurrency } from "../../utils/money.js";
 
 function payoutTypeToOwnerType(payoutType) {
   if (payoutType === PAYOUT_TYPE.SELLER) return OWNER_TYPE.SELLER;
@@ -198,6 +198,28 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
     if (adminId) payout.createdBy = adminId;
     await payout.save({ session });
 
+    // SELLER_PAYOUT_PROCESSED/RIDER_PAYOUT_PROCESSED existed in the enum but
+    // were never actually written anywhere — the ledger showed money going
+    // "pending" (createPendingPayoutForOrder) but never showed the matching
+    // "paid out" event, only the less-structured FinanceAuditLog below did.
+    await createLedgerEntry(
+      {
+        orderId: payout.relatedOrderIds?.[0] || null,
+        payoutId: payout._id,
+        walletId: wallet._id,
+        actorType: ownerType,
+        actorId: payout.beneficiaryId,
+        type:
+          payout.payoutType === PAYOUT_TYPE.SELLER
+            ? LEDGER_TRANSACTION_TYPE.SELLER_PAYOUT_PROCESSED
+            : LEDGER_TRANSACTION_TYPE.RIDER_PAYOUT_PROCESSED,
+        direction: LEDGER_DIRECTION.CREDIT,
+        amount,
+        description: `${payout.payoutType} payout processed (pending balance released to available)`,
+      },
+      { session },
+    );
+
     for (const orderId of payout.relatedOrderIds) {
       const order = await Order.findById(orderId).session(session);
       if (!order) continue;
@@ -209,6 +231,12 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
         order.settlementStatus = { ...(order.settlementStatus || {}), riderPayout: "COMPLETED" };
         order.financeFlags = { ...(order.financeFlags || {}), riderPayoutQueued: true };
       }
+      // Previously left stale forever — only sellerPayout/riderPayout
+      // sub-fields updated here, so settlementStatus.overall never actually
+      // reached COMPLETED through this normal path (only the manual-settle
+      // controller ever set it, unconditionally and incorrectly, regardless
+      // of whether the OTHER side had also settled).
+      order.settlementStatus = computeOverallSettlement(order);
       await order.save({ session });
     }
 

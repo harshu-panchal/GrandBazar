@@ -61,8 +61,9 @@ import {
   emitOrderStatusUpdate,
 } from "../services/orderSocketEmitter.js";
 import * as walletService from "../services/finance/walletService.js";
-import { OWNER_TYPE } from "../constants/finance.js";
+import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } from "../constants/finance.js";
 import { processPayout } from "../services/finance/payoutService.js";
+import { createLedgerEntry } from "../services/finance/ledgerService.js";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 
 function validateWithJoi(schema, payload) {
@@ -1841,6 +1842,13 @@ export const completeReturnAndRefund = async (order) => {
   let restockFeeDeducted = 0;
   let gstRefundTotal = 0;
   let sellerShareOfReturnedItems = 0;
+  // Admin's platform commission on the returned units, prorated the same way
+  // as sellerShareOfReturnedItems below. Previously nothing ever reversed
+  // this, so admin's recognized earning (paymentBreakdown.platformTotalEarning
+  // / adminProductCommissionTotal, and every dashboard aggregate built on
+  // them) stayed permanently overstated by the commission on every returned
+  // item.
+  let adminCommissionClawback = 0;
   if (Array.isArray(order.returnItems) && order.returnItems.length > 0) {
     const productIds = order.returnItems.map((item) => item.product).filter(Boolean);
     if (productIds.length > 0) {
@@ -1890,6 +1898,7 @@ export const completeReturnAndRefund = async (order) => {
         if (lineItem && Number(lineItem.quantity) > 0) {
           const proration = Math.min(1, (item.quantity || 0) / Number(lineItem.quantity));
           sellerShareOfReturnedItems += Number(((Number(lineItem.sellerPayout) || 0) * proration).toFixed(2));
+          adminCommissionClawback += Number(((Number(lineItem.adminProductCommission) || 0) * proration).toFixed(2));
         } else {
           // Legacy order with no frozen line-item snapshot — fall back to
           // the net merchandise value (can't recover the original per-line
@@ -2036,6 +2045,72 @@ export const completeReturnAndRefund = async (order) => {
           returnDeliveryCommissionCharged: isHeld ? 0 : commission,
         },
       });
+      // Persisted so the admin order-detail money breakdown can show exactly
+      // how much was actually clawed back from the seller on this return —
+      // previously computed here and then discarded, with no record left
+      // once the return had processed.
+      order.returnSellerClawback = actualSellerDebit;
+    }
+  }
+
+  // 2b. Admin commission clawback — mirror the seller adjustment above, but
+  // for the platform's own commission share. Also shrink the frozen
+  // paymentBreakdown totals in place so every existing aggregate that sums
+  // paymentBreakdown.platformTotalEarning/adminProductCommissionTotal (e.g.
+  // getAdminFinanceSummary's totalAdminEarning) reflects the return with no
+  // extra query needed.
+  if (adminCommissionClawback > 0) {
+    if (order.paymentBreakdown) {
+      order.paymentBreakdown.adminProductCommissionTotal = Math.max(
+        0,
+        Number((Number(order.paymentBreakdown.adminProductCommissionTotal || 0) - adminCommissionClawback).toFixed(2)),
+      );
+      order.paymentBreakdown.platformTotalEarning = Math.max(
+        0,
+        Number((Number(order.paymentBreakdown.platformTotalEarning || 0) - adminCommissionClawback).toFixed(2)),
+      );
+      order.markModified("paymentBreakdown");
+    }
+
+    // Admin only ever actually held this commission in its wallet for
+    // ONLINE orders (creditAdminEarning explicitly skips COD orders at
+    // delivery time — COD admin earning is recognized separately, via
+    // remittance, not at delivery), so only debit the real wallet here for
+    // ONLINE orders whose payment was actually captured.
+    if (order.paymentMode !== "COD" && order.financeFlags?.onlinePaymentCaptured) {
+      try {
+        await walletService.debitWallet({
+          ownerType: OWNER_TYPE.ADMIN,
+          ownerId: null,
+          amount: adminCommissionClawback,
+          bucket: "available",
+        });
+
+        // Admin-side money events elsewhere in this app (handleOnlineOrderFinance,
+        // creditAdminEarning, reverseOrderFinanceOnCancellation) are all recorded
+        // via LedgerEntry, not the legacy Transaction collection — there is no
+        // established "Admin" Transaction convention (no actorId to attach it
+        // to), so this mirrors that existing pattern instead of inventing one.
+        // Persisted for the same reason as returnSellerClawback above — only
+        // set when a real wallet debit actually happened (ONLINE + captured),
+        // since for COD orders admin never held this commission to begin
+        // with (creditAdminEarning's COD skip), so there's nothing to show
+        // as "clawed back" there.
+        order.returnAdminCommissionClawback = adminCommissionClawback;
+
+        await createLedgerEntry({
+          orderId: order._id,
+          actorType: OWNER_TYPE.ADMIN,
+          actorId: null,
+          type: LEDGER_TRANSACTION_TYPE.REFUND,
+          direction: LEDGER_DIRECTION.DEBIT,
+          amount: adminCommissionClawback,
+          description: "Admin commission reversed on return QC pass",
+          reference: `REF-ADMIN-${order.orderId}`,
+        });
+      } catch (error) {
+        console.error(`[ReturnFinance] Admin commission clawback failed for order ${order.orderId}`, error.message);
+      }
     }
   }
 

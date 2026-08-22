@@ -779,6 +779,19 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // The seller's/admin's actual clawback on this return — computed in
+    // completeReturnAndRefund but previously never persisted anywhere, so
+    // there was no way to show "how much was taken back and from whom" once
+    // the return had processed (only the reduced, post-clawback totals were
+    // visible on paymentBreakdown, with no record of the delta itself).
+    returnSellerClawback: {
+      type: Number,
+      default: 0,
+    },
+    returnAdminCommissionClawback: {
+      type: Number,
+      default: 0,
+    },
     returnPickedAt: {
       type: Date,
     },

@@ -7,9 +7,14 @@ import BulkSettlement from "../models/bulkSettlement.js";
 import Refund from "../models/refund.js";
 import handleResponse from "../utils/helper.js";
 import { getAdminFinanceSummary } from "../services/finance/walletService.js";
+import {
+  getEarningsBreakdown,
+  getDeliveryEarningsSummary,
+  getSellerEarningsSummary,
+} from "../services/finance/earningsBreakdownService.js";
 import { buildKey, getOrSet, getTTL } from "../services/cacheService.js";
 import { getLedgerEntries } from "../services/finance/ledgerService.js";
-import { bulkProcessPayouts } from "../services/finance/payoutService.js";
+import { bulkProcessPayouts, processPayout } from "../services/finance/payoutService.js";
 import { exportFinanceStatement } from "../services/finance/statementService.js";
 import {
   FINANCE_AUDIT_ACTION,
@@ -149,6 +154,42 @@ export const getAdminFinancePayoutsController = async (req, res) => {
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+// Admin earnings sliced by product/category/shop/city — previously the
+// admin Wallet page only ever showed lump-sum totals, with zero dimensional
+// breakdown anywhere in the app for admin commission earnings.
+export const getEarningsBreakdownController = async (req, res) => {
+  try {
+    const { dimension, from, to, limit } = req.query;
+    const breakdown = await getEarningsBreakdown({ dimension, from, to, limit });
+    return handleResponse(res, 200, "Earnings breakdown fetched", breakdown);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+// Platform's cut of delivery-partner earnings — the one item from the
+// target list with genuinely no existing view anywhere (DeliveryFunds/
+// CashCollection only ever showed rider payouts and cash-in-hand).
+export const getDeliveryEarningsSummaryController = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const summary = await getDeliveryEarningsSummary({ from, to });
+    return handleResponse(res, 200, "Delivery earnings summary fetched", summary);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const getSellerEarningsSummaryController = async (req, res) => {
+  try {
+    const { from, to, limit } = req.query;
+    const summary = await getSellerEarningsSummary({ from, to, limit });
+    return handleResponse(res, 200, "Seller earnings summary fetched", summary);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
@@ -354,63 +395,30 @@ export const settleSellerPayoutManualController = async (req, res) => {
       return handleResponse(res, 400, "Payout has already been marked as settled.");
     }
 
-    if (payout.relatedOrderIds?.length) {
-      const heldOrder = await Order.findOne({
-        _id: { $in: payout.relatedOrderIds },
-        $or: [
-          { "settlementStatus.sellerPayout": "HOLD" },
-          { "financeFlags.manualSettlementHold": true },
-        ],
-      })
-        .select("orderId")
-        .lean();
-      if (heldOrder) {
-        return handleResponse(
-          res,
-          409,
-          `Cannot settle this payout — order ${heldOrder.orderId} is on settlement hold. Release the hold first.`,
-        );
-      }
-    }
-
-    payout.status = "COMPLETED";
-    payout.processedAt = new Date();
-    payout.createdBy = req.user?.id || null;
-    if (remarks) payout.remarks = remarks;
     if (transactionRef) {
       payout.metadata = { ...(payout.metadata || {}), transactionRef };
-    }
-    await payout.save();
-
-    // Mark related orders as settled
-    if (Array.isArray(payout.relatedOrderIds) && payout.relatedOrderIds.length > 0) {
-      await Order.updateMany(
-        { _id: { $in: payout.relatedOrderIds } },
-        {
-          $set: {
-            "settlementStatus.sellerPayout": "COMPLETED",
-            "settlementStatus.overall": "COMPLETED",
-            "settlementStatus.reconciledAt": new Date(),
-          },
-        }
-      );
+      await payout.save();
     }
 
-    // This bypasses processPayout() entirely (a separate manual-settlement
-    // path), so it must independently keep BulkSettlement in sync the same
-    // way processPayout does — otherwise a bulk order settled through this
-    // route stays stuck showing "PENDING" in the admin bulk-breakdown modal
-    // forever, even though it was actually paid out.
-    if (payout.isBulkSettlement && payout.payoutType === "SELLER") {
-      await BulkSettlement.updateOne(
-        { payout: payout._id },
-        { $set: { status: "COMPLETED", settledAt: new Date() } },
-      );
-    }
+    // Previously duplicated processPayout()'s own hold-check and status
+    // writes here, but skipped the actual Wallet pendingBalance ->
+    // availableBalance move and LedgerEntry write — every payout "manually
+    // settled" through this admin route left the seller's wallet balance
+    // permanently out of sync with what Payout/Order records showed as
+    // settled. This route's hold-check was never actually a deliberate
+    // bypass of processPayout's — it enforced the identical condition — so
+    // delegating to processPayout (which also keeps BulkSettlement and
+    // settlementStatus.overall in sync) is a strict fix, not a behavior
+    // change for callers.
+    const processed = await processPayout(payoutId, {
+      remarks,
+      adminId: req.user?.id || null,
+    });
 
-    return handleResponse(res, 200, "Seller payout successfully settled by admin", payout);
+    return handleResponse(res, 200, "Seller payout successfully settled by admin", processed);
   } catch (error) {
-    return handleResponse(res, 500, error.message);
+    const statusCode = error.statusCode || 500;
+    return handleResponse(res, statusCode, error.message);
   }
 };
 

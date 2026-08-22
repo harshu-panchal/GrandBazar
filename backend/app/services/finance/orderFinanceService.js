@@ -27,6 +27,7 @@ import {
   updateCashInHand,
 } from "./walletService.js";
 import { createPendingPayoutForOrder } from "./payoutService.js";
+import { computeOverallSettlement } from "../../utils/settlementStatus.js";
 
 function toOrderIdQuery(orderOrId) {
   if (!orderOrId) return null;
@@ -62,25 +63,6 @@ async function findOrderForUpdate(orderOrId, session) {
     }
   }
   return order;
-}
-
-function computeOverallSettlement(order) {
-  const settlement = order.settlementStatus || {};
-  const sellerDone = settlement.sellerPayout === "COMPLETED";
-  const riderDone =
-    settlement.riderPayout === "COMPLETED" ||
-    settlement.riderPayout === "NOT_APPLICABLE";
-  const adminDone = Boolean(settlement.adminEarningCredited);
-
-  if (sellerDone && riderDone && adminDone) {
-    settlement.overall = ORDER_SETTLEMENT_STATUS.COMPLETED;
-    if (!settlement.reconciledAt) settlement.reconciledAt = new Date();
-  } else if (sellerDone || riderDone || adminDone) {
-    settlement.overall = ORDER_SETTLEMENT_STATUS.PARTIAL;
-  } else {
-    settlement.overall = ORDER_SETTLEMENT_STATUS.PENDING;
-  }
-  return settlement;
 }
 
 function syncLegacyPricing(order) {
@@ -453,12 +435,18 @@ export async function handleCodOrderFinance(
     session.startTransaction();
     const order = await findOrderForUpdate(orderOrId, session);
 
-    // An ONLINE order can still have cash due at the door if the customer
-    // added items post-placement and their wallet didn't fully cover the
-    // extra cost (see addItemsToOrder) — paymentMode stays ONLINE (the
-    // original amount really was captured via gateway), only the tracked
-    // extraCashDue remainder gets collected here.
-    const isExtraCashOnlyCollection = order.paymentMode === "ONLINE" && order.financeFlags?.hasExtraCashDue;
+    // An order can have a specially-tracked cash-due amount if the customer
+    // added items post-placement (see addItemsToOrder):
+    // - ONLINE: paymentMode stays ONLINE (the original amount really was
+    //   captured via gateway) and only the tracked remainder gets collected
+    //   here as a one-off top-up.
+    // - COD: nothing was ever captured electronically, so codPendingAmount
+    //   instead holds the TOTAL cash still owed for the whole order, net of
+    //   all wallet usage across its lifetime — addItemsToOrder sets this flag
+    //   for COD orders whenever any wallet amount was applied, even if it
+    //   fully covered the delta, so this branch is always consulted instead
+    //   of re-deriving the amount from the (wallet-inflated) grandTotal.
+    const isExtraCashOnlyCollection = Boolean(order.financeFlags?.hasExtraCashDue);
     if (order.paymentMode === "ONLINE" && !isExtraCashOnlyCollection) {
       throw new Error("COD collection is not allowed for ONLINE orders");
     }
@@ -500,11 +488,19 @@ export async function handleCodOrderFinance(
     }
 
     // Requirement: system float (COD) should track remittable cash with delivery partners,
-    // i.e. gross order amount minus delivery partner commission. A post-placement
-    // item-addition top-up never had its own rider commission computed, so it's
-    // collected in full — the order's normal riderPayoutTotal was already earned
-    // against the original delivery, not this later top-up.
-    const deliveryPartnerCommission = isExtraCashOnlyCollection
+    // i.e. gross order amount minus delivery partner commission.
+    //
+    // ONLINE extra-cash-only top-up: this collection is purely the platform's
+    // money (a remainder that wasn't captured electronically) — the rider's
+    // commission for the whole delivery was already queued separately
+    // (createPendingRiderPayout) against the original delivery, so no
+    // separate commission carve-out applies to this one-off collection.
+    //
+    // COD (whether or not extra-cash-only): this is still the rider's one
+    // and only cash-collection event for the order, so they still keep their
+    // full riderPayoutTotal commission out of whatever cash they collect,
+    // exactly as in a normal COD delivery with no add-items involved.
+    const deliveryPartnerCommission = isExtraCashOnlyCollection && order.paymentMode === "ONLINE"
       ? 0
       : roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
     const codAmountNet = roundCurrency(
@@ -544,7 +540,15 @@ export async function handleCodOrderFinance(
         ...(order.financeFlags || {}),
         hasExtraCashDue: false,
       };
-    } else {
+    }
+    // A COD order's cash-collection status (paymentStatus/payment/
+    // codMarkedCollected) must still be marked here even when it went
+    // through the extra-cash-only branch above (i.e. add-items applied a
+    // wallet payment before delivery) — this is still that order's one and
+    // only real cash-collection event. Only skip this for ONLINE orders,
+    // whose paymentStatus is already PAID from the original gateway capture
+    // and has nothing to do with this one-off top-up collection.
+    if (order.paymentMode !== "ONLINE") {
       order.paymentStatus = ORDER_PAYMENT_STATUS.CASH_COLLECTED;
       order.payment = {
         ...(order.payment || {}),

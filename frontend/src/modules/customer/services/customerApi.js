@@ -5,8 +5,9 @@ export const customerApi = {
   sendLoginOtp: (data) => axiosInstance.post("/customer/send-login-otp", data),
   sendSignupOtp: (data) =>
     axiosInstance.post("/customer/send-signup-otp", data),
-  loginWithEmail: (data) => axiosInstance.post("/customer/login-email", data),
+  sendLoginOtpEmail: (data) => axiosInstance.post("/customer/send-login-otp-email", data),
   verifyOtp: (data) => axiosInstance.post("/customer/verify-otp", data),
+  verifyLoginOtpEmail: (data) => axiosInstance.post("/customer/verify-otp-email", data),
   getProfile: () => getWithDedupe("/customer/profile", {}, { ttl: 5000 }), // Short cache for profile
   updateProfile: (data) => {
     invalidateCache("/customer/profile");

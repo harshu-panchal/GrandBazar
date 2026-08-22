@@ -40,6 +40,7 @@ import { useToast } from '@shared/components/ui/Toast';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 import { getOrderStoreReassignment, getLegacyStatusFromOrder, getOrderStatusLabel } from '@/shared/utils/orderStatus';
 import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/services/orderSocket';
+import OrderMoneyBreakdown from '../components/orders/OrderMoneyBreakdown';
 
 const REASSIGNABLE_WORKFLOW = new Set([
     'SELLER_PENDING',
@@ -1448,6 +1449,9 @@ const OrderDetail = () => {
                     )}
                 </div>
             </div>
+
+            {/* Money Breakdown — every rupee, split by exactly who received it */}
+            <OrderMoneyBreakdown order={order} />
 
             {/* Hidden Printable Invoice Template */}
             <div className="fixed -left-[9999px] top-0">

@@ -85,6 +85,9 @@ import {
     getAdminFinanceLedgerController,
     getAdminFinancePayoutsController,
     getAdminFinanceSummaryController,
+    getEarningsBreakdownController,
+    getDeliveryEarningsSummaryController,
+    getSellerEarningsSummaryController,
     getDeliverySettingsController,
     processAdminFinancePayoutsController,
     settleSellerPayoutManualController,
@@ -192,6 +195,24 @@ router.get(
     verifyToken,
     allowRoles("admin"),
     getAdminBulkSettlementsController,
+);
+router.get(
+    "/finance/earnings-breakdown",
+    verifyToken,
+    allowRoles("admin"),
+    getEarningsBreakdownController,
+);
+router.get(
+    "/finance/delivery-earnings-summary",
+    verifyToken,
+    allowRoles("admin"),
+    getDeliveryEarningsSummaryController,
+);
+router.get(
+    "/finance/seller-earnings-summary",
+    verifyToken,
+    allowRoles("admin"),
+    getSellerEarningsSummaryController,
 );
 router.get(
     "/finance/refunds",

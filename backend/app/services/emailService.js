@@ -170,6 +170,44 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
 }
 
 /**
+ * Sends customer login OTP email (email-OTP login, replaces password login).
+ */
+export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMinutes = 5 }) {
+  const appName = await getAppName();
+  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Your Login Verification Code</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>Use the following OTP code to log in to your ${appName} account:</p>
+      <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
+        ${otp}
+      </div>
+      <p style="color: #64748b; font-size: 13px;">This code will expire in ${expiresInMinutes} minutes. If you did not request this code, please ignore this email.</p>
+    </div>
+  `;
+
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking Customer Login OTP for ${email}: ${otp}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `${appName} Platform <${fromEmail}>`,
+      to: email,
+      subject: `Your ${appName} Login OTP: ${otp}`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send customer login OTP email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Sends welcome email to newly created admin staff member (accountant/assistant).
  */
 export async function sendStaffWelcomeEmail({ email, name, password, role }) {

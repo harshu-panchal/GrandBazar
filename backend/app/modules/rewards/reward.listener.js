@@ -31,7 +31,14 @@ export async function handleRewardEvent(eventType, payload = {}) {
     ) {
       const orderDbId = await getOrderIdFromPayload(payload);
       if (orderDbId) {
-        await reverseOrderRewards(orderDbId);
+        // REFUND_COMPLETED fires for both full and partial returns; pass the
+        // actual refunded amount so a partial return only reverses the
+        // matching fraction of any reward grant (see reversalService.js).
+        // ORDER_CANCELLED carries no refundAmount, so it stays a full
+        // reversal, which is correct for a whole-order cancellation.
+        const refundAmount =
+          eventType === NOTIFICATION_EVENTS.REFUND_COMPLETED ? payload?.data?.refundAmount : undefined;
+        await reverseOrderRewards(orderDbId, { refundAmount });
       }
       return;
     }

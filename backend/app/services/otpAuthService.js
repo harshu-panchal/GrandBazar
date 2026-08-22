@@ -93,7 +93,6 @@ export async function issueCustomerOtp({
   name = "",
   rawPhone,
   email = "",
-  password = "",
   flow,
   ipAddress = "unknown",
   agreedToTerms = false,
@@ -142,7 +141,6 @@ export async function issueCustomerOtp({
         name: name || "Customer",
         phone,
         email: normalizedEmail || undefined,
-        password: flow === "signup" && password ? password : undefined,
         isVerified: false,
         termsAcceptedAt: flow === "signup" && agreedToTerms ? now : null,
       });
@@ -172,9 +170,6 @@ export async function issueCustomerOtp({
     }
     customer.name = name || customer.name;
     customer.email = normalizedEmail || customer.email;
-    if (password) {
-      customer.password = password;
-    }
     customer.termsAcceptedAt = agreedToTerms ? now : customer.termsAcceptedAt;
     // A soft-deleted account (isActive=false) is being re-signed-up on the same
     // phone number — reactivate it and require fresh OTP verification, rather

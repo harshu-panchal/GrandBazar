@@ -4,15 +4,7 @@ export const sendSignupOtpSchema = Joi.object({
   name: Joi.string().trim().min(2).max(80).required(),
   phone: Joi.string().trim().min(7).max(24).required(),
   email: Joi.string().trim().lowercase().email().allow("", null).optional(),
-  password: Joi.string().min(6).max(72).allow("", null).optional(),
   agreedToTerms: Joi.boolean().optional(),
-}).custom((value, helpers) => {
-  if (value.password && !value.email) {
-    return helpers.error("password.requiresEmail");
-  }
-  return value;
-}).messages({
-  "password.requiresEmail": "Email is required to set a password",
 });
 
 export const sendLoginOtpSchema = Joi.object({
@@ -23,6 +15,15 @@ export const verifyOtpSchema = Joi.object({
   phone: Joi.string().trim().min(7).max(24).required(),
   otp: Joi.string().trim().pattern(/^\d{4,8}$/).required(),
   referralCode: Joi.string().trim().allow("", null).optional(),
+});
+
+export const sendLoginOtpEmailSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+});
+
+export const verifyLoginOtpEmailSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+  otp: Joi.string().trim().pattern(/^\d{4}$/).required(),
 });
 
 export function validateSchema(schema, payload) {

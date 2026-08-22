@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import bcrypt from "bcrypt";
 import { normalizePhoneNumber } from "../utils/phone.js";
 
 const addressSchema = new mongoose.Schema({
@@ -47,11 +46,6 @@ const userSchema = new mongoose.Schema(
             required: true,
             unique: true,
             trim: true,
-        },
-
-        password: {
-            type: String,
-            select: false, // response me password na aaye
         },
 
         role: {
@@ -169,15 +163,5 @@ userSchema.pre("validate", function() {
         this.phone = normalizePhoneNumber(this.phone);
     }
 });
-
-userSchema.pre("save", async function () {
-    if (!this.isModified("password") || !this.password) return;
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-});
-
-userSchema.methods.comparePassword = async function (enteredPassword) {
-    return bcrypt.compare(enteredPassword, this.password);
-};
 
 export default mongoose.model("User", userSchema);
