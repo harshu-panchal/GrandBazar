@@ -20,6 +20,7 @@ import {
     getSimilarProductsController,
     getProductAddonMappingsController,
     getSuggestedAddonsController,
+    estimateCustomerPrice,
 } from "../controller/productController.js";
 import { adjustStock, getStockHistory } from "../controller/stockController.js";
 import {
@@ -48,6 +49,7 @@ const sellerChain = [verifyToken, allowRoles("seller"), resolveActiveStore, requ
 
 // Seller protected routes
 router.get("/seller/me", ...sellerChain, checkSubSellerPermission("products", "read"), getSellerProducts);
+router.post("/seller/estimate-customer-price", ...sellerChain, checkSubSellerPermission("products", "read"), estimateCustomerPrice);
 router.get("/seller/unpublished", ...sellerChain, checkSubSellerPermission("products", "read"), getUnpublishedSellerProducts);
 router.patch("/seller/publish-bulk", ...sellerChain, checkSubSellerPermission("products", "write"), bulkPublishSellerProducts);
 router.patch("/seller/:id/publish", ...sellerChain, checkSubSellerPermission("products", "write"), publishSellerProduct);

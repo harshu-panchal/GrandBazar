@@ -58,7 +58,7 @@ const ProductDetailPage = () => {
             offers: {
                 "@type": "Offer",
                 priceCurrency: "INR",
-                price: Number(product.price || 0),
+                price: Number(product.customerSalePrice ?? product.customerPrice ?? product.salePrice ?? product.price ?? 0),
                 availability: Number(product.stock || 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
                 url: canonicalUrl,
             },
@@ -330,17 +330,27 @@ const ProductDetailPage = () => {
                             {product.name}
                         </h1>
 
-                        <div className="flex items-baseline gap-4 mb-5">
-                            <span className="text-4xl font-black text-primary">₹{product.salePrice || product.price}</span>
-                            {(product.salePrice && product.salePrice < product.price) && (
-                                <span className="text-lg text-slate-400 line-through font-bold">₹{product.price}</span>
-                            )}
-                            {product.salePrice && product.salePrice < product.price && (
-                                <span className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-lg font-black uppercase">
-                                    {Math.round(((product.price - product.salePrice) / product.price) * 100)}% OFF
-                                </span>
-                            )}
-                        </div>
+                        {(() => {
+                            // Commission-inclusive customer-facing price/original —
+                            // falls back to raw price/salePrice only if
+                            // customerPrice hasn't been backfilled yet.
+                            const displayPrice = product.customerSalePrice ?? product.customerPrice ?? product.salePrice ?? product.price;
+                            const displayOriginal = product.customerPrice ?? product.price;
+                            const hasDiscount = displayPrice && displayOriginal && displayPrice < displayOriginal;
+                            return (
+                                <div className="flex items-baseline gap-4 mb-5">
+                                    <span className="text-4xl font-black text-primary">₹{displayPrice}</span>
+                                    {hasDiscount && (
+                                        <span className="text-lg text-slate-400 line-through font-bold">₹{displayOriginal}</span>
+                                    )}
+                                    {hasDiscount && (
+                                        <span className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-lg font-black uppercase">
+                                            {Math.round(((displayOriginal - displayPrice) / displayOriginal) * 100)}% OFF
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         <p className="text-slate-600 text-lg leading-relaxed mb-6 font-medium max-w-2xl">
                             {product.description || "Fresh and premium quality product sourced directly from local vendors."}

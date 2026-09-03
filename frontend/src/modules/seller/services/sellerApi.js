@@ -22,6 +22,7 @@ export const sellerApi = {
     updateProduct: (id, data) => axiosInstance.put(`/products/${id}`, data),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
     getSuggestedAddons: (id) => axiosInstance.get(`/products/${id}/suggested-addons`),
+    estimateCustomerPrice: (data) => axiosInstance.post('/products/seller/estimate-customer-price', data),
 
     // Catalog
     getCatalogProducts: (params) => axiosInstance.get('/catalog', { params }),

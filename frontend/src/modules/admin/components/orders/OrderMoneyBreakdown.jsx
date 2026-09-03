@@ -123,7 +123,7 @@ const OrderMoneyBreakdown = ({ order }) => {
                                 icon={Store}
                                 label="Seller Got"
                                 amount={pb.sellerPayoutTotal}
-                                description="Product value net of commission"
+                                description="Full price seller listed — commission is added on top, not taken from this"
                                 accent="bg-orange-50 border-orange-100 text-orange-800"
                             />
                             <RecipientTile
@@ -189,8 +189,7 @@ const OrderMoneyBreakdown = ({ order }) => {
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Where It Went, Per Recipient</p>
                             <div className="divide-y divide-slate-50">
-                                <Row label="Seller Payout" value={pb.sellerPayoutTotal} bold />
-                                <Row label="— Admin Product Commission" value={pb.adminProductCommissionTotal} sub="Deducted from seller's share" tone="negative" />
+                                <Row label="Seller Payout" value={pb.sellerPayoutTotal} bold sub="Full price the seller listed — paid in full" />
                                 <Row label="Admin / Platform Earning" value={pb.platformTotalEarning} bold />
                                 <Row label="— Product Commission" value={pb.adminProductCommissionTotal} />
                                 <Row label="— Logistics Margin" value={pb.platformLogisticsMargin} sub="Delivery + handling fees minus rider base pay" />

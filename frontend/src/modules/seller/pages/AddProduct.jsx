@@ -79,6 +79,45 @@ const AddProduct = () => {
   const [sellerProducts, setSellerProducts] = useState([]);
   const [isLoadingCats, setIsLoadingCats] = useState(true);
 
+  // Live "customer will pay" preview — commission is added on top of the
+  // price you enter, so the customer's price is higher than what's typed
+  // here. Debounced so it doesn't fire an API call on every keystroke.
+  const [priceEstimates, setPriceEstimates] = useState({ customerPrice: null, customerSalePrice: null, variants: [] });
+  const [isEstimatingPrice, setIsEstimatingPrice] = useState(false);
+  useEffect(() => {
+    const hasAnyPrice =
+      Number(formData.price) > 0 || formData.variants.some((v) => Number(v.price) > 0);
+    if (!hasAnyPrice) {
+      setPriceEstimates({ customerPrice: null, customerSalePrice: null, variants: [] });
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      setIsEstimatingPrice(true);
+      try {
+        const res = await sellerApi.estimateCustomerPrice({
+          price: formData.price,
+          salePrice: formData.salePrice,
+          subcategoryId: formData.subcategory || null,
+          variants: formData.variants.map((v) => ({ name: v.name, sku: v.sku, price: v.price, salePrice: v.salePrice })),
+        });
+        if (res.data.success) {
+          const result = res.data.result || {};
+          setPriceEstimates({
+            customerPrice: result.customerPrice ?? null,
+            customerSalePrice: result.customerSalePrice ?? null,
+            variants: Array.isArray(result.variants) ? result.variants : [],
+          });
+        }
+      } catch {
+        // Non-blocking — the preview is a convenience, not required to save the product.
+      } finally {
+        setIsEstimatingPrice(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.price, formData.salePrice, formData.subcategory, formData.variants]);
+
   useEffect(() => {
     setFormData((prev) => {
       if (!prev.name) return prev;
@@ -557,6 +596,24 @@ const AddProduct = () => {
                         className="w-full px-3 py-2 bg-brand-50 ring-1 ring-brand-100 border-none rounded-xl text-xs font-bold text-brand-700 outline-none focus:ring-2 focus:ring-brand-200"
                       />
                     </div>
+                    {Number(variant.price) > 0 && (
+                      <div className="col-span-12 md:col-span-3 -mt-1">
+                        {(() => {
+                          const est = priceEstimates.variants?.[index];
+                          const customerPrice = est?.customerSalePrice ?? est?.customerPrice;
+                          return customerPrice != null ? (
+                            <p className="text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1.5 inline-flex items-center gap-1">
+                              Customer pays ₹{customerPrice}
+                              {isEstimatingPrice && <span className="text-emerald-400">…</span>}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] font-semibold text-slate-300">
+                              {isEstimatingPrice ? "Estimating customer price…" : ""}
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    )}
                     <div className="col-span-6 md:col-span-2 space-y-1">
                       <label className="text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
                         Stock

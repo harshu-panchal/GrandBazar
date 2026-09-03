@@ -74,8 +74,8 @@ const formatStoreProduct = (p) => ({
   ...p,
   id: p._id,
   image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-  price: p.salePrice || p.price,
-  originalPrice: p.price,
+  price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+  originalPrice: p.customerPrice ?? p.price,
   weight: p.weight || "1 unit",
   deliveryTime: p.deliveryEta?.label || "10-15 mins",
 });
@@ -785,8 +785,8 @@ const StoreDetailPage = () => {
                           ...sigProd,
                           id: sigProd._id,
                           image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                          price: sigProd.salePrice || sigProd.price,
-                          originalPrice: sigProd.price,
+                          price: sigProd.customerSalePrice ?? sigProd.customerPrice ?? sigProd.salePrice ?? sigProd.price,
+                          originalPrice: sigProd.customerPrice ?? sigProd.price,
                           weight: sigProd.weight || "1 unit"
                         }} 
                         compact={true}

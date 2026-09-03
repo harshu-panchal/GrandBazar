@@ -265,14 +265,22 @@ describe("Property 38: Search Fallback", () => {
   });
 
   test("buildQuery includes price range when provided", () => {
+    // Filters on the commission-inclusive customerPrice (what the customer
+    // actually pays), with a fallback to raw `price` only for products
+    // whose customerPrice hasn't been backfilled yet (customerPrice: null).
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 100, noNaN: true }),
         fc.double({ min: 100, max: 1000, noNaN: true }),
         (priceMin, priceMax) => {
           const mongoQuery = backend.buildQuery({ priceMin, priceMax });
-          expect(mongoQuery.price.$gte).toBe(priceMin);
-          expect(mongoQuery.price.$lte).toBe(priceMax);
+          const priceClause = mongoQuery.$and.find((clause) => clause.$or)?.$or;
+          expect(priceClause).toBeDefined();
+          expect(priceClause[0].customerPrice.$gte).toBe(priceMin);
+          expect(priceClause[0].customerPrice.$lte).toBe(priceMax);
+          expect(priceClause[1].customerPrice).toBeNull();
+          expect(priceClause[1].price.$gte).toBe(priceMin);
+          expect(priceClause[1].price.$lte).toBe(priceMax);
         }
       ),
       { numRuns: 50 }

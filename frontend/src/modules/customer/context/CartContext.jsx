@@ -92,12 +92,16 @@ export const CartProvider = ({ children }) => {
     });
   };
 
+  // Cart items store the customer-facing, commission-inclusive price (what
+  // the customer actually pays), not the seller's raw entered price — falls
+  // back to raw price/salePrice only when customerPrice hasn't been
+  // computed yet (e.g. a product created before the backfill ran).
   const resolveVariantPricing = (product, variantSku = "") => {
     const normalizedKey = String(variantSku || "").trim();
     if (!normalizedKey) {
       return {
-        price: Number(product?.price || 0),
-        salePrice: Number(product?.salePrice || 0),
+        price: Number(product?.customerPrice ?? product?.price ?? 0),
+        salePrice: Number(product?.customerSalePrice ?? product?.salePrice ?? 0),
         variantName: "",
       };
     }
@@ -109,8 +113,8 @@ export const CartProvider = ({ children }) => {
       return (sku && sku === normalizedKey) || (!sku && name === normalizedKey) || name === normalizedKey;
     });
     return {
-      price: Number(hit?.price || product?.price || 0),
-      salePrice: Number(hit?.salePrice || 0),
+      price: Number(hit?.customerPrice ?? hit?.price ?? product?.customerPrice ?? product?.price ?? 0),
+      salePrice: Number(hit?.customerSalePrice ?? hit?.salePrice ?? 0),
       variantName: String(hit?.name || "").trim(),
     };
   };

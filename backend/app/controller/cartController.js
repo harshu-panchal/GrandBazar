@@ -11,7 +11,7 @@ import {
 } from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
-  "name slug price salePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
@@ -32,7 +32,7 @@ async function getCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id name sellerId price salePrice stock variants")
+    .select("_id name sellerId price salePrice customerPrice customerSalePrice stock variants")
     .lean();
 }
 

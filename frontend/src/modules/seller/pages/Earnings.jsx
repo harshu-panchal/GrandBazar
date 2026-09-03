@@ -231,7 +231,7 @@ const Earnings = () => {
                   email: "Customer Email",
                   items: "Items",
                   orderTotal: "Order Total",
-                  commissionAmount: "Commission Deducted",
+                  commissionAmount: "Platform Commission (paid by customer)",
                   packagingAmount: "Packaging Charge",
                   taxAmount: "Tax (GST)",
                   earning: "Earning Amount",
@@ -381,7 +381,7 @@ const Earnings = () => {
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Customer</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Items</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Order Total</th>
-                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Deductions</th>
+                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Commission &amp; Fees</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Your Earning</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Payment</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Status</th>
@@ -453,10 +453,14 @@ const Earnings = () => {
                           {row.orderId ? formatMoney(row.orderTotal) : "—"}
                         </p>
                       </td>
-                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Deductions">
+                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Commission & Fees">
                         {row.orderId && (row.commissionAmount || row.packagingAmount) ? (
                           <div className="space-y-0.5 text-[11px] text-slate-500">
-                            {row.commissionAmount > 0 && <p>Commission: -{formatMoney(row.commissionAmount)}</p>}
+                            {/* Commission is added to the customer's price, not
+                                deducted from your payout — you keep 100% of the
+                                price you set. Shown here to reconcile Order
+                                Total down to Your Earning below. */}
+                            {row.commissionAmount > 0 && <p>Platform commission (paid by customer): {formatMoney(row.commissionAmount)}</p>}
                             {row.packagingAmount > 0 && <p>Packaging: +{formatMoney(row.packagingAmount)}</p>}
                           </div>
                         ) : (

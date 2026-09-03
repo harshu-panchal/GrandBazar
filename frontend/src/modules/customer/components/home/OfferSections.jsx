@@ -25,8 +25,8 @@ const OfferSections = ({ sections, noServiceData }) => {
               _id: p._id,
               name: p.name,
               image: p.mainImage || p.image || "",
-              price: p.salePrice ?? p.price,
-              originalPrice: p.price ?? p.salePrice,
+              price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+              originalPrice: p.customerPrice ?? p.price ?? p.salePrice,
               weight: p.weight,
               deliveryTime: p.deliveryEta?.label || p.deliveryTime || "8-15 mins",
             }));

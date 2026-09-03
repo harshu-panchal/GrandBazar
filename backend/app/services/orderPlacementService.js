@@ -40,7 +40,10 @@ import {
   resolveChosenFulfillmentMethod,
 } from "./deliveryOptionResolver.js";
 import { FULFILLMENT_METHOD, fulfillmentMethodToLogisticsMode } from "../constants/deliveryPolicy.js";
-import { hydrateOrderItems } from "./finance/pricingService.js";
+import {
+  hydrateOrderItems,
+  resolveCommissionInclusiveLineTotals,
+} from "./finance/pricingService.js";
 import {
   inferFulfillmentType,
   validateScheduleSelection,
@@ -517,17 +520,24 @@ export async function placeOrderAtomic({
         session,
         enforceServerPricing: true,
       });
-      const cartTotalForCoupon = hydratedForCoupon.reduce((sum, item) => {
-        const price = Number(item.price || 0);
-        const qty = Number(item.quantity || 1);
-        return sum + price * qty;
-      }, 0);
+      // Coupon eligibility/discount is calculated against the full
+      // customer-facing price (seller price + admin commission), not the
+      // seller's raw base price, so it matches what the customer actually
+      // sees and pays.
+      const commissionResolvedForCoupon = await resolveCommissionInclusiveLineTotals(
+        hydratedForCoupon,
+        { session },
+      );
+      const cartTotalForCoupon = commissionResolvedForCoupon.reduce(
+        (sum, item) => sum + Number(item.commissionInclusiveLineTotal || 0),
+        0,
+      );
 
       const applied = await applySingleCoupon({
         code: requestedCouponCode,
         couponId: requestedCouponId,
         cartTotal: cartTotalForCoupon,
-        items: hydratedForCoupon,
+        items: commissionResolvedForCoupon,
         customerId,
       });
 

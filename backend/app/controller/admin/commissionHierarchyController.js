@@ -8,6 +8,10 @@ import {
   upsertCityCommission,
 } from "../../services/cityCommissionService.js";
 import { recordAuditLog } from "../../services/auditTrailService.js";
+import {
+  enqueueRecalcBySeller,
+  enqueueRecalcByCity,
+} from "../../queues/pricingQueueProcessors.js";
 
 function toStoreCommissionPayload(store) {
   return {
@@ -71,6 +75,7 @@ export async function updateStoreCommission(req, res) {
       before,
       after: normalized,
     });
+    enqueueRecalcBySeller(id);
     return handleResponse(res, 200, "Store commission updated", toStoreCommissionPayload(updated));
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -120,6 +125,7 @@ export async function upsertCityCommissionController(req, res) {
       payload: req.body || {},
       adminId: req.user?.id || null,
     });
+    enqueueRecalcByCity(cityKey);
     return handleResponse(res, 200, "City commission upserted", item);
   } catch (error) {
     return handleResponse(res, 500, error.message);

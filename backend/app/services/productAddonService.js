@@ -3,8 +3,10 @@ import Product from "../models/product.js";
 import ProductAddonMapping from "../models/productAddonMapping.js";
 import Order from "../models/order.js";
 import { getApprovedOrLegacyFilter } from "./productModerationService.js";
+import { computeCustomerPriceFieldsForWrite } from "./finance/customerPriceService.js";
 
-const ADDON_FIELDS = "name slug price salePrice mainImage stock status sellerId";
+const ADDON_FIELDS =
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status sellerId subcategoryId applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule";
 
 /**
  * Hydrates a product's addons[] (bare Product refs) into full addon cards,
@@ -37,22 +39,47 @@ export async function resolveProductAddons(product) {
   const productById = new Map(addonProducts.map((p) => [String(p._id), p]));
   const mappingByAddonId = new Map(mappings.map((m) => [String(m.addonProductId), m]));
 
-  return addonIds
-    .map((id) => {
+  const results = await Promise.all(
+    addonIds.map(async (id) => {
       const addonProduct = productById.get(String(id));
       if (!addonProduct) return null;
       const mapping = mappingByAddonId.get(String(id));
       const priceOverride = mapping?.priceOverride ?? null;
+
+      let effectivePrice;
+      if (priceOverride != null) {
+        // A per-pairing override price hasn't gone through the standard
+        // customerPrice backfill/recompute pipeline, so resolve commission
+        // for it live — rare case, most addons have no override.
+        try {
+          const { customerPrice } = await computeCustomerPriceFieldsForWrite({
+            ...addonProduct,
+            price: priceOverride,
+            salePrice: 0,
+          });
+          effectivePrice = customerPrice ?? priceOverride;
+        } catch {
+          effectivePrice = priceOverride;
+        }
+      } else {
+        effectivePrice =
+          addonProduct.customerSalePrice ??
+          addonProduct.customerPrice ??
+          addonProduct.salePrice ??
+          addonProduct.price;
+      }
+
       return {
         ...addonProduct,
         priceOverride,
-        effectivePrice: priceOverride ?? addonProduct.salePrice ?? addonProduct.price,
+        effectivePrice,
         required: mapping?.required || false,
         sortOrder: mapping?.sortOrder || 0,
       };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+    }),
+  );
+
+  return results.filter(Boolean).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 /**

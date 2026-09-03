@@ -61,15 +61,30 @@ export class MongoSearchBackend extends SearchBackend {
       mongoQuery.categoryId = query.categoryId;
     }
     
-    // Price range filter
+    // Price range filter — filters on the commission-inclusive
+    // customer-facing price (customerPrice), not the seller's raw price,
+    // since that's what the customer actually sees/pays. Falls back to
+    // matching on raw `price` for any product whose customerPrice hasn't
+    // been backfilled yet (customerPrice: null) — a defensive measure for
+    // the migration window; once backfill is complete this branch matches
+    // nothing.
     if (query.priceMin !== undefined || query.priceMax !== undefined) {
-      mongoQuery.price = {};
+      const range = {};
       if (query.priceMin !== undefined) {
-        mongoQuery.price.$gte = Number(query.priceMin);
+        range.$gte = Number(query.priceMin);
       }
       if (query.priceMax !== undefined) {
-        mongoQuery.price.$lte = Number(query.priceMax);
+        range.$lte = Number(query.priceMax);
       }
+      mongoQuery.$and = [
+        ...(mongoQuery.$and || []),
+        {
+          $or: [
+            { customerPrice: range },
+            { customerPrice: null, price: range },
+          ],
+        },
+      ];
     }
     
     // Stock filter
@@ -108,6 +123,8 @@ export class MongoSearchBackend extends SearchBackend {
         name: 1,
         price: 1,
         salePrice: 1,
+        customerPrice: 1,
+        customerSalePrice: 1,
         mainImage: 1,
         sellerId: 1,
         stock: 1,

@@ -37,8 +37,8 @@ const SignatureProductsSection = () => {
               ...seller.signatureProduct,
               id: seller.signatureProduct._id,
               image: seller.signatureProduct.mainImage || seller.signatureProduct.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-              price: seller.signatureProduct.salePrice || seller.signatureProduct.price,
-              originalPrice: seller.signatureProduct.price,
+              price: seller.signatureProduct.customerSalePrice ?? seller.signatureProduct.customerPrice ?? seller.signatureProduct.salePrice ?? seller.signatureProduct.price,
+              originalPrice: seller.signatureProduct.customerPrice ?? seller.signatureProduct.price,
               weight: seller.signatureProduct.weight || "1 unit",
               storeName: seller.shopName || seller.name // Optional: track which store it came from
             });

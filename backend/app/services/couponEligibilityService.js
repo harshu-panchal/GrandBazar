@@ -105,6 +105,15 @@ export const getSellerEligibleSubtotal = (coupon, items = []) => {
     const itemSellerId = resolveItemSellerId(item);
     if (!couponSellerId || itemSellerId !== couponSellerId) return;
 
+    // Prefer the commission-inclusive line total (seller price + admin
+    // commission) when the caller has already resolved it — matches what
+    // the customer actually pays. Falls back to raw price for callers that
+    // haven't run resolveCommissionInclusiveLineTotals.
+    if (item.commissionInclusiveLineTotal != null) {
+      eligibleTotal += Number(item.commissionInclusiveLineTotal || 0);
+      return;
+    }
+
     const price =
       item.product?.salePrice ||
       item.product?.price ||

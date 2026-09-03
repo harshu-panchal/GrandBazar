@@ -194,8 +194,8 @@ const SearchPage = () => {
                           p.mainImage ||
                           p.image ||
                           "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                        price: p.salePrice || p.price,
-                        originalPrice: p.price,
+                        price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+                        originalPrice: p.customerPrice ?? p.price,
                         weight: p.weight || '1 unit',
                         deliveryTime: p.deliveryEta?.label || '8-15 mins',
                         distance: p.distance ?? p.distanceKm,
@@ -298,8 +298,8 @@ const SearchPage = () => {
                           p.mainImage ||
                           p.image ||
                           "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                        price: p.salePrice || p.price,
-                        originalPrice: p.price,
+                        price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+                        originalPrice: p.customerPrice ?? p.price,
                         weight: p.weight || '1 unit',
                         deliveryTime: p.deliveryEta?.label || '8-15 mins',
                         distance: p.distance ?? p.distanceKm,

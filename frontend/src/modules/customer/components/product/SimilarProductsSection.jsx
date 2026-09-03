@@ -9,8 +9,8 @@ const normalizeProduct = (p) => ({
   ...p,
   id: p._id,
   image: p.mainImage || p.image || FALLBACK_IMAGE,
-  price: p.salePrice || p.price,
-  originalPrice: p.price,
+  price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+  originalPrice: p.customerPrice ?? p.price,
   weight: p.weight || "1 unit",
   deliveryTime: p.deliveryEta?.label || "8-15 mins",
 });

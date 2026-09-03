@@ -431,20 +431,25 @@ export function calculateProductSubtotal(items = []) {
 
 export function calculateCategoryCommission(item, categoryConfig) {
   const quantity = normalizeLineQuantity(item.quantity);
-  const itemSubtotal = roundCurrency(normalizeLinePrice(item.price) * quantity);
+  // Seller's entered price × qty — the amount the seller keeps in full.
+  const baseAmount = roundCurrency(normalizeLinePrice(item.price) * quantity);
   const { type, value, fixedRule } = resolveCommissionConfig(categoryConfig);
 
   let adminCommission = 0;
   if (type === COMMISSION_TYPE.PERCENTAGE) {
-    adminCommission = percentOf(itemSubtotal, value);
+    adminCommission = percentOf(baseAmount, value);
   } else {
     const fixedBase =
       fixedRule === COMMISSION_FIXED_RULE.PER_ITEM ? value : value * quantity;
     adminCommission = roundCurrency(fixedBase);
   }
 
-  adminCommission = clampMoney(adminCommission, 0, itemSubtotal);
-  const sellerPayout = roundCurrency(itemSubtotal - adminCommission);
+  // Commission is added on top of the seller's price, not deducted from it,
+  // so it no longer needs an upper bound tied to the base amount.
+  adminCommission = clampMoney(adminCommission, 0);
+  const sellerPayout = baseAmount;
+  // Customer-facing amount: seller price + admin commission.
+  const itemSubtotal = addMoney(baseAmount, adminCommission);
 
   return {
     itemSubtotal,
@@ -865,6 +870,122 @@ export async function hydrateOrderItems(
       isAddonLine,
       parentProductId: parentProductId || null,
     };
+  });
+}
+
+// Standalone version of the per-line commission resolution used inside
+// generateOrderPaymentBreakdown, for callers (coupon eligibility) that need
+// a commission-inclusive line total before the full order breakdown is
+// built. Deliberately resolves STANDARD commission only — no bulk-order
+// rate override, no free-tier surcharge — since those depend on the whole
+// order/seller context that isn't settled yet at this point in checkout.
+// Matches generateOrderPaymentBreakdown exactly for non-bulk orders; for
+// bulk orders it's a close approximation (accepted simplification — bulk
+// buyers rarely combine bulk pricing with consumer coupons).
+export async function resolveCommissionInclusiveLineTotals(hydratedItems, { session = null } = {}) {
+  if (!Array.isArray(hydratedItems) || hydratedItems.length === 0) {
+    return [];
+  }
+
+  const sellerIds = Array.from(new Set(hydratedItems.map((item) => item.sellerId)));
+  const storeId = sellerIds[0];
+  const storeQuery = storeId
+    ? Store.findById(storeId)
+        .select("applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule city")
+        .lean()
+    : null;
+  if (session && storeQuery) storeQuery.session(session);
+  const storeDoc = storeQuery ? await storeQuery : null;
+
+  const cityKey = normalizeCityKey(storeDoc?.city || "");
+  const cityCommissionQuery = cityKey
+    ? CityCommission.findOne({ cityKey })
+        .select("cityKey cityName enabled applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
+        .lean()
+    : null;
+  if (session && cityCommissionQuery) cityCommissionQuery.session(session);
+  const cityCommission = cityCommissionQuery ? await cityCommissionQuery : null;
+
+  const categoryIds = Array.from(
+    new Set(
+      hydratedItems
+        .flatMap((item) => [item.headerCategoryId, item.categoryId, item.subcategoryId])
+        .filter(Boolean),
+    ),
+  );
+  const categoryQuery = Category.find({ _id: { $in: categoryIds } })
+    .select(
+      "_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule",
+    )
+    .lean();
+  if (session) categoryQuery.session(session);
+  const categories = await categoryQuery;
+  const categoryById = new Map(categories.map((category) => [String(category._id), category]));
+
+  const parentProductIds = Array.from(
+    new Set(hydratedItems.map((item) => item.parentProductId).filter(Boolean)),
+  );
+  const parentProductDocs = parentProductIds.length
+    ? await Product.find({ _id: { $in: parentProductIds } })
+        .select("_id addons")
+        .lean()
+    : [];
+  const parentProductById = new Map(parentProductDocs.map((doc) => [String(doc._id), doc]));
+
+  return hydratedItems.map((item) => {
+    const subcategory = item.subcategoryId ? categoryById.get(String(item.subcategoryId)) : null;
+    const headerCategory = item.headerCategoryId ? categoryById.get(String(item.headerCategoryId)) : null;
+    const level2Category = item.categoryId ? categoryById.get(String(item.categoryId)) : null;
+
+    const productCategory =
+      item.applyCommission === true
+        ? {
+            _id: item.productId,
+            name: item.productName || "Product",
+            applyCommission: true,
+            adminCommissionType: item.adminCommissionType || COMMISSION_TYPE.PERCENTAGE,
+            adminCommissionValue: Number(item.adminCommissionValue || 0),
+            adminCommission: Number(item.adminCommissionValue || 0),
+            adminCommissionFixedRule: item.adminCommissionFixedRule || COMMISSION_FIXED_RULE.PER_QTY,
+          }
+        : null;
+
+    const parentProduct = item.parentProductId
+      ? parentProductById.get(String(item.parentProductId))
+      : null;
+    const addonProduct = item.isAddonLine && productCategory
+      ? { ...productCategory, _id: item.productId, name: item.productName || "Add-on Product" }
+      : null;
+    const addonAllowed = Boolean(
+      item.isAddonLine &&
+      parentProduct &&
+      Array.isArray(parentProduct.addons) &&
+      parentProduct.addons.some((id) => String(id) === String(item.productId)),
+    ) || Boolean(item.isAddonLine && item.parentProductId);
+
+    const resolved = ENABLE_HIERARCHICAL_COMMISSION
+      ? resolveEffectiveCommissionForLineItem({
+          addonProduct: addonAllowed ? addonProduct : null,
+          productCategory,
+          subcategory,
+          shopCommission: storeDoc,
+          cityCommission,
+        })
+      : resolveCategoryHierarchyCommission({
+          productCategory,
+          headerCategory,
+          level2Category,
+          subcategory,
+        });
+
+    const baseConfig = resolved.category || {
+      adminCommissionType: COMMISSION_TYPE.PERCENTAGE,
+      adminCommissionValue: 0,
+      adminCommissionFixedRule: COMMISSION_FIXED_RULE.PER_QTY,
+    };
+
+    const commission = calculateCategoryCommission(item, baseConfig);
+    return { ...item, commissionInclusiveLineTotal: commission.itemSubtotal };
   });
 }
 

@@ -33,6 +33,25 @@ const productSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        // Denormalized commission-inclusive customer-facing price. Computed
+        // from price/salePrice + resolved commission (see
+        // finance/customerPriceService.js). null = not yet computed.
+        // Display/search/filter/sort only — never authoritative for checkout,
+        // which always live-computes via generateOrderPaymentBreakdown.
+        customerPrice: {
+            type: Number,
+            default: null,
+            min: 0,
+        },
+        customerSalePrice: {
+            type: Number,
+            default: null,
+            min: 0,
+        },
+        customerPriceComputedAt: {
+            type: Date,
+            default: null,
+        },
         stock: {
             type: Number,
             required: true,
@@ -128,6 +147,16 @@ const productSchema = new mongoose.Schema(
                 name: String,
                 price: Number,
                 salePrice: Number,
+                customerPrice: {
+                    type: Number,
+                    default: null,
+                    min: 0,
+                },
+                customerSalePrice: {
+                    type: Number,
+                    default: null,
+                    min: 0,
+                },
                 stock: Number,
                 sku: String,
                 applyCommission: {
@@ -265,6 +294,7 @@ productSchema.index({ sellerId: 1, createdAt: -1, _id: -1 });
 productSchema.index({ sellerId: 1, displayOrder: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, isPublished: 1, status: 1 });
 productSchema.index({ isCurrentlyAvailable: 1, status: 1 });
+productSchema.index({ status: 1, customerPrice: 1 });
 productSchema.index({ name: "text", tags: "text" }); // For better search if regex is too slow
 
 export default mongoose.model("Product", productSchema);

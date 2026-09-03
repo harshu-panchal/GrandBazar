@@ -16,6 +16,10 @@ import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService
 import { uploadToCloudinary } from "../services/mediaService.js";
 import { resolveCategoryName, resolveSellerName } from "../services/entityNameCache.js";
 import {
+  computeCustomerPriceFieldsForWrite,
+  PRICE_AFFECTING_FIELDS,
+} from "../services/finance/customerPriceService.js";
+import {
   PRODUCT_APPROVAL_STATUS,
   getProductApprovalConfig,
   getApprovedOrLegacyFilter,
@@ -404,8 +408,10 @@ export const getProducts = async (req, res) => {
       oldest: { createdAt: 1 },
       "name-asc": { name: 1, createdAt: -1 },
       "name-desc": { name: -1, createdAt: -1 },
-      "price-asc": { price: 1, createdAt: -1 },
-      "price-desc": { price: -1, createdAt: -1 },
+      // Customer-facing listing sorts by the commission-inclusive price the
+      // customer actually pays, not the seller's raw entered price.
+      "price-asc": { customerPrice: 1, createdAt: -1 },
+      "price-desc": { customerPrice: -1, createdAt: -1 },
       "stock-asc": { stock: 1, createdAt: -1 },
       "stock-desc": { stock: -1, createdAt: -1 },
       "display-asc": { displayOrder: 1, createdAt: -1 },
@@ -418,7 +424,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -542,7 +548,7 @@ export const getTrendingProductsController = async (req, res) => {
    GET SIMILAR PRODUCTS
 ================================ */
 const SIMILAR_PRODUCT_FIELDS =
-  "name slug price salePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
 
 export const getSimilarProductsController = async (req, res) => {
   try {
@@ -676,7 +682,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -772,6 +778,45 @@ export const getSellerProducts = async (req, res) => {
         rejected: rejectedCount,
       },
     });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===============================
+   ESTIMATE CUSTOMER-FACING PRICE
+   Seller-facing preview: given a draft price/salePrice (and optional
+   variants) not yet saved, resolves the seller's own effective commission
+   (subcategory → shop → city hierarchy; sellers can't set a per-product
+   commission override themselves) and returns what the customer would pay.
+   Never authoritative for checkout — display-only, same as the stored
+   customerPrice field.
+================================ */
+export const estimateCustomerPrice = async (req, res) => {
+  try {
+    const sellerId = req.user?.id;
+    if (!sellerId) {
+      return handleResponse(res, 401, "Unauthorized");
+    }
+    const { price, salePrice, subcategoryId, variants } = req.body || {};
+    const productLike = {
+      price: Number(price) || 0,
+      salePrice: Number(salePrice) || 0,
+      subcategoryId: subcategoryId || null,
+      sellerId,
+      applyCommission: false,
+      variants: Array.isArray(variants)
+        ? variants.map((v) => ({
+            name: v?.name || "",
+            sku: v?.sku || "",
+            price: Number(v?.price) || 0,
+            salePrice: Number(v?.salePrice) || 0,
+            applyCommission: false,
+          }))
+        : [],
+    };
+    const result = await computeCustomerPriceFieldsForWrite(productLike);
+    return handleResponse(res, 200, "Estimated customer price", result);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
@@ -964,6 +1009,12 @@ export const createProduct = async (req, res) => {
       }
     }
     Object.assign(productData, moderationUpdate);
+
+    try {
+      Object.assign(productData, await computeCustomerPriceFieldsForWrite(productData));
+    } catch (customerPriceError) {
+      console.error("Failed to compute customerPrice on create (non-blocking):", customerPriceError);
+    }
 
     const product = await Product.create(productData);
 
@@ -1192,6 +1243,24 @@ export const updateProduct = async (req, res) => {
     }
     Object.assign(productData, moderationUpdate);
 
+    const touchesPriceAffectingField = PRICE_AFFECTING_FIELDS.some((key) =>
+      Object.prototype.hasOwnProperty.call(productData, key),
+    );
+    if (touchesPriceAffectingField) {
+      try {
+        const merged = {
+          ...product.toObject(),
+          ...productData,
+          variants: Array.isArray(productData.variants) ? productData.variants : product.variants,
+          subcategoryId: productData.subcategoryId ?? product.subcategoryId,
+          sellerId: product.sellerId,
+        };
+        Object.assign(productData, await computeCustomerPriceFieldsForWrite(merged));
+      } catch (customerPriceError) {
+        console.error("Failed to recompute customerPrice on update (non-blocking):", customerPriceError);
+      }
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
       { $set: productData },
@@ -1302,7 +1371,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -1472,7 +1541,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

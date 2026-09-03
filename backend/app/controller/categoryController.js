@@ -5,6 +5,7 @@ import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService
 import { uploadToCloudinary } from "../services/mediaService.js";
 import mongoose from "mongoose";
 import { invalidateCategoryName } from "../services/entityNameCache.js";
+import { enqueueRecalcByCategory } from "../queues/pricingQueueProcessors.js";
 
 function normalizeUrl(value) {
   if (!value || typeof value !== "string") return "";
@@ -303,6 +304,12 @@ export const updateCategory = async (req, res) => {
     invalidateCategoryName(id).catch(err => {
       console.warn("[Category] Name cache invalidation failed:", err.message);
     });
+
+    const commissionFieldsChanged = ["applyCommission", "adminCommission", "adminCommissionType", "adminCommissionValue"]
+      .some((key) => Object.prototype.hasOwnProperty.call(categoryData, key));
+    if (commissionFieldsChanged) {
+      enqueueRecalcByCategory(id);
+    }
 
     return handleResponse(res, 200, "Category updated successfully", updatedCategory);
   } catch (error) {
