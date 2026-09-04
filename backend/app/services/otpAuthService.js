@@ -173,10 +173,17 @@ export async function issueCustomerOtp({
     customer.termsAcceptedAt = agreedToTerms ? now : customer.termsAcceptedAt;
     // A soft-deleted account (isActive=false) is being re-signed-up on the same
     // phone number — reactivate it and require fresh OTP verification, rather
-    // than leaving it permanently blocked as "already registered".
+    // than leaving it permanently blocked as "already registered". Also clear
+    // any OTP failure-lock/cooldown state left over from before the account
+    // was deleted (belt-and-suspenders alongside the reset in
+    // deleteCustomerAccount — covers accounts deleted before that reset
+    // existed), so this "fresh" signup isn't blocked by stale state.
     if (customer.isActive === false) {
       customer.isActive = true;
       customer.isVerified = false;
+      customer.otpFailedAttempts = 0;
+      customer.otpLockedUntil = null;
+      customer.otpLastSentAt = null;
     }
   }
 

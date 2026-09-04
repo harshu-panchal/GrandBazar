@@ -251,6 +251,16 @@ export const deleteCustomerAccount = async (req, res) => {
         // but mark inactive so the account can no longer authenticate, mirroring
         // the isActive convention used for store deactivation elsewhere.
         customer.isActive = false;
+        // Clear OTP throttling/lockout state so a later signup on this same
+        // phone number (which reactivates this same document, see
+        // otpAuthService.issueCustomerOtp) isn't blocked by a lock or
+        // cooldown left over from before the account was deleted.
+        customer.otpHash = undefined;
+        customer.otpExpiresAt = undefined;
+        customer.otpFailedAttempts = 0;
+        customer.otpLockedUntil = null;
+        customer.otpLastSentAt = null;
+        customer.otpSessionVersion = (customer.otpSessionVersion || 0) + 1;
         await customer.save();
 
         return handleResponse(res, 200, "Account deleted successfully");
