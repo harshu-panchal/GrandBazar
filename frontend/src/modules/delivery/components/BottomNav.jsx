@@ -3,18 +3,33 @@ import { NavLink } from "react-router-dom";
 import { Home, IndianRupee, History, User } from "lucide-react";
 import { motion } from "framer-motion";
 
-/** Hides the fixed bottom nav while the on-screen keyboard is open, so it can't ride up over a focused input. */
+/**
+ * Hides the fixed bottom nav while the on-screen keyboard is open, so it
+ * can't ride up over a focused input.
+ *
+ * Prefers the Visual Viewport API (most accurate — some mobile browsers
+ * keep `window.innerHeight` constant and only shrink the visual viewport),
+ * but also compares plain `window.innerHeight` against its initial value on
+ * every resize. Older/embedded WebViews without `visualViewport` support
+ * would otherwise never fire the resize handler at all, leaving the nav
+ * permanently visible and riding up with the keyboard.
+ */
 function useKeyboardOpen() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
+    const initialHeight = window.visualViewport?.height || window.innerHeight;
     const vv = window.visualViewport;
-    if (!vv) return undefined;
     const handleResize = () => {
-      const shrink = window.innerHeight - vv.height;
+      const currentHeight = vv?.height || window.innerHeight;
+      const shrink = initialHeight - currentHeight;
       setKeyboardOpen(shrink > 120);
     };
-    vv.addEventListener("resize", handleResize);
-    return () => vv.removeEventListener("resize", handleResize);
+    vv?.addEventListener("resize", handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      vv?.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
   return keyboardOpen;
 }

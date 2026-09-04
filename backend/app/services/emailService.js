@@ -65,7 +65,7 @@ function getTransporter() {
  */
 export async function sendVendorWelcomeEmail({ email, name, password, storeName }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
 
   const passwordBlock = password
@@ -136,7 +136,7 @@ export function useRealEmailOTP() {
  */
 export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user" }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Password Reset Verification Code</h2>
@@ -174,7 +174,7 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
  */
 export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMinutes = 5 }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Your Login Verification Code</h2>
@@ -212,7 +212,7 @@ export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMin
  */
 export async function sendStaffWelcomeEmail({ email, name, password, role }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/admin";
 
   const htmlContent = `
@@ -258,7 +258,7 @@ export async function sendStaffWelcomeEmail({ email, name, password, role }) {
  */
 export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Seller Verification OTP</h2>
@@ -298,7 +298,7 @@ export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
  */
 export async function sendSellerInviteEmail({ email, inviteLink }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -348,7 +348,7 @@ export async function sendSellerInviteEmail({ email, inviteLink }) {
  */
 export async function sendSellerStaffWelcomeEmail({ email, name, password, storeName, roleTitle }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
 
   const htmlContent = `
@@ -393,7 +393,7 @@ export async function sendSellerStaffWelcomeEmail({ email, name, password, store
  */
 export async function sendBecomeSellerLinksEmail({ email, name }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
   
   const playstoreLink = process.env.PLAYSTORE_LINK || "https://play.google.com/store/apps";
   const appstoreLink = process.env.APPSTORE_LINK || "https://apps.apple.com/";

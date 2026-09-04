@@ -11,12 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
 import { useLocation } from '../context/LocationContext';
 import MapPicker from '@shared/components/MapPicker';
+import AddressAutocompleteInput from '@shared/components/AddressAutocompleteInput';
 
 /** Maps known technical error shapes (Mongo validation, duplicate-key, etc.) to plain-language copy. */
 function friendlyAddressErrorMessage(err) {
@@ -199,6 +199,7 @@ const AddressesPage = () => {
         pincode: ''
     });
     const [updating, setUpdating] = useState(false);
+    const [editPinnedLocation, setEditPinnedLocation] = useState(null);
 
     const handleEdit = (addr) => {
         setSelectedAddress(addr);
@@ -212,6 +213,7 @@ const AddressesPage = () => {
             state: addr.state ?? '',
             pincode: addr.pincode ?? ''
         });
+        setEditPinnedLocation(null);
         setIsEditOpen(true);
     };
 
@@ -237,27 +239,34 @@ const AddressesPage = () => {
             ...(editForm.pincode?.trim() && { pincode: editForm.pincode.trim() })
         };
 
-        // Best-effort: refresh coordinates + placeId whenever address fields change.
-        try {
-            const query = [
-                editForm.address?.trim(),
-                editForm.landmark?.trim(),
-                editForm.city?.trim(),
-                editForm.state?.trim(),
-                editForm.pincode?.trim(),
-            ].filter(Boolean).join(', ');
-            const geo = await customerApi.geocodeAddress(query);
-            const loc = geo.data?.result?.location;
-            if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
-                updatedRaw.location = { lat: loc.lat, lng: loc.lng };
-                if (geo.data?.result?.placeId) updatedRaw.placeId = geo.data.result.placeId;
-                if (geo.data?.result?.formattedAddress) updatedRaw.formattedAddress = geo.data.result.formattedAddress;
+        if (editPinnedLocation) {
+            // An autocomplete suggestion (or the map picker) already resolved an
+            // exact, Google-verified location — use it directly instead of
+            // re-geocoding the freeform text below.
+            updatedRaw.location = editPinnedLocation;
+        } else {
+            // Best-effort: refresh coordinates + placeId whenever address fields change.
+            try {
+                const query = [
+                    editForm.address?.trim(),
+                    editForm.landmark?.trim(),
+                    editForm.city?.trim(),
+                    editForm.state?.trim(),
+                    editForm.pincode?.trim(),
+                ].filter(Boolean).join(', ');
+                const geo = await customerApi.geocodeAddress(query);
+                const loc = geo.data?.result?.location;
+                if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                    updatedRaw.location = { lat: loc.lat, lng: loc.lng };
+                    if (geo.data?.result?.placeId) updatedRaw.placeId = geo.data.result.placeId;
+                    if (geo.data?.result?.formattedAddress) updatedRaw.formattedAddress = geo.data.result.formattedAddress;
+                }
+            } catch (e) {
+                toast.error(
+                    e.response?.data?.message ||
+                    'Could not refresh coordinates for this address. Delivery fees may be inaccurate.'
+                );
             }
-        } catch (e) {
-            toast.error(
-                e.response?.data?.message ||
-                'Could not refresh coordinates for this address. Delivery fees may be inaccurate.'
-            );
         }
 
         const updatedAddresses = rawAddresses.map((raw, i) => (i === idx ? updatedRaw : raw));
@@ -449,7 +458,23 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="address">Address</Label>
-                            <Textarea id="address" placeholder="Flat No, Building, Street" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))} />
+                            <AddressAutocompleteInput
+                                id="address"
+                                placeholder="Start typing your address..."
+                                value={addForm.address}
+                                onChange={(val) => setAddForm(f => ({ ...f, address: val }))}
+                                onSelect={(place) => {
+                                    setPinnedLocation({ lat: place.lat, lng: place.lng });
+                                    setAddForm(f => ({
+                                        ...f,
+                                        address: place.formattedAddress,
+                                        city: place.city || f.city,
+                                        state: place.state || f.state,
+                                        pincode: place.pincode || f.pincode,
+                                    }));
+                                }}
+                            />
+                            <p className="text-[11px] text-slate-400">Pick a suggestion for an exact, deliverable address.</p>
                         </div>
                         <button
                             type="button"
@@ -522,7 +547,22 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-address">Address</Label>
-                            <Textarea id="edit-address" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
+                            <AddressAutocompleteInput
+                                id="edit-address"
+                                value={editForm.address}
+                                onChange={(val) => setEditForm(f => ({ ...f, address: val }))}
+                                onSelect={(place) => {
+                                    setEditPinnedLocation({ lat: place.lat, lng: place.lng });
+                                    setEditForm(f => ({
+                                        ...f,
+                                        address: place.formattedAddress,
+                                        city: place.city || f.city,
+                                        state: place.state || f.state,
+                                        pincode: place.pincode || f.pincode,
+                                    }));
+                                }}
+                            />
+                            <p className="text-[11px] text-slate-400">Pick a suggestion for an exact, deliverable address.</p>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="edit-landmark">Nearest Landmark (optional)</Label>

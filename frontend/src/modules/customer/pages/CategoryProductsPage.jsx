@@ -10,6 +10,7 @@ import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 
 import ProductCard from '../components/shared/ProductCard';
 import ProductDetailSheet from '../components/shared/ProductDetailSheet';
+import CategoryFilterBar from '../components/shared/CategoryFilterBar';
 import { useProductDetail } from '../context/ProductDetailContext';
 import { customerApi } from '../services/customerApi';
 import MiniCart from '../components/shared/MiniCart';
@@ -24,7 +25,7 @@ const CategoryProductsPage = () => {
     const { categoryName: catId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
-    const { currentLocation } = useAppLocation();
+    const { currentLocation, hasHydratedLocation } = useAppLocation();
     const { settings } = useSettings();
     const initialSubcategoryId = location.state?.activeSubcategoryId || 'all';
     const { isOpen: isProductDetailOpen } = useProductDetail();
@@ -35,6 +36,9 @@ const CategoryProductsPage = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [noServiceData, setNoServiceData] = useState(null);
     const [refreshTick, setRefreshTick] = useState(0);
+    const [sortBy, setSortBy] = useState('newest');
+    const [maxDistanceKm, setMaxDistanceKm] = useState(null);
+    const [inStockOnly, setInStockOnly] = useState(false);
     const canonicalPath = category ? buildCategoryPath(category) : `/category/${catId || ""}`;
     const canonicalUrl = `${window.location.origin}${canonicalPath}`;
 
@@ -100,6 +104,13 @@ const CategoryProductsPage = () => {
     // changes, instead of client-filtering only the category's first page of
     // results (which silently missed products past the default page size).
     useEffect(() => {
+        // Location hasn't finished restoring from storage/GPS yet — wait rather
+        // than treating "not yet known" as "no service available" (that flashed
+        // the Service Unavailable screen on every fresh mount).
+        if (!hasHydratedLocation) {
+            return;
+        }
+
         let cancelled = false;
         const fetchProducts = async () => {
             setIsLoading(true);
@@ -118,6 +129,9 @@ const CategoryProductsPage = () => {
                     lat: currentLocation.latitude,
                     lng: currentLocation.longitude,
                     limit: 100,
+                    // "distance" isn't a DB-sortable field (computed per-seller after
+                    // the query) — sorted client-side below instead.
+                    sort: sortBy === 'distance' ? 'newest' : sortBy,
                 };
                 if (selectedSubCategory !== 'all') {
                     params.subcategoryId = selectedSubCategory;
@@ -161,13 +175,27 @@ const CategoryProductsPage = () => {
         };
         fetchProducts();
         return () => { cancelled = true; };
-    }, [catId, selectedSubCategory, currentLocation?.latitude, currentLocation?.longitude, refreshTick]);
+    }, [catId, selectedSubCategory, currentLocation?.latitude, currentLocation?.longitude, hasHydratedLocation, refreshTick, sortBy]);
 
     const safeProducts = Array.isArray(products) ? products : [];
 
-    // Subcategory filtering now happens server-side (see the products fetch
-    // effect above) — `products` already reflects the selected subcategory.
-    const filteredProducts = safeProducts;
+    // Subcategory + price/newest sort happen server-side (see the products
+    // fetch effect above). Distance sort/filter and in-stock are applied here
+    // since distance is computed per-seller after the DB query, not a stored field.
+    const filteredProducts = React.useMemo(() => {
+        let result = safeProducts;
+        if (inStockOnly) {
+            result = result.filter((p) => Number(p.stock) > 0);
+        }
+        if (Number.isFinite(maxDistanceKm)) {
+            result = result.filter((p) => !Number.isFinite(p.distanceKm) || p.distanceKm <= maxDistanceKm);
+        }
+        if (sortBy === 'distance') {
+            result = [...result].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+        }
+        return result;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [safeProducts, inStockOnly, maxDistanceKm, sortBy]);
 
     const productsById = React.useMemo(() => {
         const map = {};
@@ -198,6 +226,19 @@ const CategoryProductsPage = () => {
 
             </header>
 
+            {!(safeProducts.length === 0 && !isLoading) && (
+                <div className="sticky top-[60px] z-40">
+                    <CategoryFilterBar
+                        sortBy={sortBy}
+                        onSortChange={setSortBy}
+                        maxDistanceKm={maxDistanceKm}
+                        onDistanceChange={setMaxDistanceKm}
+                        inStockOnly={inStockOnly}
+                        onInStockChange={setInStockOnly}
+                    />
+                </div>
+            )}
+
             <div className="flex flex-1 relative items-start">
                 {(safeProducts.length === 0 && !isLoading) ? (
                     <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
@@ -224,7 +265,7 @@ const CategoryProductsPage = () => {
                 ) : (
                     <>
                         {/* Sidebar */}
-                        <aside className="w-[70px] border-r border-gray-50 flex flex-col bg-white overflow-y-auto hide-scrollbar sticky top-[60px] h-[calc(100vh-60px)] pb-32 flex-shrink-0">
+                        <aside className="w-[70px] border-r border-gray-50 flex flex-col bg-white overflow-y-auto hide-scrollbar sticky top-[108px] h-[calc(100vh-108px)] pb-32 flex-shrink-0">
                             {subCategories.map((cat) => (
                                 <button
                                     key={cat.id}
@@ -254,14 +295,27 @@ const CategoryProductsPage = () => {
 
                         {/* Content */}
                         <main className="flex-1 p-2 pb-24 bg-white space-y-4 overflow-x-hidden">
-                            <div className={cn(
-                                "grid grid-cols-2 gap-x-2 gap-y-3 transition-opacity",
-                                isLoading && "opacity-40 pointer-events-none"
-                            )}>
-                                {filteredProducts.map((product) => (
-                                    <ProductCard key={product.id} product={product} compact={true} />
-                                ))}
-                            </div>
+                            {(filteredProducts.length === 0 && !isLoading && safeProducts.length > 0) ? (
+                                <div className="py-16 px-4 flex flex-col items-center text-center">
+                                    <p className="text-sm font-bold text-slate-600 mb-1">No products match your filters</p>
+                                    <p className="text-xs text-slate-400 mb-4">Try widening the distance or clearing filters.</p>
+                                    <button
+                                        onClick={() => { setMaxDistanceKm(null); setInStockOnly(false); }}
+                                        className="px-5 py-2 rounded-full bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors"
+                                    >
+                                        Clear filters
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className={cn(
+                                    "grid grid-cols-2 gap-x-2 gap-y-3 transition-opacity",
+                                    isLoading && "opacity-40 pointer-events-none"
+                                )}>
+                                    {filteredProducts.map((product) => (
+                                        <ProductCard key={product.id} product={product} compact={true} />
+                                    ))}
+                                </div>
+                            )}
                         </main>
                     </>
                 )}

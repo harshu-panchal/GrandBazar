@@ -16,7 +16,6 @@ import {
   Banknote,
   ChevronRight,
   ChevronLeft,
-  Share2,
   Gift,
   ShoppingBag,
   ChevronDown,
@@ -205,7 +204,6 @@ const CheckoutPage = () => {
     return () => observer.disconnect();
   }, [isAuthenticated]);
 
-  const appName = settings?.appName || "App";
   const {
     savedAddresses: locationSavedAddresses,
     currentLocation,
@@ -651,23 +649,6 @@ const CheckoutPage = () => {
     }
 
     showToast(result?.error || "Unable to detect current location", "error");
-  };
-
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `${appName} Checkout`,
-          text: `Hey! I am ordering some goodies from ${appName}.`,
-          url: window.location.href,
-        });
-      } catch (err) {
-        console.log("Error sharing:", err);
-      }
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      showToast("Link copied to clipboard!", "success");
-    }
   };
 
   const handleApplyCoupon = async (coupon) => {
@@ -1209,12 +1190,8 @@ const CheckoutPage = () => {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleShare}
-              className="h-12 px-4 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl transition-all active:scale-95">
-              <Share2 size={20} className="text-white" />
-              <span className="text-xs font-black text-white uppercase tracking-widest hidden sm:block">Share</span>
-            </button>
+            {/* Spacer to keep the title centered now that the share button is gone */}
+            <div className="w-12 h-12" aria-hidden="true" />
           </div>
         </div>
       </div>

@@ -24,12 +24,16 @@ const mapProduct = (p) => ({
 });
 
 const ShopByStorePage = () => {
-  const { currentLocation } = useAppLocation();
+  const { currentLocation, hasHydratedLocation } = useAppLocation();
   const [sections, setSections] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeStoreId, setActiveStoreId] = useState(null);
 
   useEffect(() => {
+    // Location hasn't finished restoring from storage/GPS yet — wait rather
+    // than treating "not yet known" as "no stores available".
+    if (!hasHydratedLocation) return;
+
     const load = async () => {
       const hasValidLocation =
         Number.isFinite(currentLocation?.latitude) &&
@@ -63,7 +67,7 @@ const ShopByStorePage = () => {
       }
     };
     load();
-  }, [currentLocation?.latitude, currentLocation?.longitude]);
+  }, [currentLocation?.latitude, currentLocation?.longitude, hasHydratedLocation]);
 
   const sortedStores = useMemo(
     () => [...sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),

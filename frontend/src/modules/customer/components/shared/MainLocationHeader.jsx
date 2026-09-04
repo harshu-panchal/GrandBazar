@@ -356,17 +356,20 @@ const MainLocationHeader = ({
                 onClick={() => navigate("/")}
                 className="flex items-center gap-3 cursor-pointer group shrink-0">
                 <div className="flex items-center gap-2 group-hover:scale-110 transition-all duration-300 drop-shadow-[0_2px_8px_rgba(255,255,255,0.2)]">
-                  {logoUrl && (
+                  {logoUrl ? (
+                    // The logo asset is a full lockup (mascot + wordmark) — showing
+                    // the app name text beside it duplicated the brand name.
                     <img
                       src={logoUrl}
                       alt={`${appName} Logo`}
                       loading="lazy"
                       className="h-10 w-auto object-contain"
                     />
+                  ) : (
+                    <span className="text-xl font-black tracking-tight text-slate-900">
+                      {appName}
+                    </span>
                   )}
-                  <span className="text-xl font-black tracking-tight text-slate-900">
-                    {appName}
-                  </span>
                 </div>
               </div>
 
@@ -475,15 +478,18 @@ const MainLocationHeader = ({
               }}
               className="relative z-10">
               <div className="mb-1">
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
-                  style={{ color: headerFontColor }}
-                >
-                  {logoUrl && (
-                    <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-3.5 w-auto object-contain" />
-                  )}
-                  {appName}
-                </span>
+                {logoUrl ? (
+                  // The logo asset is a full lockup (mascot + wordmark) — the
+                  // pill chrome + duplicated app name text below clashed with it.
+                  <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-6 w-auto object-contain" />
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
+                    style={{ color: headerFontColor }}
+                  >
+                    {appName}
+                  </span>
+                )}
               </div>
               <div className="flex justify-between items-start">
                 <div className="flex flex-col">

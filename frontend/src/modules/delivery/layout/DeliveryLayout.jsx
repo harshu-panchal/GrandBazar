@@ -33,7 +33,13 @@ const DeliveryLayout = () => {
   const mainRef = useRef(null);
 
   useEffect(() => {
+    // Reset both the internal scroll container and the window itself — on
+    // some mobile viewports (dynamic browser-chrome height) the outer shell
+    // ends up taller than the screen and the window scrolls instead of
+    // `main`'s own overflow, so resetting only one of them left the page
+    // opening mid-scroll.
     mainRef.current?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   }, [location.pathname]);
 
   const [activeOrder, setActiveOrder] = useState(null);
