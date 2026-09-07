@@ -2486,13 +2486,13 @@ const Orders = () => {
                                                         value={pickupVerifyOtp}
                                                         onChange={(e) => setPickupVerifyOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                                         placeholder="Enter code"
-                                                        className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-center text-lg font-black tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-300"
+                                                        className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-center text-lg font-black tracking-[0.2em] sm:tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-300"
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => handleVerifyPickupOtp(selectedOrder.id)}
                                                         disabled={pickupOtpVerifying || pickupVerifyOtp.length < 4}
-                                                        className="rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        className="shrink-0 whitespace-nowrap rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                                     >
                                                         {pickupOtpVerifying ? 'Verifying...' : 'Verify'}
                                                     </button>

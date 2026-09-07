@@ -173,7 +173,6 @@ const OrderDetailPage = () => {
   const [handoffOtp, setHandoffOtp] = useState(null);
   const [pickupOtp, setPickupOtp] = useState("");
   const [pickupQr, setPickupQr] = useState("");
-  const [pickupVerifyInput, setPickupVerifyInput] = useState("");
   const [clockTick, setClockTick] = useState(Date.now());
   const returnWindowMinutes = useMemo(() => {
     if (settings?.refundWindowHours && typeof settings.refundWindowHours === "number" && settings.refundWindowHours > 0) {
@@ -1076,6 +1075,7 @@ const OrderDetailPage = () => {
               <div className="rounded-2xl bg-white p-4 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pickup OTP</p>
                 <p className="text-3xl font-black tracking-[0.3em] text-slate-900 mt-2">{pickupOtp}</p>
+                <p className="text-[11px] text-slate-500 mt-2">Tell the seller this code — they'll enter it to confirm it's you.</p>
               </div>
             )}
             {pickupQr && (
@@ -1084,32 +1084,11 @@ const OrderDetailPage = () => {
                 <p className="text-sm font-mono break-all text-slate-800 mt-2">{pickupQr}</p>
               </div>
             )}
-            {String(order.workflowStatus || "").toUpperCase() === "CUSTOMER_PICKUP_READY" && (
-              <div className="flex gap-2">
-                <input
-                  value={pickupVerifyInput}
-                  onChange={(e) => setPickupVerifyInput(e.target.value)}
-                  placeholder="Enter OTP to confirm pickup"
-                  className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await customerApi.verifyCustomerPickup(order.orderId || orderId, {
-                        otp: pickupVerifyInput,
-                        orderNumber: order.orderId || orderId,
-                      });
-                      toast.success("Pickup confirmed");
-                      refreshOrder();
-                    } catch (e) {
-                      toast.error(e?.response?.data?.message || "Pickup verification failed");
-                    }
-                  }}
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white"
-                >
-                  Verify
-                </button>
+            {String(order.workflowStatus || "").toUpperCase() === "CUSTOMER_PICKUP_READY" && !pickupOtp && !pickupQr && (
+              <div className="rounded-2xl bg-white p-4 text-center">
+                <p className="text-xs font-semibold text-slate-500">
+                  Waiting for the seller to send your pickup code. Ask them to resend it if this doesn't update.
+                </p>
               </div>
             )}
           </div>
