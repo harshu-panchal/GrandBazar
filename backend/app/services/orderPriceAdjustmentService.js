@@ -17,7 +17,6 @@ import { debitWallet, creditWallet } from "./finance/walletService.js";
 import { createLedgerEntry } from "./finance/ledgerService.js";
 import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE } from "../constants/finance.js";
 import { roundCurrency } from "../utils/money.js";
-import { compensateOrderCancellation } from "./orderCompensation.js";
 import { releaseReservedStockForOrder, reserveStockForItems } from "./stockService.js";
 import { resolveWorkflowStatus } from "./orderWorkflowService.js";
 import { extraPaymentDeadlineQueue, JOB_NAMES } from "../queues/orderQueues.js";
@@ -47,10 +46,17 @@ function mapItemsForPricing(items = []) {
     product: item.product,
     variantSku: item.variantSlot || "",
     quantity: item.quantity,
+    // Only set when the caller (seller/admin adjustment) actually supplies an
+    // override — hydrateOrderItems falls back to the real product price for
+    // any line where this is absent, so quantity-only adjustments are unaffected.
+    ...(item.price != null && item.price !== "" ? { price: Number(item.price) } : {}),
   }));
 }
 
-async function scheduleExtraPaymentDeadline(orderId, deadlineAt) {
+// Same deadline queue/job name serves both "waiting on payment" and "waiting
+// on approval" — both are just "customer hasn't responded to a pending
+// adjustment yet," and reusing the queue avoids a second job type to wire up.
+async function scheduleAdjustmentDeadline(orderId, deadlineAt) {
   const delay = Math.max(0, new Date(deadlineAt).getTime() - Date.now());
   const jobId = `order:${orderId}:extra-payment`;
   try {
@@ -67,33 +73,31 @@ async function scheduleExtraPaymentDeadline(orderId, deadlineAt) {
   return jobId;
 }
 
+async function cancelAdjustmentDeadline(order) {
+  const jobId = order?.priceAdjustment?.extraPaymentJobId;
+  if (!jobId) return;
+  try {
+    const existing = await extraPaymentDeadlineQueue.getJob(jobId);
+    if (existing) await existing.remove();
+  } catch {
+    /* ignore — job may already have run/expired */
+  }
+}
+
+// A non-responding customer is treated exactly like an explicit rejection —
+// the order resumes at its original items/price, nothing to undo since
+// order.items was never touched while the adjustment was only proposed.
 export async function processExtraPaymentDeadlineJob({ orderId }) {
   orderId = await requireCanonicalOrderId(orderId);
-  const updated = await Order.findOneAndUpdate(
-    {
-      orderId,
-      workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
-      "priceAdjustment.status": "awaiting_payment",
-    },
-    {
-      $set: {
-        workflowStatus: WORKFLOW_STATUS.CANCELLED,
-        status: "cancelled",
-        cancelledBy: "system",
-        cancelReason: "Extra payment not received in time",
-        "priceAdjustment.status": "cancelled",
-      },
-    },
-    { new: true },
-  );
-  if (!updated) return;
-  await compensateOrderCancellation(updated, orderId);
-  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+  const order = await Order.findOne({
     orderId,
-    customerId: updated.customer,
-    userId: updated.customer,
-    sellerId: updated.seller,
-    customerMessage: "Order cancelled because extra payment was not completed.",
+    workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
+    "priceAdjustment.status": "pending",
+  });
+  if (!order) return;
+  await revertPendingAdjustment(order, {
+    actorLabel: "system",
+    reason: "Customer did not respond in time",
   });
 }
 
@@ -241,6 +245,11 @@ export async function applyOrderPriceAdjustment({
     err.statusCode = 409;
     throw err;
   }
+  if (order.priceAdjustment?.status === "pending") {
+    const err = new Error("An earlier adjustment on this order is still awaiting the customer's response");
+    err.statusCode = 409;
+    throw err;
+  }
 
   const previousGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
   const pricingSnapshot = await buildCheckoutPricingSnapshot({
@@ -248,6 +257,10 @@ export async function applyOrderPriceAdjustment({
     address: order.address,
     tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
     discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
+    // This is the seller/admin adjusting their own order, not a customer
+    // checkout — lets mapItemsForPricing's per-line price override through
+    // instead of silently re-pricing off the live product record.
+    enforceServerPricing: false,
   });
 
   const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(
@@ -262,35 +275,174 @@ export async function applyOrderPriceAdjustment({
   const newGrandTotal = Number(sellerEntry.breakdown?.grandTotal || 0);
   const delta = Math.round((newGrandTotal - previousGrandTotal) * 100) / 100;
   const direction = delta > 0 ? "increase" : delta < 0 ? "decrease" : "none";
+  const proposedItems = sellerEntry.items.map((item) => ({
+    product: item.productId,
+    name: item.productName,
+    quantity: item.quantity,
+    price: item.price,
+    variantSlot: item.variantSku || undefined,
+    image: item.image || "",
+  }));
+
+  // No real change (e.g. same total after swapping quantities/price) — apply
+  // the item-list edit immediately, there's nothing for the customer to approve.
+  if (direction === "none") {
+    const updated = await Order.findOneAndUpdate(
+      { _id: order._id, deliveryBoy: null },
+      {
+        $set: {
+          items: proposedItems,
+          "priceAdjustment.previousGrandTotal": previousGrandTotal,
+          "priceAdjustment.newGrandTotal": newGrandTotal,
+          "priceAdjustment.deltaAmount": 0,
+          "priceAdjustment.reason": reason || "",
+          "priceAdjustment.status": "applied",
+          "priceAdjustment.direction": "none",
+        },
+        $push: {
+          modificationTimeline: {
+            version: Number(order.modificationVersion || 0) + 1,
+            type: "price_adjusted",
+            actorRole: actorLabel,
+            actorId: "",
+            note: reason || "",
+            meta: { direction: "none", deltaAmount: 0, previousGrandTotal, newGrandTotal },
+            createdAt: new Date(),
+          },
+        },
+        $inc: { modificationVersion: 1 },
+      },
+      { new: true },
+    );
+    if (!updated) {
+      const err = new Error("Unable to apply adjustment");
+      err.statusCode = 409;
+      throw err;
+    }
+    freezeFinancialSnapshot(updated, sellerEntry.breakdown);
+    await updated.save();
+    return updated;
+  }
+
+  // Real change — propose it and wait for the customer. order.items/pricing
+  // stay exactly as they are until approved (or paid, for an online
+  // increase); a rejection or timeout later needs no revert because of that.
+  const requiresPayment = direction === "increase" && order.paymentMode === "ONLINE";
+  const deadline = new Date(Date.now() + DEFAULT_EXTRA_PAYMENT_DEADLINE_MS());
+  const jobId = await scheduleAdjustmentDeadline(orderId, deadline);
 
   const updateSet = {
-    items: sellerEntry.items.map((item) => ({
-      product: item.productId,
-      name: item.productName,
-      quantity: item.quantity,
-      price: item.price,
-      variantSlot: item.variantSku || undefined,
-      image: item.image || "",
-    })),
+    workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
+    status: "awaiting_extra_payment",
+    orderStatus: "awaiting_extra_payment",
+    "priceAdjustment.status": "pending",
+    "priceAdjustment.direction": direction,
     "priceAdjustment.previousGrandTotal": previousGrandTotal,
     "priceAdjustment.newGrandTotal": newGrandTotal,
     "priceAdjustment.deltaAmount": Math.abs(delta),
     "priceAdjustment.reason": reason || "",
     "priceAdjustment.priorWorkflowStatus": order.workflowStatus,
     "priceAdjustment.priorLegacyStatus": order.status,
+    "priceAdjustment.requiresPayment": requiresPayment,
+    "priceAdjustment.proposedItems": proposedItems,
+    "priceAdjustment.proposedBreakdown": sellerEntry.breakdown,
+    "priceAdjustment.proposedPartialCancelIndexes": partialCancelIndexes,
+    "priceAdjustment.extraPaymentDeadlineAt": deadline,
+    "priceAdjustment.extraPaymentJobId": jobId,
   };
 
-  if (partialCancelIndexes.length > 0) {
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, deliveryBoy: null },
+    {
+      $set: updateSet,
+      $push: {
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: partialCancelIndexes.length > 0 ? "partial_cancel_proposed" : "price_adjustment_proposed",
+          actorRole: actorLabel,
+          actorId: "",
+          note: reason || "",
+          meta: { direction, deltaAmount: Math.abs(delta), previousGrandTotal, newGrandTotal },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("Unable to propose price adjustment");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  emitOrderStatusUpdate(orderId, { priceAdjustmentPending: true, direction }, updated.customer);
+  if (requiresPayment) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.EXTRA_PAYMENT_REQUIRED, {
+      orderId,
+      customerId: updated.customer,
+      userId: updated.customer,
+      amount: Math.abs(delta),
+    });
+  } else {
+    emitNotificationEvent(NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_PENDING_APPROVAL, {
+      orderId,
+      customerId: updated.customer,
+      userId: updated.customer,
+      amount: Math.abs(delta),
+      direction,
+    });
+  }
+
+  return updated;
+}
+
+// Shared by payPriceDifference (online-increase, after payment) and
+// approveOrderAdjustment (COD increase / decrease, no payment needed) — both
+// are "the customer signed off, now actually apply what was proposed."
+async function finalizePendingAdjustment(order, { actorRole, extraSet = {}, skipNotification = false }) {
+  const pa = order.priceAdjustment || {};
+  const direction = pa.direction || "none";
+  const deltaAmount = Math.abs(Number(pa.deltaAmount || 0));
+  const reason = pa.reason || "";
+  const proposedItems = Array.isArray(pa.proposedItems) ? pa.proposedItems : [];
+  const proposedPartialCancelIndexes = Array.isArray(pa.proposedPartialCancelIndexes)
+    ? pa.proposedPartialCancelIndexes
+    : [];
+  const proposedBreakdown = pa.proposedBreakdown || null;
+  const priorWs = pa.priorWorkflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
+
+  // Refund BEFORE the $set below overwrites paymentBreakdown — this reads the
+  // order's still-original wallet/payment figures, same ordering the old
+  // immediate-apply code relied on.
+  let creditNote = null;
+  if (direction === "decrease") {
+    creditNote = await issueCreditNoteAndRefund(order, deltaAmount, reason, actorRole);
+  }
+
+  const updateSet = {
+    items: proposedItems,
+    workflowStatus: priorWs,
+    status: legacyStatusFromWorkflow(priorWs),
+    orderStatus: legacyStatusFromWorkflow(priorWs),
+    "priceAdjustment.status": "applied",
+    "priceAdjustment.proposedItems": [],
+    "priceAdjustment.proposedBreakdown": null,
+    "priceAdjustment.proposedPartialCancelIndexes": [],
+  };
+  if (creditNote) updateSet["priceAdjustment.creditNoteId"] = creditNote._id;
+  Object.assign(updateSet, extraSet);
+
+  if (proposedPartialCancelIndexes.length > 0) {
     updateSet["partialCancellation.isPartial"] = true;
-    updateSet["partialCancellation.cancelledItemIndexes"] = partialCancelIndexes;
+    updateSet["partialCancellation.cancelledItemIndexes"] = proposedPartialCancelIndexes;
     updateSet["partialCancellation.cancelledAt"] = new Date();
-    updateSet["partialCancellation.reason"] = reason || "";
+    updateSet["partialCancellation.reason"] = reason;
     updateSet["partialCancellation.updatedEtaAt"] = new Date();
     updateSet.status = "partial_cancelled";
     updateSet.orderStatus = "partial_cancelled";
 
-    // Fewer items remain — re-sync the activation timing for the (unchanged)
-    // committed slot rather than leaving a stale value computed pre-cancellation.
     if (order.schedule?.deliveryDate && order.schedule?.windowStart) {
       const recomputedActivationAt = computeActivationAt(
         order.schedule.deliveryDate,
@@ -300,70 +452,46 @@ export async function applyOrderPriceAdjustment({
       updateSet["schedule.activationAt"] = recomputedActivationAt;
       if (order.schedule.activationJobId) {
         updateSet["schedule.activationJobId"] = await scheduleOrderActivationJob(
-          orderId,
+          order.orderId,
           recomputedActivationAt,
         );
       }
     }
-  }
-
-  if (direction === "increase" && order.paymentMode === "ONLINE") {
-    const deadline = new Date(Date.now() + DEFAULT_EXTRA_PAYMENT_DEADLINE_MS());
-    const jobId = await scheduleExtraPaymentDeadline(orderId, deadline);
-    updateSet.workflowStatus = WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT;
-    updateSet.status = "awaiting_extra_payment";
-    updateSet.orderStatus = "awaiting_extra_payment";
-    updateSet["priceAdjustment.status"] = "awaiting_payment";
-    updateSet["priceAdjustment.direction"] = "increase";
-    updateSet["priceAdjustment.extraPaymentDeadlineAt"] = deadline;
-    updateSet["priceAdjustment.extraPaymentJobId"] = jobId;
-  } else if (direction === "increase" && order.paymentMode === "COD") {
-    updateSet["priceAdjustment.status"] = "applied";
-    updateSet["priceAdjustment.direction"] = "increase";
+  } else if (direction !== "none") {
     updateSet.status = "price_revised";
     updateSet.orderStatus = "price_revised";
-  } else if (direction === "decrease") {
-    const creditNote = await issueCreditNoteAndRefund(order, Math.abs(delta), reason, actorLabel);
-    updateSet["priceAdjustment.status"] = "applied";
-    updateSet["priceAdjustment.direction"] = "decrease";
-    updateSet["priceAdjustment.creditNoteId"] = creditNote._id;
-    updateSet.status = "price_revised";
-    updateSet.orderStatus = "price_revised";
-  } else {
-    updateSet["priceAdjustment.status"] = "applied";
-    updateSet["priceAdjustment.direction"] = "none";
   }
 
   const updated = await Order.findOneAndUpdate(
-    { _id: order._id, deliveryBoy: null },
+    { _id: order._id, "priceAdjustment.status": "pending" },
     {
       $set: updateSet,
       $push: {
         "priceAdjustment.history": {
           direction,
-          deltaAmount: Math.abs(delta),
-          reason: reason || "",
-          changedBy: actorLabel,
+          deltaAmount,
+          reason,
+          changedBy: actorRole,
           changedAt: new Date(),
         },
         revisedInvoices: buildRevisedInvoiceEntry(order, {
-          source: partialCancelIndexes.length > 0 ? "partial_cancel" : "price_adjustment",
+          source: proposedPartialCancelIndexes.length > 0 ? "partial_cancel" : "price_adjustment",
           direction,
-          deltaAmount: Math.abs(delta),
-          note: reason || "",
-          grandTotal: newGrandTotal,
+          deltaAmount,
+          note: reason,
+          grandTotal: pa.newGrandTotal,
         }),
         modificationTimeline: {
           version: Number(order.modificationVersion || 0) + 1,
-          type: partialCancelIndexes.length > 0 ? "partial_cancelled" : "price_adjusted",
-          actorRole: actorLabel,
+          type: proposedPartialCancelIndexes.length > 0 ? "partial_cancelled" : "price_adjusted",
+          actorRole,
           actorId: "",
-          note: reason || "",
+          note: reason,
           meta: {
             direction,
-            deltaAmount: Math.abs(delta),
-            previousGrandTotal,
-            newGrandTotal,
+            deltaAmount,
+            previousGrandTotal: pa.previousGrandTotal,
+            newGrandTotal: pa.newGrandTotal,
           },
           createdAt: new Date(),
         },
@@ -374,35 +502,132 @@ export async function applyOrderPriceAdjustment({
   );
 
   if (!updated) {
-    const err = new Error("Unable to apply price adjustment");
+    const err = new Error("This adjustment was already resolved");
     err.statusCode = 409;
     throw err;
   }
 
-  freezeFinancialSnapshot(updated, sellerEntry.breakdown);
-  await updated.save();
+  if (proposedBreakdown) {
+    freezeFinancialSnapshot(updated, proposedBreakdown);
+    await updated.save();
+  }
 
-  if (partialCancelIndexes.length > 0) {
+  if (proposedPartialCancelIndexes.length > 0) {
     await releaseReservedStockForOrder(updated, { reason: "Partial cancellation" });
   }
 
-  emitOrderStatusUpdate(orderId, { priceAdjusted: true, direction }, updated.customer);
-  if (direction === "increase" && order.paymentMode === "ONLINE") {
-    emitNotificationEvent(NOTIFICATION_EVENTS.EXTRA_PAYMENT_REQUIRED, {
-      orderId,
-      customerId: updated.customer,
-      userId: updated.customer,
-      amount: Math.abs(delta),
-    });
-  } else if (direction === "decrease") {
+  await cancelAdjustmentDeadline(order);
+  emitOrderStatusUpdate(order.orderId, { priceAdjusted: true, direction }, updated.customer);
+  if (direction !== "none" && !skipNotification) {
     emitNotificationEvent(NOTIFICATION_EVENTS.PRICE_REVISED, {
-      orderId,
+      orderId: order.orderId,
       customerId: updated.customer,
       userId: updated.customer,
-      amount: Math.abs(delta),
+      amount: deltaAmount,
     });
   }
 
+  return updated;
+}
+
+// Discards a proposed adjustment — used for both an explicit customer
+// rejection and a deadline expiry. order.items was never touched while
+// "pending", so this only needs to move the workflow status back, never a
+// data revert.
+async function revertPendingAdjustment(order, { actorLabel, reason }) {
+  const pa = order.priceAdjustment || {};
+  const priorWs = pa.priorWorkflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, "priceAdjustment.status": "pending" },
+    {
+      $set: {
+        workflowStatus: priorWs,
+        status: legacyStatusFromWorkflow(priorWs),
+        orderStatus: legacyStatusFromWorkflow(priorWs),
+        "priceAdjustment.status": "cancelled",
+        "priceAdjustment.proposedItems": [],
+        "priceAdjustment.proposedBreakdown": null,
+        "priceAdjustment.proposedPartialCancelIndexes": [],
+      },
+      $push: {
+        "priceAdjustment.history": {
+          direction: pa.direction || "none",
+          deltaAmount: Math.abs(Number(pa.deltaAmount || 0)),
+          reason: reason || "",
+          changedBy: actorLabel,
+          changedAt: new Date(),
+        },
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: "price_adjustment_rejected",
+          actorRole: actorLabel,
+          actorId: "",
+          note: reason || "",
+          meta: { direction: pa.direction || "none" },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+    { new: true },
+  );
+  if (!updated) return null;
+
+  await cancelAdjustmentDeadline(order);
+  emitOrderStatusUpdate(order.orderId, { priceAdjustmentRejected: true }, updated.customer);
+  emitNotificationEvent(NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_REJECTED, {
+    orderId: order.orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    sellerId: updated.seller,
+  });
+  return updated;
+}
+
+export async function approveOrderAdjustment(customerId, orderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({
+    orderId,
+    customer: customerId,
+    workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
+    "priceAdjustment.status": "pending",
+  });
+  if (!order) {
+    const err = new Error("No pending adjustment for this order");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (order.priceAdjustment?.requiresPayment) {
+    const err = new Error("This adjustment requires payment — use pay difference instead");
+    err.statusCode = 400;
+    throw err;
+  }
+  return finalizePendingAdjustment(order, { actorRole: "customer" });
+}
+
+export async function rejectOrderAdjustment(customerId, orderId, { reason = "" } = {}) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({
+    orderId,
+    customer: customerId,
+    workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
+    "priceAdjustment.status": "pending",
+  });
+  if (!order) {
+    const err = new Error("No pending adjustment for this order");
+    err.statusCode = 404;
+    throw err;
+  }
+  const updated = await revertPendingAdjustment(order, {
+    actorLabel: "customer",
+    reason: reason || "Declined by customer",
+  });
+  if (!updated) {
+    const err = new Error("This adjustment was already resolved");
+    err.statusCode = 409;
+    throw err;
+  }
   return updated;
 }
 
@@ -412,6 +637,8 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
     orderId,
     customer: customerId,
     workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT,
+    "priceAdjustment.status": "pending",
+    "priceAdjustment.requiresPayment": true,
   });
   if (!order) {
     const err = new Error("No pending extra payment for this order");
@@ -442,34 +669,31 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
     });
   }
 
-  const priorWs = order.priceAdjustment?.priorWorkflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
-  const updated = await Order.findOneAndUpdate(
-    { orderId, workflowStatus: WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT },
+  // Paying the difference IS the customer's approval for an online increase
+  // — applies the proposed items/pricing exactly like approveOrderAdjustment
+  // does for the no-payment-needed cases.
+  const updated = await finalizePendingAdjustment(order, {
+    actorRole: "customer",
+    extraSet: { "priceAdjustment.extraPaymentRef": `EXTRA-${orderId}` },
+    skipNotification: true,
+  });
+
+  await Order.updateOne(
+    { _id: updated._id },
     {
-      $set: {
-        workflowStatus: priorWs,
-        status: legacyStatusFromWorkflow(priorWs),
-        orderStatus: legacyStatusFromWorkflow(priorWs),
-        "priceAdjustment.status": "applied",
-        "priceAdjustment.extraPaymentRef": `EXTRA-${orderId}`,
-      },
       $push: {
         modificationTimeline: {
-          version: Number(order.modificationVersion || 0) + 1,
+          version: Number(updated.modificationVersion || 0) + 1,
           type: "extra_payment_recorded",
           actorRole: "customer",
           actorId: String(customerId || ""),
           note: "Extra payment received",
-          meta: {
-            deltaAmount: delta,
-            walletUsed: walletUse,
-          },
+          meta: { deltaAmount: delta, walletUsed: walletUse },
           createdAt: new Date(),
         },
       },
       $inc: { modificationVersion: 1 },
     },
-    { new: true },
   );
 
   emitNotificationEvent(NOTIFICATION_EVENTS.PAYMENT_SUCCESS, {

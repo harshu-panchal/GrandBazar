@@ -515,6 +515,22 @@ function eventDefinition(eventType) {
             ? `Please pay the additional ₹${payload.amount} to continue with order #${payload.orderId || ""}.`
             : "Additional payment is required to continue your order.",
       };
+    case NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_PENDING_APPROVAL:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Review Order Price Change",
+        body: (payload) =>
+          `The seller ${payload.direction === "decrease" ? "reduced" : "increased"} order #${payload.orderId || ""} by ₹${payload.amount || 0}. Please review and approve before it continues.`,
+      };
+    case NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_REJECTED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Price Adjustment Declined",
+        body: (payload) =>
+          `The customer declined your price adjustment for order #${payload.orderId || ""} — it will continue at the original price.`,
+      };
     case NOTIFICATION_EVENTS.ITEMS_ADDED_TO_ORDER:
       return {
         multi: true,

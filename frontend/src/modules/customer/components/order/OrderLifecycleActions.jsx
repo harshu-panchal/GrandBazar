@@ -13,6 +13,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [paying, setPaying] = useState(false);
+  const [resolvingAdjustment, setResolvingAdjustment] = useState("");
   const [reviewingReplacement, setReviewingReplacement] = useState("");
   const [disputeCountdown, setDisputeCountdown] = useState(null);
   const [showAddItems, setShowAddItems] = useState(false);
@@ -54,7 +55,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const canReschedule = ["pending", "confirmed", "reschedule_requested", "preorder_confirmed"].includes(
     legacyStatus,
   );
-  const awaitingExtra = legacyStatus === "awaiting_extra_payment";
   // The server is always the source of truth and will reject a late
   // request regardless — this just keeps the button from inviting a
   // complaint the backend is going to refuse anyway.
@@ -96,6 +96,32 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
     }
   };
 
+  const approveAdjustment = async () => {
+    try {
+      setResolvingAdjustment("approve");
+      await customerApi.approveOrderAdjustment(order.orderId);
+      toast.success("Adjustment approved");
+      onRefresh?.();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Could not approve adjustment");
+    } finally {
+      setResolvingAdjustment("");
+    }
+  };
+
+  const rejectAdjustment = async () => {
+    try {
+      setResolvingAdjustment("reject");
+      await customerApi.rejectOrderAdjustment(order.orderId, {});
+      toast.success("Adjustment declined — order continues at the original price");
+      onRefresh?.();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Could not decline adjustment");
+    } finally {
+      setResolvingAdjustment("");
+    }
+  };
+
   const raiseDispute = async () => {
     try {
       await customerApi.raiseDispute(order.orderId, {
@@ -129,13 +155,16 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
     }
   };
 
-  // Surface a seller price adjustment to the customer regardless of payment
-  // mode/direction — previously only the online-payment "pay the difference"
-  // case (awaitingExtra, below) had any visible notice; a COD price increase
-  // or any price decrease was applied to the order silently.
+  // A seller price adjustment (any direction, any payment mode) now pauses
+  // the order until the customer explicitly approves it — nothing is applied
+  // to the order until then, so there's always something to review here
+  // rather than a silent after-the-fact notice.
   const priceAdjustment = order.priceAdjustment;
   const showPriceAdjustmentNotice =
     priceAdjustment?.status === "applied" && priceAdjustment?.direction && priceAdjustment.direction !== "none";
+  const isAdjustmentPending = priceAdjustment?.status === "pending";
+  const adjustmentNeedsPayment = isAdjustmentPending && priceAdjustment?.requiresPayment;
+  const adjustmentNeedsApproval = isAdjustmentPending && !priceAdjustment?.requiresPayment;
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
@@ -163,15 +192,49 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         </div>
       )}
 
-      {awaitingExtra && (
-        <button
-          type="button"
-          disabled={paying}
-          onClick={payDifference}
-          className="w-full rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white"
-        >
-          Pay difference ₹{order.priceAdjustment?.deltaAmount || 0}
-        </button>
+      {(adjustmentNeedsPayment || adjustmentNeedsApproval) && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">
+            {priceAdjustment.direction === "decrease" ? "Seller reduced your order total" : "Seller increased your order total"}
+          </h4>
+          <p className="text-xs text-slate-700">
+            {priceAdjustment.direction === "decrease"
+              ? `The seller reduced your order total by ₹${priceAdjustment.deltaAmount || 0}. Approve to receive the refund, or decline to keep the order as it was.`
+              : `The seller increased your order total by ₹${priceAdjustment.deltaAmount || 0}. Your order won't continue until you respond.`}
+          </p>
+          {priceAdjustment.reason && (
+            <p className="text-xs text-slate-500">Reason: {priceAdjustment.reason}</p>
+          )}
+          <div className="flex gap-2 pt-1">
+            {adjustmentNeedsPayment ? (
+              <button
+                type="button"
+                disabled={paying}
+                onClick={payDifference}
+                className="flex-1 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                Pay difference ₹{priceAdjustment.deltaAmount || 0}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={resolvingAdjustment === "approve"}
+                onClick={approveAdjustment}
+                className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                Approve
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={resolvingAdjustment === "reject"}
+              onClick={rejectAdjustment}
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
       )}
 
       {canAddItems && (

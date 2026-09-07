@@ -290,12 +290,39 @@ const Orders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Subsequent changes (page, date filters): update data without full page "refresh"
+    // A stale page number combined with a new tab's backend status filter can
+    // point past the end of that tab's results — reset to page 1 on tab change.
+    useEffect(() => {
+        if (!hasMountedRef.current) return;
+        setPage(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
+    // Subsequent changes (page, date filters, tab): update data without full page "refresh"
     useEffect(() => {
         if (!hasMountedRef.current) return;
         fetchOrders(page, false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, startDate, endDate]);
+    }, [page, startDate, endDate, activeTab]);
+
+    // Maps a tab to the backend's `status` filter (see
+    // normalizeSellerStatusFilter in orderQueryService.js) — without this,
+    // fetchOrders only ever pulls the single most-recent page of ALL
+    // orders and every tab (including Cancelled) just filters that same
+    // 25-item page client-side. An order past the first page effectively
+    // "disappears" from a tab it's actually still in, since it's never in
+    // the fetched page to begin with. 'Confirmed'/'Packed' share the
+    // backend's combined "processed" bucket; filteredOrders below still
+    // narrows to the exact one. 'Scheduled' and 'All' have no single
+    // backend status value, so they keep fetching everything.
+    const TAB_TO_BACKEND_STATUS = {
+        'Pending': 'pending',
+        'Confirmed': 'processed',
+        'Packed': 'processed',
+        'Out for Delivery': 'out-for-delivery',
+        'Delivered': 'delivered',
+        'Cancelled': 'cancelled',
+    };
 
     const fetchOrders = async (requestedPage = 1, showPageLoader = false) => {
         try {
@@ -305,6 +332,8 @@ const Orders = () => {
             const params = { page: requestedPage };
             if (startDate) params.startDate = startDate;
             if (endDate) params.endDate = endDate;
+            const backendStatus = TAB_TO_BACKEND_STATUS[activeTab];
+            if (backendStatus) params.status = backendStatus;
 
             const response = await sellerApi.getOrders(params);
 
@@ -839,6 +868,14 @@ const Orders = () => {
         });
     };
 
+    const updateAdjustPrice = (idx, price) => {
+        setAdjustItems((prev) => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], price };
+            return next;
+        });
+    };
+
     const adjustPreviewTotal = useMemo(
         () => adjustItems.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0),
         [adjustItems]
@@ -848,6 +885,10 @@ const Orders = () => {
         const kept = adjustItems.filter((it) => Number(it.quantity) > 0);
         if (!kept.length) {
             showToast("At least one item must remain. Use cancel for a full cancellation.", "error");
+            return;
+        }
+        if (kept.some((it) => !(Number(it.price) > 0))) {
+            showToast("Each item's price must be greater than 0", "error");
             return;
         }
         if (!adjustReason.trim()) {
@@ -861,6 +902,7 @@ const Orders = () => {
                     product: it.product,
                     variantSlot: it.variantSlot,
                     quantity: Number(it.quantity),
+                    price: Number(it.price),
                 })),
                 reason: adjustReason.trim(),
             });
@@ -2547,7 +2589,8 @@ const Orders = () => {
                                             const s = (selectedOrder.status || '').toLowerCase();
                                             const canAdjustPrice =
                                                 !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
-                                                && canSellerManuallyUpdateStatus(selectedOrder);
+                                                && canSellerManuallyUpdateStatus(selectedOrder)
+                                                && selectedOrder.priceAdjustment?.status !== 'pending';
                                             const canSplitOrReplace = canSellerSplitOrReplace(selectedOrder);
                                             const canCancelItems = canAdjustPrice && selectedOrder.items.length > 1;
                                             const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode && !cancelItemsMode;
@@ -2641,26 +2684,39 @@ const Orders = () => {
                                             <div className="space-y-3">
                                                 <div className="space-y-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
                                                     {adjustItems.map((item, idx) => (
-                                                        <div key={idx} className="flex items-center justify-between gap-2 p-3 bg-white ring-1 ring-slate-100 rounded-2xl">
-                                                            <div className="flex items-center gap-3 min-w-0">
-                                                                <div className="h-10 w-10 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 shrink-0">
-                                                                    <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                                                                </div>
-                                                                <div className="min-w-0">
+                                                        <div key={idx} className="flex flex-col gap-2.5 p-3 bg-white ring-1 ring-slate-100 rounded-2xl">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <div className="h-10 w-10 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 shrink-0">
+                                                                        <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                                                                    </div>
                                                                     <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                                                                    <p className="text-xs font-semibold text-slate-600 mt-0.5">₹{Number(item.price).toFixed(2)} each</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    <button onClick={() => updateAdjustQty(idx, Number(item.quantity) - 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">−</button>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        value={item.quantity}
+                                                                        onChange={(e) => updateAdjustQty(idx, e.target.value)}
+                                                                        className="w-12 text-center text-xs font-bold border border-slate-200 rounded-lg py-1"
+                                                                    />
+                                                                    <button onClick={() => updateAdjustQty(idx, Number(item.quantity) + 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">+</button>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                <button onClick={() => updateAdjustQty(idx, Number(item.quantity) - 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">−</button>
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => updateAdjustQty(idx, e.target.value)}
-                                                                    className="w-12 text-center text-xs font-bold border border-slate-200 rounded-lg py-1"
-                                                                />
-                                                                <button onClick={() => updateAdjustQty(idx, Number(item.quantity) + 1)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">+</button>
+                                                            <div className="flex items-center justify-between gap-2 pl-[52px]">
+                                                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Price each</label>
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-xs font-bold text-slate-500">₹</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                        value={item.price}
+                                                                        onChange={(e) => updateAdjustPrice(idx, e.target.value)}
+                                                                        className="w-20 text-right text-xs font-bold border border-slate-200 rounded-lg py-1 px-1.5"
+                                                                    />
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -2684,7 +2740,7 @@ const Orders = () => {
                                                     </button>
                                                 </div>
                                                 <p className="text-[10px] text-slate-400 leading-relaxed">
-                                                    Final pricing is recomputed from current product prices. Increases on prepaid orders will request an extra payment; decreases issue a credit note/refund automatically.
+                                                    Change quantity, per-item price, or both. Increases on prepaid orders will request an extra payment from the customer; decreases issue a credit note/refund automatically.
                                                 </p>
                                             </div>
                                         ) : (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Wallet,
@@ -128,6 +128,35 @@ const RewardsPage = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [tab, setTab] = useState("overview");
+  // Switching tabs (My Cashback / My Referrals / Reward History / Alerts) is
+  // pure component state, not a route change — hardware/gesture back had
+  // nothing of its own to consume, so it fell through to wherever this page
+  // was opened from (e.g. Profile) instead of returning to the tile view.
+  // Push a history entry on entering a sub-tab and consume it on the way
+  // back, same pattern as the product-detail sheet fix elsewhere in the app.
+  const wasOnOverviewRef = useRef(true);
+  useEffect(() => {
+    const isOverview = tab === "overview";
+    if (!isOverview && wasOnOverviewRef.current) {
+      window.history.pushState({ rewardsTab: true }, "");
+    } else if (isOverview && !wasOnOverviewRef.current) {
+      if (window.history.state?.rewardsTab) {
+        window.history.back();
+      }
+    }
+    wasOnOverviewRef.current = isOverview;
+  }, [tab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (tab !== "overview") {
+        setTab("overview");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [tab]);
+
   const [grantFilter, setGrantFilter] = useState("available");
   const [couponView, setCouponView] = useState("available");
   const [historyView, setHistoryView] = useState("rewards");
@@ -328,7 +357,7 @@ const RewardsPage = () => {
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => (tab === "overview" ? navigate(-1) : setTab("overview"))}
           className="flex items-center gap-1 text-white/80 mb-4 relative z-10"
         >
           <ChevronLeft className="w-5 h-5" /> Back
@@ -707,7 +736,7 @@ const RewardsPage = () => {
                   <button
                     type="button"
                     onClick={() => navigate("/refer-and-earn")}
-                    className="mt-4 w-full py-2.5 bg-white text-primary-700 rounded-xl font-bold text-sm"
+                    className="mt-4 w-full py-2.5 bg-white text-violet-700 hover:bg-violet-50 transition-colors rounded-xl font-bold text-sm shadow-sm"
                   >
                     Open Refer & Earn
                   </button>

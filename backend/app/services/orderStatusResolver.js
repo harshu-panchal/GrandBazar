@@ -154,6 +154,13 @@ export function resolveOrderStatus(order) {
 
   let label = DISPLAY_LABELS[legacyStatus] || legacyStatus.replace(/_/g, " ");
   if (isScheduled) label = "Scheduled";
+  // "awaiting_extra_payment" now also covers COD-increase/decrease
+  // adjustments that only need the customer's approval, not a payment — the
+  // bucket/gating logic stays the same (workflowStatus is unchanged), only
+  // the label needs to say the right thing.
+  if (legacyStatus === "awaiting_extra_payment" && order.priceAdjustment?.status === "pending" && !order.priceAdjustment?.requiresPayment) {
+    label = "Awaiting customer approval";
+  }
   // Return/dispute/cancellation overlays take label priority over the base
   // lifecycle status — an order sitting at "delivered" with an active return
   // should read as the return state, not silently look finished.
