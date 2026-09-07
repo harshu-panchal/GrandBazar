@@ -36,6 +36,7 @@ export default function OrderDeliveryChatModal({
   isOpen,
   onClose,
   orderId,
+  shortOrderId = "",
   currentUserRole = "customer", // 'customer' | 'delivery' | 'admin'
   currentUserId,
   partnerInfo = null, // { name, phone, avatar }
@@ -150,7 +151,7 @@ export default function OrderDeliveryChatModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+      <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
         {/* Backdrop overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -169,10 +170,10 @@ export default function OrderDeliveryChatModal({
           className="relative w-full max-w-lg bg-slate-900 text-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-[650px] overflow-hidden border border-slate-800"
         >
           {/* Header */}
-          <div className="p-4 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-11 h-11 rounded-full bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 font-bold overflow-hidden shadow-inner">
+          <div className="p-3 sm:p-4 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2 z-10">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="relative shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 font-bold overflow-hidden shadow-inner">
                   {partner?.avatar ? (
                     <img
                       src={partner.avatar}
@@ -180,41 +181,41 @@ export default function OrderDeliveryChatModal({
                       className="w-full h-full object-cover"
                     />
                   ) : isRider ? (
-                    <User size={22} />
+                    <User size={20} />
                   ) : (
-                    <Bike size={22} />
+                    <Bike size={20} />
                   )}
                 </div>
                 {canChat && (
-                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full ring-2 ring-slate-900 animate-pulse" />
+                  <span className="absolute bottom-0 right-0 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-emerald-500 rounded-full ring-2 ring-slate-900 animate-pulse" />
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-slate-100 text-base leading-tight">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <h3 className="font-bold text-slate-100 text-sm sm:text-base leading-tight truncate">
                     {partner?.name || partnerRoleLabel}
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                  <span className="shrink-0 px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-brand-500/20 text-brand-300 border border-brand-500/30">
                     {partnerRoleLabel}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
-                  <span>Order #{orderId}</span>
+                <p className="text-[11px] sm:text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <span className="shrink-0">Order #{shortOrderId || orderId}</span>
                   {canChat ? (
-                    <span className="text-emerald-400 font-semibold">• Live Delivery Chat</span>
+                    <span className="text-emerald-400 font-semibold shrink-0">• Live Delivery Chat</span>
                   ) : (
-                    <span className="text-amber-400 font-semibold">• Delivery Window Ended</span>
+                    <span className="text-amber-400 font-semibold shrink-0">• Delivery Window Ended</span>
                   )}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {partner?.phone && (
                 <a
                   href={`tel:${partner.phone}`}
-                  className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all flex items-center justify-center"
+                  className="shrink-0 p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all flex items-center justify-center"
                   title="Call Phone"
                 >
                   <Phone size={18} />
@@ -222,7 +223,7 @@ export default function OrderDeliveryChatModal({
               )}
               <button
                 onClick={onClose}
-                className="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+                className="shrink-0 p-2 sm:p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
               >
                 <X size={18} />
               </button>

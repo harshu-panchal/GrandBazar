@@ -1849,6 +1849,7 @@ const OrderDetailPage = () => {
         isOpen={showChatModal}
         onClose={() => setShowChatModal(false)}
         orderId={order?.orderId || orderId}
+        shortOrderId={order?.shortOrderId}
         currentUserRole="customer"
         currentUserId={order?.customer?._id || order?.customer}
         orderStatus={status}

@@ -1227,6 +1227,7 @@ const OrderDetails = () => {
         isOpen={showChatModal}
         onClose={() => setShowChatModal(false)}
         orderId={order?.orderId || orderId}
+        shortOrderId={order?.shortOrderId}
         currentUserRole="delivery"
         currentUserId={user?._id || user?.id}
         orderStatus={getLegacyStatusFromOrder(order)}
