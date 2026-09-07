@@ -40,8 +40,8 @@ function getTransporter() {
   if (!transporter) {
     const host = process.env.SMTP_HOST || "smtp.gmail.com";
     const port = parseInt(process.env.SMTP_PORT || "587", 10);
-    const user = process.env.SMTP_USER || process.env.EMAIL_FROM || "";
-    const pass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || "";
+    const user = process.env.SMTP_USER || process.env.EMAIL_FROM || process.env.MAIL_FROM || "";
+    const pass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || process.env.MAIL_PASSWORD || "";
     const secure = process.env.SMTP_SECURE === "true" || port === 465;
 
     transporter = nodemailer.createTransport({
@@ -49,6 +49,9 @@ function getTransporter() {
       port,
       secure,
       auth: user && pass ? { user, pass } : undefined,
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
   }
   return transporter;
@@ -65,8 +68,8 @@ function getTransporter() {
  */
 export async function sendVendorWelcomeEmail({ email, name, password, storeName }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
-  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://zinto.in/seller";
 
   const passwordBlock = password
     ? `<p><strong>Temporary Password:</strong> <code>${password}</code></p>
@@ -136,7 +139,7 @@ export function useRealEmailOTP() {
  */
 export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user" }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Password Reset Verification Code</h2>
@@ -174,7 +177,7 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
  */
 export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMinutes = 5 }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Your Login Verification Code</h2>
@@ -212,8 +215,8 @@ export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMin
  */
 export async function sendStaffWelcomeEmail({ email, name, password, role }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
-  const appLink = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/admin";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const appLink = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://zinto.in/admin";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -258,7 +261,7 @@ export async function sendStaffWelcomeEmail({ email, name, password, role }) {
  */
 export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
       <h2 style="color: #2563eb; margin-top: 0;">Seller Verification OTP</h2>
@@ -298,7 +301,7 @@ export async function sendSellerVerificationOtpEmail({ email, otp, name }) {
  */
 export async function sendSellerInviteEmail({ email, inviteLink }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -326,7 +329,7 @@ export async function sendSellerInviteEmail({ email, inviteLink }) {
       html: htmlContent,
     };
 
-    if (!process.env.SMTP_USER && !process.env.EMAIL_FROM) {
+    if (!process.env.SMTP_USER && !process.env.EMAIL_FROM && !process.env.MAIL_FROM) {
       console.log("[emailService] Mocking Seller Invite Email Dispatch (No SMTP Configured):", {
         to: email,
         inviteLink,
@@ -348,8 +351,8 @@ export async function sendSellerInviteEmail({ email, inviteLink }) {
  */
 export async function sendSellerStaffWelcomeEmail({ email, name, password, storeName, roleTitle }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
-  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://grandbazar.com/seller";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const appLink = process.env.SELLER_PORTAL_URL || process.env.FRONTEND_URL || "https://zinto.in/seller";
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -393,7 +396,7 @@ export async function sendSellerStaffWelcomeEmail({ email, name, password, store
  */
 export async function sendBecomeSellerLinksEmail({ email, name }) {
   const appName = await getAppName();
-  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@grandbazar.com";
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
   
   const playstoreLink = process.env.PLAYSTORE_LINK || "https://play.google.com/store/apps";
   const appstoreLink = process.env.APPSTORE_LINK || "https://apps.apple.com/";

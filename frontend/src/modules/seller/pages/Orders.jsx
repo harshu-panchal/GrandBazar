@@ -100,6 +100,8 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
 
     if (readOnly || requiresDisplayOnly) {
         const isScheduled = isScheduledHoldOrder(order) || order.status === 'scheduled';
+        const isPacked = normalizedStatus === 'packed' || Boolean(order.sellerPackedAt);
+        const displayLabel = isPacked ? 'Packed' : (order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold')));
         return (
             <div className={compact ? 'text-right' : ''}>
                 <span
@@ -108,14 +110,16 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                         compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
                         isScheduled
                             ? 'bg-blue-100 text-blue-700'
-                            : platformLocked
-                                ? 'bg-brand-100 text-brand-700'
-                                : requiresDisplayOnly
-                                    ? 'bg-violet-100 text-violet-700'
-                                    : 'bg-amber-100 text-amber-700',
+                            : isPacked
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : platformLocked
+                                    ? 'bg-brand-100 text-brand-700'
+                                    : requiresDisplayOnly
+                                        ? 'bg-violet-100 text-violet-700'
+                                        : 'bg-amber-100 text-amber-700',
                     )}
                 >
-                    {order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold'))}
+                    {displayLabel}
                 </span>
                 {isScheduled && (
                     <p className="text-[10px] font-semibold text-slate-500 mt-1">
@@ -128,7 +132,7 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                     </p>
                 )}
                 {platformLocked && ['delivery_search', 'delivery_assigned'].includes(String(order.workflowStatus || '').toLowerCase()) && (
-                    order.sellerPackedAt ? (
+                    isPacked ? (
                         <p className="text-[10px] font-bold text-emerald-600 mt-1">Packed ✓</p>
                     ) : (
                         <button
@@ -138,8 +142,9 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                                 try {
                                     await sellerApi.markOrderPacked(order.id || order._id || order.orderId);
                                     showToast('Marked as packed — rider notified', 'success');
-                                    // The seller-room socket push from the backend triggers this page's
-                                    // existing order:status:update listener, which refetches the list.
+                                    if (typeof onStatusUpdate === 'function') {
+                                        onStatusUpdate(order.id || order._id || order.orderId, 'packed', { sellerPackedAt: new Date().toISOString() });
+                                    }
                                 } catch (err) {
                                     showToast(err?.response?.data?.message || 'Failed to mark as packed', 'error');
                                 }
@@ -618,8 +623,7 @@ const Orders = () => {
         setAdjustMode(false);
         setAdjustItems([]);
         setAdjustReason('');
-        setCustomerPickupOtp('');
-        setCustomerPickupQr('');
+        setPickupVerifyOtp('');
         setPickupOtpCooldown(0);
         setIsDetailsModalOpen(true);
 
@@ -652,6 +656,17 @@ const Orders = () => {
 
     const handleStatusUpdate = async (orderId, newStatus, additionalData = {}) => {
         const normalizedStatus = String(newStatus).toLowerCase();
+        if (additionalData.sellerPackedAt) {
+            setOrders((prev) =>
+                prev.map((o) =>
+                    o.id === orderId
+                        ? { ...o, status: 'packed', statusLabel: 'Packed', sellerPackedAt: additionalData.sellerPackedAt }
+                        : o
+                )
+            );
+            fetchOrders(page, false);
+            return;
+        }
         const targetOrder = orders.find((o) => o.id === orderId) || (selectedOrder?.id === orderId ? selectedOrder : null);
         const isSelfDelivery = targetOrder ? resolveFulfillmentMethod(targetOrder) === 'seller_delivery' : false;
 

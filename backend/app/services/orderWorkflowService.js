@@ -833,9 +833,10 @@ export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
     return order; // idempotent
   }
 
+  const now = new Date();
   const updated = await Order.findOneAndUpdate(
     { orderId, seller: sellerId, workflowStatus: ws },
-    { $set: { sellerPackedAt: new Date() } },
+    { $set: { sellerPackedAt: now, status: "packed", orderStatus: "packed" } },
     { new: true },
   );
   if (!updated) {
@@ -852,7 +853,7 @@ export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
   }
   emitOrderStatusUpdate(
     updated.orderId,
-    { sellerPackedAt: updated.sellerPackedAt },
+    { sellerPackedAt: updated.sellerPackedAt, status: "packed" },
     updated.customer,
     updated.seller,
   );

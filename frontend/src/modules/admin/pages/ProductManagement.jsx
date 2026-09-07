@@ -28,8 +28,14 @@ import Modal from '@shared/components/ui/Modal';
 import Pagination from '@shared/components/ui/Pagination';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSettings } from '@core/context/SettingsContext';
 
 const ProductManagement = () => {
+    const { settings } = useSettings();
+    const isApprovalRequired = Boolean(
+        settings?.productApproval?.sellerCreateRequiresApproval ||
+        settings?.productApproval?.sellerEditRequiresApproval
+    );
     const [searchParams, setSearchParams] = useSearchParams();
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]); // All categories for dropdowns
@@ -644,30 +650,32 @@ const ProductManagement = () => {
                 ))}
             </div>
 
-            <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
-                <div className="flex flex-wrap gap-2">
-                    {[
-                        { key: 'all', label: 'All', count: moderationCounts.all },
-                        { key: 'approved', label: 'Approved', count: moderationCounts.approved },
-                        { key: 'pending', label: 'Pending Approval', count: moderationCounts.pending },
-                        { key: 'rejected', label: 'Rejected', count: moderationCounts.rejected },
-                    ].map((item) => (
-                        <button
-                            key={item.key}
-                            type="button"
-                            onClick={() => setFilterApprovalStatus(item.key)}
-                            className={cn(
-                                "rounded-xl px-4 py-2 text-xs font-bold transition-all",
-                                filterApprovalStatus === item.key
-                                    ? "bg-slate-900 text-white"
-                                    : "bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
-                            )}
-                        >
-                            {item.label} ({item.count})
-                        </button>
-                    ))}
-                </div>
-            </Card>
+            {isApprovalRequired && (
+                <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { key: 'all', label: 'All', count: moderationCounts.all },
+                            { key: 'approved', label: 'Approved', count: moderationCounts.approved },
+                            { key: 'pending', label: 'Pending Approval', count: moderationCounts.pending },
+                            { key: 'rejected', label: 'Rejected', count: moderationCounts.rejected },
+                        ].map((item) => (
+                            <button
+                                key={item.key}
+                                type="button"
+                                onClick={() => setFilterApprovalStatus(item.key)}
+                                className={cn(
+                                    "rounded-xl px-4 py-2 text-xs font-bold transition-all",
+                                    filterApprovalStatus === item.key
+                                        ? "bg-slate-900 text-white"
+                                        : "bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
+                                )}
+                            >
+                                {item.label} ({item.count})
+                            </button>
+                        ))}
+                    </div>
+                </Card>
+            )}
 
             {/* Toolbox */}
             <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
@@ -871,29 +879,33 @@ const ProductManagement = () => {
                                     <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
                                         <div className="flex flex-col items-center gap-1">
                                             <StatusBadge status={p.status} stock={p.stock} />
-                                            <ApprovalBadge approvalStatus={p.approvalStatus} />
+                                            {isApprovalRequired && <ApprovalBadge approvalStatus={p.approvalStatus} />}
                                         </div>
                                     </td>
 
                                     {/* Actions Column */}
                                     <td className="px-4 py-5 text-center align-middle">
                                         <div className="flex items-center justify-center gap-2">
-                                            <button
-                                                onClick={() => handleModerationAction(p, 'approve')}
-                                                disabled={moderatingActionId === `approve:${p._id}`}
-                                                className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-emerald-50 hover:text-emerald-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100 disabled:opacity-60"
-                                                title="Approve product"
-                                            >
-                                                <HiOutlineCheckCircle className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleModerationAction(p, 'reject')}
-                                                disabled={moderatingActionId === `reject:${p._id}`}
-                                                className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-amber-50 hover:text-amber-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100 disabled:opacity-60"
-                                                title="Reject product"
-                                            >
-                                                <HiOutlineXMark className="h-4 w-4" />
-                                            </button>
+                                            {isApprovalRequired && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleModerationAction(p, 'approve')}
+                                                        disabled={moderatingActionId === `approve:${p._id}`}
+                                                        className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-emerald-50 hover:text-emerald-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100 disabled:opacity-60"
+                                                        title="Approve product"
+                                                    >
+                                                        <HiOutlineCheckCircle className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleModerationAction(p, 'reject')}
+                                                        disabled={moderatingActionId === `reject:${p._id}`}
+                                                        className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-amber-50 hover:text-amber-600 rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100 disabled:opacity-60"
+                                                        title="Reject product"
+                                                    >
+                                                        <HiOutlineXMark className="h-4 w-4" />
+                                                    </button>
+                                                </>
+                                            )}
                                             <button
                                                 onClick={() => openModal(p)}
                                                 className="flex h-9 w-9 shrink-0 items-center justify-center hover:bg-white hover:text-primary rounded-xl transition-all text-slate-400 shadow-sm ring-1 ring-slate-100"

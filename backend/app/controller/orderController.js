@@ -388,8 +388,10 @@ export const getOrderInvoice = async (req, res) => {
 
     let invoice = await getInvoiceForOrder(order.orderId, type);
 
-    // If invoice is missing, but order is delivered (e.g. self-pickup or legacy transition), generate on-demand now
-    if (!invoice) {
+    const forceRegenerate = req.query.regenerate === "true" || !invoice || invoice.pdfVersion !== 2;
+
+    // If invoice is missing or needs upgrade to pdfVersion 2, generate/update on-demand now
+    if (forceRegenerate) {
       const isDelivered =
         String(order.status).toLowerCase() === "delivered" ||
         String(order.orderStatus).toLowerCase() === "delivered" ||
@@ -399,7 +401,7 @@ export const getOrderInvoice = async (req, res) => {
       if (isDelivered) {
         try {
           const { generateOrderInvoices } = await import("../services/finance/invoiceService.js");
-          await generateOrderInvoices(order._id);
+          await generateOrderInvoices(order._id, true);
           invoice = await getInvoiceForOrder(order.orderId, type);
         } catch (genErr) {
           console.error(`[getOrderInvoice] On-demand invoice generation error for ${order.orderId}:`, genErr);

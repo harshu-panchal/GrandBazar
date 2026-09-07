@@ -574,9 +574,27 @@ const ProductManagement = () => {
       setIsLoadingSuggestions(false);
     }
   };
-
   const openEditModal = (item = null) => {
     if (item) {
+      const catalogObj = typeof item.catalogProductId === "object" ? item.catalogProductId : null;
+      const parseImages = (imgs) => {
+        if (!imgs) return [];
+        if (Array.isArray(imgs)) return imgs;
+        if (typeof imgs === "string" && imgs.trim()) {
+          try {
+            const parsed = JSON.parse(imgs);
+            return Array.isArray(parsed) ? parsed : [imgs];
+          } catch {
+            return imgs.split(",").map((s) => s.trim()).filter(Boolean);
+          }
+        }
+        return [];
+      };
+
+      const itemGallery = parseImages(item.galleryImages);
+      const catalogGallery = parseImages(catalogObj?.galleryImages);
+      const finalGallery = itemGallery.length > 0 ? itemGallery : catalogGallery;
+
       setFormData({
         name: item.name || "",
         slug: item.slug || "",
@@ -594,8 +612,8 @@ const ProductManagement = () => {
         weight: item.weight || "",
         brand: item.brand || "",
         packagingCharge: item.packagingCharge ?? "",
-        mainImage: item.mainImage || null,
-        galleryImages: item.galleryImages || [],
+        mainImage: item.mainImage || catalogObj?.mainImage || null,
+        galleryImages: finalGallery,
         variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => ({ ...v, id: v._id || Date.now() })) : [
           {
             id: Date.now(),
@@ -1606,7 +1624,7 @@ const ProductManagement = () => {
                           Gallery Photos
                         </label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {(formData.galleryImages || []).slice(0, 4).map((img, idx) => (
+                          {(formData.galleryImages || []).map((img, idx) => (
                             <div
                               key={`${img}-${idx}`}
                               className="aspect-square rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden relative">
@@ -1629,6 +1647,11 @@ const ProductManagement = () => {
                             </div>
                           ))}
                         </div>
+                        {editingItem?.catalogProductId && (!formData.galleryImages || formData.galleryImages.length === 0) && (
+                          <p className="text-xs text-slate-400 font-medium italic mt-2">
+                            No gallery photos set for this product.
+                          </p>
+                        )}
                         {!editingItem?.catalogProductId && (
                           <p className="text-[10px] text-slate-500 font-medium">
                             Existing gallery images are shown here. Uploading new images will append them to the gallery.

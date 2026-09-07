@@ -78,4 +78,6 @@ export const deliveryApi = {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   createSupportTicket: (data) => axiosInstance.post("/tickets/create", data),
+  getOrderChatMessages: (orderId) => axiosInstance.get(`/orders/${orderId}/chat`),
+  sendOrderChatMessage: (orderId, data) => axiosInstance.post(`/orders/${orderId}/chat`, data),
 };

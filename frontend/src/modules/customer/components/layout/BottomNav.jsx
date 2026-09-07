@@ -24,21 +24,55 @@ const navItems = [
  */
 function useKeyboardOpen() {
     const [keyboardOpen, setKeyboardOpen] = useState(false);
+
     useEffect(() => {
-        const initialHeight = window.visualViewport?.height || window.innerHeight;
-        const vv = window.visualViewport;
+        let vv = window.visualViewport;
+        let lastWidth = vv?.width || window.innerWidth;
+        let baselineHeight = vv?.height || window.innerHeight;
+
         const handleResize = () => {
+            vv = window.visualViewport;
             const currentHeight = vv?.height || window.innerHeight;
-            const shrink = initialHeight - currentHeight;
+            const currentWidth = vv?.width || window.innerWidth;
+
+            // If width changed significantly (e.g. rotating device horizontally),
+            // reset baseline height for the new orientation.
+            if (Math.abs(currentWidth - lastWidth) > 30) {
+                lastWidth = currentWidth;
+                baselineHeight = currentHeight;
+                setKeyboardOpen(false);
+                return;
+            }
+
+            // If height expanded (e.g. browser address bar collapsed), update baseline
+            if (currentHeight > baselineHeight) {
+                baselineHeight = currentHeight;
+            }
+
+            const shrink = baselineHeight - currentHeight;
             setKeyboardOpen(shrink > 120);
         };
+
+        const handleOrientationChange = () => {
+            setTimeout(() => {
+                const currentVv = window.visualViewport;
+                lastWidth = currentVv?.width || window.innerWidth;
+                baselineHeight = currentVv?.height || window.innerHeight;
+                setKeyboardOpen(false);
+            }, 150);
+        };
+
         vv?.addEventListener('resize', handleResize);
         window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleOrientationChange);
+
         return () => {
             vv?.removeEventListener('resize', handleResize);
             window.removeEventListener('resize', handleResize);
+            window.removeEventListener('orientationchange', handleOrientationChange);
         };
     }, []);
+
     return keyboardOpen;
 }
 
@@ -49,7 +83,7 @@ const BottomNav = () => {
     if (keyboardOpen) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-[500] bg-white border-t border-slate-200 flex items-center justify-around h-[calc(70px+env(safe-area-inset-bottom))] md:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.06)] px-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="fixed bottom-0 left-0 right-0 z-[500] bg-white border-t border-slate-200 flex items-center justify-around h-[calc(64px+env(safe-area-inset-bottom))] landscape:h-[calc(54px+env(safe-area-inset-bottom))] [@media(min-width:768px)_and_(min-height:501px)]:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.06)] px-2 pb-[env(safe-area-inset-bottom)]">
             {navItems.map((item) => {
                 const isActive = location.pathname === item.path ||
                     (item.path !== '/' && location.pathname.startsWith(item.path));
@@ -58,6 +92,7 @@ const BottomNav = () => {
                     <Link
                         key={item.path}
                         to={item.path}
+                        replace={location.pathname !== '/' && item.path !== '/'}
                         className="flex-1 flex flex-col items-center justify-center h-full transition-all"
                     >
                         <div className={cn(

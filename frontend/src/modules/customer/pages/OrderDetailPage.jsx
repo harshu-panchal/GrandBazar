@@ -6,6 +6,7 @@ import InvoiceModal from "../components/order/InvoiceModal";
 import HelpModal from "../components/order/HelpModal";
 import LiveTrackingMap from "../components/order/LiveTrackingMap";
 import PickupRouteMap from "../components/order/PickupRouteMap";
+import OrderDeliveryChatModal from "@/shared/components/OrderDeliveryChatModal";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import DeliveryOtpDisplay from "../components/DeliveryOtpDisplay";
 import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
@@ -152,6 +153,7 @@ const OrderDetailPage = () => {
   const { orderId } = useParams();
   const [showInvoice, setShowInvoice] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [returnDetails, setReturnDetails] = useState(null);
@@ -992,6 +994,7 @@ const OrderDetailPage = () => {
               routePhase={routePhase}
               routePolyline={activeRoutePolyline}
               onOpenInMaps={handleOpenInMaps}
+              onOpenChat={() => setShowChatModal(true)}
             />
           </motion.div>
         )}
@@ -1840,6 +1843,21 @@ const OrderDetailPage = () => {
           </motion.div>
         </div>
       )}
+
+      {/* Order Delivery Chat Modal */}
+      <OrderDeliveryChatModal
+        isOpen={showChatModal}
+        onClose={() => setShowChatModal(false)}
+        orderId={order?.orderId || orderId}
+        currentUserRole="customer"
+        currentUserId={order?.customer?._id || order?.customer}
+        orderStatus={status}
+        partnerInfo={{
+          name: order?.deliveryBoy?.name || "Delivery Partner",
+          phone: order?.deliveryBoy?.phone || "",
+          avatar: order?.deliveryBoy?.profileImage || order?.deliveryBoy?.avatar || "",
+        }}
+      />
     </div>
   );
 };

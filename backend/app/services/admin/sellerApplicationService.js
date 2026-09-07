@@ -663,7 +663,7 @@ export async function inviteSellerByAdmin({ email, phone = "", invitedBy }) {
     invitedBy,
   });
 
-  const baseUrl = process.env.FRONTEND_URL || "https://grandbazar.com";
+  const baseUrl = process.env.FRONTEND_URL || "https://zinto.in";
   const inviteLink = `${baseUrl.replace(/\/$/, "")}/seller/auth?invite=${invite.token}`;
 
   const emailResult = await sendSellerInviteEmail({ email: normalizedEmail, inviteLink });

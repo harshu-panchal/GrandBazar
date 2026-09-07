@@ -56,6 +56,7 @@ const LiveTrackingMap = memo(({
   routePhase = "pickup",
   routePolyline,
   onOpenInMaps,
+  onOpenChat,
 }) => {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
@@ -473,8 +474,15 @@ const LiveTrackingMap = memo(({
                       <Phone size={14} />
                     </button>
                     <button
-                      onClick={() => { window.location.href = `sms:${riderPhone}`; }}
+                      onClick={() => {
+                        if (typeof onOpenChat === "function") {
+                          onOpenChat();
+                        } else {
+                          window.location.href = `sms:${riderPhone}`;
+                        }
+                      }}
                       className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 hover:bg-brand-100 transition-colors"
+                      title="Chat with Rider"
                     >
                       <MessageSquare size={14} />
                     </button>
@@ -519,7 +527,8 @@ const LiveTrackingMap = memo(({
     prevProps.routePhase === nextProps.routePhase &&
     prevProps.routePolyline?.phase === nextProps.routePolyline?.phase &&
     prevProps.routePolyline?.polyline === nextProps.routePolyline?.polyline &&
-    prevProps.routePolyline?.cachedAt === nextProps.routePolyline?.cachedAt
+    prevProps.routePolyline?.cachedAt === nextProps.routePolyline?.cachedAt &&
+    prevProps.onOpenChat === nextProps.onOpenChat
   );
 });
 

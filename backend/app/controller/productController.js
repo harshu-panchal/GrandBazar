@@ -688,6 +688,7 @@ export const getSellerProducts = async (req, res) => {
         .populate("categoryId", "name")
         .populate("subcategoryId", "name")
         .populate("sellerId", "shopName")
+        .populate("catalogProductId", "mainImage galleryImages name description")
         .sort(sortQuery)
         .skip(skip)
         .limit(limit)
@@ -1371,7 +1372,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -1541,7 +1542,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

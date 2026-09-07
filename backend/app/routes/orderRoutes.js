@@ -1,5 +1,9 @@
 import express from "express";
 import {
+  getOrderChatMessages,
+  sendOrderChatMessage,
+} from "../controller/orderChatController.js";
+import {
   placeOrder,
   getMyOrders,
   getOrderDetails,
@@ -360,6 +364,20 @@ router.get(
   allowRoles("customer", "user", "delivery", "seller", "admin"),
   requireApprovedSeller,
   getOrderRoute,
+);
+
+// Delivery Boy & Customer Order Chat
+router.get(
+  "/:orderId/chat",
+  verifyToken,
+  allowRoles("customer", "user", "delivery", "admin"),
+  getOrderChatMessages
+);
+router.post(
+  "/:orderId/chat",
+  verifyToken,
+  allowRoles("customer", "user", "delivery", "admin"),
+  sendOrderChatMessage
 );
 
 // Scheduling & delivery windows

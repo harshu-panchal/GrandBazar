@@ -20,6 +20,56 @@ jest.unstable_mockModule("../app/models/deliveryAssignment.js", () => ({
   default: { create: mockDeliveryAssignmentCreate },
 }));
 
+jest.unstable_mockModule("../app/models/delivery.js", () => ({
+  default: {},
+}));
+
+jest.unstable_mockModule("../app/models/orderOtp.js", () => ({
+  default: {},
+}));
+
+jest.unstable_mockModule("../app/models/store.js", () => ({
+  default: {
+    findById: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ _id: "store2", shopName: "Shop" }),
+    }),
+  },
+}));
+
+jest.unstable_mockModule("../app/services/orderCompensation.js", () => ({
+  compensateOrderCancellation: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/utils/geoUtils.js", () => ({
+  distanceMeters: jest.fn(() => 100),
+}));
+
+jest.unstable_mockModule("../app/services/orderSettlement.js", () => ({
+  applyDeliveredSettlement: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/deliveryOptionResolver.js", () => ({
+  resolveFulfillmentAtSellerAccept: jest.fn().mockImplementation((order, store) =>
+    Promise.resolve({
+      fulfillmentMethod: order?.fulfillmentMethod || "delivery",
+      logisticsMode: order?.logisticsMode || "zinto",
+    })
+  ),
+  resolveStoreDeliveryPolicy: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/orderStateMachine.js", () => ({
+  assertTransition: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/orderSchedulingService.js", () => ({
+  scheduleOrderActivationJob: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/customerPickupService.js", () => ({
+  markOrderReadyForCustomerPickup: jest.fn(),
+}));
+
 jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", () => ({
   getPlatformDeliveryProvider: mockGetPlatformDeliveryProvider,
 }));
@@ -34,6 +84,7 @@ jest.unstable_mockModule("../app/services/orderSocketEmitter.js", () => ({
   emitDeliveryBroadcastForSeller: jest.fn(),
   emitToCustomer: jest.fn(),
   retractDeliveryBroadcastForOrder: jest.fn(),
+  emitToDelivery: jest.fn(),
 }));
 
 jest.unstable_mockModule("../app/modules/notifications/notification.emitter.js", () => ({
@@ -53,7 +104,7 @@ jest.unstable_mockModule("../app/config/redis.js", () => ({
   getRedisClient: jest.fn(() => null),
 }));
 
-const { sellerAcceptAtomic } = await import("../app/services/orderWorkflowService.js");
+const { sellerAcceptAtomic, sellerMarkPackedSignalAtomic } = await import("../app/services/orderWorkflowService.js");
 const { WORKFLOW_STATUS } = await import("../app/constants/orderWorkflow.js");
 
 describe("orderWorkflowService sellerAcceptAtomic", () => {
@@ -91,7 +142,7 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
     expect(mockDeliveryAssignmentCreate).not.toHaveBeenCalled();
     expect(mockEmitOrderStatusUpdate).toHaveBeenCalledWith(
       "ORD-100",
-      { workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING },
+      expect.objectContaining({ workflowStatus: WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING }),
       "cust1",
     );
   });
@@ -121,5 +172,41 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
 
     expect(result.workflowStatus).toBe(WORKFLOW_STATUS.DELIVERY_SEARCH);
     expect(mockDeliveryAssignmentCreate).toHaveBeenCalled();
+  });
+
+  it("sellerMarkPackedSignalAtomic updates sellerPackedAt and status to packed", async () => {
+    mockRequireCanonicalOrderId.mockImplementation((id) => Promise.resolve(id));
+    const existingOrder = {
+      orderId: "ORD-300",
+      seller: "store3",
+      workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
+    };
+    mockOrderFindOne.mockResolvedValue(existingOrder);
+
+    const now = new Date();
+    const updatedOrder = {
+      orderId: "ORD-300",
+      sellerPackedAt: now,
+      status: "packed",
+      orderStatus: "packed",
+      customer: "cust3",
+      seller: "store3",
+    };
+    mockOrderFindOneAndUpdate.mockResolvedValue(updatedOrder);
+
+    const result = await sellerMarkPackedSignalAtomic("store3", "ORD-300");
+
+    expect(result.status).toBe("packed");
+    expect(mockOrderFindOneAndUpdate).toHaveBeenCalledWith(
+      { orderId: "ORD-300", seller: "store3", workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
+      { $set: { sellerPackedAt: expect.any(Date), status: "packed", orderStatus: "packed" } },
+      { new: true },
+    );
+    expect(mockEmitOrderStatusUpdate).toHaveBeenCalledWith(
+      "ORD-300",
+      { sellerPackedAt: now, status: "packed" },
+      "cust3",
+      "store3",
+    );
   });
 });

@@ -121,6 +121,10 @@ export function getLegacyStatusFromOrder(order) {
     return explicit;
   }
 
+  if (order.sellerPackedAt && !["cancelled", "delivered", "out_for_delivery"].includes(explicit)) {
+    return "packed";
+  }
+
   const v = Number(order.workflowVersion) || 0;
   if (v >= 2 && order.workflowStatus) {
     const workflowStatus = String(order.workflowStatus).toUpperCase();
@@ -132,7 +136,7 @@ export function getLegacyStatusFromOrder(order) {
       workflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH ||
       workflowStatus === WORKFLOW_STATUS.SELLER_ACCEPTED
     ) {
-      return "confirmed";
+      return order.sellerPackedAt ? "packed" : "confirmed";
     }
     return legacyFromWorkflow(workflowStatus);
   }

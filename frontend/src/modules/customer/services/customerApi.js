@@ -150,6 +150,8 @@ export const customerApi = {
   },
   requestReturn: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/returns`, data),
+  getOrderChatMessages: (orderId) => axiosInstance.get(`/orders/${orderId}/chat`),
+  sendOrderChatMessage: (orderId, data) => axiosInstance.post(`/orders/${orderId}/chat`, data),
   getReturnDetails: (orderId) =>
     axiosInstance.get(`/orders/${encodeURIComponent(String(orderId ?? "").trim())}/returns`),
 

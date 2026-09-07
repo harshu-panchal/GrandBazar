@@ -171,8 +171,13 @@ const getHomePageDataCacheKey = (location, categoryId) => {
   return categoryId ? `${base}:cat:${categoryId}` : base;
 };
 
-const getCachedHomePageData = (location) =>
-  homePageDataCache.get(getHomePageDataCacheKey(location)) || null;
+const getCachedHomePageData = (location) => {
+  const cached = homePageDataCache.get(getHomePageDataCacheKey(location));
+  if (cached && Array.isArray(cached.products) && cached.products.length > 0) {
+    return cached;
+  }
+  return null;
+};
 
 const Home = () => {
   const canonicalUrl = `${window.location.origin}/`;
@@ -197,7 +202,7 @@ const Home = () => {
   });
   const { scrollY } = useScroll();
   const { isOpen: isProductDetailOpen } = useProductDetail();
-  const { currentLocation, needsLocationSetup, openLocationPicker } = useLocation();
+  const { currentLocation, needsLocationSetup, openLocationPicker, hasHydratedLocation } = useLocation();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const quickCatsRef = useRef(null);
@@ -279,14 +284,17 @@ const Home = () => {
       if (!prev || prev._id === "all") return data.activeCategory || data.categories?.[0] || ALL_CATEGORY;
       return (data.categories || []).find((cat) => cat._id === prev._id) || data.activeCategory || prev;
     });
-    if (persist && cacheKey) homePageDataCache.set(cacheKey, data);
+    if (persist && cacheKey && Array.isArray(data.products) && data.products.length > 0) {
+      homePageDataCache.set(cacheKey, data);
+    }
   };
 
   const fetchData = async ({ forceRefresh = false } = {}) => {
+    if (!hasHydratedLocation) return;
     const activeHeaderId = activeCategory && activeCategory._id !== ALL_CATEGORY._id ? activeCategory._id : undefined;
     const cacheKey = getHomePageDataCacheKey(currentLocation, activeHeaderId);
     if (!forceRefresh) {
-      const cached = homePageDataCache.get(cacheKey);
+      const cached = getCachedHomePageData(currentLocation);
       if (cached) {
         applyHomePageData(cached, { cacheKey, persist: false });
         setIsLoading(false);
@@ -378,7 +386,11 @@ const Home = () => {
     } catch (e) {}
   };
 
-  useEffect(() => { fetchData(); }, [currentLocation?.latitude, currentLocation?.longitude, activeCategory?._id]);
+  useEffect(() => {
+    if (hasHydratedLocation) {
+      fetchData();
+    }
+  }, [hasHydratedLocation, currentLocation?.latitude, currentLocation?.longitude, activeCategory?._id]);
   const headerSectionsCache = useRef(headerSectionsMemoryCache);
   const heroConfigCache = useRef(heroConfigMemoryCache);
 
@@ -503,7 +515,7 @@ const Home = () => {
   };
 
   return (
-    <div className={`min-h-screen pt-[190px] md:pt-[250px] ${(needsLocationSetup || (products.length === 0 && !isLoading)) ? "bg-white" : "bg-[#F5F7F8]"}`}>
+    <div className={`min-h-screen pt-[190px] md:pt-[250px] ${(needsLocationSetup || (!hasHydratedLocation || isLoading) || products.length === 0) ? "bg-white" : "bg-[#F5F7F8]"}`}>
       <div className={cn("contents", isProductDetailOpen && "hidden md:contents")}>
         <MainLocationHeader categories={categories} activeCategory={activeCategory} onCategorySelect={setActiveCategory} />
       </div>
@@ -527,7 +539,15 @@ const Home = () => {
             Choose location
           </button>
         </div>
-      ) : products.length === 0 && !isLoading && hasFetchError ? (
+      ) : (!hasHydratedLocation || isLoading) ? (
+        <div className="flex flex-col items-center justify-center pt-24 pb-48">
+          <div className="animate-pulse flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-slate-200" />
+            <div className="h-6 w-48 bg-slate-200 rounded" />
+            <div className="h-4 w-32 bg-slate-200 rounded" />
+          </div>
+        </div>
+      ) : products.length === 0 && hasFetchError ? (
         <div className="flex flex-col items-center justify-center pt-24 pb-48">
           <h3 className="text-2xl md:text-4xl font-black text-slate-800 text-center uppercase">Something <span className="text-primary">went wrong</span></h3>
           <p className="text-slate-500 font-bold max-w-md text-center px-10 text-sm md:text-lg opacity-80">We couldn't load products right now. Please check your connection and try again.</p>
@@ -535,7 +555,7 @@ const Home = () => {
             <button onClick={() => fetchData({ forceRefresh: true })} className="w-full py-4 bg-primary text-white font-black rounded-xl uppercase text-[13px] tracking-widest transition-all active:scale-95">Retry</button>
           </div>
         </div>
-      ) : products.length === 0 && !isLoading ? (
+      ) : products.length === 0 ? (
         <div className="flex flex-col items-center justify-center pt-24 pb-48">
           <div className="w-64 h-64 md:w-96 md:h-96 mb-8">{noServiceData && <Lottie animationData={noServiceData} loop={true} />}</div>
           <h3 className="text-3xl md:text-5xl font-black text-slate-800 text-center uppercase">Service <span className="text-primary">Unavailable</span></h3>

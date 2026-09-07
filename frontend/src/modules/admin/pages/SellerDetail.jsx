@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
+import { useSettings } from '@core/context/SettingsContext';
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
 import MapPicker from '@/shared/components/MapPicker';
@@ -50,6 +51,11 @@ const getVideoEmbedUrl = (url) => {
 };
 
 const SellerDetail = () => {
+    const { settings } = useSettings();
+    const isApprovalRequired = Boolean(
+        settings?.productApproval?.sellerCreateRequiresApproval ||
+        settings?.productApproval?.sellerEditRequiresApproval
+    );
     const { id } = useParams();
     const navigate = useNavigate();
     const { showToast } = useToast();
@@ -1056,12 +1062,14 @@ const SellerDetail = () => {
                                                 <Badge variant={product.status === 'active' ? 'success' : 'gray'} className="text-[9px] px-1.5 py-0">
                                                     {product.status === 'active' ? 'Active' : 'Draft'}
                                                 </Badge>
-                                                <Badge
-                                                    variant={product.approvalStatus === 'rejected' ? 'error' : product.approvalStatus === 'pending' ? 'warning' : 'success'}
-                                                    className="text-[9px] px-1.5 py-0"
-                                                >
-                                                    {product.approvalStatus || 'approved'}
-                                                </Badge>
+                                                {isApprovalRequired && (
+                                                    <Badge
+                                                        variant={product.approvalStatus === 'rejected' ? 'error' : product.approvalStatus === 'pending' ? 'warning' : 'success'}
+                                                        className="text-[9px] px-1.5 py-0"
+                                                    >
+                                                        {product.approvalStatus || 'approved'}
+                                                    </Badge>
+                                                )}
                                                 <button
                                                     type="button"
                                                     onClick={() => navigate(`/admin/products?edit=${product._id}`)}

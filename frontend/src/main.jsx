@@ -2,6 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { registerChunkErrorListeners } from '@core/utils/lazyWithRetry';
+
+registerChunkErrorListeners();
 
 // Prevent mouse-wheel from changing values in focused number inputs
 document.addEventListener(

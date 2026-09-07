@@ -20,6 +20,18 @@ const RootErrorBoundary = () => {
         errorMessage = error.message;
     }
 
+    const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk/i.test(errorMessage);
+
+    React.useEffect(() => {
+        if (isChunkError) {
+            const lastReload = Number(sessionStorage.getItem('root_chunk_reload_time') || 0);
+            if (Date.now() - lastReload > 10000) {
+                sessionStorage.setItem('root_chunk_reload_time', String(Date.now()));
+                window.location.reload();
+            }
+        }
+    }, [isChunkError]);
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-outfit">
             <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center border border-gray-100">
@@ -27,8 +39,14 @@ const RootErrorBoundary = () => {
                     <AlertCircle className="w-10 h-10 text-red-500" />
                 </div>
 
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Oops!</h1>
-                <p className="text-gray-500 mb-6"> {errorMessage} </p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    {isChunkError ? "App Update Required" : "Oops!"}
+                </h1>
+                <p className="text-gray-500 mb-6">
+                    {isChunkError
+                        ? "A new version of the app is available. Please refresh to load the latest features."
+                        : errorMessage}
+                </p>
 
                 <div className="space-y-3">
                     <button

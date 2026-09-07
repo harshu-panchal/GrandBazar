@@ -24,6 +24,7 @@ import DeliveryTrackingMap from "../components/DeliveryTrackingMap";
 import DeliverySlideButton from "../components/DeliverySlideButton";
 import OtpInput from "../components/OtpInput";
 import ReturnPickupProofUpload from "../components/ReturnPickupProofUpload";
+import OrderDeliveryChatModal from "@/shared/components/OrderDeliveryChatModal";
 import {
   getCachedDeliveryPartnerLocation,
   getCurrentPositionWithCache,
@@ -163,6 +164,7 @@ const OrderDetails = () => {
   const [dragX, setDragX] = useState(0);
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [showDropOtpInput, setShowDropOtpInput] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
   const [pickupProofSubmitted, setPickupProofSubmitted] = useState(false);
   const [routeStats, setRouteStats] = useState(null);
   const [clockTick, setClockTick] = useState(Date.now());
@@ -937,18 +939,15 @@ const OrderDetails = () => {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    {(isReturn ? order.seller?.phone : order.address?.phone) && (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          (window.location.href = `sms:${isReturn ? order.seller?.phone : order.address?.phone}`)
-                        }
-                      >
-                        <MessageSquare size={18} />
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 bg-brand-50 hover:bg-brand-100 text-brand-600 border-brand-200"
+                      title="Chat with Customer"
+                      onClick={() => setShowChatModal(true)}
+                    >
+                      <MessageSquare size={18} />
+                    </Button>
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
                       <Button
                         variant="outline"
@@ -1222,6 +1221,21 @@ const OrderDetails = () => {
           </div>
         </div>
       )}
+
+      {/* Order Delivery Chat Modal */}
+      <OrderDeliveryChatModal
+        isOpen={showChatModal}
+        onClose={() => setShowChatModal(false)}
+        orderId={order?.orderId || orderId}
+        currentUserRole="delivery"
+        currentUserId={user?._id || user?.id}
+        orderStatus={getLegacyStatusFromOrder(order)}
+        partnerInfo={{
+          name: order?.address?.name || "Customer",
+          phone: order?.address?.phone || "",
+          avatar: "",
+        }}
+      />
     </div>
   );
 };

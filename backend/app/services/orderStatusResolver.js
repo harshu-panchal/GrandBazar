@@ -136,17 +136,21 @@ export function resolveOrderStatus(order) {
 
   const rawStatus = String(order.status || "").toLowerCase();
   const workflowStatus = resolveWorkflowStatusFor(order);
+  const isScheduled = workflowStatus === WORKFLOW_STATUS.SCHEDULED_HOLD;
 
-  const legacyStatus = ORPHAN_STATUSES.has(rawStatus)
+  let legacyStatus = ORPHAN_STATUSES.has(rawStatus)
     ? rawStatus
     : workflowStatus
       ? legacyStatusFromWorkflow(workflowStatus)
       : (rawStatus || "pending");
 
+  if (order.sellerPackedAt && ["confirmed", "pending"].includes(legacyStatus) && !isScheduled) {
+    legacyStatus = "packed";
+  }
+
   const returnStatusRaw = order.returnStatus && order.returnStatus !== "none" ? order.returnStatus : null;
   const isDisputed = legacyStatus === "disputed" || Boolean(order.disputeRef);
   const cancellationPending = order.cancellationRequest?.status === "pending";
-  const isScheduled = workflowStatus === WORKFLOW_STATUS.SCHEDULED_HOLD;
 
   let label = DISPLAY_LABELS[legacyStatus] || legacyStatus.replace(/_/g, " ");
   if (isScheduled) label = "Scheduled";

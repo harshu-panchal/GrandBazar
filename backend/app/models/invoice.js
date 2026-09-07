@@ -93,6 +93,7 @@ const invoiceSchema = new mongoose.Schema(
     grandTotal: { type: Number, default: 0 },
     pdfUrl: { type: String, default: "" },
     pdfPublicId: { type: String, default: "" },
+    pdfVersion: { type: Number, default: 1 },
     generatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true },

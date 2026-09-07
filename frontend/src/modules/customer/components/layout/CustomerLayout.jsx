@@ -9,7 +9,7 @@ import LocationDrawer from '../shared/LocationDrawer';
 import { useProductDetail } from '../../context/ProductDetailContext';
 import { useLocation as useAppLocation } from '../../context/LocationContext';
 import { cn } from '@/lib/utils';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
 import { onReturnPickupOtp, onReturnDropOtp } from '@core/services/orderSocket';
 import { toast } from 'sonner';
@@ -17,9 +17,27 @@ import { ShieldCheck, Package } from 'lucide-react';
 
 const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = false, showCart: showCartProp, showBottomNav: showBottomNavProp }) => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { isOpen: isProductDetailOpen } = useProductDetail();
     const { user, token } = useAuth();
     const { isLocationPickerOpen, closeLocationPicker } = useAppLocation();
+
+    // Redirect to Home '/' when back button is pressed on any bottom navbar tab page
+    useEffect(() => {
+        const bottomNavPaths = ['/stores', '/shop-by-store', '/categories', '/orders', '/profile'];
+        const currentPath = location.pathname.replace(/\/$/, '') || '/';
+
+        if (!bottomNavPaths.includes(currentPath)) return;
+
+        const handlePopState = () => {
+            navigate('/', { replace: true });
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [location.pathname, navigate]);
 
     // Listen for Return OTPs (Real-time Alert for Customer)
     useEffect(() => {
@@ -83,7 +101,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
     const path = location.pathname.replace(/\/$/, '') || '/';
 
     const hideHeaderRoutes = ['/', '/categories', '/orders', '/transactions', '/profile', '/profile/edit', '/wishlist', '/addresses', '/wallet', '/rewards', '/support', '/privacy', '/about', '/terms', '/checkout', '/search', '/chat'];
-    const hideBottomNavRoutes = ['/checkout', '/search', '/chat'];
+    const hideBottomNavRoutes = ['/checkout', '/search', '/chat', '/return-policy', '/returns'];
     const hideCartRoutes = ['/checkout', '/search', '/chat'];
 
     // If props are passed, use them. Otherwise, use route-based logic.
@@ -117,7 +135,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
                 </>
             )}
 
-            <main className={cn("flex-1 md:pb-0", !showHeader && "pt-0", !fullHeight && "pb-[calc(70px+env(safe-area-inset-bottom))]")}>
+            <main className={cn("flex-1 [@media(min-width:768px)_and_(min-height:501px)]:pb-0", !showHeader && "pt-0", !fullHeight && "pb-[calc(64px+env(safe-area-inset-bottom))] landscape:pb-[calc(54px+env(safe-area-inset-bottom))]")}>
                 {children}
             </main>
 
@@ -128,12 +146,12 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
                 onClose={closeLocationPicker}
             />
 
-            <div className="hidden md:block">
+            <div className="hidden [@media(min-width:768px)_and_(min-height:501px)]:block">
                 <Footer />
             </div>
 
             {/* Mobile Footer Message logic */}
-            <div className="md:hidden">
+            <div className="[@media(min-width:768px)_and_(min-height:501px)]:hidden">
                 {finalShowFooterMessageMobile && <MobileFooterMessage />}
             </div>
 

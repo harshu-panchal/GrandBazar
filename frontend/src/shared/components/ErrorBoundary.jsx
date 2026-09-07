@@ -13,10 +13,23 @@ class ErrorBoundary extends Component {
 
     componentDidCatch(error, errorInfo) {
         console.error("Uncaught error:", error, errorInfo);
+        const errorMsg = error?.message || String(error || '');
+        const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk/i.test(errorMsg);
+
+        if (isChunkError) {
+            const lastReload = Number(sessionStorage.getItem('eb_chunk_reload_time') || 0);
+            if (Date.now() - lastReload > 10000) {
+                sessionStorage.setItem('eb_chunk_reload_time', String(Date.now()));
+                window.location.reload();
+            }
+        }
     }
 
     render() {
         if (this.state.hasError) {
+            const errorMsg = this.state.error?.message || "An unexpected error occurred while loading the application.";
+            const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk/i.test(errorMsg);
+
             return (
                 <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-outfit">
                     <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center border border-gray-100">
@@ -24,9 +37,13 @@ class ErrorBoundary extends Component {
                             <AlertCircle className="w-10 h-10 text-red-500" />
                         </div>
 
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2">Something went wrong</h1>
+                        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                            {isChunkError ? "App Update Required" : "Something went wrong"}
+                        </h1>
                         <p className="text-gray-500 mb-6">
-                            {this.state.error?.message || "An unexpected error occurred while loading the application."}
+                            {isChunkError
+                                ? "A new version of the app is available. Please refresh to load the latest version."
+                                : errorMsg}
                         </p>
 
                         <div className="space-y-3">

@@ -1,9 +1,10 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../guards/ProtectedRoute';
 import RoleGuard from '../guards/RoleGuard';
 import { UserRole } from '../constants/roles';
 import RootErrorBoundary from '../../shared/components/RootErrorBoundary';
+import { lazyWithRetry as lazy } from '../utils/lazyWithRetry';
 
 // Providers for Customer Module
 import { WishlistProvider } from '../../modules/customer/context/WishlistContext';
@@ -22,7 +23,7 @@ import AdminAuth from '../../modules/admin/pages/AdminAuth';
 import DeliveryAuth from '../../modules/delivery/pages/DeliveryAuth';
 import CustomerAuth from '../../modules/customer/pages/CustomerAuth';
 
-// Customer Pages (lazy-loaded)
+// Customer Pages (lazy-loaded with auto-retry on new deployment chunks)
 const Home = lazy(() => import('../../modules/customer/pages/Home'));
 const CategoriesPage = lazy(() => import('../../modules/customer/pages/CategoriesPage'));
 const CategoryProductsPage = lazy(() => import('../../modules/customer/pages/CategoryProductsPage'));

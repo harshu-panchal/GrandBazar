@@ -249,6 +249,19 @@ export function emitToCustomer(customerId, { event, payload }) {
   s.to(`customer:${customerId}`).emit(event, payload);
 }
 
+export function emitOrderChatMessage(orderId, messageObj, customerId, deliveryId) {
+  const s = getIo();
+  if (!s) return;
+  const payload = {
+    orderId,
+    message: messageObj,
+    at: new Date().toISOString(),
+  };
+  s.to(`order:${orderId}`).emit("order:chat:message", payload);
+  if (customerId) s.to(`customer:${customerId}`).emit("order:chat:message", payload);
+  if (deliveryId) s.to(`delivery:${deliveryId}`).emit("order:chat:message", payload);
+}
+
 /**
  * Notify delivery partners near a CUSTOMER for return pickups.
  * Sends both Socket events (for open app) and Push (for background).
