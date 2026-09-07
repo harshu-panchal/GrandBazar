@@ -289,13 +289,13 @@ const MapPicker = ({
       title="Select Shop Location"
       size="md"
       footer={
-        <div className="flex justify-between w-full items-center">
-          <div className="text-sm text-gray-500">
+        <div className="flex flex-wrap justify-between gap-2 w-full items-center">
+          <div className="text-sm text-gray-500 min-w-0 truncate">
             {marker
               ? `${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}`
               : "No location selected"}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0 ml-auto">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>

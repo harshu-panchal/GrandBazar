@@ -4,6 +4,7 @@ import RewardGrant from "./models/rewardGrant.model.js";
 import RewardTransaction from "./models/rewardTransaction.model.js";
 import CouponRedemption from "./models/couponRedemption.model.js";
 import User from "../../models/customer.js";
+import Setting from "../../models/setting.js";
 import handleResponse from "../../utils/helper.js";
 import { CAMPAIGN_STATUS } from "./reward.constants.js";
 import { validateCampaignPayload } from "./reward.validation.js";
@@ -80,6 +81,7 @@ export const updateCampaign = async (req, res) => {
     };
     const { valid, message } = validateCampaignPayload(merged, {
       isSellerCampaign: existing.createdBy?.role === "seller",
+      isUpdate: true,
     });
     if (!valid) return handleResponse(res, 400, message);
 
@@ -215,7 +217,7 @@ export const updateSellerCampaign = async (req, res) => {
       rewardConfig: { ...existing.rewardConfig, ...(req.body.rewardConfig || {}) },
       rules: { ...existing.rules, ...(req.body.rules || {}) },
     };
-    const { valid, message } = validateCampaignPayload(merged, { isSellerCampaign: true });
+    const { valid, message } = validateCampaignPayload(merged, { isSellerCampaign: true, isUpdate: true });
     if (!valid) return handleResponse(res, 400, message);
 
     const campaign = await RewardCampaign.findOneAndUpdate(
@@ -466,15 +468,29 @@ export const getMyReferrals = async (req, res) => {
   }
 };
 
+// Admin-configured (Settings) store links win; env vars are the fallback for
+// deployments that haven't filled in Settings yet — same default URLs
+// emailService.js already uses for its own app-links email.
+async function getAppStoreLinks() {
+  const setting = await Setting.findOne().select("playStoreLink appStoreLink").lean();
+  return {
+    playStoreLink:
+      setting?.playStoreLink || process.env.PLAYSTORE_LINK || "https://play.google.com/store/apps",
+    appStoreLink: setting?.appStoreLink || process.env.APPSTORE_LINK || "https://apps.apple.com/",
+  };
+}
+
 export const getMyReferralCode = async (req, res) => {
   try {
     const customerId = req.user.id || req.user._id;
     const code = await ensureCustomerReferralCode(customerId);
     const stats = await getReferralStats(customerId);
+    const storeLinks = await getAppStoreLinks();
     return handleResponse(res, 200, "Referral code fetched", {
       referralCode: code,
       ...stats,
       shareLink: `${process.env.FRONTEND_URL || "http://localhost:5173"}/signup?ref=${code}`,
+      ...storeLinks,
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -486,10 +502,12 @@ export const inviteReferral = async (req, res) => {
     const customerId = req.user.id || req.user._id;
     const code = await ensureCustomerReferralCode(customerId);
     const { phone } = req.body;
+    const storeLinks = await getAppStoreLinks();
     return handleResponse(res, 200, "Invite prepared", {
       referralCode: code,
       phone,
       shareLink: `${process.env.FRONTEND_URL || "http://localhost:5173"}/signup?ref=${code}`,
+      ...storeLinks,
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);

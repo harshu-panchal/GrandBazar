@@ -441,7 +441,7 @@ export const getSellerEarnings = async (req, res) => {
             .populate({
                 path: "order",
                 select:
-                    "orderId status workflowStatus workflowVersion returnStatus disputeRef cancellationRequest pricing payment address paymentBreakdown items createdAt customer settlementStatus financeFlags",
+                    "orderId shortOrderId status workflowStatus workflowVersion returnStatus disputeRef cancellationRequest pricing payment address paymentBreakdown items createdAt customer settlementStatus financeFlags",
                 populate: {
                     path: "customer",
                     select: "name phone email",
@@ -612,6 +612,7 @@ export const getSellerEarnings = async (req, res) => {
                     customerPhone,
                     customerEmail,
                     orderId: order?.orderId || null,
+                    shortOrderId: order?.shortOrderId || null,
                     orderMongoId: order?._id ? String(order._id) : null,
                     orderStatus: order?.status || null,
                     // Additive — was previously the only status signal here,

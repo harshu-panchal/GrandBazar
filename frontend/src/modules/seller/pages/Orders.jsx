@@ -103,10 +103,10 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
         const isPacked = normalizedStatus === 'packed' || Boolean(order.sellerPackedAt);
         const displayLabel = isPacked ? 'Packed' : (order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold')));
         return (
-            <div className={compact ? 'text-right' : ''}>
+            <div className={cn(compact ? 'text-right' : '', 'max-w-[140px]')}>
                 <span
                     className={cn(
-                        'inline-flex items-center rounded-full font-black uppercase tracking-widest',
+                        'inline-flex items-center rounded-full font-black uppercase tracking-widest whitespace-normal text-right',
                         compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
                         isScheduled
                             ? 'bg-blue-100 text-blue-700'

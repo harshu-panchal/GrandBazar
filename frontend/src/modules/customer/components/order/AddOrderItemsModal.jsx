@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Minus, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customerApi } from "../../services/customerApi";
@@ -55,13 +55,55 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
     };
   }, [sellerId, currentLocation?.latitude, currentLocation?.longitude]);
 
-  const setQty = (productId, qty) => {
+  // Flatten each product into one row per purchasable variant (or a single
+  // row for products without variants) — each variant has its own price and
+  // stock, so they can't be collapsed into one product-level row/price.
+  const rows = useMemo(() => {
+    const out = [];
+    for (const product of products) {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      if (variants.length > 0) {
+        for (const variant of variants) {
+          const stock = Number(variant?.stock || 0);
+          if (stock <= 0) continue;
+          const variantSku = String(variant.sku || variant.name || "").trim();
+          const original = variant.customerPrice ?? variant.price;
+          const sale = variant.customerSalePrice ?? variant.salePrice;
+          out.push({
+            key: `${product._id}::${variantSku}`,
+            productId: product._id,
+            variantSku,
+            name: product.name,
+            variantLabel: variant.name || variantSku,
+            image: product.mainImage,
+            price: sale || original || product.salePrice || product.price || 0,
+            stock,
+          });
+        }
+      } else {
+        out.push({
+          key: product._id,
+          productId: product._id,
+          variantSku: "",
+          name: product.name,
+          variantLabel: "",
+          image: product.mainImage,
+          price: product.salePrice || product.price || 0,
+          stock: Number(product.stock || 0),
+        });
+      }
+    }
+    return out;
+  }, [products]);
+
+  const setQty = (key, qty, stock) => {
+    const clamped = Math.max(0, Math.min(qty, stock));
     setQuantities((prev) => {
       const next = { ...prev };
-      if (qty <= 0) {
-        delete next[productId];
+      if (clamped <= 0) {
+        delete next[key];
       } else {
-        next[productId] = qty;
+        next[key] = clamped;
       }
       return next;
     });
@@ -77,10 +119,10 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
     }
     try {
       setSubmitting(true);
-      const items = selectedEntries.map(([productId, quantity]) => ({
-        product: productId,
-        quantity,
-      }));
+      const items = selectedEntries.map(([key, quantity]) => {
+        const [productId, variantSku = ""] = key.split("::");
+        return { product: productId, variantSku, quantity };
+      });
       const res = await customerApi.addOrderItems(order.orderId, { items });
       toast.success("Items added to your order");
       onAdded?.(res.data?.result);
@@ -107,37 +149,40 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
             <div className="flex justify-center py-16">
               <Loader2 size={28} className="animate-spin text-primary" />
             </div>
-          ) : products.length === 0 ? (
+          ) : rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-slate-400">
               No items available from this store right now.
             </p>
           ) : (
             <div className="space-y-2">
-              {products.map((product) => {
-                const qty = quantities[product._id] || 0;
-                const price = product.salePrice || product.price || 0;
+              {rows.map((row) => {
+                const qty = quantities[row.key] || 0;
+                const atMaxStock = qty >= row.stock;
                 return (
                   <div
-                    key={product._id}
+                    key={row.key}
                     className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5"
                   >
                     <img
-                      src={applyCloudinaryTransform(product.mainImage, { width: 80 })}
-                      alt={product.name}
+                      src={applyCloudinaryTransform(row.image, { width: 80 })}
+                      alt={row.name}
                       className="h-12 w-12 flex-shrink-0 rounded-lg object-cover bg-slate-50"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
+                      <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
+                      {row.variantLabel && (
+                        <p className="truncate text-[11px] font-semibold text-slate-400">{row.variantLabel}</p>
+                      )}
                       <p className="text-xs font-bold text-slate-500">
                         {RUPEE}
-                        {Number(price).toFixed(0)}
+                        {Number(row.price).toFixed(0)}
                       </p>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
                       <button
                         type="button"
                         disabled={qty === 0}
-                        onClick={() => setQty(product._id, qty - 1)}
+                        onClick={() => setQty(row.key, qty - 1, row.stock)}
                         className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-600 disabled:opacity-30"
                       >
                         <Minus size={14} />
@@ -145,8 +190,9 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
                       <span className="w-4 text-center text-sm font-bold text-slate-800">{qty}</span>
                       <button
                         type="button"
-                        onClick={() => setQty(product._id, qty + 1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white"
+                        disabled={atMaxStock}
+                        onClick={() => setQty(row.key, qty + 1, row.stock)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white disabled:opacity-30"
                       >
                         <Plus size={14} />
                       </button>

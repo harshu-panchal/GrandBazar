@@ -257,7 +257,9 @@ export async function verifyCustomerLoginOtp({ email, otp, ipAddress = "unknown"
     target,
   }).select("+otpHash +expiresAt");
 
-  const mockMode = useMockEmailOtp();
+  // A misconfigured USE_MOCK_OTP must never let a fixed code bypass a real
+  // OTP in production — same hard lock as the delivery/order OTP validators.
+  const mockMode = useMockEmailOtp() && process.env.NODE_ENV !== "production";
   const mockOtp = getMockOtp();
   let otpValid = false;
 

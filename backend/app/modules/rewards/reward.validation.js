@@ -8,7 +8,7 @@ const hasIds = (arr) => Array.isArray(arr) && arr.filter(Boolean).length > 0;
  * key off of for each rewardSubtype, so campaigns can't be saved missing the
  * fields their own offer type depends on.
  */
-export function validateCampaignPayload(body, { isSellerCampaign = false } = {}) {
+export function validateCampaignPayload(body, { isSellerCampaign = false, isUpdate = false } = {}) {
   const rewardConfig = body.rewardConfig || {};
   const rules = body.rules || {};
   const subtype = rewardConfig.rewardSubtype;
@@ -19,6 +19,39 @@ export function validateCampaignPayload(body, { isSellerCampaign = false } = {})
 
   if (body.startAt && body.endAt && new Date(body.startAt) >= new Date(body.endAt)) {
     return { valid: false, message: "Start date must be before end date" };
+  }
+  // Only block a past start date on creation — editing an already-live campaign
+  // legitimately has a start date in the past.
+  if (!isUpdate && body.startAt && new Date(body.startAt) < new Date()) {
+    return { valid: false, message: "Start date cannot be in the past" };
+  }
+  if (body.endAt && new Date(body.endAt) < new Date()) {
+    return { valid: false, message: "End date cannot be in the past" };
+  }
+
+  if (
+    (body.fundingSource === "seller" || body.fundingSource === "shared") &&
+    !isSellerCampaign &&
+    !hasIds(rules.shopIds)
+  ) {
+    return {
+      valid: false,
+      message: "Select at least one seller/shop to fund this campaign",
+    };
+  }
+  if (body.fundingSource === "shared") {
+    const platformPercent = Number(body.sharedFunding?.platformPercent);
+    const sellerPercent = Number(body.sharedFunding?.sellerPercent);
+    if (
+      !(platformPercent >= 0) ||
+      !(sellerPercent >= 0) ||
+      platformPercent + sellerPercent !== 100
+    ) {
+      return {
+        valid: false,
+        message: "Shared funding split must add up to 100%",
+      };
+    }
   }
 
   if (rewardConfig.valueType === "percent") {

@@ -13,10 +13,12 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@core/context/AuthContext';
+import { useKeyboardVisible } from '@core/hooks/useKeyboardVisible';
 
 const BottomNav = ({ navItems }) => {
     const { role } = useAuth();
     const location = useLocation();
+    const isKeyboardVisible = useKeyboardVisible();
     const isLightTheme =
       role === 'admin' ||
       role === 'seller' ||
@@ -38,9 +40,10 @@ const BottomNav = ({ navItems }) => {
 
     return (
         <div className={cn(
-            "fixed bottom-0 left-0 right-0 h-16 z-[60] md:hidden px-2 flex items-center justify-around",
-            isLightTheme 
-                ? "bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]" 
+            "fixed bottom-0 left-0 right-0 h-16 z-[60] md:hidden px-2 flex items-center justify-around transition-transform duration-200",
+            isKeyboardVisible && "translate-y-full",
+            isLightTheme
+                ? "bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]"
                 : "bg-[#0a0c10] border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.4)]"
         )}>
             {primaryItems.map((item) => (

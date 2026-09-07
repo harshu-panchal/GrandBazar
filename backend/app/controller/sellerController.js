@@ -34,9 +34,12 @@ export const getNearbySellers = async (req, res) => {
 
     // Reuses the Redis-cached geospatial lookup (same one /products and
     // /offer-sections use) instead of re-running the $near query and the
-    // business-model filter on every request.
+    // business-model filter on every request. includeClosed: true because
+    // this is the Stores directory — a customer should still be able to find
+    // and favorite a store that's closed right now (product listings use the
+    // default, which excludes closed stores).
     const [nearbyWithDistance, etaSettings] = await Promise.all([
-      getNearbySellersWithDistanceForCustomer(customerLat, customerLng),
+      getNearbySellersWithDistanceForCustomer(customerLat, customerLng, { includeClosed: true }),
       getDeliveryEtaSettings(),
     ]);
 
@@ -50,7 +53,9 @@ export const getNearbySellers = async (req, res) => {
     const storeIds = nearbyWithDistance.map((entry) => entry.id);
 
     const [visibleStores, activeProducts, signatureProducts] = await Promise.all([
-      Store.find({ _id: { $in: storeIds } }).lean(),
+      Store.find({ _id: { $in: storeIds } })
+        .populate("ownerId", "phone")
+        .lean(),
       Product.find({ sellerId: { $in: storeIds }, status: "active" })
         .select("sellerId headerId categoryId")
         .populate("headerId", "name")
@@ -65,6 +70,10 @@ export const getNearbySellers = async (req, res) => {
 
     visibleStores.forEach((s) => {
       s.distance = distanceById.get(String(s._id)) ?? null;
+      // StoresPage.jsx reads s.phone directly — Store itself has no phone
+      // field, the number lives on the owning Seller account.
+      s.phone = s.ownerId?.phone || null;
+      s.ownerId = s.ownerId?._id || s.ownerId || null;
     });
 
     if (visibleStores.length > 0) {

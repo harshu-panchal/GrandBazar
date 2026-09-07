@@ -800,11 +800,11 @@ const ProductManagement = () => {
               className="w-full pl-10 pr-4 py-2.5 bg-slate-100/50 border-none rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-primary/5 transition-all outline-none"
             />
           </div>
-          <div className="flex gap-2 shrink-0 w-full lg:w-auto">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap lg:flex-nowrap gap-2 shrink-0 w-full lg:w-auto">
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="flex-1 lg:flex-none px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer"
+              className="w-full sm:w-auto flex-1 lg:flex-none px-3 sm:px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer truncate"
             >
               <option value="all">All Categories</option>
               {categories.map((h) => (
@@ -821,7 +821,7 @@ const ProductManagement = () => {
             <select
               value={filterApproval}
               onChange={(e) => setFilterApproval(e.target.value)}
-              className="flex-1 lg:flex-none px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer"
+              className="w-full sm:w-auto flex-1 lg:flex-none px-3 sm:px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer truncate"
               aria-label="Filter by approval status"
               title="Approval"
             >
@@ -833,7 +833,7 @@ const ProductManagement = () => {
             <button
               ref={filterButtonRef}
               onClick={() => setIsFilterOpen((prev) => !prev)}
-              className="flex items-center space-x-2 px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 px-3 sm:px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shrink-0"
             >
               <HiOutlineFunnel className="h-4 w-4" />
               <span>Filters</span>
@@ -841,7 +841,7 @@ const ProductManagement = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="flex-1 lg:flex-none px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer"
+              className="w-full sm:w-auto flex-1 lg:flex-none px-3 sm:px-4 py-2.5 bg-white ring-1 ring-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-primary/5 outline-none appearance-none cursor-pointer truncate"
             >
               <option value="display-asc">Display order</option>
               <option value="newest">Newest first</option>

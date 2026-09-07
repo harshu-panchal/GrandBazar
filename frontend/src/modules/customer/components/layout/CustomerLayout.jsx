@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import BottomNav from './BottomNav';
@@ -18,7 +18,7 @@ import { ShieldCheck, Package } from 'lucide-react';
 const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = false, showCart: showCartProp, showBottomNav: showBottomNavProp }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { isOpen: isProductDetailOpen } = useProductDetail();
+    const { isOpen: isProductDetailOpen, closeProduct } = useProductDetail();
     const { user, token } = useAuth();
     const { isLocationPickerOpen, closeLocationPicker } = useAppLocation();
 
@@ -38,6 +38,35 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
             window.removeEventListener('popstate', handlePopState);
         };
     }, [location.pathname, navigate]);
+
+    // Opening the product detail sheet doesn't push browser history, so hardware
+    // back had nothing to consume and fell through to the WebView's "exit app"
+    // prompt instead of closing the sheet. Push an entry on open and close on
+    // back; if the sheet is closed some other way (the X button), consume that
+    // same entry with history.back() so a real back-press isn't left one behind.
+    const wasProductDetailOpenRef = useRef(false);
+    useEffect(() => {
+        if (isProductDetailOpen && !wasProductDetailOpenRef.current) {
+            window.history.pushState({ productDetailSheet: true }, '');
+        } else if (!isProductDetailOpen && wasProductDetailOpenRef.current) {
+            if (window.history.state?.productDetailSheet) {
+                window.history.back();
+            }
+        }
+        wasProductDetailOpenRef.current = isProductDetailOpen;
+    }, [isProductDetailOpen]);
+
+    useEffect(() => {
+        const handleProductDetailPopState = () => {
+            if (isProductDetailOpen) {
+                closeProduct();
+            }
+        };
+        window.addEventListener('popstate', handleProductDetailPopState);
+        return () => {
+            window.removeEventListener('popstate', handleProductDetailPopState);
+        };
+    }, [isProductDetailOpen, closeProduct]);
 
     // Listen for Return OTPs (Real-time Alert for Customer)
     useEffect(() => {

@@ -382,7 +382,9 @@ export async function verifySellerOtpCode({
     target,
   }).select("+otpHash +expiresAt");
 
-  const mockMode = useMockOtpForSellerChannel(normalizedChannel);
+  // A misconfigured USE_MOCK_OTP must never let a fixed code bypass a real
+  // OTP in production — same hard lock as the delivery/order OTP validators.
+  const mockMode = useMockOtpForSellerChannel(normalizedChannel) && process.env.NODE_ENV !== "production";
   const mockOtp = getMockOtp();
 
   if (mockMode && code === mockOtp) {

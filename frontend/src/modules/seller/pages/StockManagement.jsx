@@ -40,6 +40,8 @@ const StockManagement = () => {
     const [adjustType, setAdjustType] = useState('Restock');
     const [adjustValue, setAdjustValue] = useState('');
     const [adjustNote, setAdjustNote] = useState('');
+    const [variantQuantities, setVariantQuantities] = useState({});
+    const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
 
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -141,17 +143,57 @@ const StockManagement = () => {
     }, [inventory, searchTerm, filterStatus]);
 
     const handleFullAdjustment = async () => {
+        const hasVariants = Array.isArray(selectedItem?.variants) && selectedItem.variants.length > 0;
+        const type = adjustType === 'Restock' ? 'Restock' : 'Correction';
+
+        if (hasVariants) {
+            const entries = Object.entries(variantQuantities)
+                .map(([variantId, raw]) => [variantId, parseInt(raw)])
+                .filter(([, value]) => !isNaN(value) && value > 0);
+
+            if (!entries.length) {
+                toast.error("Enter a quantity for at least one variant");
+                return;
+            }
+
+            setIsSavingAdjustment(true);
+            try {
+                for (const [variantId, value] of entries) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await sellerApi.adjustVariantStock({
+                        productId: selectedItem.id,
+                        variantId,
+                        type,
+                        quantity: value,
+                        note: adjustNote,
+                    });
+                }
+                toast.success("Stock adjusted successfully");
+                setIsAdjustModalOpen(false);
+                fetchInventory(true);
+            } catch (error) {
+                toast.error(error.response?.data?.message || "Failed to adjust stock");
+            } finally {
+                setIsSavingAdjustment(false);
+            }
+            return;
+        }
+
         const value = parseInt(adjustValue);
         if (isNaN(value) || value <= 0) {
             toast.error("Please enter a valid quantity");
             return;
         }
 
+        setIsSavingAdjustment(true);
         try {
+            // quantity is always positive — the backend decides add vs. subtract
+            // from `type` itself. Pre-negating here too used to double-negate
+            // "Remove" and silently ADD stock instead of removing it.
             const res = await sellerApi.adjustStock({
                 productId: selectedItem.id,
-                type: adjustType === 'Restock' ? 'Restock' : 'Correction',
-                quantity: adjustType === 'Restock' ? value : -value,
+                type,
+                quantity: value,
                 note: adjustNote
             });
 
@@ -162,6 +204,8 @@ const StockManagement = () => {
             }
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to adjust stock");
+        } finally {
+            setIsSavingAdjustment(false);
         }
     };
 
@@ -169,6 +213,7 @@ const StockManagement = () => {
         setSelectedItem(item);
         setAdjustValue('');
         setAdjustNote('');
+        setVariantQuantities({});
         setIsAdjustModalOpen(true);
     };
 
@@ -522,19 +567,54 @@ const StockManagement = () => {
                                         ))}
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">Quantity Change</label>
-                                        <div className="relative group">
-                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-slate-600">#</div>
-                                            <input
-                                                type="number"
-                                                value={adjustValue}
-                                                onChange={(e) => setAdjustValue(e.target.value)}
-                                                className="w-full pl-10 pr-4 py-4 bg-slate-50 border-none rounded-2xl text-2xl font-black text-slate-900 focus:ring-2 focus:ring-primary/20 transition-all outline-none"
-                                                placeholder="0"
-                                            />
+                                    {Array.isArray(selectedItem.variants) && selectedItem.variants.length > 0 ? (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">
+                                                Quantity Change per Variant
+                                            </label>
+                                            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                                {selectedItem.variants.map((v) => (
+                                                    <div
+                                                        key={v._id || v.sku}
+                                                        className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl px-3 py-2.5"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-black text-slate-900 truncate">{v.name || v.sku}</p>
+                                                            <p className="text-[10px] font-bold text-slate-500">Current: {v.stock ?? 0} units</p>
+                                                        </div>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={variantQuantities[v._id] || ''}
+                                                            onChange={(e) =>
+                                                                setVariantQuantities((prev) => ({
+                                                                    ...prev,
+                                                                    [v._id]: e.target.value,
+                                                                }))
+                                                            }
+                                                            className="w-20 shrink-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black text-slate-900 focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 ml-1">Leave a variant at 0 to skip it.</p>
                                         </div>
-                                    </div>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">Quantity Change</label>
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-slate-600">#</div>
+                                                <input
+                                                    type="number"
+                                                    value={adjustValue}
+                                                    onChange={(e) => setAdjustValue(e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-4 bg-slate-50 border-none rounded-2xl text-2xl font-black text-slate-900 focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">Internal Note (Optional)</label>
@@ -558,9 +638,10 @@ const StockManagement = () => {
                                 </Button>
                                 <Button
                                     onClick={handleFullAdjustment}
-                                    className="flex-1 py-4 text-xs font-bold rounded-2xl shadow-xl shadow-primary/20"
+                                    disabled={isSavingAdjustment}
+                                    className="flex-1 py-4 text-xs font-bold rounded-2xl shadow-xl shadow-primary/20 disabled:opacity-50"
                                 >
-                                    SAVE CHANGES
+                                    {isSavingAdjustment ? 'SAVING...' : 'SAVE CHANGES'}
                                 </Button>
                             </div>
                         </motion.div>

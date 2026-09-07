@@ -202,13 +202,17 @@ async function resolveOrderItemsInput({
 
   let orderItemsInput = Array.isArray(payload.items) ? payload.items.filter(Boolean) : [];
   if (orderItemsInput.length > 0) {
-    orderItemsInput = orderItemsInput.map((item) => ({
-      ...item,
-      campaignId:
-        item.campaignId ||
-        cartCampaignByLine.get(cartLineKey(item.product || item.productId, item.variantSku)) ||
-        null,
-    }));
+    orderItemsInput = orderItemsInput.map((item) => {
+      const variantSku = String(item.variantSku || item.variantSlot || "").trim();
+      return {
+        ...item,
+        variantSku,
+        campaignId:
+          item.campaignId ||
+          cartCampaignByLine.get(cartLineKey(item.product || item.productId, variantSku)) ||
+          null,
+      };
+    });
     return {
       orderItemsInput,
       source: "DIRECT_ITEMS",
@@ -224,7 +228,7 @@ async function resolveOrderItemsInput({
 
   orderItemsInput = cart.items.map((item) => ({
     product: item.productId,
-    variantSku: String(item.variantSku || "").trim(),
+    variantSku: String(item.variantSku || item.variantSlot || "").trim(),
     quantity: item.quantity,
     campaignId: item.campaignId || null,
   }));
@@ -258,9 +262,10 @@ async function assertAllItemsInStock(orderItemsInput, session) {
       continue;
     }
     const requestedQuantity = Number(item.quantity) || 0;
-    if (item.variantSku) {
+    const variantSku = String(item.variantSku || item.variantSlot || "").trim();
+    if (variantSku) {
       const variant = Array.isArray(product.variants)
-        ? product.variants.find((v) => String(v?.sku || v?.name || "").trim() === item.variantSku)
+        ? product.variants.find((v) => String(v?.sku || v?.name || "").trim() === variantSku)
         : null;
       const availableStock = Number(variant?.stock || 0);
       if (!variant || availableStock < requestedQuantity) {
@@ -883,20 +888,29 @@ export async function placeOrderAtomic({
       }
     }
 
-    for (const order of orders) {
-      emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PLACED, {
-        orderId: order.orderId,
-        checkoutGroupId,
-        customerId,
-        userId: customerId,
-      });
-      if (order.seller) {
-        emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {
+    // For ONLINE orders, the order isn't actually confirmed yet — it's sitting in
+    // PAYMENT_PENDING until the gateway captures payment. Firing "order placed
+    // successfully" here would tell the customer it succeeded before it has.
+    // The equivalent success notification (PAYMENT_SUCCESS) plus NEW_ORDER to the
+    // seller already fire once payment actually captures (paymentService.js,
+    // handleOrderSideEffectsFromPaymentStatus). COD has no such gate, so it still
+    // notifies immediately here.
+    if (paymentMode !== "ONLINE") {
+      for (const order of orders) {
+        emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PLACED, {
           orderId: order.orderId,
           checkoutGroupId,
-          sellerId: order.seller,
           customerId,
+          userId: customerId,
         });
+        if (order.seller) {
+          emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {
+            orderId: order.orderId,
+            checkoutGroupId,
+            sellerId: order.seller,
+            customerId,
+          });
+        }
       }
     }
 

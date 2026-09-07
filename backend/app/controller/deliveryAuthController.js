@@ -3,7 +3,7 @@ import Admin from "../models/admin.js";
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
-import { generateOTP, useRealSMS, useMockOtpEnabled, getMockOtp } from "../utils/otp.js";
+import { generateOTP, useRealSMS, isMockOtpBypassAllowed, getMockOtp } from "../utils/otp.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
@@ -163,7 +163,7 @@ export const verifyDeliveryOTP = async (req, res) => {
         }
 
         let delivery;
-        if (useMockOtpEnabled() && otp === getMockOtp()) {
+        if (isMockOtpBypassAllowed() && otp === getMockOtp()) {
             delivery = await Delivery.findOne({ phone });
         } else {
             delivery = await Delivery.findOne({

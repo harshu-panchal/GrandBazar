@@ -1,6 +1,7 @@
 import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
+import ScrollToTop from "@shared/components/ScrollToTop";
 import { StoreProvider } from "../context/StoreContext";
 import { useAuth } from "@core/context/AuthContext";
 import { hasSellerModuleAccess } from "../constants/sellerPermissions";
@@ -40,6 +41,7 @@ const Analytics = React.lazy(() => import("../pages/Analytics"));
 const Transactions = React.lazy(() => import("../pages/Transactions"));
 const DeliveryTracking = React.lazy(() => import("../pages/DeliveryTracking"));
 const Profile = React.lazy(() => import("../pages/Profile"));
+const Notifications = React.lazy(() => import("../pages/Notifications"));
 const Withdrawals = React.lazy(() => import("../pages/Withdrawals"));
 const Storefront = React.lazy(() => import("../pages/Storefront"));
 const SellerCoupons = React.lazy(() => import("../pages/SellerCoupons"));
@@ -148,6 +150,7 @@ const SellerRoutes = () => {
   return (
     <StoreProvider>
     <DashboardLayout navItems={filteredNavItems} title="Seller Panel">
+      <ScrollToTop />
       <Suspense
         fallback={
           <div className="flex min-h-[50vh] items-center justify-center">
@@ -189,6 +192,7 @@ const SellerRoutes = () => {
           </>
         )}
         <Route path="profile" element={<Profile />} />
+        <Route path="notifications" element={<Notifications />} />
         {isOwner && <Route path="staff" element={<StaffManagement />} />}
         <Route path="*" element={<Navigate to="/seller" replace />} />
       </Routes>

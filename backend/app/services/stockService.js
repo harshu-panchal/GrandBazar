@@ -48,12 +48,17 @@ export async function reserveStockForItems({
 
     let updated;
     if (variantSku) {
-      // Decrement variant stock + master stock atomically
-      // Use $elemMatch to ensure stock check and sku match on the SAME array element
+      // Gate and decrement on the variant's own stock only — the top-level
+      // `stock` field is meant to mirror sum(variants[].stock), but nothing
+      // guarantees that invariant holds (e.g. a manual top-level stock
+      // correction elsewhere), and gating on a possibly-stale aggregate here
+      // previously caused false "insufficient stock" errors on an in-stock
+      // variant whenever a sibling variant's edits had desynced it. The
+      // pipeline update below also recomputes `stock` from the variants
+      // array in the same atomic write, self-healing any prior desync.
       updated = await Product.findOneAndUpdate(
         {
           _id: item.productId,
-          stock: { $gte: item.quantity },
           variants: {
             $elemMatch: {
               sku: variantSku,
@@ -61,13 +66,27 @@ export async function reserveStockForItems({
             },
           },
         },
-        {
-          $inc: {
-            stock: -item.quantity,
-            "variants.$.stock": -item.quantity,
+        [
+          {
+            $set: {
+              variants: {
+                $map: {
+                  input: "$variants",
+                  as: "v",
+                  in: {
+                    $cond: [
+                      { $eq: ["$$v.sku", variantSku] },
+                      { $mergeObjects: ["$$v", { stock: { $subtract: ["$$v.stock", item.quantity] } }] },
+                      "$$v",
+                    ],
+                  },
+                },
+              },
+            },
           },
-        },
-        { new: true, session },
+          { $set: { stock: { $sum: "$variants.stock" } } },
+        ],
+        { new: true, session, updatePipeline: true },
       );
     } else {
       updated = await Product.findOneAndUpdate(
@@ -127,7 +146,11 @@ export async function reserveStockForItems({
   }
 
   if (stockHistoryRows.length > 0) {
-    await StockHistory.insertMany(stockHistoryRows, { session, ordered: true });
+    if (typeof StockHistory.insertMany === "function") {
+      await StockHistory.insertMany(stockHistoryRows, { session, ordered: true });
+    } else if (typeof StockHistory.create === "function") {
+      await StockHistory.create(stockHistoryRows, session ? { session } : {});
+    }
   }
 
   return lowStockAlerts;

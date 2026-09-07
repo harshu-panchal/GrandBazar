@@ -781,11 +781,36 @@ const CheckoutPage = () => {
       try {
         const params = { status: "active" };
         if (cartSellerKey) params.sellerIds = cartSellerKey;
-        const res = await customerApi.getActiveCoupons(params);
-        if (!cancelled && res.data.success) {
-          const list = res.data.result || res.data.results || [];
-          setCoupons(Array.isArray(list) ? list : []);
+        const [generalRes, rewardRes] = await Promise.all([
+          customerApi.getActiveCoupons(params),
+          customerApi.getMyRewardCoupons().catch((error) => {
+            console.error("Failed to load reward coupons", error);
+            return null;
+          }),
+        ]);
+        if (cancelled) return;
+
+        const generalList =
+          generalRes.data.success
+            ? generalRes.data.result || generalRes.data.results || []
+            : [];
+        const rewardList =
+          rewardRes && rewardRes.data.success
+            ? rewardRes.data.result || rewardRes.data.results || []
+            : [];
+
+        // Reward-campaign coupons (e.g. cashback vouchers) live in a separate API
+        // from platform/seller coupons and were never merged in here, so earned
+        // coupons never showed up at checkout. Merge both, preferring the reward
+        // copy (carries source:"digital_voucher" + campaignName) on id clashes.
+        const byId = new Map();
+        for (const coupon of Array.isArray(generalList) ? generalList : []) {
+          if (coupon?._id) byId.set(String(coupon._id), coupon);
         }
+        for (const coupon of Array.isArray(rewardList) ? rewardList : []) {
+          if (coupon?._id) byId.set(String(coupon._id), coupon);
+        }
+        setCoupons([...byId.values()]);
       } catch (error) {
         console.error("Failed to load checkout coupons", error);
         if (!cancelled) setCoupons([]);

@@ -21,6 +21,14 @@ export const adjustStock = async (req, res) => {
             return handleResponse(res, 404, "Product not found or unauthorized");
         }
 
+        if (Array.isArray(product.variants) && product.variants.length > 0) {
+            return handleResponse(
+                res,
+                400,
+                "This product has variants — adjust stock per-variant from the product edit page instead of the total, or it will desync from checkout.",
+            );
+        }
+
         const qtyChange = Number(quantity);
         const previousStock = Number(product.stock || 0);
         const finalStock = type === 'Restock' ? product.stock + qtyChange : product.stock - qtyChange;
@@ -62,6 +70,84 @@ export const adjustStock = async (req, res) => {
         return handleResponse(res, 200, "Stock adjusted successfully", {
             newStock: product.stock,
             historyEntry
+        });
+
+    } catch (error) {
+        return handleResponse(res, 500, error.message);
+    }
+};
+
+/* ===============================
+   ADJUST VARIANT STOCK MANUALLY
+================================ */
+export const adjustVariantStock = async (req, res) => {
+    try {
+        const { productId, variantId, type, quantity, note } = req.body;
+        const sellerId = req.user.id;
+
+        const product = await Product.findOne({ _id: productId, sellerId });
+        if (!product) {
+            return handleResponse(res, 404, "Product not found or unauthorized");
+        }
+
+        const variant = product.variants?.id?.(variantId);
+        if (!variant) {
+            return handleResponse(res, 404, "Variant not found");
+        }
+
+        const qtyChange = Number(quantity);
+        if (!Number.isFinite(qtyChange) || qtyChange <= 0) {
+            return handleResponse(res, 400, "Quantity must be a positive number");
+        }
+
+        const previousStock = Number(product.stock || 0);
+        const previousVariantStock = Number(variant.stock || 0);
+        const finalVariantStock =
+            type === 'Restock' ? previousVariantStock + qtyChange : previousVariantStock - qtyChange;
+
+        if (finalVariantStock < 0) {
+            return handleResponse(res, 400, "Stock cannot be negative");
+        }
+
+        variant.stock = finalVariantStock;
+        // Keep the top-level `stock` field in sync with the sum of variants —
+        // same invariant productController.js maintains on the edit-product
+        // path (checkout/listing visibility gates on this field, not on any
+        // single variant's stock).
+        product.stock = product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+        await product.save();
+
+        const historyEntry = new StockHistory({
+            product: productId,
+            seller: sellerId,
+            type,
+            quantity: type === 'Restock' ? qtyChange : -qtyChange,
+            note: note || `Manual ${type} adjustment (${variant.name || variant.sku || 'variant'})`,
+        });
+        await historyEntry.save();
+
+        if (
+            type !== 'Restock' &&
+            qtyChange > 0 &&
+            await isLowStockAlertsEnabled()
+        ) {
+            const lowStockAlert = createLowStockAlertCandidate({
+                product,
+                previousStock,
+                currentStock: product.stock,
+                variantSku: variant.sku,
+                previousVariantStock,
+                currentVariantStock: finalVariantStock,
+            });
+            if (lowStockAlert) {
+                emitNotificationEvent(NOTIFICATION_EVENTS.LOW_STOCK_ALERT, lowStockAlert);
+            }
+        }
+
+        return handleResponse(res, 200, "Stock adjusted successfully", {
+            newVariantStock: variant.stock,
+            newProductStock: product.stock,
+            historyEntry,
         });
 
     } catch (error) {

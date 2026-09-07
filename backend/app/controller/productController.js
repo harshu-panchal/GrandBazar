@@ -993,6 +993,15 @@ export const createProduct = async (req, res) => {
             ? variant.sku
             : makeProductSku(productData.name, idx + 1),
       }));
+      // The top-level `stock` field is what gates checkout/listing visibility
+      // (see stockService.js), so for variant products it must always equal
+      // the sum of variant stocks rather than whatever the form submitted.
+      if (productData.variants.length > 0) {
+        productData.stock = productData.variants.reduce(
+          (sum, v) => sum + (Number(v.stock) || 0),
+          0,
+        );
+      }
     }
 
     let moderationUpdate = {};
@@ -1226,6 +1235,16 @@ export const updateProduct = async (req, res) => {
             ? variant.sku
             : makeProductSku(skuBaseName, idx + 1),
       }));
+      // Keep the top-level `stock` field (which gates checkout/listing
+      // visibility, see stockService.js) in sync with the variants — it must
+      // never be edited independently or it silently blocks checkout on an
+      // in-stock variant while another variant is out of stock.
+      if (productData.variants.length > 0) {
+        productData.stock = productData.variants.reduce(
+          (sum, v) => sum + (Number(v.stock) || 0),
+          0,
+        );
+      }
     }
 
     let moderationUpdate = {};

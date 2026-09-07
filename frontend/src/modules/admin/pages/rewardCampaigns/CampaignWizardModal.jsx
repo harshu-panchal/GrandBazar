@@ -36,6 +36,14 @@ const SectionTitle = ({ children }) => (
 const inputCls =
   "w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/30";
 
+// "YYYY-MM-DDTHH:mm" in local time, for datetime-local `min` attributes.
+const localDatetimeNow = () => {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
+
 const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
   const { showToast } = useToast();
   const [form, setForm] = useState(emptyForm());
@@ -227,6 +235,7 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
   };
 
   const scopeMeta = SCOPE_FIELD_META[offerConfig.scopeField];
+  const nowLocalDatetime = localDatetimeNow();
 
   return (
     <Modal isOpen={open} onClose={onClose} title={editing ? "Edit Campaign" : "Create Reward Campaign"} size="lg">
@@ -390,7 +399,7 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Priority (lower = higher)</label>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Processing Order (lower runs first)</label>
                 <input
                   type="number"
                   min="1"
@@ -398,8 +407,77 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                   onChange={(e) => setForm({ ...form, priority: e.target.value })}
                   className={inputCls}
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Only affects the order campaigns are evaluated in — every eligible campaign still stacks on an order, this does not make one campaign "win" over another.
+                </p>
               </div>
             </div>
+
+            {(form.fundingSource === "seller" || form.fundingSource === "shared") &&
+              (offerConfig.scopeField !== "shop" || form.fundingSource === "shared") && (
+              <>
+                <SectionTitle>Funding Scope</SectionTitle>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {offerConfig.scopeField !== "shop" && (
+                    <div className={form.fundingSource === "shared" ? "" : "md:col-span-2"}>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">
+                        {form.fundingSource === "seller"
+                          ? "Seller(s) funding this campaign *"
+                          : "Seller(s) sharing this cost *"}
+                      </label>
+                      <input
+                        required
+                        value={form.rules.shopIdsText}
+                        onChange={(e) => setRules({ shopIdsText: e.target.value })}
+                        className={inputCls}
+                        placeholder="Shop / Store IDs (comma-separated)"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Only orders from the selected seller(s) will be eligible for this campaign.
+                      </p>
+                    </div>
+                  )}
+                  {form.fundingSource === "shared" && (
+                    <>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">Platform share (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={form.sharedFunding.platformPercent}
+                          onChange={(e) => {
+                            const platformPercent = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                            setForm((f) => ({
+                              ...f,
+                              sharedFunding: { platformPercent, sellerPercent: 100 - platformPercent },
+                            }));
+                          }}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">Seller share (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={form.sharedFunding.sellerPercent}
+                          onChange={(e) => {
+                            const sellerPercent = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                            setForm((f) => ({
+                              ...f,
+                              sharedFunding: { sellerPercent, platformPercent: 100 - sellerPercent },
+                            }));
+                          }}
+                          className={inputCls}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
 
             <SectionTitle>Schedule</SectionTitle>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -408,6 +486,7 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                 <input
                   type="datetime-local"
                   required
+                  min={editing ? undefined : nowLocalDatetime}
                   value={form.startAt}
                   onChange={(e) => setForm({ ...form, startAt: e.target.value })}
                   className={inputCls}
@@ -418,6 +497,7 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                 <input
                   type="datetime-local"
                   required
+                  min={form.startAt || nowLocalDatetime}
                   value={form.endAt}
                   onChange={(e) => setForm({ ...form, endAt: e.target.value })}
                   className={inputCls}
@@ -488,8 +568,9 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                         type="number"
                         min="1"
                         value={form.rewardConfig.delayedDays}
-                        onChange={(e) => setRewardConfig({ delayedDays: Number(e.target.value) })}
+                        onChange={(e) => setRewardConfig({ delayedDays: e.target.value })}
                         className={inputCls}
+                        placeholder="e.g. 7"
                       />
                     </div>
                   )}
@@ -591,9 +672,10 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                     <input
                       type="number"
                       min="0"
-                      value={form.redemptionRules?.minOrderAmount ?? 0}
-                      onChange={(e) => setRedemption({ minOrderAmount: Number(e.target.value) })}
+                      value={form.redemptionRules?.minOrderAmount ?? ""}
+                      onChange={(e) => setRedemption({ minOrderAmount: e.target.value })}
                       className={inputCls}
+                      placeholder="No minimum"
                     />
                   </div>
                   <div>
@@ -715,9 +797,10 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                     <input
                       type="number"
                       min="0"
-                      value={form.redemptionRules?.minOrderAmount ?? 0}
-                      onChange={(e) => setRedemption({ minOrderAmount: Number(e.target.value) })}
+                      value={form.redemptionRules?.minOrderAmount ?? ""}
+                      onChange={(e) => setRedemption({ minOrderAmount: e.target.value })}
                       className={inputCls}
+                      placeholder="No minimum"
                     />
                   </div>
                   <div>
@@ -776,8 +859,9 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                       type="number"
                       min="0"
                       value={form.rules.minPurchase}
-                      onChange={(e) => setRules({ minPurchase: Number(e.target.value) })}
+                      onChange={(e) => setRules({ minPurchase: e.target.value })}
                       className={inputCls}
+                      placeholder="No minimum"
                     />
                   </div>
                   <div>

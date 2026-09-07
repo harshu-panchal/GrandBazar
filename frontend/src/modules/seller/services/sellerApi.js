@@ -71,6 +71,7 @@ export const sellerApi = {
 
     // Stock
     adjustStock: (data) => axiosInstance.post('/products/adjust-stock', data),
+    adjustVariantStock: (data) => axiosInstance.post('/products/adjust-variant-stock', data),
     getStockHistory: () => axiosInstance.get('/products/stock-history'),
 
     // Notifications

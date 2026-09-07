@@ -59,8 +59,42 @@ const ROLES_LIST = [
 const emptyMatrix = () => matrixFromPermissions([]);
 
 const PermissionMatrix = ({ matrix, onChange, disabled = false }) => (
-  <div className="overflow-x-auto rounded-2xl border border-slate-100">
-    <table className="w-full min-w-[520px] text-left">
+  <div className="rounded-2xl border border-slate-100 overflow-hidden">
+    {/* Below sm: stacked cards — a fixed-width table forced horizontal
+        scrolling to reach the Write column on phone widths. */}
+    <div className="sm:hidden divide-y divide-slate-100">
+      {SELLER_PERMISSION_MODULES.map((module) => (
+        <div key={module.id} className="px-4 py-3 hover:bg-slate-50/60">
+          <p className="text-sm font-bold text-slate-900">{module.label}</p>
+          <p className="text-[11px] text-slate-400">{module.description}</p>
+          <div className="flex items-center gap-5 mt-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+              <input
+                type="checkbox"
+                disabled={disabled}
+                checked={Boolean(matrix[module.id]?.read)}
+                onChange={(e) => onChange(module.id, 'read', e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Read
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+              <input
+                type="checkbox"
+                disabled={disabled}
+                checked={Boolean(matrix[module.id]?.write)}
+                onChange={(e) => onChange(module.id, 'write', e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Write
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* sm and up: table, plenty of room for all three columns. */}
+    <table className="w-full text-left hidden sm:table">
       <thead>
         <tr className="bg-slate-50 border-b border-slate-100">
           <th className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-500">Module</th>

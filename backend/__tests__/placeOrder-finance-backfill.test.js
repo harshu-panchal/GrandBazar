@@ -33,6 +33,7 @@ jest.unstable_mockModule("../app/utils/helper.js", () => ({
 jest.unstable_mockModule("../app/constants/orderWorkflow.js", () => ({
   WORKFLOW_STATUS: { SELLER_PENDING: "SELLER_PENDING" },
   DEFAULT_SELLER_TIMEOUT_MS: () => 0,
+  legacyStatusFromWorkflow: jest.fn().mockReturnValue("confirmed"),
 }));
 
 jest.unstable_mockModule("../app/services/orderWorkflowService.js", () => ({
@@ -73,6 +74,7 @@ jest.unstable_mockModule("../app/models/product.js", () => ({
   default: {
     findById: mockProductFindById,
     findByIdAndUpdate: mockProductFindByIdAndUpdate,
+    findOneAndUpdate: jest.fn().mockResolvedValue({ _id: "p1", stock: 10 }),
   },
 }));
 
@@ -101,6 +103,7 @@ jest.unstable_mockModule("../app/utils/pagination.js", () => ({ default: jest.fn
 jest.unstable_mockModule("../app/utils/orderLookup.js", () => ({
   orderMatchQueryFromRouteParam: jest.fn(),
   orderMatchQueryFlexible: jest.fn(),
+  requireCanonicalOrderId: jest.fn(),
 }));
 jest.unstable_mockModule("../app/utils/geoUtils.js", () => ({
   distanceMeters: jest.fn(),

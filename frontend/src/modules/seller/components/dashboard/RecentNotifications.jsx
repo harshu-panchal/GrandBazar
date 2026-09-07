@@ -49,7 +49,7 @@ const RecentNotifications = () => {
   return (
     <Card
       title="Recent Notifications"
-      headerAction={<ViewAllLink onClick={() => navigate("/seller/profile")} />}
+      headerAction={<ViewAllLink onClick={() => navigate("/seller/notifications")} />}
       contentClassName="p-4"
     >
       {notifications === null ? (

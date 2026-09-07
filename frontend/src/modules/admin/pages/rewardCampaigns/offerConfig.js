@@ -67,9 +67,9 @@ export const OFFER_CONFIG = {
   birthday: { group: "birthday", scopeField: "none", showRedemption: false, showEligibility: false, helpText: "Runs on a daily birthday check, not at order delivery — order-based eligibility rules don't apply." },
   instant_cashback: { group: "cashback", scopeField: "none", showRedemption: true, showEligibility: true, helpText: "Credits immediately on the configured timing (usually on payment)." },
   future_cashback: { group: "cashback", scopeField: "none", showRedemption: true, showEligibility: true, helpText: "Use \"Delayed (days)\" credit timing below to hold the credit for a period after delivery." },
-  flat_coupon: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, helpText: "Issues a flat-amount discount coupon to the customer." },
+  flat_coupon: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, hideMaxCap: true, helpText: "Issues a flat-amount discount coupon to the customer." },
   percent_coupon: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, helpText: "Issues a percentage-off discount coupon to the customer." },
-  free_delivery: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, hideValue: true, helpText: "Issues a free-delivery coupon; no discount value needed." },
+  free_delivery: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, hideValue: true, hideBudget: true, helpText: "Issues a free-delivery coupon; no discount value needed." },
   voucher: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, helpText: "Issues a cashback voucher coupon, optionally linked to an existing coupon." },
   digital_voucher: { group: "coupon", scopeField: "none", showRedemption: false, showEligibility: true, helpText: "Issues a personal digital voucher after purchase, optionally linked to an existing coupon." },
   referral_registration: { group: "referral", scopeField: "none", showRedemption: false, showEligibility: false, helpText: "Pays the referrer when a referee registers using their code." },
@@ -132,7 +132,7 @@ export const emptyForm = () => ({
   monthlyLimit: "",
   sharedFunding: { platformPercent: 50, sellerPercent: 50 },
   rules: {
-    minPurchase: 0,
+    minPurchase: "",
     customerType: "all",
     maxRewardPerCustomer: "",
     maxRewardsPerDay: "",
@@ -152,7 +152,7 @@ export const emptyForm = () => ({
     maxRewardAmount: 100,
     validityDays: 30,
     creditTiming: "on_delivery",
-    delayedDays: 0,
+    delayedDays: "",
     linkedCouponId: "",
     festivalName: "",
     refereeValue: "",
@@ -161,7 +161,7 @@ export const emptyForm = () => ({
     couponCodePrefix: "",
   },
   redemptionRules: {
-    minOrderAmount: 0,
+    minOrderAmount: "",
     maxWalletPercent: 100,
     maxWalletAmount: "",
     allowWithCoupon: true,
@@ -181,6 +181,14 @@ export function validateFormForSubtype(form) {
   if (form.startAt && form.endAt && new Date(form.startAt) >= new Date(form.endAt)) {
     return "Start date must be before end date";
   }
+  // Only block a past start date on creation — editing an already-live campaign
+  // legitimately has a start date in the past.
+  if (!form._id && form.startAt && new Date(form.startAt) < new Date()) {
+    return "Start date cannot be in the past";
+  }
+  if (form.endAt && new Date(form.endAt) < new Date()) {
+    return "End date cannot be in the past";
+  }
   if (rewardConfig.valueType === "percent") {
     const value = Number(rewardConfig.value);
     if (!(value > 0) || value > 100) return "Percentage value must be between 0 and 100";
@@ -197,6 +205,19 @@ export function validateFormForSubtype(form) {
   }
   if (config.scopeField === "shop" && !parseCsvIds(rules.shopIdsText).length) {
     return `${subtypeLabel(subtype)} requires at least one shop ID`;
+  }
+  if (
+    (form.fundingSource === "seller" || form.fundingSource === "shared") &&
+    !parseCsvIds(rules.shopIdsText).length
+  ) {
+    return "Select at least one seller/shop to fund this campaign";
+  }
+  if (form.fundingSource === "shared") {
+    const platformPercent = Number(form.sharedFunding?.platformPercent);
+    const sellerPercent = Number(form.sharedFunding?.sellerPercent);
+    if (!(platformPercent >= 0) || !(sellerPercent >= 0) || platformPercent + sellerPercent !== 100) {
+      return "Shared funding split must add up to 100%";
+    }
   }
   if (config.requiresShopAge && !(Number(rules.newShopMaxAgeDays) > 0)) {
     return `${subtypeLabel(subtype)} requires a max shop age (days) greater than 0`;

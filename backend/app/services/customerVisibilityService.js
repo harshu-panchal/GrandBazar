@@ -20,22 +20,29 @@ export function parseCustomerCoordinates(query = {}) {
   return { valid: true, lat, lng };
 }
 
-function buildNearbySellersKey(lat, lng) {
+function buildNearbySellersKey(lat, lng, includeClosed) {
   const rLat = Number(lat).toFixed(4);
   const rLng = Number(lng).toFixed(4);
-  return buildKey("stores", "nearbyWithDistance", `${rLat}:${rLng}`);
+  const suffix = includeClosed ? ":all" : ":open";
+  return buildKey("stores", "nearbyWithDistance", `${rLat}:${rLng}${suffix}`);
 }
 
 /**
  * Nearby approved stores within service radius, with distanceKm from customer.
+ * `includeClosed` keeps temporarily-closed stores in the result — used by the
+ * Stores directory page, where customers should still be able to find and
+ * favorite a store that's closed right now. Product listings (Home, offer
+ * sections) want the default (false) so a closed store's products don't
+ * surface where a customer could try to buy them.
  * @returns {Promise<Array<{ id: string, distanceKm: number }>>}
  */
-export async function getNearbySellersWithDistanceForCustomer(lat, lng) {
+export async function getNearbySellersWithDistanceForCustomer(lat, lng, { includeClosed = false } = {}) {
   const fetchFn = async () => {
     const stores = await Store.find({
       isActive: true,
       isVerified: true,
       applicationStatus: "approved",
+      ...(includeClosed ? {} : { isOpen: { $ne: false } }),
       location: {
         $near: {
           $geometry: {
@@ -68,7 +75,7 @@ export async function getNearbySellersWithDistanceForCustomer(lat, lng) {
   };
 
   const nearby = await getOrSet(
-    buildNearbySellersKey(lat, lng),
+    buildNearbySellersKey(lat, lng, includeClosed),
     fetchFn,
     getTTL("nearbySellers"),
   );
@@ -80,12 +87,12 @@ export async function getNearbySellersWithDistanceForCustomer(lat, lng) {
   return nearby.filter((entry) => allowedIds.has(entry.id));
 }
 
-export async function getNearbySellerIdsForCustomer(lat, lng) {
-  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng);
+export async function getNearbySellerIdsForCustomer(lat, lng, options) {
+  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng, options);
   return nearby.map((entry) => entry.id);
 }
 
-export async function getNearbySellerDistanceMapForCustomer(lat, lng) {
-  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng);
+export async function getNearbySellerDistanceMapForCustomer(lat, lng, options) {
+  const nearby = await getNearbySellersWithDistanceForCustomer(lat, lng, options);
   return new Map(nearby.map((entry) => [entry.id, entry.distanceKm]));
 }

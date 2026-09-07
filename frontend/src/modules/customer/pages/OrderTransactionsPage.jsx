@@ -3,6 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ArrowUpRight, ArrowDownLeft, ReceiptIndianRupee } from 'lucide-react';
 import { customerApi } from '../services/customerApi';
 
+const PAYMENT_METHOD_LABELS = {
+    cash: 'COD',
+    online: 'Online',
+    wallet: 'Wallet',
+};
+
+const PAYMENT_STATUS_STYLES = {
+    pending: 'bg-amber-50 text-amber-600',
+    completed: 'bg-emerald-50 text-emerald-600',
+    failed: 'bg-red-50 text-red-600',
+    refunded: 'bg-slate-100 text-slate-600',
+};
+
 const OrderTransactionsPage = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
@@ -65,9 +78,13 @@ const OrderTransactionsPage = () => {
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {orders.map((order) => {
-                                const isRefund = order.paymentStatus === 'refunded';
-                                const amount = order.totalAmount || order.payableAmount || 0;
+                                const paymentStatus = order.payment?.status || 'pending';
+                                const paymentMethod = order.payment?.method || 'cash';
+                                const isRefund = paymentStatus === 'refunded';
+                                const amount = order.pricing?.total || 0;
                                 const createdAt = order.createdAt ? new Date(order.createdAt) : null;
+                                const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod;
+                                const statusStyle = PAYMENT_STATUS_STYLES[paymentStatus] || PAYMENT_STATUS_STYLES.pending;
 
                                 return (
                                     <div
@@ -93,8 +110,7 @@ const OrderTransactionsPage = () => {
                                                     {isRefund ? 'Refund' : 'Order Payment'}
                                                 </h4>
                                                 <p className="text-[11px] text-slate-500">
-                                                    #{order.orderId || order._id?.slice(-8)} •{' '}
-                                                    {order.paymentMethod || 'Online'}
+                                                    #{order.orderId || order._id?.slice(-8)} • {methodLabel}
                                                 </p>
                                                 {createdAt && (
                                                     <p className="text-[11px] text-slate-500 mt-0.5">
@@ -107,12 +123,17 @@ const OrderTransactionsPage = () => {
                                                 )}
                                             </div>
                                         </div>
-                                        <div
-                                            className={`text-sm font-semibold ${
-                                                isRefund ? 'text-amber-600' : 'text-slate-900'
-                                            }`}
-                                        >
-                                            {isRefund ? '+' : '-'}₹{amount}
+                                        <div className="text-right">
+                                            <div
+                                                className={`text-sm font-semibold ${
+                                                    isRefund ? 'text-amber-600' : 'text-slate-900'
+                                                }`}
+                                            >
+                                                {isRefund ? '+' : '-'}₹{amount}
+                                            </div>
+                                            <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusStyle}`}>
+                                                {paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
+                                            </span>
                                         </div>
                                     </div>
                                 );

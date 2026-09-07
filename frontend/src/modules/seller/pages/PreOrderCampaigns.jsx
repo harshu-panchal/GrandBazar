@@ -398,23 +398,29 @@ const PreOrderCampaigns = () => {
                       </option>
                     ))}
                   </select>
-                  <div className="flex sm:contents items-center gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
-                    <Input
-                      className="flex-1 sm:col-span-3"
-                      type="number"
-                      min="1"
-                      placeholder="Cap"
-                      value={row.allocationCap}
-                      onChange={(e) => updateProductRow(idx, "allocationCap", e.target.value)}
-                    />
-                    <Input
-                      className="flex-1 sm:col-span-3"
-                      type="number"
-                      min="0"
-                      placeholder="Price"
-                      value={row.priceOverride}
-                      onChange={(e) => updateProductRow(idx, "priceOverride", e.target.value)}
-                    />
+                  <div className="flex sm:contents items-end gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
+                    <div className="flex-1 sm:col-span-3">
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Allocation Cap</label>
+                      <Input
+                        className="w-full"
+                        type="number"
+                        min="1"
+                        placeholder="Cap"
+                        value={row.allocationCap}
+                        onChange={(e) => updateProductRow(idx, "allocationCap", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1 sm:col-span-3">
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Price Override (₹)</label>
+                      <Input
+                        className="w-full"
+                        type="number"
+                        min="0"
+                        placeholder="Price"
+                        value={row.priceOverride}
+                        onChange={(e) => updateProductRow(idx, "priceOverride", e.target.value)}
+                      />
+                    </div>
                     <button
                       type="button"
                       className="sm:col-span-1 flex items-center justify-center text-red-500 hover:text-red-700 p-2 sm:p-0 bg-white dark:bg-gray-800 sm:bg-transparent sm:dark:bg-transparent shadow-sm sm:shadow-none rounded-lg sm:rounded-none border border-gray-200 dark:border-gray-700 sm:border-none"
@@ -455,27 +461,36 @@ const PreOrderCampaigns = () => {
                     value={row.label}
                     onChange={(e) => updateSlotRow(idx, "label", e.target.value)}
                   />
-                  <div className="flex sm:contents items-center gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
-                    <Input
-                      className="flex-1 sm:col-span-3"
-                      type="time"
-                      value={row.start}
-                      onChange={(e) => updateSlotRow(idx, "start", e.target.value)}
-                    />
-                    <Input
-                      className="flex-1 sm:col-span-3"
-                      type="time"
-                      value={row.end}
-                      onChange={(e) => updateSlotRow(idx, "end", e.target.value)}
-                    />
-                    <Input
-                      className="w-16 sm:w-auto sm:col-span-1"
-                      type="number"
-                      min="1"
-                      placeholder="Cap"
-                      value={row.capacityPerDay}
-                      onChange={(e) => updateSlotRow(idx, "capacityPerDay", e.target.value)}
-                    />
+                  <div className="flex sm:contents items-end gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 sm:border-none sm:pt-0">
+                    <div className="flex-1 sm:col-span-3">
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Start</label>
+                      <Input
+                        className="w-full"
+                        type="time"
+                        value={row.start}
+                        onChange={(e) => updateSlotRow(idx, "start", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1 sm:col-span-3">
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">End</label>
+                      <Input
+                        className="w-full"
+                        type="time"
+                        value={row.end}
+                        onChange={(e) => updateSlotRow(idx, "end", e.target.value)}
+                      />
+                    </div>
+                    <div className="w-16 sm:w-auto sm:col-span-1">
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Cap/Day</label>
+                      <Input
+                        className="w-full"
+                        type="number"
+                        min="1"
+                        placeholder="Cap"
+                        value={row.capacityPerDay}
+                        onChange={(e) => updateSlotRow(idx, "capacityPerDay", e.target.value)}
+                      />
+                    </div>
                     <button
                       type="button"
                       className="sm:col-span-1 flex items-center justify-center text-red-500 hover:text-red-700 p-2 sm:p-0 bg-white dark:bg-gray-800 sm:bg-transparent sm:dark:bg-transparent shadow-sm sm:shadow-none rounded-lg sm:rounded-none border border-gray-200 dark:border-gray-700 sm:border-none"

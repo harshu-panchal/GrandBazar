@@ -402,8 +402,8 @@ const Earnings = () => {
                         <p className="text-xs text-slate-500">{row.time || ""}</p>
                       </td>
                       <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Order">
-                        <p className="text-sm font-black text-slate-900">
-                          {row.orderId ? `#${row.orderId}` : row.ref || "—"}
+                        <p className="text-sm font-black text-slate-900" title={row.orderId || ""}>
+                          {row.orderId ? `#${row.shortOrderId || row.orderId.slice(-8)}` : row.ref || "—"}
                         </p>
                         <div className="mt-1 flex flex-wrap gap-1 sm:justify-start justify-end">
                           {row.orderStatus && (

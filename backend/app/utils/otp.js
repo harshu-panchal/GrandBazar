@@ -24,6 +24,13 @@ export function useMockOtpEnabled() {
 
 export const useRealSMS = () => !useMockOtpEnabled();
 
+// Stricter than useMockOtpEnabled(): a misconfigured USE_REAL_SMS/USE_MOCK_OTP
+// env var must never open the fixed-code bypass in production. Use this (not
+// useMockOtpEnabled) anywhere a fixed mock code is accepted as a valid OTP.
+export function isMockOtpBypassAllowed() {
+  return process.env.NODE_ENV !== "production" && useMockOtpEnabled();
+}
+
 const OTP_LENGTH = Math.max(4, parseInt(process.env.OTP_LENGTH || "4", 10));
 
 function randomOtp(length) {

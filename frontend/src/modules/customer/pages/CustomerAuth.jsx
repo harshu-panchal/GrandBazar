@@ -18,7 +18,8 @@ import {
     Heart,
     Star,
     ChevronLeft,
-    Mail
+    Mail,
+    Gift
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
@@ -97,23 +98,31 @@ const CustomerAuth = () => {
     const displayFavicon = faviconUrl || logoUrl || '';
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const referralCode = searchParams.get('ref') || '';
+    const referralCodeFromLink = searchParams.get('ref') || '';
 
     const [formData, setFormData] = useState(() => {
         try {
             const saved = sessionStorage.getItem('auth_formData');
-            return saved !== null ? JSON.parse(saved) : {
+            const parsed = saved !== null ? JSON.parse(saved) : null;
+            if (parsed) {
+                // A code already typed/saved in this session wins over the link —
+                // don't clobber it if the page reloads without a ?ref= param.
+                return { referralCode: referralCodeFromLink, ...parsed };
+            }
+            return {
                 phone: '',
                 otp: '',
                 name: '',
-                email: ''
+                email: '',
+                referralCode: referralCodeFromLink
             };
         } catch {
             return {
                 phone: '',
                 otp: '',
                 name: '',
-                email: ''
+                email: '',
+                referralCode: referralCodeFromLink
             };
         }
     });
@@ -320,7 +329,7 @@ const CustomerAuth = () => {
                 : await customerApi.verifyOtp({
                     phone: formData.phone,
                     otp: formData.otp,
-                    ...(referralCode ? { referralCode } : {}),
+                    ...(formData.referralCode ? { referralCode: formData.referralCode.trim() } : {}),
                 });
             const { token, customer } = response.data.result;
             login({ ...customer, token, role: 'customer' });
@@ -640,6 +649,23 @@ const CustomerAuth = () => {
                                                     />
                                                 </div>
                                                 <p className="text-[10px] font-bold text-gray-400 px-1">For order receipts and updates.</p>
+                                            </div>
+                                        )}
+
+                                        {!isLogin && (
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                    <Gift size={18} />
+                                                </div>
+                                                <input
+                                                    name="referralCode"
+                                                    placeholder="Referral Code (optional)"
+                                                    value={formData.referralCode || ''}
+                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all uppercase"
+                                                    onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
+                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
+                                                    onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
+                                                />
                                             </div>
                                         )}
 

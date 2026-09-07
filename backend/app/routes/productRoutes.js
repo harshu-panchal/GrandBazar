@@ -22,7 +22,7 @@ import {
     getSuggestedAddonsController,
     estimateCustomerPrice,
 } from "../controller/productController.js";
-import { adjustStock, getStockHistory } from "../controller/stockController.js";
+import { adjustStock, adjustVariantStock, getStockHistory } from "../controller/stockController.js";
 import {
     verifyToken,
     allowRoles,
@@ -58,6 +58,7 @@ router.patch("/seller/:id/pause", ...sellerChain, checkSubSellerPermission("prod
 router.patch("/seller/:id/unpause", ...sellerChain, checkSubSellerPermission("products", "write"), unpauseSellerProduct);
 router.get("/stock-history", ...sellerChain, checkSubSellerPermission("inventory", "read"), getStockHistory);
 router.post("/adjust-stock", ...sellerChain, checkSubSellerPermission("inventory", "write"), adjustStock);
+router.post("/adjust-variant-stock", ...sellerChain, checkSubSellerPermission("inventory", "write"), adjustVariantStock);
 router.get("/moderation", verifyToken, allowRoles("admin"), getModerationProducts);
 router.get("/:id/addon-mappings", verifyToken, allowRoles("admin"), getProductAddonMappingsController);
 router.get("/:id/suggested-addons", verifyToken, allowRoles("admin", "seller"), getSuggestedAddonsController);

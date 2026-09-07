@@ -13,7 +13,9 @@ import {
   QrCode,
   MessageCircle,
   Sparkles,
+  X,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { customerApi } from "../services/customerApi";
 import { useToast } from "@shared/components/ui/Toast";
 
@@ -40,6 +42,7 @@ const ReferAndEarnPage = () => {
   const [loading, setLoading] = useState(true);
   const [invitePhone, setInvitePhone] = useState("");
   const [inviting, setInviting] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +66,15 @@ const ReferAndEarnPage = () => {
 
   const shareLink = data?.shareLink || "";
   const referralCode = data?.referralCode || "";
+  const playStoreLink = data?.playStoreLink || "";
+  const appStoreLink = data?.appStoreLink || "";
+
+  const inviteMessage = () => {
+    let msg = `Join GrandBazar with my code ${referralCode} and earn rewards! ${shareLink}`;
+    if (playStoreLink) msg += `\nAndroid: ${playStoreLink}`;
+    if (appStoreLink) msg += `\niPhone: ${appStoreLink}`;
+    return msg;
+  };
 
   const copyCode = () => {
     navigator.clipboard.writeText(referralCode);
@@ -89,8 +101,16 @@ const ReferAndEarnPage = () => {
   };
 
   const shareWhatsApp = () => {
-    const text = encodeURIComponent(`Join GrandBazar with my code *${referralCode}* and earn rewards! ${shareLink}`);
-    window.open(`https://wa.me/?text=${text}`, "_blank");
+    const text = encodeURIComponent(inviteMessage());
+    // window.location.href (not window.open(..., "_blank")) — opening a blank
+    // tab that then redirects to wa.me flashes an empty page in mobile WebViews
+    // before WhatsApp takes over.
+    window.location.href = `https://wa.me/?text=${text}`;
+  };
+
+  const shareMobile = () => {
+    const text = encodeURIComponent(inviteMessage());
+    window.location.href = `sms:?body=${text}`;
   };
 
   const handleInvite = async (e) => {
@@ -191,8 +211,8 @@ const ReferAndEarnPage = () => {
           <div className="grid grid-cols-3 gap-3 text-center">
             {[
               { icon: Link2, label: "Link" },
-              { icon: QrCode, label: "QR Code", action: copyLink },
-              { icon: Smartphone, label: "Mobile" },
+              { icon: QrCode, label: "QR Code", action: () => setShowQrModal(true) },
+              { icon: Smartphone, label: "Mobile", action: shareMobile },
             ].map((ch) => (
               <button
                 key={ch.label}
@@ -275,6 +295,38 @@ const ReferAndEarnPage = () => {
           </ul>
         </div>
       </div>
+
+      {showQrModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setShowQrModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-xs w-full text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <p className="font-bold text-slate-800 mb-1">Scan to join GrandBazar</p>
+            <p className="text-xs text-slate-500 mb-4">Your friend gets your referral code automatically</p>
+            <div className="flex items-center justify-center bg-white p-3 rounded-xl border border-slate-100 mx-auto w-fit">
+              {shareLink ? (
+                <QRCodeSVG value={shareLink} size={180} />
+              ) : (
+                <div className="w-[180px] h-[180px] flex items-center justify-center text-xs text-slate-400">
+                  Loading…
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] font-mono text-slate-400 mt-3 break-all">{shareLink}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -719,10 +719,10 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
       err.statusCode = 409;
       throw err;
     }
+    // Do NOT attach pickupResult.otp/qrToken here — the seller must never receive
+    // the pickup code itself (see customerPickupService.js), and this response
+    // goes straight back to the seller's own "mark ready for pickup" request.
     const orderObj = updatedOrder.toObject();
-    orderObj.pickupOtp = pickupResult.otp;
-    orderObj.pickupQrToken = pickupResult.qrToken;
-    orderObj.pickupExpiresAt = pickupResult.expiresAt;
     return orderObj;
   }
 

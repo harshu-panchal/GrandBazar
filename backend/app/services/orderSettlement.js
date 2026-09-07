@@ -3,6 +3,7 @@ import {
   handleCodOrderFinance,
   settleDeliveredOrder,
 } from "./finance/orderFinanceService.js";
+import { roundCurrency } from "../utils/money.js";
 
 /**
  * Legacy Transaction-collection mirror of the real (Wallet/Payout-based)
@@ -24,12 +25,16 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
   const method = (settled.payment?.method || "").toLowerCase();
   const isCod = settled.paymentMode === "COD" || method === "cash" || method === "cod";
 
-  const deliveryEarning = Math.round(settled.paymentBreakdown?.riderPayoutTotal || 0);
+  // roundCurrency (paise precision), not Math.round (whole rupee) — the live
+  // "new order" popup shows riderPayoutTotal at paise precision too, so
+  // rounding it differently here made the settled earning disagree with what
+  // the rider was shown when the order came in.
+  const deliveryEarning = roundCurrency(settled.paymentBreakdown?.riderPayoutTotal || 0);
   const deliveryMeta = {
-    tipAmount: Math.round(settled.paymentBreakdown?.riderTipAmount || 0),
-    payoutBase: Math.round(settled.paymentBreakdown?.riderPayoutBase || 0),
-    payoutDistance: Math.round(settled.paymentBreakdown?.riderPayoutDistance || 0),
-    payoutBonus: Math.round(settled.paymentBreakdown?.riderPayoutBonus || 0),
+    tipAmount: roundCurrency(settled.paymentBreakdown?.riderTipAmount || 0),
+    payoutBase: roundCurrency(settled.paymentBreakdown?.riderPayoutBase || 0),
+    payoutDistance: roundCurrency(settled.paymentBreakdown?.riderPayoutDistance || 0),
+    payoutBonus: roundCurrency(settled.paymentBreakdown?.riderPayoutBonus || 0),
   };
   await Transaction.findOneAndUpdate(
     { reference: `DEL-ERN-${orderIdString}` },

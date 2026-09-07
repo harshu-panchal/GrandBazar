@@ -1,6 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
+import ScrollToTop from "@shared/components/ScrollToTop";
 import { useSupportUnread } from "@core/context/SupportUnreadContext";
 import { useAuth } from "@core/context/AuthContext";
 import { adminApi } from "../services/adminApi";
@@ -380,6 +381,7 @@ const AdminRoutes = () => {
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<Dashboard />} />
         {hasPermission("staff") && <Route path="/users" element={<UserManagement />} />}

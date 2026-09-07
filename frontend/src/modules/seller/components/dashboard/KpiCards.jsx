@@ -90,12 +90,12 @@ const KpiCards = ({ kpis }) => {
                 navigate(card.path);
               }
             }}
-            contentClassName="p-4"
-            className="cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            contentClassName="p-4 min-w-0"
+            className="cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 min-w-0"
           >
             <IconChip icon={card.icon} className={card.chip} />
-            <p className="text-xs font-medium text-slate-500 mt-3">{card.label}</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5">{value}</p>
+            <p className="text-xs font-medium text-slate-500 mt-3 truncate">{card.label}</p>
+            <p className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5 truncate" title={value}>{value}</p>
             <div className="flex items-center gap-1.5 mt-1.5 min-h-4 flex-wrap">
               <TrendChip pct={kpi.trendPct} />
               <span
