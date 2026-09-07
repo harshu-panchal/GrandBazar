@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "@shared/components/ui/Modal";
 import Button from "@shared/components/ui/Button";
 import { useToast } from "@shared/components/ui/Toast";
@@ -8,6 +8,7 @@ import {
   HiOutlineTicket,
   HiOutlineArrowLeft,
   HiOutlineInformationCircle,
+  HiOutlineChevronDown,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
 import { adminApi } from "../../services/adminApi";
@@ -33,6 +34,111 @@ const SectionTitle = ({ children }) => (
   </h3>
 );
 
+// Multi-select dropdown for picking sellers/shops, backed by GET /admin/sellers.
+// Wire format stays the existing comma-separated shopIdsText string (same
+// field submitted today) — this only changes how it's edited, not what's sent.
+const SellerMultiSelect = ({ value, onChange, sellers, loading, placeholder = "Select seller(s)…" }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClickOutside = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const selectedIds = useMemo(() => new Set(value), [value]);
+  const selectedSellers = useMemo(
+    () => sellers.filter((s) => selectedIds.has(s._id)),
+    [sellers, selectedIds],
+  );
+  const filteredSellers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sellers;
+    return sellers.filter((s) => (s.shopName || "").toLowerCase().includes(q));
+  }, [sellers, query]);
+
+  const toggle = (id) => {
+    onChange(selectedIds.has(id) ? value.filter((v) => v !== id) : [...value, id]);
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(inputCls, "text-left flex items-center justify-between gap-2")}
+      >
+        <span className={cn("truncate", selectedSellers.length ? "text-slate-900" : "text-slate-400")}>
+          {selectedSellers.length
+            ? `${selectedSellers.length} seller${selectedSellers.length > 1 ? "s" : ""} selected`
+            : placeholder}
+        </span>
+        <HiOutlineChevronDown className={cn("w-4 h-4 text-slate-400 shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {selectedSellers.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selectedSellers.map((s) => (
+            <span
+              key={s._id}
+              className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-1 rounded-lg"
+            >
+              {s.shopName}
+              <button
+                type="button"
+                onClick={() => toggle(s._id)}
+                className="text-slate-400 hover:text-slate-700"
+                aria-label={`Remove ${s.shopName}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 flex flex-col overflow-hidden">
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search sellers…"
+            className="px-3 py-2.5 text-sm border-b border-slate-100 outline-none shrink-0"
+          />
+          <div className="overflow-y-auto">
+            {loading ? (
+              <p className="px-3 py-3 text-xs text-slate-400">Loading sellers…</p>
+            ) : filteredSellers.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-slate-400">No sellers found</p>
+            ) : (
+              filteredSellers.map((s) => (
+                <label
+                  key={s._id}
+                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(s._id)}
+                    onChange={() => toggle(s._id)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/30"
+                  />
+                  <span className="truncate">{s.shopName}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const inputCls =
   "w-full px-4 py-2.5 bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/30";
 
@@ -50,6 +156,18 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
   const [wizardStep, setWizardStep] = useState(1); // 1=family, 2=subtype, 3=configure
   const [selectedFamily, setSelectedFamily] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sellerOptions, setSellerOptions] = useState([]);
+  const [sellersLoading, setSellersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSellersLoading(true);
+    adminApi
+      .getSellers()
+      .then((res) => setSellerOptions(res.data?.result || []))
+      .catch(() => setSellerOptions([]))
+      .finally(() => setSellersLoading(false));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -425,12 +543,12 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                           ? "Seller(s) funding this campaign *"
                           : "Seller(s) sharing this cost *"}
                       </label>
-                      <input
-                        required
-                        value={form.rules.shopIdsText}
-                        onChange={(e) => setRules({ shopIdsText: e.target.value })}
-                        className={inputCls}
-                        placeholder="Shop / Store IDs (comma-separated)"
+                      <SellerMultiSelect
+                        value={parseCsvIds(form.rules.shopIdsText)}
+                        onChange={(ids) => setRules({ shopIdsText: joinCsvIds(ids) })}
+                        sellers={sellerOptions}
+                        loading={sellersLoading}
+                        placeholder="Select seller(s)…"
                       />
                       <p className="text-[11px] text-slate-400 mt-1">
                         Only orders from the selected seller(s) will be eligible for this campaign.
@@ -896,13 +1014,23 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-1 block">{scopeMeta.label} *</label>
-                    <input
-                      required
-                      value={form.rules[scopeMeta.key]}
-                      onChange={(e) => setRules({ [scopeMeta.key]: e.target.value })}
-                      className={inputCls}
-                      placeholder={scopeMeta.placeholder}
-                    />
+                    {offerConfig.scopeField === "shop" ? (
+                      <SellerMultiSelect
+                        value={parseCsvIds(form.rules.shopIdsText)}
+                        onChange={(ids) => setRules({ shopIdsText: joinCsvIds(ids) })}
+                        sellers={sellerOptions}
+                        loading={sellersLoading}
+                        placeholder="Select shop(s)…"
+                      />
+                    ) : (
+                      <input
+                        required
+                        value={form.rules[scopeMeta.key]}
+                        onChange={(e) => setRules({ [scopeMeta.key]: e.target.value })}
+                        className={inputCls}
+                        placeholder={scopeMeta.placeholder}
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-1 block">City filters (optional)</label>

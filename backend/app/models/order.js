@@ -469,6 +469,26 @@ const orderSchema = new mongoose.Schema(
       extraPaymentJobId: { type: String, default: null },
       priorWorkflowStatus: { type: String, default: "" },
       priorLegacyStatus: { type: String, default: "" },
+      // Every adjustment (any direction, any payment mode) is staged here and
+      // only copied onto the order's real items/pricing once the customer
+      // approves (or pays, for an online increase) — order.items/pricing
+      // never change until then, so a rejection or timeout needs no revert.
+      requiresPayment: { type: Boolean, default: false },
+      proposedItems: {
+        type: [
+          {
+            product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+            name: String,
+            quantity: Number,
+            price: Number,
+            variantSlot: String,
+            image: String,
+          },
+        ],
+        default: [],
+      },
+      proposedPartialCancelIndexes: { type: [Number], default: [] },
+      proposedBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
       history: {
         type: [
           {

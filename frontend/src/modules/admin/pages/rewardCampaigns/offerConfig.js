@@ -76,9 +76,11 @@ export const OFFER_CONFIG = {
   referral_first_purchase: { group: "referral", scopeField: "none", showRedemption: false, showEligibility: false, showRefereeValue: true, helpText: "Pays the referrer and (optionally, a different amount to) the referee when the referee's first order is delivered." },
 };
 
+// "on_payment" was removed — the engine (cashbackService.js) never actually
+// distinguished it from "on_delivery", so it was a no-op that misled admins
+// into thinking cashback could credit at payment time when it couldn't.
 export const CREDIT_TIMINGS = [
   { value: "on_delivery", label: "On delivery" },
-  { value: "on_payment", label: "On payment success" },
   { value: "delayed_days", label: "Delayed (days)" },
 ];
 

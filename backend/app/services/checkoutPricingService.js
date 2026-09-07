@@ -447,10 +447,16 @@ export async function buildCheckoutPricingSnapshot({
   fulfillmentMethod = null,
   fulfillmentMethodBySeller = null,
   orderPlacedAt = new Date(),
+  // Real customer checkout must always keep this true — it forces every line
+  // to price off the live product record, ignoring any price the caller
+  // supplied. Only a privileged, already-authorized flow (e.g. a seller's own
+  // manual order-price adjustment) should ever pass false, since that's what
+  // lets a caller-supplied item.price through.
+  enforceServerPricing = true,
 }) {
   const hydratedItems = await hydrateOrderItems(orderItems, {
     session,
-    enforceServerPricing: true,
+    enforceServerPricing,
   });
   if (!hydratedItems.length) {
     const err = new Error("Cannot checkout with empty cart");

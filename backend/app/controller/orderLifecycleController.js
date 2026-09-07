@@ -16,6 +16,8 @@ import {
 import {
   applyOrderPriceAdjustment,
   payPriceDifference,
+  approveOrderAdjustment,
+  rejectOrderAdjustment,
   partialCancelOrderItems,
   addItemsToOrder,
 } from "../services/orderPriceAdjustmentService.js";
@@ -236,6 +238,13 @@ export const sellerRescheduleOrder = async (req, res) => {
 export const adjustOrder = async (req, res) => {
   try {
     const { items, reason } = req.body || {};
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (item?.price != null && item.price !== "" && !(Number(item.price) > 0)) {
+          return handleResponse(res, 400, "Adjusted price must be greater than 0");
+        }
+      }
+    }
     const isSeller = req.user.role === "seller";
     const order = await applyOrderPriceAdjustment({
       orderId: req.params.orderId,
@@ -292,6 +301,24 @@ export const payOrderDifference = async (req, res) => {
   try {
     const order = await payPriceDifference(req.user.id, req.params.orderId, req.body);
     return handleResponse(res, 200, "Extra payment recorded", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const approveOrderAdjustmentController = async (req, res) => {
+  try {
+    const order = await approveOrderAdjustment(req.user.id, req.params.orderId);
+    return handleResponse(res, 200, "Adjustment approved", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const rejectOrderAdjustmentController = async (req, res) => {
+  try {
+    const order = await rejectOrderAdjustment(req.user.id, req.params.orderId, req.body);
+    return handleResponse(res, 200, "Adjustment rejected", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

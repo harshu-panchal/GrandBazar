@@ -114,15 +114,13 @@ const StockManagement = () => {
 
     useEffect(() => {
         if (activeView === 'inventory') {
-            let stockStatusParam;
-            if (filterStatus === 'In Stock') stockStatusParam = 'in';
-            else if (filterStatus === 'Out of Stock') stockStatusParam = 'out';
-            else stockStatusParam = undefined; // All / Low Stock -> no backend filter
-            fetchInventory(false, stockStatusParam);
+            if (inventory.length === 0) {
+                fetchInventory(false);
+            }
         } else {
             fetchHistory();
         }
-    }, [activeView, filterStatus]);
+    }, [activeView]);
 
     const stats = useMemo(() => [
         { label: 'Total Inventory', value: inventory.reduce((acc, item) => acc + item.stock, 0), icon: HiOutlineCube, color: 'text-brand-600', bg: 'bg-brand-50', status: 'All' },
@@ -137,7 +135,10 @@ const StockManagement = () => {
             const matchesSearch =
                 item.name.toLowerCase().includes(term) ||
                 (item.sku || '').toString().toLowerCase().includes(term);
-            const matchesStatus = filterStatus === 'All' || item.status === filterStatus;
+            const matchesStatus =
+                filterStatus === 'All' ||
+                item.status === filterStatus ||
+                (filterStatus === 'In Stock' && item.stock > 0);
             return matchesSearch && matchesStatus;
         });
     }, [inventory, searchTerm, filterStatus]);

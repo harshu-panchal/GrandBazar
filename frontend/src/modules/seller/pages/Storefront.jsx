@@ -123,7 +123,7 @@ const Storefront = () => {
           </Button>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 bg-slate-50/50 border border-slate-100 p-6 rounded-2xl w-full max-w-2xl">
+        <div className="flex flex-col items-center text-center gap-5 bg-slate-50/50 border border-slate-100 p-6 rounded-2xl w-full max-w-md">
           <div className="relative group h-28 w-28 rounded-full overflow-hidden border-4 border-white bg-slate-100 flex items-center justify-center shrink-0 shadow-md">
             {logoUrl ? (
               <img src={logoUrl} alt="Store logo" className="w-full h-full object-cover" />
@@ -138,7 +138,7 @@ const Storefront = () => {
               </label>
             </div>
           </div>
-          <div className="flex flex-col gap-3 w-full">
+          <div className="flex flex-col items-center text-center gap-3 w-full">
             <div>
               <h4 className="text-base font-bold text-slate-800">Your Store Logo</h4>
               <p className="text-sm text-slate-500 leading-relaxed mt-1">
@@ -146,8 +146,8 @@ const Storefront = () => {
                 Valid formats: JPG, PNG. Max file size: 1MB.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="cursor-pointer bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-1">
+              <label className="cursor-pointer bg-slate-900 text-white hover:bg-black rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center justify-center gap-2">
                 <ImageIcon size={14} />
                 {logoUrl ? "CHANGE LOGO" : "UPLOAD LOGO"}
                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
@@ -155,7 +155,7 @@ const Storefront = () => {
               {logoUrl && (
                 <button
                   onClick={() => setLogoUrl("")}
-                  className="bg-white border border-slate-200 text-red-500 hover:text-red-700 hover:border-red-200 hover:bg-red-50 rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center gap-2"
+                  className="bg-white border border-slate-200 text-red-500 hover:text-red-700 hover:border-red-200 hover:bg-red-50 rounded-lg px-5 py-2 text-xs font-bold tracking-[1px] uppercase transition-all flex items-center justify-center gap-2"
                 >
                   <Trash2 size={14} />
                   REMOVE
