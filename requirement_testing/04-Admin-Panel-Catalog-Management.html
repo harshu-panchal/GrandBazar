@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 4: Admin Panel — Catalog & Shop Management</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 28px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+  <div class="cover">
+    <h1>Zinto Manual Testing Guide<br>Part 4: Admin Panel — Catalog &amp; Shop Management</h1>
+    <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+    <div class="intro">
+      This document walks you through checking that the Admin (Super Admin) side of Zinto works as expected —
+      creating and managing sellers, adding or editing products on a seller's behalf, setting up a seller's shop
+      end-to-end, organising categories, and configuring what customers see on the app's home page. Log in to the
+      Admin Center with an admin/super-admin account and follow each numbered test below, in order, ticking off the
+      Expected Result as you confirm it.
+    </div>
+  </div>
+
+  <div class="howto">
+    <h3>How to use this guide</h3>
+    <p>Each test below has a number, a short title, and simple numbered steps telling you exactly what to click or tap.
+    After the steps, an <b>✅ Expected Result</b> line tells you exactly what you should see if everything is working
+    correctly. Go through the tests one at a time, in your own copy of the Admin Center (usually reached from a
+    web browser), and tick each one off once what you see matches the Expected Result. If a step doesn't apply
+    because a screen looks slightly different, use your best judgement — the important thing is whether the end
+    result matches.</p>
+  </div>
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>4.3 Admin / Super Admin Panel</li>
+      <li>11. Product Catalog, Product Rules &amp; Inventory Management</li>
+      <li>12.1 Super Admin Visibility of Seller Product Listings</li>
+      <li>12.2 Product Entry by Super Admin on Behalf of Seller</li>
+      <li>12.3 Product Editing by Super Admin</li>
+      <li>12.4 Full Shop Setup / Shop Management on Behalf of Seller</li>
+      <li>12.5 Admin Override / Assisted Seller Management Use Case</li>
+      <li>13. Category &amp; Catalog Structure</li>
+      <li>22. Home Page Configuration &amp; CMS-Style Admin Control</li>
+      <li>31.1 Offline Seller Scenario</li>
+      <li>31.2 Admin Role (Seller Availability)</li>
+    </ol>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title">4.3 Admin / Super Admin Panel</h2>
+  <p class="section-desc">This section covers the main day-to-day admin tools: creating and onboarding sellers, setting business rules like commission and delivery charges, running the order lifecycle, and managing what appears on the app's home page.</p>
+
+  <div class="test-card">
+    <h4>Create a new seller (vendor) account <span class="ref-tag">Ref: Req #69</span></h4>
+    <ol>
+      <li>In the left-hand menu, open <b>Sellers → Active Sellers</b>.</li>
+      <li>Click the <b>+ Create Vendor Account</b> button near the top of the page.</li>
+      <li>Fill in the seller's name, shop details, email/phone, and password in the form that opens, then submit.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new seller appears in the Active Sellers list right away, with their shop name and contact details visible.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Send the new seller their login details by email <span class="ref-tag">Ref: Req #70</span></h4>
+    <ol>
+      <li>Create (or open) a seller account as above.</li>
+      <li>Look for an option such as "Send Credentials" or "Email Login Details" on the seller's account.</li>
+      <li>Trigger it, then check the seller's registered email inbox.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The seller receives an email containing their login ID/password and a link to the seller app or seller portal, so they can log in without calling support.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage a seller's onboarding/approval journey <span class="ref-tag">Ref: Req #71</span></h4>
+    <ol>
+      <li>Go to <b>Sellers → Seller Applications</b> in the left menu.</li>
+      <li>You will see sellers who have signed up and are waiting for review, grouped by status (e.g. Pending, Rejected/Deactivated).</li>
+      <li>Open one application and review the shop details submitted.</li>
+      <li>Use the <b>Approve</b> or <b>Reject</b> action on that seller's row.</li>
+    </ol>
+    <div class="flow">
+      <div class="flow-box">Seller signs up</div><div class="flow-arrow">→</div>
+      <div class="flow-box warn">Appears in Seller Applications</div><div class="flow-arrow">→</div>
+      <div class="flow-box">Admin reviews details</div><div class="flow-arrow">→</div>
+      <div class="flow-box alt">Approve</div><div class="flow-arrow">→</div>
+      <div class="flow-box">Seller can log in &amp; sell</div>
+    </div>
+    <div class="expected"><b>✅ Expected Result:</b> Approving moves the seller into Active Sellers and unlocks their ability to sell; rejecting moves them to the "Rejected / Deactivated" list with a reason recorded.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage subscription plans for sellers <span class="ref-tag">Ref: Req #72</span></h4>
+    <ol>
+      <li>Go to <b>Sellers → Subscriptions</b> in the left menu.</li>
+      <li>Review the list of subscription plans (e.g. plan name, price, billing cycle, number of shops/products allowed).</li>
+      <li>Create a new plan or edit an existing one and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The plan list updates with your changes, and this plan becomes selectable when setting up a seller's shop.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure commission rules <span class="ref-tag">Ref: Req #73</span></h4>
+    <ol>
+      <li>For a city-wide rate, go to <b>City Commissions</b> in the left menu and set the commission percentage for a city.</li>
+      <li>For a category-level rate, open <b>Master Catalog</b> or <b>Products</b>, edit a product, and turn on the "Apply Commission" option to set a specific commission for that item.</li>
+      <li>For a single shop's rate, open <b>Sellers → Active Sellers</b>, click into a seller, go to their <b>Shop Setup</b> tab, and set "Apply Shop-wise Custom Commission Rate" under Plan &amp; Monetization Setup.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Each level (city, category/product, or individual shop) accepts and saves its own commission percentage or fixed amount, and orders from that scope are billed using the rate you set.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage orders through their full lifecycle <span class="ref-tag">Ref: Req #74</span></h4>
+    <ol>
+      <li>Go to <b>Orders → All Orders</b>.</li>
+      <li>Open any order to see its detail page.</li>
+      <li>Follow the order through its stages — new, being prepared, on the way, delivered — using the status tabs (New Orders, Being Prepared, On the Way, Delivered, Cancelled, Returned) in the Orders menu.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Every order can be tracked from placement to delivery (or cancellation/return) from this one Orders area, and its status tab always matches its real current stage.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Monitor every order across the platform <span class="ref-tag">Ref: Req #75</span></h4>
+    <ol>
+      <li>Go to <b>Orders → All Orders</b>.</li>
+      <li>Use the search box and filters (by status, seller, date) to look up any order placed on the platform, regardless of which seller it belongs to.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You can find and view any order from any seller/store in one place, with accurate item, price, and status details.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Approve or reject customer cancellation requests <span class="ref-tag">Ref: Req #76</span></h4>
+    <ol>
+      <li>Go to <b>Orders → All Orders</b> (or the relevant status tab) and look for an order flagged "Cancel Request Pending".</li>
+      <li>Open that order's detail page — you will see a "Cancellation Request" section with the customer's reason.</li>
+      <li>Click <b>Approve</b> to confirm the cancellation, or <b>Reject</b> with a note to keep the order active.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Approving marks the order cancelled and (where applicable) starts a refund; rejecting keeps the order moving and notifies the customer with your note.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Assign a delivery rider after an order is packed <span class="ref-tag">Ref: Req #77</span></h4>
+    <ol>
+      <li>Go to <b>Orders → Being Prepared</b> and find an order the seller has finished packing.</li>
+      <li>Open the order, or go to <b>Delivery Drivers → Track Drivers</b>, and use <b>Assign Delivery Partner</b>.</li>
+      <li>Pick an available rider from the list and confirm.</li>
+    </ol>
+    <div class="flow">
+      <div class="flow-box">Seller packs order</div><div class="flow-arrow">→</div>
+      <div class="flow-box warn">Admin assigns rider</div><div class="flow-arrow">→</div>
+      <div class="flow-box alt">Rider picks up</div><div class="flow-arrow">→</div>
+      <div class="flow-box">Order out for delivery</div>
+    </div>
+    <div class="expected"><b>✅ Expected Result:</b> The chosen rider is linked to the order and the order moves into "On the Way"; the rider's app shows the new delivery.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage the home page configuration <span class="ref-tag">Ref: Req #78</span></h4>
+    <ol>
+      <li>Go to <b>Marketing Tools → Create Sections</b> (this opens the "Experience Studio" screen).</li>
+      <li>Click <b>Add Component</b> and build a new home page section, or edit/reorder existing ones.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Changes made here are reflected on the customer app's home page (check the Home Page vs Header Category Pages toggle at the top of the screen for each scope).</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage banners, categories, featured products, offers, and seller highlights <span class="ref-tag">Ref: Req #79</span></h4>
+    <ol>
+      <li>Open <b>Marketing Tools → Create Sections</b> (Experience Studio).</li>
+      <li>Click <b>Add Component</b> and choose a type: Banners, Categories, Sub Categories, Products, Seller Highlights, or Super AD Placements.</li>
+      <li>Fill in the heading and the items for that section (e.g. pick banners, or pick which products/categories/shops to feature) and save.</li>
+      <li>Separately, check <b>Marketing Tools → Offer Sections</b> and <b>Marketing Tools → Shop by Store</b> for dedicated offer-card and themed-store screens.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Each type of section (banner, category strip, featured products, offers, or seller highlights) can be created, edited, reordered, and shows correctly on the customer-facing app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage seller recommendations for offline sellers <span class="ref-tag">Ref: Req #80</span></h4>
+    <ol>
+      <li>Open <b>Sellers → Active Sellers</b> and click into any seller.</li>
+      <li>Go to the <b>Shop Setup</b> tab and find <b>Discovery Controls</b>.</li>
+      <li>Toggle "Exclude from 'Other stores near you' suggestions" on or off and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> When toggled on, this shop is never suggested as an alternative to customers when a nearby shop is closed; toggled off, it can appear in those suggestions.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure refunds by category <span class="ref-tag">Ref: Req #81</span></h4>
+    <ol>
+      <li>Open <b>Orders → Refund Ledger</b> to review how refunds are currently processed.</li>
+      <li>Check <b>Master Catalog</b>/category screens for any per-category refund/return-eligibility setting.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> An admin can set different refund rules (e.g. eligible or not, restocking fee) per product category, and refunds processed for that category follow the configured rule.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure odd-hour, weather, delivery and platform charges <span class="ref-tag">Ref: Req #82</span></h4>
+    <ol>
+      <li>Go to <b>Fees &amp; Charges</b> in the left menu.</li>
+      <li>Turn on "Odd Hour Surcharge" and set its amount and time window (e.g. 10 PM to 6 AM).</li>
+      <li>Turn on "Weather Surcharge" and set its amount.</li>
+      <li>Review and adjust the standard delivery charge and platform charge fields on the same page, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All saved charges are applied to new customer orders under the matching condition (e.g. odd-hour surcharge only appears on orders placed in the configured night window).</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage advertisement / Super AD placements <span class="ref-tag">Ref: Req #83</span></h4>
+    <ol>
+      <li>Open <b>Marketing Tools → Create Sections</b> (Experience Studio).</li>
+      <li>Click <b>Add Component</b> and choose the "Super AD Placements" type.</li>
+      <li>Add one or more ad slots (image, link, seller) and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The ad slot appears on the customer app in its designated placement and links to the correct product, shop, or offer.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure dynamic sections and platform-wide rules <span class="ref-tag">Ref: Req #84</span></h4>
+    <ol>
+      <li>Open <b>Settings</b> and <b>System Settings</b> in the left menu to review platform-wide toggles.</li>
+      <li>Open <b>Marketing Tools → Create Sections</b> to add or reorder dynamic home page sections.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Platform-level rules and section layouts can be changed from these admin screens without needing a new app release, and the customer app reflects the change after refreshing.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Add or edit a seller's products on their behalf <span class="ref-tag">Ref: Req #85</span></h4>
+    <ol>
+      <li>Go to <b>Products</b> in the left menu.</li>
+      <li>Click <b>+ Add Product</b> (or the equivalent "create" button).</li>
+      <li>In the "Seller / Store" field, pick the seller this product belongs to.</li>
+      <li>Fill in the product's General Info, Item Variants, Add-ons, and Media tabs, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new product appears under the chosen seller's shop, exactly as if the seller had added it themselves.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Manage a seller's shop setup on their behalf <span class="ref-tag">Ref: Req #86</span></h4>
+    <p>See the dedicated walkthrough of this flow under <b>Section 12.4 — Full Shop Setup / Shop Management on Behalf of Seller</b> further in this guide, which covers all the shop setup fields step by step.</p>
+  </div>
+
+  <div class="test-card">
+    <h4>View and manage seller settlement / bulk-order settlement <span class="ref-tag">Ref: Req #87</span></h4>
+    <p class="confirmed-note">How this is confirmed: this capability is covered separately under the dedicated Seller Payments and Bulk Settlements screens (outside the scope of this catalog-focused guide) — no action needed here.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">11. Product Catalog, Product Rules &amp; Inventory Management</h2>
+  <p class="section-desc">This section checks that products, their details, and stock behave correctly for customers shopping the app.</p>
+
+  <div class="test-card">
+    <h4>Seller-managed product details, images, pricing, stock and category <span class="ref-tag">Ref: Req #120</span></h4>
+    <ol>
+      <li>Log in to a seller account (or, as admin, open <b>Products</b> and add a product for a chosen seller).</li>
+      <li>Fill in name, description, images, price, sale price, stock quantity, and pick a category/subcategory.</li>
+      <li>Save the product.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All entered details are saved and show correctly on the product's page in the customer app, including the correct category/store association.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Product description details <span class="ref-tag">Ref: Req #121</span></h4>
+    <ol>
+      <li>Open <b>Products</b>, edit any product, and go to the "General Info" tab.</li>
+      <li>Update the Description field and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The updated description shows on the product's detail page in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Out-of-stock products are hidden from customers <span class="ref-tag">Ref: Req #122</span></h4>
+    <ol>
+      <li>Open <b>Products</b>, edit a product, and set its stock to 0 (or mark it inactive), then save.</li>
+      <li>Open the customer app and browse to that product's category, or search for it by name.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The out-of-stock product no longer appears in category listings, search results, or suggested/offer sections on the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Time-based category/product availability rules <span class="ref-tag">Ref: Req #123</span></h4>
+    <ol>
+      <li>Open a seller's <b>Shop Setup</b> tab (under Sellers → Active Sellers → seller → Shop Setup) and look at "Scheduling &amp; Future Orders".</li>
+      <li>Turn on scheduling and set the delivery windows/time rules, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Products from that shop can only be ordered for delivery inside the configured time windows on the customer app.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">12.1 Super Admin Visibility of Seller Product Listings</h2>
+  <p class="section-desc">This section checks that admin can see every seller's products in one place, with full details.</p>
+
+  <div class="test-card">
+    <h4>View all products listed by every seller <span class="ref-tag">Ref: Req #124</span></h4>
+    <ol>
+      <li>Go to <b>Products</b> in the left menu.</li>
+      <li>Scroll the list — products are grouped and labelled by the seller/shop name they belong to (or "Admin" for platform-added items).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Every seller's products are visible in this one screen, clearly grouped by their shop name.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Seller-wise product details, status, pricing, category, and stock <span class="ref-tag">Ref: Req #125</span></h4>
+    <ol>
+      <li>On the <b>Products</b> page, use the search box and category filter to narrow the list.</li>
+      <li>Click into any product to see its full details, including status (active/inactive), price, category, and stock in one panel.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Every important detail about a product — who sells it, its status, price, category, and current stock — is visible without leaving this screen.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">12.2 Product Entry by Super Admin on Behalf of Seller</h2>
+  <p class="section-desc">This checks the flow where an admin creates products directly under a chosen seller's shop.</p>
+
+  <div class="test-card">
+    <h4>Select a seller and add a product under their shop <span class="ref-tag">Ref: Req #126</span></h4>
+    <ol>
+      <li>Go to <b>Products</b> and click <b>+ Add Product</b>.</li>
+      <li>In the "Seller / Store" dropdown on the General Info tab, choose the seller/shop this product belongs to.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A note under the dropdown confirms "This product will be created directly under the selected seller's store"; leaving it blank instead creates a generic platform product.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Enter full product details on behalf of the seller <span class="ref-tag">Ref: Req #127</span></h4>
+    <ol>
+      <li>With a seller selected, fill in the product name, pricing, category/subcategory, stock, description, and images across the General Info, Item Variants, and Media tabs.</li>
+      <li>Save the product.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The product saves successfully with every field intact and is now visible under that seller's shop.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Publish or manage the listing for that seller <span class="ref-tag">Ref: Req #128</span></h4>
+    <ol>
+      <li>After saving the product, find it in the Products list under the seller's name.</li>
+      <li>Open it again and change its status (e.g. active/inactive) or update details, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Admin can continue to publish, unpublish, or edit this product at any time on the seller's behalf, and the change reflects instantly in the list and on the customer app.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">12.3 Product Editing by Super Admin</h2>
+  <p class="section-desc">This section checks each individual field an admin can edit on an existing product.</p>
+
+  <div class="test-card">
+    <h4>Edit a product's name and general details <span class="ref-tag">Ref: Req #129</span></h4>
+    <ol>
+      <li>Open <b>Products</b>, click the edit (pencil) icon on any product.</li>
+      <li>On the "General Info" tab, change the product Name and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The updated name shows immediately in the Products list and on the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit a product's description <span class="ref-tag">Ref: Req #130</span></h4>
+    <ol>
+      <li>Open the same product's edit screen, General Info tab.</li>
+      <li>Update the Description field and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new description is reflected on the product's detail page in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit a product's category/subcategory <span class="ref-tag">Ref: Req #131</span></h4>
+    <ol>
+      <li>Open the product's edit screen and go to the "Category" tab.</li>
+      <li>Choose a different category and/or subcategory, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The product moves to the newly chosen category/subcategory and appears there in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit a product's pricing <span class="ref-tag">Ref: Req #132</span></h4>
+    <ol>
+      <li>Open the product's edit screen, General Info tab.</li>
+      <li>Change the Price and/or Sale Price fields and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The customer app shows the updated price (and any discount) the next time the product page loads.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit stock/inventory details <span class="ref-tag">Ref: Req #133</span></h4>
+    <ol>
+      <li>Open the product's edit screen, General Info tab.</li>
+      <li>Change the Stock quantity and Low Stock Alert value, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Stock updates instantly; when stock hits 0 the product is hidden from the customer app as tested in Req #122.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit product images <span class="ref-tag">Ref: Req #134</span></h4>
+    <ol>
+      <li>Open the product's edit screen and go to the "Media" tab.</li>
+      <li>Replace the main image and/or add/remove gallery images, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new images show on the product card and detail page in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit product visibility / listing status <span class="ref-tag">Ref: Req #135</span></h4>
+    <ol>
+      <li>Open the product's edit screen, General Info tab.</li>
+      <li>Change the Status field between "Active" and "Inactive", then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Setting a product to Inactive removes it from the customer app immediately; Active brings it back.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit future-order / advance-booking configuration <span class="ref-tag">Ref: Req #136</span></h4>
+    <ol>
+      <li>Open the product's edit screen, General Info tab, and look for the "Pre-order Eligible" option.</li>
+      <li>Turn it on or off and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> When enabled, the product becomes available for advance/future booking on the customer app; when off, it only supports normal ordering.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Edit add-on and packaging-related configuration <span class="ref-tag">Ref: Req #137</span></h4>
+    <ol>
+      <li>Open the product's edit screen and go to the "Add-ons" tab. Select or remove add-on products and mark any as required.</li>
+      <li>On the General Info tab, review the Packaging Charge field (this can override the seller's default packaging charge for this one item), then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The chosen add-ons appear as options when a customer buys this product, and the packaging charge override applies only to this product's orders.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">12.4 Full Shop Setup / Shop Management on Behalf of Seller</h2>
+  <p class="section-desc">This section walks through the complete "Shop Setup" screen admin uses to configure a seller's shop from A to Z, as if setting it up for them.</p>
+
+  <div class="flow">
+    <div class="flow-box">Sellers → Active Sellers</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Click seller</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Shop Setup tab</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Fill profile, media, commission, category, scheduling</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Save Shop Setup</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure the shop/store profile details <span class="ref-tag">Ref: Req #138</span></h4>
+    <ol>
+      <li>Go to <b>Sellers → Active Sellers</b> and click on a seller to open their detail page.</li>
+      <li>Click the <b>Shop Setup</b> tab.</li>
+      <li>Under "Store Basic Profile", fill in Shop Name, Category, Description, Address, Locality, City, Pincode, and Service Radius.</li>
+      <li>Click <b>Save Shop Setup</b>.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All profile fields save and appear correctly when the seller's storefront is viewed in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure shop banners, media, and about-shop details <span class="ref-tag">Ref: Req #139</span></h4>
+    <ol>
+      <li>On the same Shop Setup tab, scroll to "Storefront Media".</li>
+      <li>Upload a Store Logo, add up to 5 Carousel Banners, and paste a Store Promotional Video URL if desired.</li>
+      <li>Save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The logo, banners, and video all show correctly on the seller's storefront page in the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure the shop's category mapping <span class="ref-tag">Ref: Req #140</span></h4>
+    <ol>
+      <li>On the Shop Setup tab, set the shop's business Category field (e.g. Fashion &amp; Apparel, Pharmacy &amp; Health, Beauty &amp; Cosmetics, Pet Care, General Store).</li>
+      <li>Save Shop Setup.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The shop shows up correctly under that business category when customers browse shops by category on the app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure product listing under the shop <span class="ref-tag">Ref: Req #141</span></h4>
+    <ol>
+      <li>Open the seller's detail page and click the <b>Products</b> tab to see everything currently listed under this shop.</li>
+      <li>Go to <b>Products</b> in the main menu, add a new product, and choose this seller in the "Seller / Store" field to list it under their shop.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The Products tab on the seller's page always matches exactly what's listed under their shop on the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Configure commission / business setup for the shop <span class="ref-tag">Ref: Req #142</span></h4>
+    <ol>
+      <li>On the Shop Setup tab, find "Plan &amp; Monetization Setup".</li>
+      <li>Choose <b>Commission Based</b> and set a custom rate, or choose <b>Subscription Plan</b> and pick a plan from the dropdown.</li>
+      <li>Save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The chosen business model applies to this shop's future orders — either the custom commission rate is deducted, or the shop is billed under the selected subscription plan.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Complete the operational setup needed to make the shop live <span class="ref-tag">Ref: Req #143</span></h4>
+    <ol>
+      <li>On the Shop Setup tab, complete every section in order: Store Basic Profile, Plan &amp; Monetization Setup, Storefront Media, Discovery Controls, and Scheduling &amp; Future Orders.</li>
+      <li>Click <b>Save Shop Setup</b> at the top of the tab.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A confirmation message ("Shop setup updated successfully on behalf of seller") appears, and the shop is now fully configured and visible to customers as an operating store.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">12.5 Admin Override / Assisted Seller Management Use Case</h2>
+  <p class="section-desc">This checks that both a seller managing their own shop and an admin managing it on their behalf are supported side by side.</p>
+
+  <div class="test-card">
+    <h4>Support both self-managed and admin-assisted seller management <span class="ref-tag">Ref: Req #144</span></h4>
+    <ol>
+      <li>As admin, open a seller's <b>Shop Setup</b> tab (Sellers → Active Sellers → seller) and make a small change, e.g. update the shop description, then save.</li>
+      <li>Separately, log in to the same seller's own seller-portal account and open their shop settings screen.</li>
+      <li>Confirm the seller can see and further edit the same details themselves.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Both the admin and the seller can view and edit the same shop profile — whichever one last saves a change is reflected everywhere, with no conflict or duplicate shop record.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">13. Category &amp; Catalog Structure</h2>
+  <p class="section-desc">This section checks that the multi-level category structure (header categories, main categories, subcategories) works correctly.</p>
+
+  <div class="flow">
+    <div class="flow-box">Header Categories</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Main Categories</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Sub-Categories</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Products tagged to a category</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Support for top-level categories <span class="ref-tag">Ref: Req #145</span></h4>
+    <ol>
+      <li>Go to <b>Categories → Header Categories</b>.</li>
+      <li>Click <b>Add New Header</b>, fill in a name (e.g. "Electronics"), pick colours/icon, and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new header category appears in the list and shows as a top-level tab/section on the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Support for main categories <span class="ref-tag">Ref: Req #146</span></h4>
+    <ol>
+      <li>Go to <b>Categories → Main Categories</b>.</li>
+      <li>Click <b>Add New Category</b>, give it a name (e.g. "Laptops"), link it to a Header Category, and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new main category shows nested correctly under its chosen header category on the customer app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Support for subcategories <span class="ref-tag">Ref: Req #147</span></h4>
+    <ol>
+      <li>Go to <b>Categories → Sub-Categories</b>.</li>
+      <li>Click <b>Add New Subcategory</b>, give it a name (e.g. "Gaming Laptops"), link it to its parent Main Category, and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The subcategory appears correctly nested under its parent category, both in the admin category list and on the customer app's category navigation.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Products can be tagged to categories <span class="ref-tag">Ref: Req #147 (product tagging)</span></h4>
+    <ol>
+      <li>Open <b>Products</b>, edit any product, and go to the "Category" tab.</li>
+      <li>Assign it a Header, Category, and Subcategory, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The product shows up correctly when a customer browses to that specific category/subcategory.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Shop category navigation <span class="ref-tag">Ref: Req #148</span></h4>
+    <ol>
+      <li>On the customer app, open the Categories or Stores browsing screen.</li>
+      <li>Tap a category and confirm it filters to shops/products that belong to that category.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Tapping a category consistently narrows down the shops and products shown to that category only.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Packaging-related category structures <span class="ref-tag">Ref: Req #149</span></h4>
+    <ol>
+      <li>Open a category (Header, Main, or Sub) for editing and look for a packaging charge field.</li>
+      <li>Set a value and save — then check that a product under that category without its own override uses this rate.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The category-level packaging charge applies to products in that category unless a product has its own override (see Req #137).</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Category model supports name, image, subcategories, and slug <span class="ref-tag">Ref: Req #150</span></h4>
+    <ol>
+      <li>Open <b>Categories → Header Categories</b> (or Main/Sub), and edit any category.</li>
+      <li>Confirm it has fields for Name, an uploaded Image, an auto-generated or editable URL Slug (e.g. "electronics"), and a list of its subcategories.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All four pieces of information — name, image, slug, and subcategory list — are present and saved correctly for every category.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">22. Home Page Configuration &amp; CMS-Style Admin Control</h2>
+  <p class="section-desc">This section checks that the customer app's home page can be fully controlled from the admin side without needing a developer.</p>
+
+  <div class="test-card">
+    <h4>Home page sections are dynamic and admin-configurable <span class="ref-tag">Ref: Req #218</span></h4>
+    <ol>
+      <li>Go to <b>Marketing Tools → Create Sections</b> (Experience Studio).</li>
+      <li>Add, reorder (using the up/down arrows on a section), or delete a section, then open the customer app's home page.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The home page on the customer app reflects your section order and content changes without needing an app update.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage banners <span class="ref-tag">Ref: Req #219</span></h4>
+    <ol>
+      <li>In Experience Studio, click <b>Add Component</b> and choose "Banners".</li>
+      <li>Upload one or more banner images, set their links, and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The banners appear in the customer app's home page carousel and open the correct link when tapped.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage categories shown on the home page <span class="ref-tag">Ref: Req #220</span></h4>
+    <ol>
+      <li>In Experience Studio, click <b>Add Component</b> and choose "Categories" (or "Sub Categories").</li>
+      <li>Pick which categories to show and how many rows, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The chosen categories appear on the home page in the layout configured.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage product sections <span class="ref-tag">Ref: Req #221</span></h4>
+    <ol>
+      <li>In Experience Studio, click <b>Add Component</b> and choose "Products".</li>
+      <li>Give the section a heading, pick the products, set rows/columns (or single-row scroll), and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A new product carousel/grid with your chosen heading and products appears on the home page.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage featured products <span class="ref-tag">Ref: Req #222</span></h4>
+    <ol>
+      <li>Open <b>Products</b>, edit a product, and turn on its "Featured" flag, then save.</li>
+      <li>Confirm the product shows up in any home page section built to show featured items.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Featured products are marked and surfaced correctly wherever the app highlights featured items.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage offers <span class="ref-tag">Ref: Req #223</span></h4>
+    <ol>
+      <li>Go to <b>Marketing Tools → Offer Sections</b> (or the Offers screen).</li>
+      <li>Click <b>Create Offer</b>, fill in the offer title, short description, code, and discount, then save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The new offer card shows on the customer app and, where applicable, applies its discount at checkout.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Admin can manage seller highlights <span class="ref-tag">Ref: Req #224</span></h4>
+    <ol>
+      <li>In Experience Studio, click <b>Add Component</b> and choose "Seller Highlights".</li>
+      <li>Pick which shops to feature and save.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The featured shops appear in a "Seller Highlights" section on the customer app's home page.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">31.1 Offline Seller Scenario</h2>
+  <p class="section-desc">This checks what a customer sees when their preferred shop is closed.</p>
+
+  <div class="test-card">
+    <h4>Customer sees alternative seller suggestions when a shop is offline <span class="ref-tag">Ref: Req #345</span></h4>
+    <ol>
+      <li>On the customer app, open a shop's page for a store that is currently closed (marked "Currently Closed").</li>
+      <li>Scroll down on that shop's page.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> An "Other stores near you" section appears with nearby open shops the customer can order from instead.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 class="section-title page-break">31.2 Admin Role (Seller Availability)</h2>
+  <p class="section-desc">This checks the admin-side control over which shops can be suggested as alternatives.</p>
+
+  <div class="test-card">
+    <h4>Admin manages alternate-seller suggestions <span class="ref-tag">Ref: Req #346</span></h4>
+    <ol>
+      <li>Go to <b>Sellers → Active Sellers</b>, click into a seller, and open their <b>Shop Setup</b> tab.</li>
+      <li>Under "Discovery Controls", toggle "Exclude from 'Other stores near you' suggestions" on or off, then save.</li>
+      <li>Confirm the change by testing Req #345 above — check whether this shop appears in another closed shop's suggestion list.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A shop marked "Excluded" never appears as a suggested alternative to customers, giving admin full control over which shops participate in this feature.</div>
+  </div>
+
+  <div class="footer-note">Zinto Manual Testing Guide — Part 4: Admin Panel — Catalog &amp; Shop Management</div>
+
+</body>
+</html>

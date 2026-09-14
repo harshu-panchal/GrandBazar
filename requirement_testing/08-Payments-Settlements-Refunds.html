@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 8: Payments, Seller Settlements & Refunds</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .role-badge { display:inline-block; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:999px; margin-bottom:8px; letter-spacing:.3px; }
+  .role-customer { background:#dbeafe; color:#1e40af; }
+  .role-admin { background:#fef3c7; color:#92400e; }
+  .role-seller { background:#dcfce7; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Zinto Manual Testing Guide<br>Part 8: Payments, Seller Settlements &amp; Refunds</h1>
+  <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+  <div class="intro">
+    This document walks a non-technical reviewer through checking that refunds, complaints, seller payouts and
+    settlement tracking all work correctly on the Zinto platform. Some tests are done as a <b>customer</b> in the
+    app, some as an <b>admin</b> in the admin panel, and some as a <b>seller</b> in the seller portal — each test
+    tells you clearly which one to use and where to log in. No technical knowledge is needed; just follow the
+    numbered steps and compare what you see against the "Expected Result".
+  </div>
+</div>
+
+<div class="howto">
+  <h3>How to use this guide</h3>
+  <p>Every check below is a numbered <b>Test</b>. Each test tells you which role/app to use, gives you simple
+  numbered steps to follow (tap, click, type, etc.), and ends with an <b>✅ Expected Result</b> — what you should
+  see if everything is working. Go through the tests in order, tick each one off as you confirm the expected
+  result matches what you actually see on screen.</p>
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>29.1 Refund Access Window</li>
+    <li>29.2 Refund Countdown</li>
+    <li>29.3 Category-Based Refund Control</li>
+    <li>29.4 Wallet Refund for Cancelled Items</li>
+    <li>29.5 Refund Types to Support</li>
+    <li>29.6 Complaint Management</li>
+    <li>30.2 Settlement Scope</li>
+    <li>30.3 Settlement Status Tracking</li>
+    <li>30.4 Settlement Rules</li>
+    <li>30.6 Bulk Order Seller Settlement</li>
+    <li>30.7 Admin Settlement Controls</li>
+  </ol>
+</div>
+
+<!-- ============ MONEY FLOW DIAGRAM ============ -->
+<h2 class="section-title">How money moves through Zinto</h2>
+<p class="section-desc">Before testing the individual screens, it helps to see the two money journeys these tests cover: how a seller eventually gets paid for an order, and how a customer gets their money back for a return or complaint.</p>
+
+<div class="flow">
+  <div class="flow-box">Order Delivered</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Seller payout calculated (minus commission, GST, packaging charges)</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Settlement Pending / On Hold (return window open)</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Admin reviews, adjusts or releases</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Settled to seller</div>
+</div>
+
+<div class="flow">
+  <div class="flow-box">Customer requests refund or raises a complaint (within allowed time window)</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Admin reviews the request</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Refund credited to Customer Wallet</div>
+</div>
+
+<!-- ============ 29.1 ============ -->
+<h2 class="section-title">29.1 Refund Access Window</h2>
+<p class="section-desc">This section checks that customers can only ask for a refund or complaint within a limited time after their order is delivered.</p>
+
+<div class="test-card">
+  <h4>Test 1 — Refund/complaint option disappears after the allowed time <span class="ref-tag">Ref: Req #303</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Log in to the Zinto customer app and open <b>My Orders</b>.</li>
+    <li>Open an order that was delivered <b>less than 24 hours ago</b> and scroll to the bottom of the order details screen.</li>
+    <li>Confirm you can see a <b>"Request Return"</b> button and, further down, a box to raise a complaint ("Describe the issue" with a "Raise dispute" button).</li>
+    <li>Now open (or wait for) an order that was delivered <b>more than 24 hours ago</b> and check the same screen.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> For the recently delivered order, the "Request Return" button and complaint box are visible and usable. For the order delivered over 24 hours ago, these options are gone — instead you should see a note such as "The complaint window for this order has closed", and no Request Return button.</div>
+</div>
+
+<!-- ============ 29.2 ============ -->
+<h2 class="section-title">29.2 Refund Countdown</h2>
+<p class="section-desc">This section checks that customers can see exactly how much time is left to raise a refund or complaint.</p>
+
+<div class="test-card">
+  <h4>Test 2 — Countdown timer shown for refund/complaint window <span class="ref-tag">Ref: Req #304</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Open an order in <b>My Orders</b> that was delivered recently (within the allowed window).</li>
+    <li>Scroll to the complaint section near the bottom of the order details screen.</li>
+    <li>Look just above the "Describe the issue" box.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A red line of text reading something like "Complaint window ends in 23:58:41" is shown, and the numbers count down live (in hours:minutes:seconds) each time you refresh or watch the screen for a few seconds.</div>
+</div>
+
+<!-- ============ 29.3 ============ -->
+<h2 class="section-title">29.3 Category-Based Refund Control</h2>
+<p class="section-desc">This section checks that the admin can decide which product categories are allowed to be refunded/returned at all (for example, perishable food or cosmetics may never be returnable).</p>
+
+<div class="test-card">
+  <h4>Test 3 — Admin can turn refunds off for a specific category <span class="ref-tag">Ref: Req #305</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Log in to the Zinto admin panel and open <b>Categories → Main Categories</b> from the left menu.</li>
+    <li>Click Edit on any category (for example, a category you would consider non-returnable, like a perishable food category).</li>
+    <li>Find the checkbox labelled <b>"Eligible for returns / refund"</b>.</li>
+    <li>Untick this checkbox and save the category.</li>
+    <li>Notice there is also a <b>"Refund Window (hours)"</b> field next to it — this lets the admin set a custom time limit for that category instead of the default.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> When the checkbox is unticked, the "Refund Window (hours)" field becomes greyed out/disabled, and saving succeeds. Products in that category should no longer show a Request Return option to customers. Re-ticking the box re-enables refunds for that category.</div>
+</div>
+
+<!-- ============ 29.4 ============ -->
+<h2 class="section-title">29.4 Wallet Refund for Cancelled Items</h2>
+<p class="section-desc">This section checks that money for items that get cancelled or are unavailable comes back into the customer's Zinto Wallet.</p>
+
+<div class="test-card">
+  <h4>Test 4 — Cancelled/unavailable item amount is refunded to Wallet <span class="ref-tag">Ref: Req #306</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Place a test order that has more than one item.</li>
+    <li>Have the seller mark one item as unavailable/cancel it (or cancel the whole order before it is packed) using the seller portal.</li>
+    <li>In the customer app, go to <b>Profile → Wallet</b> (the wallet page shows the note "Return refunds are credited here").</li>
+    <li>Check the wallet balance and the transaction list.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A new credit entry appears in the Wallet for the value of the cancelled/unavailable item, and the wallet balance increases by that amount.</div>
+</div>
+
+<!-- ============ 29.5 ============ -->
+<h2 class="section-title">29.5 Refund Types to Support</h2>
+<p class="section-desc">This section checks the different kinds of refunds the platform must support: refunding the whole order, refunding only part of it, refunding a cancellation, and crediting the refund to the wallet.</p>
+
+<div class="test-card">
+  <h4>Test 5 — Full refund for an order <span class="ref-tag">Ref: Req #307</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span> &nbsp; <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>As a customer, open a delivered order in <b>My Orders</b> and tap <b>"Request Return"</b>.</li>
+    <li>In the "Request Return" pop-up, tick <b>all</b> items in the order, enter a reason, and submit.</li>
+    <li>As admin, log in and open <b>Orders → Return Requests</b>, find this order and approve/process the return after quality check.</li>
+    <li>Back in the customer app, check <b>Profile → Wallet</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The full order value is credited back to the customer's Wallet once the return is approved.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 6 — Partial refund for selected items only <span class="ref-tag">Ref: Req #308</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span> &nbsp; <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>As a customer, open a delivered order with multiple items and tap <b>"Request Return"</b>.</li>
+    <li>In the pop-up, tick <b>only one or two</b> of the items (not all), enter a reason, and submit.</li>
+    <li>As admin, approve this return from <b>Orders → Return Requests</b>.</li>
+    <li>Check the customer's Wallet balance.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Only the value of the selected items is refunded to the wallet — not the full order amount.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 7 — Refund for a cancelled order <span class="ref-tag">Ref: Req #309</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Place a test order and cancel it before it is packed by the seller (use the Cancel option on the order details screen, if the order is still in a cancellable stage).</li>
+    <li>Check the payment method used (wallet balance, if used, or the record shown in Wallet/Transactions).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Any amount already paid for the cancelled order is refunded back correctly (to Wallet, for wallet-based or prepaid orders).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 8 — Refund credited to wallet where applicable <span class="ref-tag">Ref: Req #310</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Repeat Test 5, 6 or 7 above (any approved refund).</li>
+    <li>Open <b>Profile → Wallet</b> and check the transaction history entry for the refund.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The refund transaction clearly appears in the Wallet history with the correct amount and date, and the usable wallet balance goes up by that amount.</div>
+</div>
+
+<!-- ============ 29.6 ============ -->
+<h2 class="section-title">29.6 Complaint Management</h2>
+<p class="section-desc">This section checks that raising a complaint about a delivered order follows the same time-window rule as refunds.</p>
+
+<div class="test-card">
+  <h4>Test 9 — Complaint option follows the same window as returns/refunds <span class="ref-tag">Ref: Req #311</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span>
+  <ol>
+    <li>Open a recently delivered order (within the allowed window) in <b>My Orders</b>.</li>
+    <li>Scroll to the bottom — you should see the "Complaint window ends in [countdown]" text and a "Describe the issue" box with a <b>"Raise dispute"</b> button.</li>
+    <li>Type a short description and tap <b>Raise dispute</b>.</li>
+    <li>Now check an order delivered outside the allowed window and confirm the same complaint box is not available there.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The complaint (dispute) option is only available while the countdown for that order is still running — the exact same cut-off used for returns/refunds. After submitting, you should see a confirmation and the complaint should show up for admin review.</div>
+</div>
+
+<!-- ============ 30.2 ============ -->
+<div class="page-break"></div>
+<h2 class="section-title">30.2 Settlement Scope</h2>
+<p class="section-desc">This section checks that when the seller gets paid for an order, the amount properly accounts for the sale price and every deduction that should apply (commission, tax, packaging, refunds, cancellations, replacements, and platform charges).</p>
+
+<div class="flow">
+  <div class="flow-box">Product selling price</div><div class="flow-arrow">−</div>
+  <div class="flow-box warn">Commission</div><div class="flow-arrow">−</div>
+  <div class="flow-box warn">GST / tax</div><div class="flow-arrow">−</div>
+  <div class="flow-box warn">Packaging &amp; platform charges</div><div class="flow-arrow">−</div>
+  <div class="flow-box warn">Refund / cancellation adjustments</div><div class="flow-arrow">=</div>
+  <div class="flow-box alt">Final seller payout</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 10 — Payout is based on the actual selling amount <span class="ref-tag">Ref: Req #313</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span> &nbsp; <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Note the price of a product before placing a test order for it.</li>
+    <li>Place the order as a customer and have it delivered.</li>
+    <li>As the seller, log in to the seller portal and open <b>Earnings</b> from the left menu.</li>
+    <li>Find this order in the earnings list and check the amount shown for it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The payout amount shown for the order is based on the actual product selling price (quantity × price) charged to the customer, not an arbitrary or flat number.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 11 — Commission is deducted from the payout <span class="ref-tag">Ref: Req #314</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Open <b>Sellers → Active Sellers</b> in the admin panel and click into a seller.</li>
+    <li>Go to the <b>Order History</b> tab and open the money breakdown for a delivered order (or use <b>Orders → All Orders → [order] → View</b> and check its money breakdown).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The breakdown clearly shows a commission line item that has been subtracted from the seller's payout for that order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 12 — GST/tax is accounted for in the breakdown <span class="ref-tag">Ref: Req #315</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Open the same order money breakdown as in Test 11.</li>
+    <li>Look for a GST or tax line.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> If the product's category has GST configured, the breakdown shows the GST amount separately and it is factored into the final numbers correctly (not silently absorbed by the seller or the platform).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 13 — Packaging/handling charge sharing is reflected <span class="ref-tag">Ref: Req #316</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Place a test order for a product that has a packaging charge configured (check <b>Products</b> in the admin or seller panel for a packaging fee field).</li>
+    <li>After delivery, open that order's money breakdown as admin.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The packaging charge appears as its own line in the breakdown and is applied consistently with how the platform's packaging rules are configured (product-level charge if set, otherwise the category/default charge).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 14 — Refunds reduce the seller's settlement correctly <span class="ref-tag">Ref: Req #317</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Process a return/refund for a delivered order as described in Test 5 or 6.</li>
+    <li>As the seller, open <b>Earnings</b> and find that order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The seller's payout for that order is reduced by the refunded amount (and its relevant share of commission/tax), instead of the seller keeping the full original payout.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 15 — Partial cancellations adjust the payout <span class="ref-tag">Ref: Req #318</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Have a seller cancel/mark unavailable just one item from a multi-item order before packing (as in Test 4).</li>
+    <li>Once the order is delivered, check the seller's <b>Earnings</b> entry for this order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The payout only includes the items that were actually delivered — the cancelled item's value (and its share of charges) is excluded from the seller's earnings for that order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 16 — Replacement orders affect payout correctly <span class="ref-tag">Ref: Req #319</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span> &nbsp; <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Trigger a replacement for an item (for example, respond to a seller-initiated price/item adjustment on an order that offers a replacement, visible on the Order Details screen as a "Replacement approval required" card).</li>
+    <li>Approve the replacement as the customer.</li>
+    <li>Once resolved, check the seller's <b>Earnings</b> entry for that order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The payout reflects the final replaced item(s), not the originally ordered item, and there is no double-charging or missing amount.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 17 — Platform charges/deductions are applied where relevant <span class="ref-tag">Ref: Req #320</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Open <b>Fees &amp; Charges</b> in the admin panel and check what platform-level charges are configured.</li>
+    <li>Open a recent order's money breakdown (via <b>Orders → All Orders</b>) and confirm any configured platform charge appears in it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Any platform charge configured under Fees &amp; Charges shows up correctly in the order's money breakdown and is deducted from the seller payout as configured.</div>
+</div>
+
+<!-- ============ 30.3 ============ -->
+<h2 class="section-title">30.3 Settlement Status Tracking</h2>
+<p class="section-desc">This section checks that every order's payout to the seller shows a clear, up-to-date status.</p>
+
+<div class="test-card">
+  <h4>Test 18 — "Pending" settlement status is shown <span class="ref-tag">Ref: Req #321</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Place and deliver a fresh test order.</li>
+    <li>As the seller, open <b>Earnings</b> and find this order immediately after delivery.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order shows a status of <b>"Pending"</b> for its payout.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 19 — "Processing" settlement status is shown <span class="ref-tag">Ref: Req #322</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>As admin, open <b>Seller Payments</b> from the left menu.</li>
+    <li>Filter or look through the list for orders that are currently being processed for payout.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Orders in the middle of being settled show a "Processing" status, distinct from "Pending" (not yet started) and "Settled" (fully complete).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 20 — "Settled" status is shown once payout completes <span class="ref-tag">Ref: Req #323</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Take an older delivered order whose return window (24 hours, or the category's configured window) has already passed and no complaint was raised.</li>
+    <li>Check its status in <b>Earnings</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order shows <b>"Settled"</b> once the return window has closed and the payout is released, with the amount now included in the seller's available/withdrawable balance.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 21 — "On Hold" status is shown <span class="ref-tag">Ref: Req #324</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span> &nbsp; <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>As admin, go to <b>Sellers → Active Sellers</b>, open a seller, and in the <b>Order History</b> tab click <b>"Hold"</b> next to any order, enter a reason, and confirm.</li>
+    <li>As the seller, check the <b>Earnings</b> page — look at the "On Hold (Return Window)" summary panel and the order's row.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order now shows an <b>"On Hold"</b> status to the seller, and its amount is excluded from the available balance until the admin releases it (or the automatic return-window hold clears).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 22 — Adjusted/deducted status after refund or cancellation <span class="ref-tag">Ref: Req #325</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Repeat Test 14 or 15 (a refund or partial cancellation on a delivered order).</li>
+    <li>Check that order's entry in seller <b>Earnings</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order clearly shows that its payout was adjusted/deducted due to the refund or cancellation, with the reduced amount visible, rather than showing the original full amount as still payable.</div>
+</div>
+
+<!-- ============ 30.4 ============ -->
+<h2 class="section-title">30.4 Settlement Rules</h2>
+<p class="section-desc">This section checks the underlying rules that decide when a seller's money actually gets released.</p>
+
+<div class="flow">
+  <div class="flow-box">Order delivered</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Return/refund window must fully pass</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Commission &amp; charges deducted</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Held if a complaint/refund/cancellation dispute is open</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Released to seller balance</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 23 — Settlement only starts after delivery <span class="ref-tag">Ref: Req #326</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Check an order that is still "Being Prepared" or "On the Way" (not yet delivered) in seller <b>Earnings</b>.</li>
+    <li>Confirm it does not yet show any payout amount as pending/settled.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> No settlement entry/status appears for the order until after it is marked Delivered.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 24 — Settlement waits for the return/refund window to close <span class="ref-tag">Ref: Req #327</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Check a freshly delivered order's status in seller <b>Earnings</b> — it should be "Pending"/"On Hold".</li>
+    <li>Wait until the return window for that order has fully expired (or check an older order where it already has), then check the status again.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order only moves to "Settled" after its return/refund window has completely closed, never before.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 25 — Commission and charges are deducted before settling <span class="ref-tag">Ref: Req #328</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Open a Settled order in seller <b>Earnings</b> and view its amount breakdown.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The amount that lands in the seller's available balance is already net of commission, GST, and other applicable charges — the seller never sees an inflated pre-deduction number credited to their balance.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 26 — Settlement is held during an open complaint/refund/cancellation dispute <span class="ref-tag">Ref: Req #329</span></h4>
+  <span class="role-badge role-customer">CUSTOMER APP</span> &nbsp; <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>As a customer, raise a dispute/complaint on a recently delivered order (as in Test 9).</li>
+    <li>As the seller, check that order's status in <b>Earnings</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order's payout remains on hold/pending and is not settled while the dispute is unresolved.</div>
+</div>
+
+<!-- ============ 30.6 ============ -->
+<div class="page-break"></div>
+<h2 class="section-title">30.6 Bulk Order Seller Settlement</h2>
+<p class="section-desc">This section checks that large/bulk orders (orders above a certain value or quantity) are settled with their own dedicated breakdown and rules, separate from regular orders.</p>
+
+<div class="test-card">
+  <h4>Test 27 — Bulk orders get a separate settlement calculation <span class="ref-tag">Ref: Req #335</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Place a test order large enough to cross the platform's bulk/wholesale threshold (a high order value or a large quantity of one item).</li>
+    <li>Have it delivered.</li>
+    <li>As the seller, open <b>Bulk Settlements</b> from the left menu (below "Earnings").</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The bulk order appears as its own entry in the Bulk Settlements list, separate from the normal Earnings ledger, with its own seller-payout / commission / packaging / tax split.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 28 — Bulk order commission/margin rules are applied <span class="ref-tag">Ref: Req #336</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>On the same bulk order from Test 27, open its row in <b>Bulk Settlements</b> to see the commission amount column/detail.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The commission amount shown reflects the bulk-specific rule (for example, a different rate for orders over the threshold), not just the seller's normal commission rate.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 29 — Partial fulfilment/cancellation affects bulk order payout <span class="ref-tag">Ref: Req #337</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>Have the seller fulfil only part of a bulk order (cancel or mark some line items unavailable) before delivery.</li>
+    <li>After delivery, check the entry in <b>Bulk Settlements</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The payout only reflects the items actually fulfilled, adjusted the same way a partial cancellation would affect a regular order's settlement.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 30 — Settlement adjusts when a bulk order is delivered in stages <span class="ref-tag">Ref: Req #338</span></h4>
+  <span class="role-badge role-seller">SELLER PORTAL</span>
+  <ol>
+    <li>If the bulk order supports multi-stage/partial delivery, have part of it delivered first and the remainder delivered later.</li>
+    <li>Check the Bulk Settlements entry after each stage is delivered.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The settlement amount updates correctly at each delivery stage and does not double-count or miss any part of the order once all stages are complete.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 31 — Admin can see the full bulk order settlement breakdown <span class="ref-tag">Ref: Req #339</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>As admin, open <b>Bulk Settlements</b> from the left menu.</li>
+    <li>Use the filters (status, order ID, date range) to find the bulk order tested above and click into its details.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Admin can view the same seller-payout / commission / packaging / tax breakdown for the bulk order, along with running totals across all bulk orders at the top of the page.</div>
+</div>
+
+<!-- ============ 30.7 ============ -->
+<h2 class="section-title">30.7 Admin Settlement Controls</h2>
+<p class="section-desc">This section checks the tools admin has to review, adjust, hold, and manage seller settlements.</p>
+
+<div class="test-card">
+  <h4>Test 32 — Admin can view seller settlement summaries <span class="ref-tag">Ref: Req #340</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Log in to the admin panel and open <b>Seller Payments</b> from the left menu.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A summary view opens showing totals such as pending settlement amount and a list of sellers' transactions, filterable by status ("all", "paid", "pending").</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 33 — Admin can view order-wise seller payable amount <span class="ref-tag">Ref: Req #341</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>From <b>Seller Payments</b>, click on any individual transaction/order row to open its details.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The details view shows exactly how much is payable to the seller for that specific order, along with its status.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 34 — Admin can apply settlement deductions/adjustments <span class="ref-tag">Ref: Req #342</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Open <b>Sellers → Active Sellers</b>, click into a seller, and go to the <b>Order History</b> tab.</li>
+    <li>Find an order's payout row and click <b>"Adjust"</b>.</li>
+    <li>In the "Adjust Settlement" pop-up, choose whether to <b>deduct</b> or <b>add</b> an amount, enter the amount, type a reason, and click <b>Apply Adjustment</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A confirmation ("Settlement adjustment applied") appears, and the seller's payout for that order changes by the adjusted amount, with the reason recorded.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 35 — Admin can hold and release a settlement <span class="ref-tag">Ref: Req #343</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>In the same <b>Order History</b> tab on a seller's detail page, click <b>"Hold"</b> next to an order's payout, enter a reason, and confirm ("Place on Hold").</li>
+    <li>Confirm the order's row now shows <b>"On Hold"</b>.</li>
+    <li>Click <b>"Release Hold"</b> on the same order to release it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The hold is applied immediately (with a success message "Payout placed on hold") and stays held even after the normal return window would have expired, since it's a manual hold. Releasing it shows "Payout hold released" and the order becomes payable again.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 36 — Admin can manage bulk-order settlement cases <span class="ref-tag">Ref: Req #344</span></h4>
+  <span class="role-badge role-admin">ADMIN PANEL</span>
+  <ol>
+    <li>Open <b>Bulk Settlements</b> from the admin left menu.</li>
+    <li>Filter by status (PENDING / COMPLETED / CANCELLED), search by Order ID, or filter by date range.</li>
+    <li>Open a bulk order's row to review its full breakdown, and cross-check it against the seller's own <b>Sellers → Active Sellers → [seller] → Order History</b> hold/adjust tools if a deduction or hold is needed.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Admin can find, filter, and review any bulk order's settlement case from this dedicated page, and apply the same hold/adjust controls to it as a regular order when needed.</div>
+</div>
+
+<div class="footer-note">Zinto Platform — Manual Requirement Testing Guide · Part 8 of the requirement testing series</div>
+
+</body>
+</html>

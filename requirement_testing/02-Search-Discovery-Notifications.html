@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 2: Search, Discovery &amp; Notifications</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+  <!-- COVER -->
+  <div class="cover">
+    <h1>Zinto Manual Testing Guide — Part 2: Search, Discovery &amp; Notifications</h1>
+    <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+    <p class="intro">
+      This document walks you through checking every search, discovery and notification feature of the Zinto app,
+      one small test at a time. No technical knowledge is needed — just the app open in front of you and this guide
+      by your side. It is meant to be used by anyone on the client side who wants to confirm, screen by screen,
+      that these features genuinely work as expected before sign-off.
+    </p>
+  </div>
+
+  <!-- HOW TO USE -->
+  <div class="howto">
+    <h3>How to use this guide</h3>
+    <p>Each test below has a number and a short title. Follow the numbered steps exactly, in order, using the real Zinto customer app.
+    After each test, read the "✅ Expected Result" line and check whether what you saw on your screen matches it.
+    If it matches, tick it off as working. If it doesn't, make a note of what happened instead so it can be reviewed.
+    A few tests are backend behaviours that can't be "clicked through" directly — for those you'll see a one-line
+    "How this is confirmed" note instead of steps.</p>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>14.1 Search Types Supported</li>
+      <li>14.2 Smart Search &amp; Recommendation Layer</li>
+      <li>14.3 Search Results Behaviour</li>
+      <li>15. Map-Based Search &amp; Discovery</li>
+      <li>16. Recommendation, Add-On &amp; Cross-Sell Module</li>
+      <li>32. Notification System</li>
+    </ol>
+  </div>
+
+  <!-- SECTION 14.1 -->
+  <h2 class="section-title">14.1 Search Types Supported</h2>
+  <p class="section-desc">This section covers the different ways a customer can search for what they want — typing, speaking, searching by shop, or browsing by category.</p>
+
+  <div class="test-card">
+    <h4>Search for a product by typing a name <span class="ref-tag">Ref: Req #151</span></h4>
+    <ol>
+      <li>Open the Zinto app and go to the Home screen.</li>
+      <li>Tap the search bar at the top (it shows a typing animation like "Search 'bread'", "Search 'milk'").</li>
+      <li>Type the name of any product you know is sold on the app, for example "biscuit".</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> As you type, matching products appear on the screen below the search bar, showing their picture, name and price.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get instant suggestions while typing <span class="ref-tag">Ref: Req #152</span></h4>
+    <ol>
+      <li>On the Search screen, start typing a product name slowly, one or two letters at a time.</li>
+      <li>Pause after each couple of letters and watch the results area.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You don't need to finish typing or press any button — the list of matching products updates on its own within a second of you pausing, showing suggestions that match what you've typed so far.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>See your past searches saved <span class="ref-tag">Ref: Req #153</span></h4>
+    <ol>
+      <li>Search for a product, for example "milk", and wait for results to appear.</li>
+      <li>Tap the back arrow or clear the search box, then tap the search bar again to open the Search screen fresh.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Recently Searched" row appears near the top of the empty Search screen, showing "milk" as a small pill you can tap to search it again, along with a small "X" to remove it.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>See trending / popular searches <span class="ref-tag">Ref: Req #154</span></h4>
+    <ol>
+      <li>Open the Search screen without typing anything.</li>
+      <li>Look below the "Recently Searched" row (if any) for a "Trending Searches" row.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A row titled "Trending Searches" shows a set of popular search terms as tappable pills; tapping one instantly searches for that term. (If your account or area has no trending data yet, this row may not appear — that itself should be checked with the team.)</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search using your voice <span class="ref-tag">Ref: Req #155</span></h4>
+    <ol>
+      <li>On the Search screen, tap the microphone icon inside the search box.</li>
+      <li>Allow microphone access if your browser/device asks for permission.</li>
+      <li>Say a product name clearly, for example "chocolate".</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Listening…" popup appears with an animation while you speak, then closes on its own and the search box fills in with the word you said, showing matching results.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Voice search correctly turns speech into text <span class="ref-tag">Ref: Req #156</span></h4>
+    <ol>
+      <li>Repeat the voice search steps above, this time saying a longer phrase such as "coconut oil".</li>
+      <li>Watch the search box while you are speaking.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The words you say appear as typed text in the search box in real time as you speak them, and once you stop, that exact text is used to search and is also saved to "Recently Searched".</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Voice search shows a clear "listening" screen <span class="ref-tag">Ref: Req #157</span></h4>
+    <ol>
+      <li>Tap the microphone icon to start voice search.</li>
+      <li>While the popup is open, notice the animation, the "Listening…" title, and the "Tap to stop" button.</li>
+      <li>Tap "Tap to stop" (or tap outside the popup) to stop listening early.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A full popup appears clearly showing that the app is listening (with a moving animation and a live preview of what it's hearing), and tapping "Tap to stop" or the background closes it immediately.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search directly for a seller/shop by name <span class="ref-tag">Ref: Req #158</span></h4>
+    <ol>
+      <li>On the Search screen, type the name of a shop/store you know is on the app.</li>
+      <li>Look at the results above the product list.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Shops &amp; Stores" section appears at the top of the results showing matching stores with their logo, name, category and distance from you; tapping one opens that store's page.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Browse and search stores directly (not just products) <span class="ref-tag">Ref: Req #159</span></h4>
+    <ol>
+      <li>From the Home screen, tap "Stores" in the bottom navigation bar (or tap the store icon at the top on a larger screen).</li>
+      <li>On the Stores screen, use the search box at the top to type a shop name or category.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The Stores screen lists nearby shops as cards; typing in its search box narrows the list down to matching shops only.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search for a seller's products specifically <span class="ref-tag">Ref: Req #160</span></h4>
+    <ol>
+      <li>Open a specific store from the Stores screen or from a search result.</li>
+      <li>Look for a way to search only within that store's own product list.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> There should be a search box on the store's own page that only searches that seller's products. If no such search box exists on the store page, this should be flagged to the team as missing.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search by category name <span class="ref-tag">Ref: Req #161</span></h4>
+    <ol>
+      <li>On the Search screen, tap one of the category filter pills shown just below the search bar (e.g. "Fruits & Vegetables", "Dairy").</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The pill highlights and the product list below updates to show only products from that category, even with the search box left empty.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Browse categories using a grid of pictures <span class="ref-tag">Ref: Req #162</span></h4>
+    <ol>
+      <li>Tap "Category" in the bottom navigation bar.</li>
+      <li>Look at how categories are displayed on this screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The Categories screen shows category groups, each with a grid of picture tiles (icon + name) that you can tap to open that category's products.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Move from a category into its sub-categories <span class="ref-tag">Ref: Req #163</span></h4>
+    <ol>
+      <li>From the Categories screen, tap any category tile.</li>
+      <li>On the category's product page, look for tabs or a strip of sub-category options near the top.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> After opening a category, related sub-categories are shown as tabs or chips you can tap to further narrow down the products shown.</div>
+  </div>
+
+  <!-- SECTION 14.2 -->
+  <h2 class="section-title">14.2 Smart Search &amp; Recommendation Layer</h2>
+  <p class="section-desc">This section checks that the app is "smart" about helping you find things — suggesting products and guiding discovery, not just returning plain keyword matches.</p>
+
+  <div class="test-card">
+    <h4>App shows smart product recommendations <span class="ref-tag">Ref: Req #164</span></h4>
+    <ol>
+      <li>Open the Home screen and scroll down through the sections (e.g. "Lowest Price Ever!", featured product rows).</li>
+      <li>Add a product to your cart and go to the Checkout screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You see rows of recommended products on the Home screen and/or a "You might also like" section on the Checkout screen, tailored around what's popular or relevant, not a random fixed list.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Auto-suggestions appear as you type a search <span class="ref-tag">Ref: Req #165</span></h4>
+    <ol>
+      <li>Open the Search screen and type a partial product name, e.g. "cho" for chocolate.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Suggested products matching "cho" (such as chocolate, chocolate biscuits, etc.) appear automatically without needing to press Enter or a search button.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Discover products intelligently, not just by exact search <span class="ref-tag">Ref: Req #166</span></h4>
+    <ol>
+      <li>On the Search screen, leave the search box empty and check the sections shown (Recently Searched, Trending Searches, Lowest Price Ever).</li>
+      <li>On the Checkout screen, check the "You might also like" / "Perfect with your order" row.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Even without typing anything, the app proactively shows you relevant products to discover — based on price, trends, or your order — rather than leaving the screen empty.</div>
+  </div>
+
+  <!-- SECTION 14.3 -->
+  <h2 class="section-title">14.3 Search Results Behaviour</h2>
+  <p class="section-desc">This section checks how different types of results (stores, products, categories) are combined and displayed together on the Search screen.</p>
+
+  <div class="test-card">
+    <h4>Stores and products both show up together in one search <span class="ref-tag">Ref: Req #167</span></h4>
+    <ol>
+      <li>On the Search screen, type a word that could match both a shop name and a product name, e.g. a common grocery term.</li>
+      <li>Look at the layout of the results screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The results page shows a "Shops &amp; Stores" section and a separate "Products" section on the same screen at the same time, each with its own count of matches, rather than forcing you to search separately for shops and products.</div>
+  </div>
+
+  <!-- SECTION 15 -->
+  <h2 class="section-title">15. Map-Based Search &amp; Discovery</h2>
+  <p class="section-desc">This section checks whether customers can find and discover stores visually on a map, in addition to plain lists.</p>
+
+  <div class="test-card">
+    <h4>Find nearby stores using a map, sorted by distance <span class="ref-tag">Ref: Req #168</span></h4>
+    <ol>
+      <li>From the Home screen, scroll to the "Stores near you" section and tap it, or tap "Stores" in the bottom navigation bar.</li>
+      <li>On the Stores screen, tap the "Map View" button near the top.</li>
+      <li>Use the distance filter dropdown to narrow results to a smaller radius (e.g. within 2 km).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A map opens showing pins for each nearby store and a pin for your own location; switching the distance filter changes which stores are shown, and each store card also lists its area/city so you can tell how far or in which locality it is.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Home screen shows store visibility on a map-style preview <span class="ref-tag">Ref: Req #169</span></h4>
+    <ol>
+      <li>On the Home screen, scroll down until you reach the "Stores near you" section.</li>
+      <li>Look at the preview shown — it should resemble a small map with store markers.</li>
+      <li>Tap "View all" to confirm it takes you to the full Stores/Map screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The Home screen shows a map-style teaser card with pins for nearby stores; tapping it (or "View all") opens the full interactive Stores map. Note: this feature is still being finished, so minor rough edges here are expected — the goal of this test is simply to confirm the map teaser appears and links through correctly.</div>
+  </div>
+
+  <!-- SECTION 16 -->
+  <h2 class="section-title">16. Recommendation, Add-On &amp; Cross-Sell Module</h2>
+  <p class="section-desc">This section checks that the app suggests sensible extra items to go along with what a customer is already buying (like suggesting a torch when buying an umbrella).</p>
+
+  <div class="flow">
+    <div class="flow-box">Customer adds a product to cart</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Opens Checkout screen</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">App shows "Perfect with your order" row</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Customer taps to add a suggested item</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get smart add-on suggestions that pair with your order <span class="ref-tag">Ref: Req #170</span></h4>
+    <ol>
+      <li>Add a product to your cart, for example a snack item, from any store.</li>
+      <li>Go to the Checkout screen.</li>
+      <li>Scroll through the checkout page and look for a row titled "Perfect with your order" (marked "Seller Recommends") or "You might also like".</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A horizontal row of suggested products appears on the checkout screen that logically pairs with what's already in your cart (for example, a matching snack or accessory), and you can tap "Add" on any of them directly from that row.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Add-on products can be priced, charged commission on, and managed like normal products <span class="ref-tag">Ref: Req #171</span></h4>
+    <p class="confirmed-note">How this is confirmed: this checks how add-on products are set up and billed behind the scenes (pricing, commission, GST) rather than something you click through as a customer. To confirm it, ask the seller/admin team to open a seller's product catalog, add or view an "add-on" style product, and verify it is priced and taxed the same way as any regular product when it appears in a customer's order.</p>
+  </div>
+
+  <!-- SECTION 32 -->
+  <h2 class="section-title">32. Notification System</h2>
+  <p class="section-desc">This section checks that customers are kept informed with timely notifications at each stage of their order, from placing it to receiving a refund.</p>
+
+  <div class="flow">
+    <div class="flow-box">Order placed</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Seller accepts</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Order packed</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Delivery partner assigned</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Out for delivery</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Delivered</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when your order is placed <span class="ref-tag">Ref: Req #347</span></h4>
+    <ol>
+      <li>Add a product to your cart and complete checkout to place a new order.</li>
+      <li>Once the order confirmation screen appears, tap the profile icon (bottom navigation "Profile"), then tap the bell icon at the top right to open Notifications.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A new notification appears at the top of the Notifications screen confirming your order was placed successfully, with a timestamp matching when you checked out.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when the seller accepts your order <span class="ref-tag">Ref: Req #348</span></h4>
+    <ol>
+      <li>After placing an order, wait for the seller to accept it (or ask the seller/admin team to accept it from their side for this test).</li>
+      <li>Check the Notifications screen again.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears letting you know the seller has accepted/confirmed your order.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when your order is packed <span class="ref-tag">Ref: Req #349</span></h4>
+    <ol>
+      <li>Once the seller marks your order as packed (ask the seller/admin team to move the order to "Packed" status if testing end-to-end), check the Notifications screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears telling you your order has been packed and is ready for pickup/delivery.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when a delivery partner is assigned <span class="ref-tag">Ref: Req #350</span></h4>
+    <ol>
+      <li>Once a delivery rider is assigned to your order (ask the admin/delivery team to assign one if testing end-to-end), check the Notifications screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears confirming that a delivery partner has been assigned to bring your order to you.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when your order is out for delivery <span class="ref-tag">Ref: Req #351</span></h4>
+    <ol>
+      <li>Once your order status moves to "Out for Delivery" (visible on the Order tracking screen under "Orders" in the bottom navigation), check the Notifications screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears letting you know your order is now out for delivery and on its way.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified when your order is delivered <span class="ref-tag">Ref: Req #352</span></h4>
+    <ol>
+      <li>Once your order is marked as delivered, check the Notifications screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears confirming your order has been delivered.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified about cancellation updates <span class="ref-tag">Ref: Req #353</span></h4>
+    <ol>
+      <li>Place an order and then cancel it (from "Orders" &gt; open the order &gt; Cancel), or request cancellation of an already-packed order.</li>
+      <li>Check the Notifications screen after the cancellation is processed or reviewed.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A notification appears confirming your cancellation was received and processed (or, if it was rejected, that it was reviewed and declined with a reason).</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Get notified about refund updates <span class="ref-tag">Ref: Req #354</span></h4>
+    <ol>
+      <li>Following a cancelled order or an approved return, wait for the refund to be initiated and then completed.</li>
+      <li>Check the Notifications screen at each stage, and also check your Wallet balance under "Profile".</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You receive a notification when the refund is initiated, and another when it is completed, and the refunded amount reflects correctly in your wallet or original payment method.</div>
+  </div>
+
+  <p class="footer-note">Zinto Manual Testing Guide — Part 2: Search, Discovery &amp; Notifications</p>
+
+</body>
+</html>

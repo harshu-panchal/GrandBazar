@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Index</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.6; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 70px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 32px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 640px; margin: 0 auto; color:#374151; font-size:13.5px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:18px 22px; margin: 30px 0; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .howto ul { margin: 6px 0; padding-left: 20px; }
+  .howto li { margin-bottom: 6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:36px; font-size:16px; }
+  .guide-list { display:flex; flex-direction:column; gap:14px; margin-top:16px; }
+  .guide-card { border:1px solid #e5e7eb; border-left:6px solid #16a34a; border-radius:8px; padding:14px 18px; background:#fafafa; page-break-inside: avoid; display:flex; gap:14px; align-items:flex-start; }
+  .guide-card.ref { border-left-color:#2563eb; background:#f5f8ff; }
+  .guide-num { font-size:22px; font-weight:700; color:#16a34a; min-width:36px; }
+  .guide-card.ref .guide-num { color:#2563eb; }
+  .guide-card h4 { margin:0 0 4px; font-size:14.5px; color:#111827; }
+  .guide-card p { margin:0; color:#4b5563; font-size:12.5px; }
+  .guide-card .file { display:block; margin-top:6px; font-size:11px; color:#6b7280; font-family: Consolas, monospace; }
+  .order-box { background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:16px 20px; margin: 26px 0; }
+  .order-box h3 { margin-top:0; color:#92400e; }
+  .order-box ol { margin: 6px 0; padding-left: 22px; }
+  .order-box li { margin-bottom: 6px; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Zinto Manual Testing Guide</h1>
+  <div class="subtitle">Requirements Traceability — Client Acceptance Testing Pack</div>
+  <div class="intro">
+    This pack contains 9 step-by-step guides that let you personally click through the Zinto platform —
+    as a customer, a seller, an admin, and a delivery partner — and confirm that every requirement discussed
+    for the project actually works in the live app. Every guide is written in plain, everyday language:
+    no technical terms, just "tap this, you should see that."
+  </div>
+</div>
+
+<div class="howto">
+  <h3>How to use this pack</h3>
+  <ul>
+    <li>Each guide below is its own PDF. Open them one at a time, in the suggested order.</li>
+    <li>You will need test logins for the customer app, the seller portal, the admin panel, and (for Part 6) the delivery partner app. Ask your development team for these if you don't already have them.</li>
+    <li>Every test inside a guide is numbered and tagged with the original requirement reference (e.g. "Ref: Req #41") so it can be traced back to the requirements sheet.</li>
+    <li>Each test ends with an <b>Expected Result</b> — compare what you actually see on your screen to that line. If it matches, tick it off; if not, note it down for your development team.</li>
+    <li>Part 9 is different from the rest — it's a short reference document for background/technical items that aren't separate button-clicks, and simply points back to the other 8 guides.</li>
+  </ul>
+</div>
+
+<div class="order-box">
+  <h3>Suggested testing order</h3>
+  <ol>
+    <li>Start with <b>Part 1</b> and <b>Part 2</b> as a regular customer — this is the experience your own end users will have.</li>
+    <li>Move to <b>Part 3</b> (Seller Panel) using a seller test account, to see how a shop owner manages products and orders.</li>
+    <li>Then test <b>Part 4</b> and <b>Part 5</b> (Admin Panel) using an admin test account, to see how the platform is configured and controlled.</li>
+    <li>Test <b>Part 6</b> (Delivery/Logistics) to see how an order gets a delivery partner and is delivered.</li>
+    <li>Use <b>Part 7</b> to walk through full order journeys end-to-end (placing, scheduling, cancelling) across all three apps.</li>
+    <li>Use <b>Part 8</b> to check the money side — refunds, wallet credits, and seller payouts.</li>
+    <li>Finally, skim <b>Part 9</b> for the background items that the earlier 8 guides already proved work.</li>
+  </ol>
+</div>
+
+<h2 class="section-title">The 9 Guides</h2>
+<div class="guide-list">
+
+  <div class="guide-card">
+    <div class="guide-num">1</div>
+    <div>
+      <h4>Customer App — Shopping Experience</h4>
+      <p>Registering, browsing stores and products, the shop page, ads/banners you see, terms &amp; conditions at checkout, login/home/search screens, and post-order actions (feedback, reorder, favourites, order history).</p>
+      <span class="file">01-Customer-App-Shopping-Experience.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">2</div>
+    <div>
+      <h4>Search, Discovery &amp; Notifications</h4>
+      <p>Text/voice/category/seller search, smart recommendations, map-based store discovery, add-on suggestions, and every push notification a customer should receive during an order.</p>
+      <span class="file">02-Search-Discovery-Notifications.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">3</div>
+    <div>
+      <h4>Seller Panel</h4>
+      <p>Seller login, shop profile, product/stock management, subscription and product-limit rules, choosing a delivery mode, processing orders, future/pre-book products, and settlement visibility.</p>
+      <span class="file">03-Seller-Panel-Guide.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">4</div>
+    <div>
+      <h4>Admin Panel — Catalog &amp; Shop Management</h4>
+      <p>Admin/super-admin overview, product catalog rules, admin adding/editing seller products, setting up a shop on a seller's behalf, category management, and homepage content control.</p>
+      <span class="file">04-Admin-Panel-Catalog-Management.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">5</div>
+    <div>
+      <h4>Admin Panel — Business Rules, Commission &amp; Pricing</h4>
+      <p>Platform-wide checks (multi-vendor, multi-city, scale), commission configuration, pricing/charges/invoice breakdown, order-timing rules, and packaging charge logic.</p>
+      <span class="file">05-Admin-Panel-Business-Rules-Pricing.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">6</div>
+    <div>
+      <h4>Delivery / Logistics Flow</h4>
+      <p>How an order gets assigned to a delivery partner (or handled by seller self-delivery), the rider's pickup-to-delivery steps, and the different logistics modes a seller can choose.</p>
+      <span class="file">06-Delivery-Logistics-Guide.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">7</div>
+    <div>
+      <h4>Order Lifecycle, Scheduling &amp; Cancellations</h4>
+      <p>The full order status journey end-to-end, scheduled/future orders, advance booking, and every cancellation rule — before acceptance, after acceptance, and the admin approval flow.</p>
+      <span class="file">07-Order-Lifecycle-Scheduling-Cancellations.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card">
+    <div class="guide-num">8</div>
+    <div>
+      <h4>Payments, Seller Settlements &amp; Refunds</h4>
+      <p>Refund and complaint windows, wallet refunds, refund types, and the full seller payout/settlement journey including bulk-order settlements and admin controls.</p>
+      <span class="file">08-Payments-Settlements-Refunds.html</span>
+    </div>
+  </div>
+
+  <div class="guide-card ref">
+    <div class="guide-num">9</div>
+    <div>
+      <h4>Platform Overview &amp; Behind-the-Scenes Foundation <i>(reference only)</i></h4>
+      <p>Architecture, database, and internal data-model items that aren't separate clickable tests — this document explains each one in plain language and points to which of Parts 1–8 already proves it works.</p>
+      <span class="file">09-Platform-Overview-Technical-Foundation.html</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer-note">Zinto Platform — Manual Requirement Testing Pack</div>
+
+</body>
+</html>

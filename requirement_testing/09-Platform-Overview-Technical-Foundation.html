@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 9: Platform Overview & Behind-the-Scenes Foundation (Reference Only)</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 28px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .why-different { background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .why-different h3 { margin-top:0; color:#1d4ed8; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #2563eb; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#eff6ff; border:1px dashed #2563eb; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; color:#1e3a5f; }
+  .confirmed-note b { color:#1d4ed8; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+  .guide-pill { display:inline-block; background:#e0f2fe; color:#075985; border-radius:12px; padding:2px 10px; font-size:11px; font-weight:600; margin:2px 3px 2px 0; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Zinto Manual Testing Guide — Part 9<br>Platform Overview &amp; Behind-the-Scenes Foundation<br>(Reference Only)</h1>
+  <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+  <div class="intro">
+    This document explains the engineering foundations that everything else in the Zinto app is built on — things like the database, the underlying data models, and the overall technical plan. These items are not separate buttons you click; they are the "plumbing" behind the screens you already tested in the other 8 guides in this series. This part is for the same reader (a business owner or product owner reviewing the project), and it should be read after finishing Parts 1–8, as a wrap-up that connects the dots.
+  </div>
+</div>
+
+<div class="why-different">
+  <h3>Why this document looks different</h3>
+  <p>Every other guide in this series (Parts 1–8) gave you numbered, click-through tests — "tap this button, you should see that result." This part is different on purpose. The items below are internal engineering foundations: things like "the database can handle many sellers at once" or "the system is built so new features can be added later without rebuilding everything." A non-technical person cannot click a button labelled "database architecture" — there is no such button. Instead, these foundations quietly make everything you already clicked-through in Parts 1–8 possible.</p>
+  <p>So for each item below, instead of steps, you will find a short plain-language explanation of what it means, plus a note on exactly which of the other 8 guides already proves it works — because if those guides' tests passed, these foundations are, by definition, working underneath them.</p>
+</div>
+
+<div class="howto">
+  <h3>How to use this guide</h3>
+  <p>You do not need to open the app for this part. Simply read each item below. Each one tells you (a) what it means in everyday terms, and (b) which guide(s) you already completed that indirectly proves it. If you passed the tests in those guides, you can consider these foundation items confirmed as well. No separate testing action is needed here.</p>
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>2.1 Database / Schema / System Design Expectations</li>
+    <li>2.2 Technical Expectations</li>
+    <li>3.1 Multi-Vendor Model</li>
+    <li>3.2 Multi-City Model</li>
+    <li>3.3 Hyperlocal Commerce Model</li>
+    <li>23.2 Backend Model - Customer Model</li>
+    <li>23.2 Backend Model - Cart Model</li>
+    <li>23.2 Backend Model - Product Model</li>
+    <li>23.2 Backend Model - Order Model</li>
+    <li>23.2 Backend Model - Category Model</li>
+    <li>23.2 Backend Model - Banners Model</li>
+    <li>23.2 Backend Model - Store Model</li>
+    <li>23.2 Backend Model - Offer Model</li>
+    <li>23.2 Backend Model - Transaction Model</li>
+    <li>23.3 Additional Practical Models Implied</li>
+    <li>34.1 Frontend Deliverables Discussed</li>
+    <li>34.2 Backend Deliverables Discussed</li>
+    <li>34.3 Action Items Discussed Across MOMs</li>
+    <li>35. Final Product Owner Summary</li>
+  </ol>
+</div>
+
+<!-- 2.1 -->
+<h2 class="section-title">2.1 Database / Schema / System Design Expectations</h2>
+<p class="section-desc">This section covers the foundational design rules the system's data storage was built around — how it copes with growth, variety, and heavy use.</p>
+
+<div class="test-card">
+  <h4>The database is designed to grow with the business <span class="ref-tag">Ref: Req #14</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The underlying data storage was planned so new kinds of information (new features, new screens, new business rules) can be added later without tearing everything down and starting over.<br><b>How this is confirmed:</b> Every guide in this series (Parts 1–8) already relies on this — each new screen you tested (offers, scheduling, bulk settlements, add-on suggestions, etc.) is proof the storage layer flexed to support it.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system supports many independent sellers on one platform <span class="ref-tag">Ref: Req #15</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is the "multi-vendor" foundation — many different shops can each run their own store on Zinto at the same time.<br><b>How this is confirmed:</b> You already saw this in <span class="guide-pill">Part 1: Customer App</span> when browsing products from different stores, and in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span> when managing multiple individual sellers.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system supports operating in more than one city <span class="ref-tag">Ref: Req #16</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The platform can run in several different cities, each with its own sellers, delivery areas, and local rules.<br><b>How this is confirmed:</b> You confirmed city-specific setup in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span> when reviewing city-wise settings, and in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span> when checking delivery-area coverage.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system can hold a very large number of products <span class="ref-tag">Ref: Req #17</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The product catalog is built to handle a huge inventory (hundreds of thousands of products) without slowing down.<br><b>How this is confirmed:</b> Confirmed by <span class="guide-pill">Part 1: Customer App</span> (smooth browsing/scrolling of products) and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> (fast search results across the catalog).</div>
+</div>
+
+<div class="test-card">
+  <h4>Products are organised into categories and subcategories <span class="ref-tag">Ref: Req #18</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Products are grouped in a structured way (e.g. Groceries → Dairy → Milk) rather than one giant unsorted list.<br><b>How this is confirmed:</b> Already confirmed while using the category tabs and menus in <span class="guide-pill">Part 1: Customer App</span> and while managing categories in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system supports packaging-type categories <span class="ref-tag">Ref: Req #19</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Beyond product categories, the system separately tracks how items are packaged (loose, boxed, bagged, etc.), which affects packaging charges.<br><b>How this is confirmed:</b> Confirmed in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span> when reviewing packaging charge settings, and in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span> when packaging charges appeared on an order bill.</div>
+</div>
+
+<div class="test-card">
+  <h4>Category structures can support special transaction-based rules if needed <span class="ref-tag">Ref: Req #20</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The category system is flexible enough to attach special charge or commission rules to specific category types, not just a flat one-size-fits-all rule.<br><b>How this is confirmed:</b> Confirmed indirectly in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span> where category-specific commission and charge settings were tested.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system supports the full order journey, including cancellations, refunds, returns, and complaints <span class="ref-tag">Ref: Req #21</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The order process is built to handle not just "place an order and get it delivered," but also all the things that can go wrong or change afterward — cancelling part of an order, returning an item, requesting a refund, or replacing a damaged item.<br><b>How this is confirmed:</b> Confirmed across <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span> (cancellations, partial cancellations) and <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span> (refunds and returns).</div>
+</div>
+
+<div class="test-card">
+  <h4>The system supports coupons, offers, subscriptions, and discounts <span class="ref-tag">Ref: Req #22</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The data storage has a place to keep track of promotional codes, special offers, subscription plans, and discount rules.<br><b>How this is confirmed:</b> Confirmed while applying coupons/offers in <span class="guide-pill">Part 1: Customer App</span> and while setting up offers and pricing rules in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system is built to accommodate future features <span class="ref-tag">Ref: Req #23</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> New features can be added later on top of the existing foundation without needing to rebuild the core system.<br><b>How this is confirmed:</b> This is a forward-looking design property rather than something with a visible test today; its soundness is reflected in how smoothly every feature across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span> works together on one shared foundation.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system is built to handle high traffic <span class="ref-tag">Ref: Req #24</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The platform should keep working smoothly even when many customers are using it at the same time.<br><b>How this is confirmed:</b> Reflected in the responsiveness you experienced throughout <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> — smooth browsing and fast search results are the everyday evidence of this.</div>
+</div>
+
+<div class="test-card">
+  <h4>Search and discovery are built to scale as the catalog grows <span class="ref-tag">Ref: Req #25</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The search feature is designed to stay fast and accurate even as more products and stores are added, at least on the customer-facing side.<br><b>How this is confirmed:</b> Directly confirmed in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> when testing product and store search.</div>
+</div>
+
+<div class="test-card">
+  <h4>Order management is built to scale with business growth <span class="ref-tag">Ref: Req #26</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> As more orders flow through the system, the tools for managing them (for sellers, admins, and delivery staff) are designed to keep working without breaking down.<br><b>How this is confirmed:</b> Confirmed by the smooth order-management workflows you tested in <span class="guide-pill">Part 3: Seller Panel</span>, <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>, and <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+
+<!-- 2.2 -->
+<h2 class="section-title">2.2 Technical Expectations</h2>
+<p class="section-desc">This section covers how the system was engineered internally — how its different parts talk to each other and how secure and future-proof it is.</p>
+
+<div class="test-card">
+  <h4>Different parts of the system work independently of each other <span class="ref-tag">Ref: Req #27</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The customer app, seller panel, admin panel, and delivery app are built as separate pieces, so a change in one does not automatically break the others.<br><b>How this is confirmed:</b> Evidenced by the fact that <span class="guide-pill">Part 1: Customer App</span>, <span class="guide-pill">Part 3: Seller Panel</span>, <span class="guide-pill">Part 4: Admin Panel</span>, and <span class="guide-pill">Part 6: Delivery/Logistics Flow</span> each work correctly as their own self-contained experiences.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system's components are built to scale <span class="ref-tag">Ref: Req #28</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Individual building blocks of the app (like the product catalog or the order system) can grow in capacity without a full redesign.<br><b>How this is confirmed:</b> Same evidence as above — the day-to-day smoothness across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span> reflects a component structure that scales.</div>
+</div>
+
+<div class="test-card">
+  <h4>The backend is ready to connect with other systems (API-ready) <span class="ref-tag">Ref: Req #29</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The behind-the-scenes engine that powers the app is built in a standard way so it could connect to other apps or services later if needed.<br><b>How this is confirmed:</b> Every screen in every guide (Parts 1–8) talks to this same backend engine — their correct behaviour is the proof this connection layer works.</div>
+</div>
+
+<div class="test-card">
+  <h4>Logging in and account security are handled safely <span class="ref-tag">Ref: Req #30</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Passwords, OTPs, and account sessions are protected so only the right person can access an account.<br><b>How this is confirmed:</b> Confirmed while logging in as a customer, seller, admin, and delivery rider throughout <span class="guide-pill">Part 1: Customer App</span>, <span class="guide-pill">Part 3: Seller Panel</span>, <span class="guide-pill">Part 4: Admin Panel</span>, and <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>Search and other lookups happen efficiently <span class="ref-tag">Ref: Req #31</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> When you search or filter for something, the system finds it quickly rather than making you wait.<br><b>How this is confirmed:</b> Directly confirmed in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> when testing search speed and filtering.</div>
+</div>
+
+<div class="test-card">
+  <h4>New features can be added without redesigning the whole database <span class="ref-tag">Ref: Req #32</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The way data is stored was planned with room to grow, so adding a new feature does not require starting the database over from scratch.<br><b>How this is confirmed:</b> Same as Req #23 above — a forward-looking property, indirectly evidenced by how well the many features across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span> already coexist.</div>
+</div>
+
+<div class="test-card">
+  <h4>Each type of user sees only the tools meant for their role <span class="ref-tag">Ref: Req #33</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Customers, sellers, admins, and delivery staff each get their own separate app/panel with only the features relevant to them.<br><b>How this is confirmed:</b> Confirmed by simply having used four separate, role-specific experiences: <span class="guide-pill">Part 1: Customer App</span>, <span class="guide-pill">Part 3: Seller Panel</span>, <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span> / <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>, and <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<!-- 3.1 -->
+<h2 class="section-title">3.1 Multi-Vendor Model</h2>
+<p class="section-desc">This section covers the core idea that Zinto is a marketplace of many shops, not just one store.</p>
+
+<div class="test-card">
+  <h4>Many different sellers can set up shop on Zinto <span class="ref-tag">Ref: Req #34</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is the "multi-vendor" model in plain terms — Zinto works like a shopping mall where many independent shopkeepers each run their own store under one roof, instead of Zinto selling everything itself.<br><b>How this is confirmed:</b> You already confirmed this while browsing multiple stores in <span class="guide-pill">Part 1: Customer App</span>, and while onboarding/managing multiple sellers in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<!-- 3.2 -->
+<h2 class="section-title">3.2 Multi-City Model</h2>
+<p class="section-desc">This section covers how the platform's rules can differ from one city to another.</p>
+
+<div class="test-card">
+  <h4>Business rules can be set differently per city <span class="ref-tag">Ref: Req #35</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Commission rates, delivery charges, and how sellers/stores operate can each be configured separately for different cities, instead of one fixed rule for the whole country.<br><b>How this is confirmed:</b> Confirmed while reviewing city-based settings in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>, and while checking delivery coverage areas in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<!-- 3.3 -->
+<h2 class="section-title">3.3 Hyperlocal Commerce Model</h2>
+<p class="section-desc">This section covers the "quick commerce" idea — ordering from nearby shops for fast delivery.</p>
+
+<div class="test-card">
+  <h4>Customers see nearby stores for fast, local delivery <span class="ref-tag">Ref: Req #36</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is the "hyperlocal" or "quick commerce" model — like Blinkit or Zepto — where the app shows you shops close to your location so delivery can be quick.<br><b>How this is confirmed:</b> Confirmed while seeing nearby stores in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>, and while checking short delivery timelines in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<!-- 23.2 models -->
+<h2 class="section-title">23.2 Backend Model - Customer Model</h2>
+<p class="section-desc">This section covers what information the system keeps on file about each customer.</p>
+
+<div class="test-card">
+  <h4>Customer records store profile, address, wishlist, and order history <span class="ref-tag">Ref: Req #225</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Behind every customer account, the system keeps their name, email, mobile number, saved addresses/locations, wishlist items, and past orders together in one place.<br><b>How this is confirmed:</b> Confirmed while updating a profile, saving an address, adding items to a wishlist, and viewing order history in <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Cart Model</h2>
+<p class="section-desc">This section covers what information the shopping cart keeps track of.</p>
+
+<div class="test-card">
+  <h4>The cart remembers which products, quantities, prices, and store they came from <span class="ref-tag">Ref: Req #226</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> When items are added to the cart, the system keeps track of exactly which product, how many, at what price, and from which store, so checkout works correctly.<br><b>How this is confirmed:</b> Confirmed every time items were added to and checked out from the cart in <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Product Model</h2>
+<p class="section-desc">This section covers what information is stored for each product listing.</p>
+
+<div class="test-card">
+  <h4>Product records store details, images, pricing, stock, category, and store <span class="ref-tag">Ref: Req #227</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Every product listing keeps its description, photos, price, how many are in stock, which category it belongs to, and which store sells it.<br><b>How this is confirmed:</b> Confirmed while browsing product detail pages in <span class="guide-pill">Part 1: Customer App</span>, and while adding/editing products in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Order Model</h2>
+<p class="section-desc">This section covers what information is stored for each order.</p>
+
+<div class="test-card">
+  <h4>Order records store customer, products, delivery, and payment status <span class="ref-tag">Ref: Req #228</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Every order keeps track of who placed it, what was ordered, where it's being delivered, and whether it has been paid for.<br><b>How this is confirmed:</b> Confirmed while placing and tracking orders in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>, and while viewing payment status in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Category Model</h2>
+<p class="section-desc">This section covers what information is stored for each product category.</p>
+
+<div class="test-card">
+  <h4>Category records store name, image, subcategories, and a web-friendly link <span class="ref-tag">Ref: Req #229</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Each category has a name, a picture, a list of subcategories under it, and a short web address tag used internally for linking to it.<br><b>How this is confirmed:</b> Confirmed while browsing categories and subcategories in <span class="guide-pill">Part 1: Customer App</span>, and while managing categories in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Banners Model</h2>
+<p class="section-desc">This section covers what information is stored for the promotional banners shown on the home page.</p>
+
+<div class="test-card">
+  <h4>Banner records store images, links, active status, and display order <span class="ref-tag">Ref: Req #230</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Each home-page banner keeps its image, where it should take you when tapped, whether it's currently switched on, and which order it should appear in among other banners.<br><b>How this is confirmed:</b> Confirmed while viewing home page banners in <span class="guide-pill">Part 1: Customer App</span>, and while managing home page content in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Store Model</h2>
+<p class="section-desc">This section covers what information is stored for each seller's store.</p>
+
+<div class="test-card">
+  <h4>Store records store shop details, ratings, and delivery radius <span class="ref-tag">Ref: Req #231</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Each store's page keeps its shop information, customer ratings, and how far it delivers.<br><b>How this is confirmed:</b> Confirmed while viewing a store page and its ratings in <span class="guide-pill">Part 1: Customer App</span>, and while checking delivery area coverage in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Offer Model</h2>
+<p class="section-desc">This section covers what information is stored for discount offers and coupons.</p>
+
+<div class="test-card">
+  <h4>Offer records store discount details, coupon codes, expiry, and usage limits <span class="ref-tag">Ref: Req #232</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Each offer or coupon keeps track of how much discount it gives, its code, when it expires, and how many times it can be used.<br><b>How this is confirmed:</b> Confirmed while applying a coupon at checkout and seeing its discount, code, and validity in <span class="guide-pill">Part 1: Customer App</span>, and while creating/managing offers in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+
+<h2 class="section-title">23.2 Backend Model - Transaction Model</h2>
+<p class="section-desc">This section covers what information is stored for each payment transaction.</p>
+
+<div class="test-card">
+  <h4>Transaction records store payment method, transaction ID, and payment/refund status <span class="ref-tag">Ref: Req #233</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Every payment made on the platform is logged with how it was paid, a unique reference number, and whether it succeeded, failed, or was refunded.<br><b>How this is confirmed:</b> Confirmed while completing checkout payments in <span class="guide-pill">Part 1: Customer App</span>, and while reviewing payment and refund records in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<!-- 23.3 -->
+<h2 class="section-title">23.3 Additional Practical Models Implied</h2>
+<p class="section-desc">This section covers other behind-the-scenes record-keeping areas the platform's design needed beyond the core models above.</p>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for sellers/vendors <span class="ref-tag">Ref: Req #234</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Sellers have their own dedicated profile and business records, separate from customer accounts.<br><b>How this is confirmed:</b> Confirmed by logging in and managing a shop in <span class="guide-pill">Part 3: Seller Panel</span>, and by viewing seller listings in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for subscriptions <span class="ref-tag">Ref: Req #235</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> If a seller or customer signs up for a subscription plan, the system tracks that plan separately.<br><b>How this is confirmed:</b> Confirmed while reviewing seller subscription plans in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for commission calculations <span class="ref-tag">Ref: Req #236</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The percentage Zinto earns from each sale is tracked as its own concept, separate from the order and product records.<br><b>How this is confirmed:</b> Confirmed while reviewing commission settings and how they show up on settlements in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span> and <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for refunds <span class="ref-tag">Ref: Req #237</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> When money is refunded to a customer, the system logs it as its own tracked event, separate from the original payment.<br><b>How this is confirmed:</b> Confirmed while requesting and tracking a refund in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for customer complaints <span class="ref-tag">Ref: Req #238</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> When a customer raises a complaint or support ticket, it is tracked as its own record so it can be followed up on.<br><b>How this is confirmed:</b> Confirmed while raising or viewing a support ticket/complaint in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span> and <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for wallet balances <span class="ref-tag">Ref: Req #239</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Each user's in-app wallet balance (used for payments and refunds) is tracked as its own record.<br><b>How this is confirmed:</b> Confirmed while paying with wallet balance or receiving a wallet refund in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for notifications <span class="ref-tag">Ref: Req #240</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Alerts sent to customers, sellers, and admins (like order updates) are tracked and stored so they can be shown in a notifications list.<br><b>How this is confirmed:</b> Confirmed while receiving and viewing notifications in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for delivery/logistics <span class="ref-tag">Ref: Req #241</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Delivery assignments, rider details, and delivery progress are tracked as their own set of records (internally called "deliveries").<br><b>How this is confirmed:</b> Confirmed while tracking a rider and delivery progress in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>Seller availability tracking <span class="ref-tag">Ref: Req #242</span></h4>
+  <div class="confirmed-note">How this is confirmed: This concerns whether a dedicated record tracks when a seller/store is open or closed for orders. You can observe the customer-facing effect of this (a store showing as open or closed) in <span class="guide-pill">Part 1: Customer App</span> and in store hour settings in <span class="guide-pill">Part 3: Seller Panel</span>; any gaps here would show up as a store's open/closed status not matching what was set.</div>
+</div>
+
+<div class="test-card">
+  <h4>Add-on product mapping <span class="ref-tag">Ref: Req #243</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is about how the system links a main product to suggested add-on products (e.g. suggesting butter with bread).<br><b>How this is confirmed:</b> The customer-facing result of this is what you tested in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> when you saw add-on/pairing suggestions while shopping, and while managing add-ons in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>Advertisement / Super AD records <span class="ref-tag">Ref: Req #244</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is about tracking sponsored/advertised product placements separately from regular listings.<br><b>How this is confirmed:</b> The visible effect — sponsored or promoted product placements — is what you would have seen in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> if any promoted listings appeared during browsing or search.</div>
+</div>
+
+<div class="test-card">
+  <h4>Future/scheduled order configuration <span class="ref-tag">Ref: Req #245</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is about how the system stores the settings for products that are scheduled to be sold or delivered on a future date.<br><b>How this is confirmed:</b> The visible result of this is what you tested in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span> when placing and reviewing a scheduled order.</div>
+</div>
+
+<div class="test-card">
+  <h4>The system keeps dedicated records for seller settlements and payouts <span class="ref-tag">Ref: Req #246</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> The money owed to each seller, and when it was paid out, is tracked in its own dedicated ledger.<br><b>How this is confirmed:</b> Confirmed while reviewing seller earnings, payouts, and settlement history in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>Bulk-order settlement tracking <span class="ref-tag">Ref: Req #247</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is about a dedicated record for tracking settlements on large "bulk" orders (as opposed to regular individual orders).<br><b>How this is confirmed:</b> The visible result is the dedicated "Bulk Order Settlements" page you would have reviewed in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+
+<div class="test-card">
+  <h4>Admin-assisted shop/product management support structure <span class="ref-tag">Ref: Req #248</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> This is about whether there's a dedicated record trail for cases where the admin team directly helps set up or edit a seller's shop or products, for audit purposes.<br><b>How this is confirmed:</b> The visible result — an admin being able to add/edit a seller's products or shop details on their behalf — is what you tested in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+
+<!-- 34.1 -->
+<h2 class="section-title">34.1 Frontend Deliverables Discussed</h2>
+<p class="section-desc">This section lists the customer-facing screens that were planned and built, as agreed in project discussions.</p>
+
+<div class="test-card">
+  <h4>Login and sign-up screens were delivered <span class="ref-tag">Ref: Req #360</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by logging in and signing up in <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+<div class="test-card">
+  <h4>The home page was delivered <span class="ref-tag">Ref: Req #361</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by viewing the home page in <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Search screens were delivered <span class="ref-tag">Ref: Req #362</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by using search in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Store discovery pages were delivered <span class="ref-tag">Ref: Req #363</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by browsing store listing/discovery pages in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+
+<!-- 34.2 -->
+<h2 class="section-title">34.2 Backend Deliverables Discussed</h2>
+<p class="section-desc">This section lists the behind-the-scenes engineering work that was planned and built.</p>
+
+<div class="test-card">
+  <h4>The database structure was built <span class="ref-tag">Ref: Req #364</span></h4>
+  <div class="confirmed-note">How this is confirmed: This is the storage layer underneath every guide in this series — its correctness is reflected in every screen across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span> working as expected.</div>
+</div>
+<div class="test-card">
+  <h4>The system is built with connectable, standard backend building blocks <span class="ref-tag">Ref: Req #365</span></h4>
+  <div class="confirmed-note">How this is confirmed: Same as above — reflected in the correct functioning of every app/panel tested across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span>.</div>
+</div>
+<div class="test-card">
+  <h4>The relationships between different pieces of information were defined <span class="ref-tag">Ref: Req #366</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> For example, the system knows an order belongs to a customer, contains products, and comes from a store — these connections were properly mapped out.<br><b>How this is confirmed:</b> Reflected in orders correctly showing the right customer, products, and store details across <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+
+<!-- 34.3 -->
+<h2 class="section-title">34.3 Action Items Discussed Across MOMs</h2>
+<p class="section-desc">This section recaps action items that came out of project meetings (MOMs = Minutes of Meetings) over the course of development — most map directly onto features you already tested elsewhere.</p>
+
+<div class="test-card">
+  <h4>Finalize the scheduled order workflow <span class="ref-tag">Ref: Req #367</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by placing/reviewing a scheduled order in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Implement stock visibility logic <span class="ref-tag">Ref: Req #368</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by seeing correct in-stock/out-of-stock labelling on products in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Define the refund, cancellation, and replacement process <span class="ref-tag">Ref: Req #369</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by cancelling an order in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span> and by requesting a refund/return in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Implement order tracking functionality <span class="ref-tag">Ref: Req #370</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by watching the order status tracker update step-by-step in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Set up vendor onboarding via email <span class="ref-tag">Ref: Req #371</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by seeing the seller invite/onboarding email flow in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Develop admin order management features <span class="ref-tag">Ref: Req #372</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by managing orders as an admin in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span> and <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Develop the home page UI <span class="ref-tag">Ref: Req #373</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by viewing the home page in <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Implement search features <span class="ref-tag">Ref: Req #374</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by searching in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Design an attractive store section <span class="ref-tag">Ref: Req #375</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by browsing store pages in <span class="guide-pill">Part 1: Customer App</span> and <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Create database schemas for the discussed models <span class="ref-tag">Ref: Req #376</span></h4>
+  <div class="confirmed-note">How this is confirmed: Reflected in every model-backed screen working correctly across <span class="guide-pill">Part 1</span> through <span class="guide-pill">Part 8</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Define model relationships <span class="ref-tag">Ref: Req #377</span></h4>
+  <div class="confirmed-note">How this is confirmed: Same as Req #366 above — reflected in correctly linked order/customer/store/product data across <span class="guide-pill">Part 1</span> and <span class="guide-pill">Part 7</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Prepare for UI, schema, and feature-prioritization review discussions <span class="ref-tag">Ref: Req #378</span></h4>
+  <div class="confirmed-note">How this is confirmed: This is a project-management/meeting-preparation action rather than a testable feature — it is reflected in the fact that a coherent, reviewable product exists across all 9 parts of this testing guide series.</div>
+</div>
+
+<!-- 35 -->
+<div class="page-break"></div>
+<h2 class="section-title">35. Final Product Owner Summary</h2>
+<p class="section-desc">This section is a high-level wrap-up of everything the platform delivers, viewed as a whole. Each line below is a big-picture theme that ties together things you already tested in detail across Parts 1–8.</p>
+
+<div class="flow">
+  <div class="flow-box">Part 1-2: Customer Experience</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Part 3-4: Seller &amp; Admin Management</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Part 5: Pricing &amp; Commission Rules</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Part 6-7: Delivery &amp; Order Lifecycle</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Part 8: Payments &amp; Settlements</div>
+</div>
+
+<div class="test-card">
+  <h4>Seller onboarding and flexible seller business models <span class="ref-tag">Ref: Req #379</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Dynamic commission and pricing logic <span class="ref-tag">Ref: Req #380</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Category, store, and product-level configurability <span class="ref-tag">Ref: Req #381</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span> and <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Premium customer-facing UI <span class="ref-tag">Ref: Req #382</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by browsing the app throughout <span class="guide-pill">Part 1: Customer App</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Search-heavy product/store discovery <span class="ref-tag">Ref: Req #383</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Smart recommendations and add-on selling <span class="ref-tag">Ref: Req #384</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by seeing suggested pairings/add-ons while shopping in <span class="guide-pill">Part 1: Customer App</span>, and while managing add-on suggestions in <span class="guide-pill">Part 3: Seller Panel</span> and <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Configurable homepage and advertising support <span class="ref-tag">Ref: Req #385</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by viewing banners/home sections in <span class="guide-pill">Part 1: Customer App</span> and managing them in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Full order lifecycle visibility <span class="ref-tag">Ref: Req #386</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by the end-to-end order tracker in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Flexible cancellation, refund, and replacement workflows <span class="ref-tag">Ref: Req #387</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span> and <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Real-time notifications and post-order engagement <span class="ref-tag">Ref: Req #388</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by receiving order/delivery notifications in <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span> and <span class="guide-pill">Part 6: Delivery/Logistics Flow</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Scheduled orders and seller-driven future/pre-book product publishing <span class="ref-tag">Ref: Req #389</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed in <span class="guide-pill">Part 7: Order Lifecycle, Scheduling &amp; Cancellations</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Flexible logistics participation model for sellers <span class="ref-tag">Ref: Req #390</span></h4>
+  <div class="confirmed-note"><b>What it means:</b> Sellers can choose how their orders get delivered (e.g. their own delivery staff vs. platform delivery riders).<br><b>How this is confirmed:</b> Confirmed in <span class="guide-pill">Part 6: Delivery/Logistics Flow</span> and delivery-related settings in <span class="guide-pill">Part 3: Seller Panel</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Seller settlement and payout handling <span class="ref-tag">Ref: Req #391</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by reviewing seller earnings and payouts in <span class="guide-pill">Part 8: Payments, Seller Settlements &amp; Refunds</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Admin-assisted product listing and seller shop setup <span class="ref-tag">Ref: Req #392</span></h4>
+  <div class="confirmed-note">How this is confirmed: Confirmed by an admin adding/editing a seller's products or shop details in <span class="guide-pill">Part 4: Admin Panel — Catalog &amp; Shop Management</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Scalable architecture for multi-city, high-traffic operations <span class="ref-tag">Ref: Req #393</span></h4>
+  <div class="confirmed-note">How this is confirmed: Reflected in the smooth, responsive experience across <span class="guide-pill">Part 1: Customer App</span>, <span class="guide-pill">Part 2: Search, Discovery &amp; Notifications</span>, and the multi-city settings reviewed in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+<div class="test-card">
+  <h4>Clear role-based separation with configurable, future-ready business rules <span class="ref-tag">Ref: Req #394</span></h4>
+  <div class="confirmed-note">How this is confirmed: Reflected in having four distinct, correctly working experiences for Customer, Seller, Admin, and Delivery roles across <span class="guide-pill">Part 1</span>, <span class="guide-pill">Part 3</span>, <span class="guide-pill">Part 4</span>, <span class="guide-pill">Part 5</span>, and <span class="guide-pill">Part 6</span>, plus the configurable business rules reviewed in <span class="guide-pill">Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</span>.</div>
+</div>
+
+<div class="footer-note">
+  End of Part 9 — Platform Overview &amp; Behind-the-Scenes Foundation (Reference Only).<br>
+  Zinto Platform — Manual Requirement Testing Guide series (Parts 1–9).
+</div>
+
+</body>
+</html>

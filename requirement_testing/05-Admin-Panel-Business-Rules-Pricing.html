@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 5: Admin Panel — Business Rules, Commission & Pricing</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 28px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+  .nav-hint { font-size:11.5px; color:#6b7280; margin: -2px 0 10px; }
+  .nav-hint code { background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:11px; color:#334155; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Zinto Manual Testing Guide<br>Part 5: Admin Panel — Business Rules, Commission &amp; Pricing</h1>
+  <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+  <div class="intro">
+    This document is a step-by-step checklist for confirming that the money-related rules of the Zinto platform work as intended —
+    how commission is charged, how prices and fees are built up, how packaging charges are calculated, and how order timing rules behave.
+    It is meant for a non-technical person: log in to the Zinto <b>Admin Panel</b> (and, for a few checks, the customer app and seller panel)
+    and follow each numbered test exactly as written, tapping the same buttons and menus described here.
+  </div>
+</div>
+
+<div class="howto">
+  <h3>How to use this guide</h3>
+  <p>Each test below has a <b>number</b> and a small reference tag pointing back to the original requirement list. Follow the numbered
+  steps in order, using the real screen and button names given. After finishing the steps, compare what you see on screen with the
+  <b>✅ Expected Result</b> line — if it matches, you can tick that test off as working. A few items describe a rule that runs
+  automatically in the background rather than something you click through; those are marked <i>"How this is confirmed"</i> instead of steps.</p>
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>1.1 Product Vision</li>
+    <li>7. Commission Management System</li>
+    <li>8. Pricing, Charges, Fee Components &amp; Invoice System</li>
+    <li>9. Order Timing Rules &amp; Order Placement Restrictions</li>
+    <li>10. Packaging Charges &amp; Packaging Logic</li>
+  </ol>
+</div>
+
+<!-- ===================== SECTION 1: PRODUCT VISION ===================== -->
+<h2 class="section-title">1.1 Product Vision</h2>
+<p class="section-desc">These are big-picture checks that confirm Zinto behaves like a full multi-seller, multi-city, hyperlocal delivery platform — not deep settings, just simple things you can see and confirm while browsing the live app.</p>
+
+<div class="test-card">
+  <h4>Test 1 — More than one seller sells on the platform <span class="ref-tag">Ref: Req #1</span></h4>
+  <ol>
+    <li>Open the Zinto customer app or website.</li>
+    <li>Browse the home screen and open two or three different products, or open two different store pages.</li>
+    <li>Look for the seller/store name shown on each product card or store page.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> You can see products belonging to more than one different seller/store name — confirming this is a shared marketplace, not a single shop.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 2 — The app works in more than one city <span class="ref-tag">Ref: Req #2</span></h4>
+  <ol>
+    <li>Open the Zinto customer app and tap the location/city selector at the top of the screen.</li>
+    <li>Search for or switch to a different city than the one currently shown.</li>
+    <li>Confirm the store list and products on the home screen refresh for the new city.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Changing the city changes which stores and products are shown, confirming the app supports more than one city/location.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 3 — Orders are hyperlocal (fast, nearby delivery) <span class="ref-tag">Ref: Req #3</span></h4>
+  <ol>
+    <li>Open the customer app, set your current delivery address.</li>
+    <li>Open a nearby store and look at the delivery time estimate shown on the store page or at checkout.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The app shows nearby stores only (not stores from far-away cities) and gives a short, local delivery time estimate (e.g. minutes, not days).</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 4 — The catalog can hold a very large number of products <span class="ref-tag">Ref: Req #4</span></h4>
+  <ol>
+    <li>Log in to the Admin Panel and open <b>Products</b> from the left menu.</li>
+    <li>Check the product list/table — note the total product count and page numbers at the bottom.</li>
+    <li>Try searching for a product by name and confirm results appear instantly.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The Products screen shows a large product count with working pagination and search, without the page freezing or timing out.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 5 — The platform can handle many users at once <span class="ref-tag">Ref: Req #5</span></h4>
+  <div class="confirmed-note">How this is confirmed: This is about the app staying fast and stable when many customers use it at the same time. It cannot be checked by clicking a single screen — it is confirmed by the technical team through load testing and by observing that the live app stays responsive during busy hours.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 6 — Products are organised into categories and subcategories <span class="ref-tag">Ref: Req #6</span></h4>
+  <ol>
+    <li>In the Admin Panel, open the <b>Categories</b> menu and check its three levels: <b>Header Categories</b>, <b>Main Categories</b>, and <b>Sub-Categories</b>.</li>
+    <li>Confirm each level lists categories that clearly nest under one another (e.g. a Header Category containing several Main Categories).</li>
+    <li>Now open the customer app and browse the home screen category bar — confirm you can drill from a broad category into narrower subcategories.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Both the Admin Panel and the customer app show a clear category → subcategory structure that products are organised under.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 7 — Sellers can join under a subscription plan or a commission plan <span class="ref-tag">Ref: Req #7</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Sellers → Subscriptions</b>.</li>
+    <li>Confirm you can see subscription plans configured for sellers (e.g. plan names, prices, limits).</li>
+    <li>Open <b>Fees &amp; Charges</b> and locate the "Free-Tier Product Limit" section, which describes commission-based sellers vs. subscription-tier sellers.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The platform clearly supports two business models for sellers — a subscription plan, and a commission-based (pay-per-sale) plan.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 8 — Orders move through a full set of stages <span class="ref-tag">Ref: Req #8</span></h4>
+  <ol>
+    <li>In the Admin Panel, open the <b>Orders</b> menu and look at its sub-items: <b>All Orders, New Orders, Being Prepared, On the Way, Delivered, Cancelled, Returned, Return Requests, Refund Ledger.</b></li>
+    <li>Place a test order as a customer and watch it move through these stages by checking the Admin Orders list periodically.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> An order visibly progresses through several real stages (placed → prepared → on the way → delivered), and cancelled/returned orders have their own dedicated views.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 9 — Prices are built up from several different charges <span class="ref-tag">Ref: Req #9</span></h4>
+  <ol>
+    <li>As a customer, add a product to your cart and proceed to checkout.</li>
+    <li>Look at the price summary/bill shown before payment.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The checkout bill shows more than just the product price — separate lines for things like delivery fee, handling/platform fee, and taxes, which can each change from order to order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 10 — You can search for products and discover stores <span class="ref-tag">Ref: Req #10</span></h4>
+  <ol>
+    <li>On the customer app home screen, tap the search bar and search for a product by name.</li>
+    <li>Separately, browse the "stores near you" or store-listing section of the app.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Searching returns matching products, and you can browse and open different nearby stores from a store-discovery section of the app.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 11 — Orders can be scheduled for a future time <span class="ref-tag">Ref: Req #11</span></h4>
+  <ol>
+    <li>As a customer, add items to your cart and go to checkout.</li>
+    <li>Look for a delivery scheduling option (e.g. choosing a future date/time slot instead of "as soon as possible").</li>
+    <li>Select a future slot and place the order.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> You can choose to schedule delivery for a later date/time instead of immediate delivery, and the order is placed successfully for that slot.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 12 — Refunds, returns, cancellations and replacements are supported <span class="ref-tag">Ref: Req #12</span></h4>
+  <ol>
+    <li>Open a delivered order in the customer app's Order Details screen.</li>
+    <li>Check for a "Return" or "Request Return/Replacement" option, and for a "Cancel Order" option on an order that hasn't been delivered yet.</li>
+    <li>In the Admin Panel, open <b>Orders → Return Requests</b> and <b>Orders → Refund Ledger</b> to confirm returns and refunds are tracked centrally.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Customers can cancel, return, or request a replacement from within their order, and the Admin Panel shows a matching return request and refund record.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 13 — Admin can configure how the platform behaves, without needing a developer <span class="ref-tag">Ref: Req #13</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Fees &amp; Charges</b> and <b>Settings</b>.</li>
+    <li>Change a simple value (for example, the "Free Delivery Minimum" amount) and save it.</li>
+    <li>Confirm the change is accepted with a success message.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Admin staff can change platform behaviour (fees, limits, charges, etc.) directly from these settings screens, with no code changes needed.</div>
+</div>
+
+<!-- ===================== SECTION 2: COMMISSION MANAGEMENT ===================== -->
+<h2 class="section-title">7. Commission Management System</h2>
+<p class="section-desc">These tests confirm how much commission Zinto takes on a sale, and that it can be set at different levels (city, category, product, and so on) with clear rules for which level wins.</p>
+
+<div class="flow">
+  <div class="flow-box">City Commission</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Header Category</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Main Category</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Sub-Category</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Product-level Override</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Variant-level Override (wins last)</div>
+</div>
+<p class="nav-hint">The box on the right always wins if it is switched on for that item — this is the order the system checks commission settings in, from broadest (city) to most specific (a single product variant).</p>
+
+<div class="test-card">
+  <h4>Test 14 — Commission can be set up and changed by admin, at multiple levels <span class="ref-tag">Ref: Req #96</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Categories → Header Categories</b> and edit a category. Find the "Apply commission at this level" checkbox and the "Admin Commission (%)" field.</li>
+    <li>Do the same on <b>Categories → Main Categories</b> and <b>Categories → Sub-Categories</b>.</li>
+    <li>Open <b>Products</b>, edit a product, and find the "Apply product commission" checkbox with a Commission Type (Percentage/Fixed) and value field.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Commission percentages/amounts can be turned on and edited at the category, subcategory, and product level, all from the Admin Panel, and the values save successfully.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 15 — Commission can be set per city <span class="ref-tag">Ref: Req #97</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>City Commissions</b> from the left menu.</li>
+    <li>Enter a city key (e.g. "indore") and city name, choose a Commission Type (Percentage or Fixed), enter a value, tick "Apply commission for this city", and click "Save City Commission".</li>
+    <li>Confirm the new city appears in the "Configured Cities" table below with the commission you entered.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> A commission rate can be saved against a specific city and shows up correctly in the city commission list.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 16 — Commission can be set per individual shop/seller <span class="ref-tag">Ref: Req #98</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Sellers → Active Sellers</b> and open a seller's profile/details page.</li>
+    <li>Look for any field on that seller's page letting you set a commission rate that applies only to that one shop.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> There should be a way to give one specific shop its own commission rate, separate from the category or city rate it would otherwise fall back to.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 17 — Commission can be set per category <span class="ref-tag">Ref: Req #99</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Categories → Header Categories</b>.</li>
+    <li>Edit any category, tick "Apply commission at this level", enter a value in "Admin Commission (%)", and save.</li>
+    <li>Confirm the category's row in the table now shows that commission percentage.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The category list shows the commission percentage you just set for that category.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 18 — Commission can be set per sub-category <span class="ref-tag">Ref: Req #100</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Categories → Sub-Categories</b>.</li>
+    <li>Edit a subcategory, tick "Apply commission at this level", enter a value, and save.</li>
+    <li>Note the on-screen hint: "Deepest level wins. If this is applied, it overrides Header and Level 2 commission."</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The subcategory's commission saves correctly and, when set, takes priority over its parent Main Category and Header Category commission.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 19 — Commission can be set per individual product <span class="ref-tag">Ref: Req #101</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Products</b>, and edit any product.</li>
+    <li>Tick "Apply product commission", choose a Commission Type, and enter a value.</li>
+    <li>Save and confirm the product's own commission is stored (check the on-screen note: "When enabled, this overrides category commission at checkout.").</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> A single product can be given its own commission rate that overrides whatever its category would normally apply.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 20 — Commission can be set per product variant <span class="ref-tag">Ref: Req #102</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Products</b> and edit a product that has variants (e.g. different sizes/weights).</li>
+    <li>Scroll to the variants list and look for a "Variant-specific commission" checkbox and percentage field next to an individual variant.</li>
+    <li>Turn it on, enter a value, and save.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> One specific variant of a product can have its own commission percentage that overrides both the product-level and category-level commission for that variant only.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 21 — Commission can be set per add-on product <span class="ref-tag">Ref: Req #103</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Products</b> and open/create a product marked as an add-on type product.</li>
+    <li>Check whether the same "Apply product commission" section (Commission Type + value) is available and works for this add-on item, the same way it does for a regular product.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> An add-on product can be given its own commission rate, separate from the main product it is attached to.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 22 — Commission can be set at the whole-shop level <span class="ref-tag">Ref: Req #104</span></h4>
+  <ol>
+    <li>In the Admin Panel, open a seller's profile under <b>Sellers → Active Sellers</b>.</li>
+    <li>Look for a single "shop-level commission" setting that would apply to every product from that shop, unless a more specific (product/category) commission overrides it.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> A shop-wide commission rate can be configured for one seller's entire store.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 23 — Multiple separate commission "layers" exist (user, shop, category, platform) <span class="ref-tag">Ref: Req #105</span></h4>
+  <ol>
+    <li>Review the commission fields you have already seen across <b>City Commissions</b>, <b>Categories</b>, <b>Products</b>, and any seller-level commission field.</li>
+    <li>Confirm each of these is a genuinely separate configurable component rather than one single global number.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Commission is not just one flat platform-wide number — it is made up of distinct, separately configurable pieces (by city, by category, by shop, by product) that combine to decide the final commission on a sale.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 24 — Sellers enter their own selling price for a product <span class="ref-tag">Ref: Req #106</span></h4>
+  <ol>
+    <li>Log in to the Seller Panel and open the screen for adding/editing a product.</li>
+    <li>Enter a price in the product's price field.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The seller can type in their own base selling price for a product — this is the amount the seller expects to receive.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 25 — The platform adds commission, GST, and packing charges on top of the seller's price <span class="ref-tag">Ref: Req #107</span></h4>
+  <ol>
+    <li>While adding a product in the Seller Panel, look at the live "customer will pay" price preview shown next to your entered price.</li>
+    <li>Confirm the customer-facing price is higher than the price you typed.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The price shown to the customer is automatically higher than the seller's entered price, because commission, GST, and packing charges have been added on top.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 26 — Cart/order-level extra charges exist (handling, platform, weather, odd-hours, delivery) <span class="ref-tag">Ref: Req #108</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Fees &amp; Charges</b> and review the sections: "Main Charges" (Platform/Handling Fee), "Apply Extra Charge (Customers Only)" (weather-style surcharge), "Odd-Hour Delivery Charge", "Weather Surcharge", and "Delivery Fee Settings".</li>
+    <li>As a customer, place an order and check the checkout bill for matching charge lines.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> All of these charges can be independently turned on/off and configured from the Admin Panel, and the ones that are enabled appear correctly on the customer's checkout bill.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 27 — Only admin can control commission, not sellers <span class="ref-tag">Ref: Req #109</span></h4>
+  <ol>
+    <li>Log in to the Seller Panel and open the "Add Product" screen.</li>
+    <li>Check that there is no field allowing the seller to set or change their own commission rate — only a price field and a read-only "customer will pay" preview.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Sellers can only set their product's selling price; they cannot see or edit commission rates — that control stays fully with the Admin Panel.</div>
+</div>
+
+<!-- ===================== SECTION 3: PRICING, CHARGES, FEE COMPONENTS & INVOICE ===================== -->
+<h2 class="section-title">8. Pricing, Charges, Fee Components &amp; Invoice System</h2>
+<p class="section-desc">These tests confirm the customer's final bill is broken down clearly, that admin can control each fee, and that proper GST invoices are available afterward.</p>
+
+<div class="test-card">
+  <h4>Test 28 — The order bill shows a full breakup of every charge <span class="ref-tag">Ref: Req #110</span></h4>
+  <ol>
+    <li>As a customer, place an order and open its Order Details screen afterward.</li>
+    <li>Scroll to the price/bill section and check for separate lines such as: product subtotal, Delivery Fee, Handling Fee, Packaging Charge, any active surcharge (weather/odd-hour/other), and GST (shown as CGST + SGST, or IGST for inter-state orders).</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The order bill clearly itemises product cost, handling fee, GST, delivery fee, any weather/odd-hour charges, packaging charge, and platform-related charges as separate lines rather than one lump total.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 29 — Product/category-level charges cover commission, GST, and packaging <span class="ref-tag">Ref: Req #111</span></h4>
+  <ol>
+    <li>In the Admin Panel, edit a category under <b>Categories → Header Categories</b> (or Main/Sub-Categories) and check it has fields for "Admin Commission (%)" and "GST Slab (%)".</li>
+    <li>Open <b>Products</b>, edit a product, and check it has its own "Packaging Charge (₹)" field that can override the category/store default.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Commission, GST, and packaging charge can each be configured at the product or category level, with a product-level value overriding the category default where set.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 30 — Cart/order-level charges cover handling, platform, delivery, weather and odd-hour fees <span class="ref-tag">Ref: Req #112</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Fees &amp; Charges</b> and confirm you can edit: Platform/Handling Fee, Delivery Fee Settings (fixed or distance-based), Odd-Hour Delivery Charge, and Weather Surcharge.</li>
+    <li>Save a change to one of them and confirm it takes effect at checkout on the customer app.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Each of these order-level charges is independently configurable by admin and correctly reflected on the customer's checkout bill.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 31 — Customers can get a proper GST invoice for their order <span class="ref-tag">Ref: Req #113</span></h4>
+  <ol>
+    <li>As a customer, open a delivered order's Order Details screen.</li>
+    <li>Tap the "Invoice" button (with a download icon) near the top of the order summary.</li>
+    <li>Confirm a "Tax Invoice" preview opens, and tap "Download Official PDF" (shown once the order is delivered).</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> A GST tax invoice is generated automatically for the order and can be viewed and downloaded as a PDF by the customer.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 32 — Sellers can get a GST invoice for their orders <span class="ref-tag">Ref: Req #114</span></h4>
+  <ol>
+    <li>Log in to the Seller Panel and open the <b>GST Invoices</b> screen.</li>
+    <li>Find a delivered order in the list and tap its "Invoice" action.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The seller can view and download a GST invoice for each of their delivered orders once it has been generated.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 33 — Charges are configurable from the Admin Panel <span class="ref-tag">Ref: Req #115</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Fees &amp; Charges</b>.</li>
+    <li>Change the amount in one of: "Charge Amount" under Odd-Hour Delivery Charge, "Charge Amount" under Weather Surcharge, "Base Delivery Charge", or "Platform/Handling Fee".</li>
+    <li>Click "Save Changes" at the top of the screen and confirm a success message appears.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Packaging, handling, delivery, weather-based, and odd-hour charges can all be changed directly from the Admin Panel without any code changes, and the new values are saved.</div>
+</div>
+
+<!-- ===================== SECTION 4: ORDER TIMING RULES ===================== -->
+<h2 class="section-title">9. Order Timing Rules &amp; Order Placement Restrictions</h2>
+<p class="section-desc">These tests confirm rules around what time of day orders can be placed, and how late-night ("odd-hour") deliveries are charged extra.</p>
+
+<div class="test-card">
+  <h4>Test 34 — No new orders can be placed after 10 PM <span class="ref-tag">Ref: Req #116</span></h4>
+  <ol>
+    <li>Open the customer app shortly after 10:00 PM (or ask someone to change the test device's clock to a time after 10:00 PM, if available).</li>
+    <li>Add a product to your cart and try to complete checkout by placing the order.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The app stops you from placing the order after 10:00 PM and shows a clear message explaining that ordering is closed for the day/until a certain time.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 35 — Odd-hour deliveries are supported and charged extra, controlled by admin <span class="ref-tag">Ref: Req #117</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Fees &amp; Charges</b> and find the "Odd-Hour Delivery Charge" section.</li>
+    <li>Turn the toggle on, set a "Charge Amount (₹)", set "Window Start" and "Window End" times (for example 22:00 to 06:00), and save.</li>
+    <li>As a customer, try placing an order while the current time falls inside that window and check the checkout bill.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Orders placed inside the configured odd-hour window automatically include the odd-hour surcharge on the bill, and admin can freely change the charge amount and time window.</div>
+</div>
+
+<!-- ===================== SECTION 5: PACKAGING CHARGES ===================== -->
+<h2 class="section-title">10. Packaging Charges &amp; Packaging Logic</h2>
+<p class="section-desc">These tests confirm packaging charges are not a single flat number, but can vary sensibly depending on the type of product.</p>
+
+<div class="test-card">
+  <h4>Test 36 — Packaging charges vary by category and how a product needs to be handled <span class="ref-tag">Ref: Req #118</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Categories → Header Categories</b> (or Main/Sub-Categories) and edit two different categories — for example, a fragile/perishable category and a simple packaged-goods category.</li>
+    <li>Give each category a different value in "Packing Fees (₹)".</li>
+    <li>Open <b>Products</b> and edit one product, setting a "Packaging Charge (₹)" that is different again from its category's default.</li>
+    <li>Place a test order containing products from these different categories and check the "Packaging Charge" line on the checkout bill.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The packaging charge on the bill changes depending on the product/category ordered, and a product's own packaging charge overrides its category's default when one is set.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 37 — The system has a proper place to store packaging categories and packaging charge rules <span class="ref-tag">Ref: Req #119</span></h4>
+  <ol>
+    <li>In the Admin Panel, open <b>Categories → Header Categories</b>, <b>Main Categories</b>, and <b>Sub-Categories</b> and confirm each one has its own "Packing Fees (₹)" field that saves independently.</li>
+    <li>Open <b>Products</b> and confirm each product also has its own optional "Packaging Charge (₹)" override field.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Packaging charges are properly organised by category level and by individual product, not hard-coded as one single number for the whole platform.</div>
+</div>
+
+<p class="footer-note">Zinto Platform — Manual Requirement Testing Guide · Part 5 of the requirement testing series</p>
+
+</body>
+</html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 7: Order Lifecycle, Scheduling &amp; Cancellations</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Order Lifecycle, Scheduling &amp; Cancellations</h1>
+  <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+  <div class="intro">
+    This document walks you through checking that every order — from the moment it is placed to the moment
+    it is delivered, cancelled or refunded — is tracked correctly and shown clearly to everyone involved
+    (the customer, the seller, and the admin team). It also covers scheduling a future delivery and every
+    way an order can be cancelled or partly cancelled. Use this by logging into the Zinto customer app,
+    seller app and admin panel with real test accounts and following each numbered test below.
+  </div>
+</div>
+
+<div class="howto">
+  <h3>How to use this guide</h3>
+  Each test below is numbered and belongs to a small reference tag (e.g. "Ref: Req #250") that matches our
+  internal checklist. Follow the numbered steps exactly as written, using the real screens and buttons named
+  in each step. Then compare what you see on your screen with the "✅ Expected Result" line — if it matches,
+  you can tick that test off as working. If it does not match, note down the test number and what you saw
+  instead, so it can be looked into.
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>24. Order Management – Complete Lifecycle</li>
+    <li>25.1 Order Management - Admin Responsibilities</li>
+    <li>26.1 Scheduled Orders</li>
+    <li>26.4 Advance Booking Window</li>
+    <li>26.5 Cart Validation for Future Products</li>
+    <li>26.6 Mixed Cart Scheduling Rule</li>
+    <li>26.7 Cart Page as Scheduling Page</li>
+    <li>27.1 User Direct Cancellation Rule</li>
+    <li>27.2 Post-Acceptance Cancellation Rule</li>
+    <li>27.3 Cancellation Request Flow</li>
+    <li>28.2 Partial Cancellation</li>
+    <li>28.3 Product Replacement Suggestion</li>
+    <li>28.4 Partial Fulfillment / Split Availability Handling</li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">24. Order Management – Complete Lifecycle</h2>
+<div class="section-desc">This section checks that a customer can always see exactly what stage their order is at, and that every stage of the journey — from placing the order to it being delivered or cancelled — shows up correctly on screen.</div>
+
+<div class="test-card">
+  <h4>Order status is always clear and up to date <span class="ref-tag">Ref: Req #249</span></h4>
+  <ol>
+    <li>Log in to the Zinto customer app.</li>
+    <li>Tap the "My Orders" menu.</li>
+    <li>Tap on any order in the list to open its order detail screen.</li>
+    <li>Look at the progress tracker shown at the top of the screen.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker clearly highlights the exact stage the order is currently at (for example "Order Packed" or "Out for Delivery"), and the wording is plain and easy to understand.</div>
+</div>
+
+<p>The full journey a normal order goes through looks like this (some steps are skipped automatically for self-pickup orders):</p>
+<div class="flow">
+  <div class="flow-box">Order Placed</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Order Received</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Order Accepted</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Order Packed</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Logistics Assigned</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Out for Delivery</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Delivered</div>
+</div>
+
+<div class="test-card">
+  <h4>"Order Placed" step shows right after checkout <span class="ref-tag">Ref: Req #250</span></h4>
+  <ol>
+    <li>As a customer, add any product to your cart and complete checkout.</li>
+    <li>Immediately go to "My Orders" and open this new order.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker shows "Order Placed" as the first completed step as soon as the order is submitted.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Order Received" step shows the order has reached the seller <span class="ref-tag">Ref: Req #251</span></h4>
+  <ol>
+    <li>Open the same order's detail screen a few moments after placing it.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker moves on to show "Order Received", confirming the order has reached the system/seller.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Order Accepted" step shows once the seller accepts <span class="ref-tag">Ref: Req #252</span></h4>
+  <ol>
+    <li>Log in to the seller app and open "Orders".</li>
+    <li>Find the same order under the "Pending" tab and tap "Accept order".</li>
+    <li>Go back to the customer app and re-open the order's detail screen.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker now shows "Order Accepted" as completed.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Order Packed" step shows once the seller finishes packing <span class="ref-tag">Ref: Req #253</span></h4>
+  <ol>
+    <li>In the seller app "Orders" screen, find the accepted order under the "Confirmed" tab.</li>
+    <li>Tap "Mark as Packed".</li>
+    <li>Go back to the customer app and check the order's tracker.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker shows "Order Packed" (or "Ready for Pickup" if this was a self-pickup order) as completed.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Logistics Assigned" step shows once a rider is assigned <span class="ref-tag">Ref: Req #254</span></h4>
+  <ol>
+    <li>Log in to the admin panel and open the delivery/logistics widget on the dashboard.</li>
+    <li>Assign a rider to the packed order.</li>
+    <li>Go back to the customer app and check the order's tracker.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker shows "Logistics Assigned" as completed. (For a self-pickup order, this step is not shown at all, which is correct.)</div>
+</div>
+
+<div class="test-card">
+  <h4>"Out for Delivery" step shows once the rider picks up the order <span class="ref-tag">Ref: Req #255</span></h4>
+  <ol>
+    <li>Log in to the delivery app as the assigned rider.</li>
+    <li>Mark the order as picked up / out for delivery.</li>
+    <li>Go back to the customer app and check the order's tracker.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker shows "Out for Delivery" as completed. (This step does not appear for self-pickup orders.)</div>
+</div>
+
+<div class="test-card">
+  <h4>"Delivered" step shows once the order reaches the customer <span class="ref-tag">Ref: Req #256</span></h4>
+  <ol>
+    <li>In the delivery app, mark the order as delivered.</li>
+    <li>Go back to the customer app and check the order's tracker.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker shows "Delivered" (or "Picked Up" for a self-pickup order) as the final completed step.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Cancelled" step shows clearly when an order is cancelled <span class="ref-tag">Ref: Req #257</span></h4>
+  <ol>
+    <li>Place a new test order and cancel it right away (see the cancellation tests later in this guide).</li>
+    <li>Open the cancelled order's detail screen.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker replaces the normal steps with "Order Cancelled", so there is no confusion about the order's state.</div>
+</div>
+
+<div class="test-card">
+  <h4>"Refund Initiated" message shows when money is returned <span class="ref-tag">Ref: Req #258</span></h4>
+  <ol>
+    <li>Cancel or have an admin cancel a prepaid/wallet-paid order.</li>
+    <li>Open that order's detail screen once the refund has been processed.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The screen shows a message such as "Refund Initiated — the amount has been credited to your wallet." This only applies when money was actually collected upfront.</div>
+</div>
+
+<div class="test-card">
+  <h4>Every status change is visible to the customer <span class="ref-tag">Ref: Req #259</span></h4>
+  <ol>
+    <li>Follow one order all the way from placing it to delivery, checking the order detail screen after each stage described above.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Every single stage change appears on the tracker — none of the steps are silently skipped or left unclear.</div>
+</div>
+
+<div class="test-card">
+  <h4>Orders can be tracked in real time, without refreshing <span class="ref-tag">Ref: Req #260</span></h4>
+  <ol>
+    <li>Keep the order detail screen open on your phone/browser.</li>
+    <li>While it stays open, have the seller or rider move the order to the next stage from their app.</li>
+    <li>Watch your screen without manually refreshing or reopening the page.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The tracker updates on its own to the new stage within a few seconds, with no need to refresh.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">25.1 Order Management - Admin Responsibilities</h2>
+<div class="section-desc">This section checks that the admin team has full visibility and control over every order placed on the platform.</div>
+
+<div class="test-card">
+  <h4>Every order shows up in the admin panel <span class="ref-tag">Ref: Req #261</span></h4>
+  <ol>
+    <li>Log in to the admin panel and open the "Orders" screen.</li>
+    <li>Place a brand-new test order as a customer.</li>
+    <li>Refresh the admin "Orders" list (leave it on "All Orders").</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The new order appears in the admin's order list, with its correct current status.</div>
+</div>
+
+<div class="test-card">
+  <h4>Admin can monitor and manage an order through its whole lifecycle <span class="ref-tag">Ref: Req #262</span></h4>
+  <ol>
+    <li>In the admin "Orders" screen, switch between the different status tabs/filters (e.g. Pending, Scheduled, Confirmed, Packed, Delivered, Cancelled).</li>
+    <li>Open a few different orders in each stage.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Admin can see and open orders at any stage of their journey, from just placed through to delivered or cancelled.</div>
+</div>
+
+<div class="test-card">
+  <h4>Admin can update and manage orders <span class="ref-tag">Ref: Req #263</span></h4>
+  <ol>
+    <li>Open any order's detail screen in the admin panel.</li>
+    <li>Look for the available admin actions on this screen (for example approving/rejecting a cancellation request, or assigning a rider).</li>
+    <li>Perform one such action.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The action is accepted and the order updates accordingly, confirming admin has genuine control over the order, not just a read-only view.</div>
+</div>
+
+<div class="test-card">
+  <h4>Admin assigns logistics after the seller finishes packing <span class="ref-tag">Ref: Req #264</span></h4>
+  <ol>
+    <li>Have a seller mark an order as "Mark as Packed" in the seller app.</li>
+    <li>In the admin panel, open the delivery/logistics dashboard widget.</li>
+    <li>Find that packed order (for orders using platform delivery, not self-pickup) and assign an available rider to it.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The rider is successfully assigned, the order's stage becomes "Logistics Assigned", and the rider receives the delivery in their app.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.1 Scheduled Orders</h2>
+<div class="section-desc">This section checks that customers can choose to have an order delivered on a future date instead of immediately.</div>
+
+<div class="test-card">
+  <h4>Customer can schedule an order for a future date and time <span class="ref-tag">Ref: Req #273</span></h4>
+  <ol>
+    <li>Add a product to your cart.</li>
+    <li>Go to the cart/checkout screen and look for the delivery date and time picker.</li>
+    <li>Choose a date and time slot in the future instead of "as soon as possible".</li>
+    <li>Complete checkout.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The order is placed successfully showing the chosen future date/time, and it appears under the "Scheduled" tab in the seller app's order list.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.4 Advance Booking Window</h2>
+<div class="section-desc">This section checks how far in advance a customer is allowed to book a future delivery.</div>
+
+<div class="test-card">
+  <h4>Check how far ahead a customer can book a future order <span class="ref-tag">Ref: Req #280</span></h4>
+  <ol>
+    <li>Add a future-order (pre-order/scheduled) product to your cart.</li>
+    <li>Open the delivery date picker on the cart/checkout screen.</li>
+    <li>Scroll through the available dates to see the furthest date that can be selected.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The app should let you book up to about a month ahead. Simply check what date range the app currently offers you — if the furthest available date looks much shorter than a month (for example, only about a week ahead), please flag this to the team so they can confirm the exact number of days that should be configured.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.5 Cart Validation for Future Products</h2>
+<div class="section-desc">This section checks that the app recognises when a future-dated product is added to the cart.</div>
+
+<div class="test-card">
+  <h4>Adding a future-order product is recognised by the cart <span class="ref-tag">Ref: Req #281</span></h4>
+  <ol>
+    <li>Browse the catalogue and find a product marked for future/scheduled delivery.</li>
+    <li>Add it to your cart.</li>
+    <li>Open the cart screen.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The cart recognises that a future-dated product is present and switches into its scheduling behaviour (see the next section). If nothing changes on the cart screen at all, please flag this to the team to confirm the intended behaviour.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.6 Mixed Cart Scheduling Rule</h2>
+<div class="section-desc">This section checks what happens when a cart contains both a regular (immediate) product and a future-dated product together.</div>
+
+<div class="test-card">
+  <h4>Mixing a regular product with a future-order product in the same cart <span class="ref-tag">Ref: Req #282</span></h4>
+  <ol>
+    <li>Add a normal, immediately available product to your cart.</li>
+    <li>Also add a future-order (scheduled) product to the same cart.</li>
+    <li>Open the cart screen and check the delivery date/time shown for the whole order.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The entire order should be treated as a scheduled delivery for the future date, rather than being split or delivered immediately. If instead the app blocks you from mixing the two, or splits them into separate deliveries, that is also worth noting — please confirm with the team which behaviour is intended.</div>
+</div>
+
+<div class="test-card">
+  <h4>All items in a mixed cart are delivered together on the scheduled date <span class="ref-tag">Ref: Req #283</span></h4>
+  <ol>
+    <li>Using the same mixed cart from the previous test, complete checkout.</li>
+    <li>Open the placed order's detail screen and check the delivery date shown for every item in the order.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Every product in the order — both the regular one and the future-order one — shows the same future delivery date/window.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.7 Cart Page as Scheduling Page</h2>
+<div class="section-desc">This section checks that the cart page turns into a date-scheduling screen whenever a future-order product is present.</div>
+
+<div class="test-card">
+  <h4>Cart page shows a scheduling section for future-order products <span class="ref-tag">Ref: Req #284</span></h4>
+  <ol>
+    <li>Add a future-order product to your cart.</li>
+    <li>Open the cart screen.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The cart page shows a delivery date/time picker section, letting you choose when this order should arrive, instead of the usual "deliver now" view.</div>
+</div>
+
+<div class="test-card">
+  <h4>Only valid, available future dates are shown <span class="ref-tag">Ref: Req #285</span></h4>
+  <ol>
+    <li>With a future-order product still in your cart, open the date picker on the cart screen.</li>
+    <li>Look through the dates that can be selected.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Only dates on which this product can actually be delivered are shown as selectable — past dates or unavailable dates are not offered.</div>
+</div>
+
+<div class="test-card">
+  <h4>Only the seller's configured dates can be chosen <span class="ref-tag">Ref: Req #286</span></h4>
+  <ol>
+    <li>Open the date picker on the cart screen for a future-order product.</li>
+    <li>Try tapping on a date that was not specifically set up by the seller for this product (if any such date appears at all).</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> You can only pick from the exact dates the seller configured for this product — any other date is either not shown or cannot be selected.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">27.1 User Direct Cancellation Rule</h2>
+<div class="section-desc">This section checks that a customer can cancel an order themselves, instantly, as long as the seller has not yet accepted it.</div>
+
+<div class="test-card">
+  <h4>Customer can instantly cancel before the seller accepts <span class="ref-tag">Ref: Req #287</span></h4>
+  <ol>
+    <li>Place a new test order and do not let the seller accept it yet.</li>
+    <li>In the customer app, open the order's detail screen.</li>
+    <li>Open the "Order actions" panel and tap the cancel option.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The order is cancelled immediately, with no need for anyone else's approval, and the tracker shows "Order Cancelled".</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">27.2 Post-Acceptance Cancellation Rule</h2>
+<div class="section-desc">This section checks that once a seller has accepted an order, the customer can no longer cancel it directly by themselves.</div>
+
+<div class="test-card">
+  <h4>Direct cancel option disappears once the seller accepts <span class="ref-tag">Ref: Req #288</span></h4>
+  <ol>
+    <li>Place a new test order.</li>
+    <li>In the seller app, tap "Accept order" for it.</li>
+    <li>Back in the customer app, open the order's detail screen and check the "Order actions" panel.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> There is no instant "cancel order" option any more — instead, only a request-based option is offered (covered in the next section).</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">27.3 Cancellation Request Flow</h2>
+<div class="section-desc">This section checks that once an order has been accepted (but a rider has not yet been assigned), the customer can only ask to cancel, and only an admin can approve it.</div>
+
+<div class="flow">
+  <div class="flow-box">Customer opens "Order actions"</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Raises cancellation request</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Admin reviews in Order Detail screen</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Admin taps Approve or Reject</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Order cancelled (if approved)</div>
+</div>
+
+<div class="test-card">
+  <h4>Customer can raise a cancellation request after acceptance <span class="ref-tag">Ref: Req #289</span></h4>
+  <ol>
+    <li>Using an order that the seller has already accepted (and packed, if needed) but for which no rider has been assigned yet, open the order's detail screen as the customer.</li>
+    <li>Open the "Order actions" panel and choose the cancellation option.</li>
+    <li>Enter a reason if asked, and submit.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The customer sees confirmation that a cancellation request has been sent for admin review, rather than the order cancelling right away. (Note: once a rider has been assigned, or the order is already delivered/cancelled/disputed, no self-serve cancel option is shown at all.)</div>
+</div>
+
+<div class="test-card">
+  <h4>Only admin can approve and finalise the cancellation <span class="ref-tag">Ref: Req #290</span></h4>
+  <ol>
+    <li>Log in to the admin panel and open that same order's detail screen.</li>
+    <li>Look for the cancellation request details shown on the page (status "Pending Admin Action", who requested it, their reason, and when).</li>
+    <li>Tap "Approve" to confirm the cancellation (or "Reject" to keep the order active).</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Only after the admin taps "Approve" does the order actually move to "Order Cancelled". Tapping "Reject" keeps the order running normally, and the customer cannot force the cancellation through themselves at any point in this flow.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">28.2 Partial Cancellation</h2>
+<div class="section-desc">This section checks that when only some items in an order are unavailable, just those items can be cancelled while the rest of the order carries on.</div>
+
+<div class="test-card">
+  <h4>Seller can cancel just the unavailable items, not the whole order <span class="ref-tag">Ref: Req #294</span></h4>
+  <ol>
+    <li>In the seller app, open an order that has more than one item in it.</li>
+    <li>Tap "Item Unavailable".</li>
+    <li>In the item editor that opens, select the specific item(s) that are out of stock.</li>
+    <li>Tap "Cancel {n} Item(s)" to confirm.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> Only the selected item(s) are removed/cancelled from the order. The remaining items stay on the order and continue through packing and delivery as normal.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">28.3 Product Replacement Suggestion</h2>
+<div class="section-desc">This section checks that when a product is unavailable, the seller can suggest a replacement instead of simply cancelling it, and the customer decides whether to accept it.</div>
+
+<div class="test-card">
+  <h4>Seller can suggest a replacement for an unavailable product <span class="ref-tag">Ref: Req #295</span></h4>
+  <ol>
+    <li>In the seller app, open an order containing the unavailable product.</li>
+    <li>Tap "Replacement" next to that item.</li>
+    <li>In the "Request Replacement" screen, fill in the replacement product and a reason.</li>
+    <li>Tap "SEND REQUEST".</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The replacement suggestion is sent successfully and appears on the customer's order for their decision.</div>
+</div>
+
+<div class="test-card">
+  <h4>Replacement is offered at the same price where possible <span class="ref-tag">Ref: Req #296</span></h4>
+  <ol>
+    <li>While filling in the "Request Replacement" form as the seller, check the "Replacement price" field.</li>
+    <li>Set it to match the original item's price (unless there is a genuine reason it must differ).</li>
+    <li>Submit the request and check what price is shown to the customer.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The customer sees the replacement offered at the same price as the original item, so they are not unexpectedly charged more.</div>
+</div>
+
+<div class="test-card">
+  <h4>Customer can accept or reject the replacement <span class="ref-tag">Ref: Req #297</span></h4>
+  <ol>
+    <li>As the customer, open the order's detail screen after a replacement has been suggested.</li>
+    <li>Open the "Order actions" panel where the replacement offer is shown.</li>
+    <li>Try both outcomes on two separate test orders: accept the replacement on one, and reject it on the other.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> When accepted, the order updates to include the replacement product. When rejected, the original item is removed/refunded instead, and the order is not forced to include a product the customer did not want.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">28.4 Partial Fulfillment / Split Availability Handling</h2>
+<div class="section-desc">This section checks the full set of options available when only part of an order can be fulfilled: cancelling and refunding what cannot be delivered, still delivering what can, keeping the customer informed, and offering a replacement.</div>
+
+<div class="flow">
+  <div class="flow-box warn">Seller finds item(s) unavailable</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Cancel unavailable item(s) + refund</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Available items still packed &amp; delivered</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Customer sees updated order &amp; refund</div>
+</div>
+
+<div class="test-card">
+  <h4>Unavailable items are cancelled and refunded <span class="ref-tag">Ref: Req #298</span></h4>
+  <ol>
+    <li>In the seller app, mark one item in a multi-item order as unavailable using "Item Unavailable" and confirm the cancellation.</li>
+    <li>As the customer, open the order's payment/summary details.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The cancelled item's amount is refunded (shown as "Refund Initiated" and credited to the wallet, or the equivalent for the original payment method), and the order total updates to reflect only the remaining items.</div>
+</div>
+
+<div class="test-card">
+  <h4>Remaining available items are still delivered <span class="ref-tag">Ref: Req #299</span></h4>
+  <ol>
+    <li>Using the same order from the previous test, continue the process for the remaining items: seller packs them, admin assigns a rider, rider delivers them.</li>
+    <li>Check the order's tracker as the customer throughout.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The remaining items continue normally through "Order Packed" → "Out for Delivery" → "Delivered", without being blocked by the cancelled item.</div>
+</div>
+
+<div class="test-card">
+  <h4>Customer is given an updated timeline for what could not be delivered <span class="ref-tag">Ref: Req #300</span></h4>
+  <ol>
+    <li>After an item has been marked unavailable and cancelled, open the order detail screen as the customer.</li>
+    <li>Look for any note about the removed item or an updated delivery estimate.</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The customer can clearly see that item was cancelled and is told what to expect next (for example, refund timing). If no such message currently appears anywhere on the order screen, please flag this to the team.</div>
+</div>
+
+<div class="test-card">
+  <h4>Replacement is offered as an alternative, with the customer's confirmation required <span class="ref-tag">Ref: Req #301</span></h4>
+  <ol>
+    <li>Instead of cancelling the unavailable item outright, have the seller use the "Replacement" button and "Request Replacement" form to suggest an alternative product.</li>
+    <li>As the customer, open the "Order actions" panel and respond to the replacement offer (accept or reject).</li>
+  </ol>
+  <div class="expected"><b>✅ Expected Result:</b> The replacement is only added to the order after the customer actively confirms it — it is never swapped in automatically without their say-so.</div>
+</div>
+
+<div class="footer-note">Zinto Platform — Manual Requirement Testing Guide — Order Lifecycle, Scheduling &amp; Cancellations</div>
+
+</body>
+</html>

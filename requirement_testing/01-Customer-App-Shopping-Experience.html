@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 1: Customer App (Shopping Experience)</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .howto ul { margin: 6px 0 0; padding-left: 20px; }
+  .howto li { margin-bottom: 4px; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+  <!-- ===================== COVER ===================== -->
+  <div class="cover">
+    <h1>Zinto Manual Testing Guide — Part 1: Customer App (Shopping Experience)</h1>
+    <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+    <p class="intro">
+      This document is a simple, step-by-step checklist for confirming that the Zinto customer app works the way it should.
+      It is written for anyone to use — no technical knowledge is needed. Log in as a customer on the Zinto app (on your
+      phone or computer browser) and go through each numbered test below, one at a time, doing exactly what it says and
+      checking whether you see the "Expected Result" described.
+    </p>
+  </div>
+
+  <!-- ===================== HOW TO USE ===================== -->
+  <div class="howto">
+    <h3>How to use this guide</h3>
+    <ul>
+      <li>Every test has a <b>number</b> and a short title telling you what it checks.</li>
+      <li>Follow the <b>numbered steps</b> exactly, in order, on the real Zinto customer app.</li>
+      <li>After finishing the steps, compare what you saw with the <b>✅ Expected Result</b> box.</li>
+      <li>If what you see matches the Expected Result, tick that test off as working. If it does not match, make a note of what happened instead.</li>
+      <li>A few tests are not something you can tap through yourself — for those you'll see a one-line note titled "How this is confirmed" instead of steps.</li>
+      <li>Some tests involve several screens or people (for example, an order moving from you, to the seller, to the delivery partner). For those, a simple picture with boxes and arrows is shown first so you can see the whole journey before testing it.</li>
+    </ul>
+  </div>
+
+  <!-- ===================== TABLE OF CONTENTS ===================== -->
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>4.1 Customer Panel / Customer App</li>
+      <li>17.1 Store / Shop Section in Customer App</li>
+      <li>17.2 Shop Module Details</li>
+      <li>17.3 Store Model Requirements</li>
+      <li>19. Advertisement &amp; Promotional Visibility Module</li>
+      <li>20. Terms &amp; Conditions / Consent Requirements</li>
+      <li>21.1 Login / Signup Page</li>
+      <li>21.2 Home Page</li>
+      <li>21.3 Search Features</li>
+      <li>21.4 Attractive Store Section</li>
+      <li>21.5 Client UI Expectations</li>
+      <li>33.1 Feedback &amp; Rating</li>
+      <li>33.2 Reorder</li>
+      <li>33.3 Favourite Seller</li>
+      <li>33.4 Previous Orders</li>
+    </ol>
+  </div>
+
+  <!-- ===================== 4.1 CUSTOMER PANEL / CUSTOMER APP ===================== -->
+  <h2 class="section-title">4.1 Customer Panel / Customer App</h2>
+  <p class="section-desc">This section covers the core shopping journey a customer goes through — from creating an account to placing, tracking, and reviewing an order.</p>
+
+  <div class="test-card">
+    <h4>Create an account or log in <span class="ref-tag">(Ref: Req #37)</span></h4>
+    <ol>
+      <li>Open the Zinto customer app and go to the login screen.</li>
+      <li>Enter your mobile number and tap "Continue" (or "Send OTP").</li>
+      <li>Enter the 4-digit OTP code you receive and tap to verify.</li>
+      <li>If you are a new user, fill in your name and tap the checkbox agreeing to the Terms &amp; Conditions and Privacy Policy, then finish signing up.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You are logged into your Zinto account and land on the Home screen with your name/profile visible.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Browse products and stores <span class="ref-tag">(Ref: Req #38)</span></h4>
+    <ol>
+      <li>From the Home screen, scroll through the product categories and featured products.</li>
+      <li>Tap the "Stores" section (or a category tile) to see a list of nearby stores.</li>
+      <li>Tap on any store card to open that store's page and view its products.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Products and stores load with images, names, and prices, and you can move between Home, category pages, and individual store pages smoothly.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search for products and sellers <span class="ref-tag">(Ref: Req #39)</span></h4>
+    <ol>
+      <li>Tap the search bar at the top of the Home screen.</li>
+      <li>Type the name of a product (e.g. "milk") and watch the results appear.</li>
+      <li>Clear the search and type the name of a store instead.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Matching products or stores appear in the results list as you type, and tapping a result opens that product or store.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Add products to the cart <span class="ref-tag">(Ref: Req #40)</span></h4>
+    <ol>
+      <li>Open any product from the Home screen or a store page.</li>
+      <li>Tap the "Add" button (or the + icon) on the product.</li>
+      <li>Tap the cart icon to open your Cart page and confirm the item is listed there.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The item appears in your Cart with the correct name, price, and quantity, and the quantity can be increased or decreased from the Cart page.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Place an order <span class="ref-tag">(Ref: Req #41)</span></h4>
+    <ol>
+      <li>With at least one item in your Cart, tap "Proceed to Checkout" (or similar) from the Cart page.</li>
+      <li>Confirm or select your delivery address.</li>
+      <li>Choose a payment method (e.g. Cash on Delivery, online payment, or Wallet).</li>
+      <li>Tick the checkbox confirming you agree to the Return &amp; Exchange Policy.</li>
+      <li>Tap the final "Place Order" / "Pay" button (slide-to-pay on larger screens).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You see an order confirmation screen, and the new order appears in "My Orders" with a status such as "Placed" or "Order Confirmed".</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Schedule an order for a future time <span class="ref-tag">(Ref: Req #42)</span></h4>
+    <ol>
+      <li>Go to the Checkout page as if placing a normal order.</li>
+      <li>Look for the delivery timing option (a "Schedule" option that opens a date/time sheet).</li>
+      <li>Pick a future date and time slot, then tap "Done".</li>
+      <li>Complete the rest of checkout and place the order as usual.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The order is placed with the future date/time you chose clearly shown, instead of being delivered immediately.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Track your order status in real time <span class="ref-tag">(Ref: Req #43)</span></h4>
+    <ol>
+      <li>Go to "My Orders" and open any active (not yet delivered) order.</li>
+      <li>Watch the order status area on the Order Details screen.</li>
+      <li>Keep the screen open while the seller/delivery partner updates the order (e.g. from "Packed" to "Out for Delivery") and confirm the screen updates without you refreshing manually.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The order status updates automatically as it changes — e.g. Placed → Accepted → Packed → Out for Delivery → Delivered — and, where available, you can see the delivery partner's live location on a map.</div>
+  </div>
+
+  <div class="flow">
+    <div class="flow-box">Order placed</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Seller accepts</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Customer cancels or requests cancellation</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Direct cancel (before acceptance) OR Admin approval (after acceptance, before rider assigned)</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Order cancelled</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Cancel an order while it is still allowed <span class="ref-tag">(Ref: Req #44)</span></h4>
+    <ol>
+      <li>Place a new order and immediately go to "My Orders" and open it.</li>
+      <li>While the order is still waiting for the seller to accept it, tap "Cancel Order".</li>
+      <li>Confirm the cancellation when asked.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Because the seller had not yet accepted the order, it is cancelled immediately and its status changes to "Cancelled". A refund (if any amount was paid) is processed to your wallet or original payment method.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Raise a cancellation request on an order already accepted <span class="ref-tag">(Ref: Req #45)</span></h4>
+    <ol>
+      <li>Open an order that the seller has already accepted (but no delivery partner has been assigned yet) from "My Orders".</li>
+      <li>Tap "Cancel Order".</li>
+      <li>Read the message explaining this will now be sent to the admin for approval, and confirm.</li>
+      <li>Check the Order Details screen for a "Cancellation request is under admin review" note.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Instead of cancelling instantly, you see a message that your request has been sent to admin for approval, and the order screen shows the request as "pending" until admin decides.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Request a refund or raise a complaint within the allowed period <span class="ref-tag">(Ref: Req #46)</span></h4>
+    <ol>
+      <li>Open a delivered order from "My Orders".</li>
+      <li>Look for the "Return & Refund" section on the Order Details screen (it shows a countdown of how much time is left to request one).</li>
+      <li>Alternatively, tap the "Help" button on the order and choose "Items missing or incorrect" or "Item quality issue".</li>
+      <li>Fill in the reason and submit your return/refund request.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Your request is submitted and the order shows a return/refund status (e.g. "Requested" / "Under review"), and once approved, a "Refund Successful" message shows the amount credited to your wallet or cash.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Accept or reject a replacement suggested by the seller <span class="ref-tag">(Ref: Req #47)</span></h4>
+    <ol>
+      <li>When a seller has run out of an item and proposes a replacement, open the affected order from "My Orders" — you will see a "Replacement approval required" card.</li>
+      <li>Review the suggested alternative item(s) shown.</li>
+      <li>Tap "Approve" to accept the replacement, or "Reject replacement" to decline it.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> If approved, the order updates with the new item and price. If rejected, the seller is notified and the original item is not swapped, with the order price unaffected.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Reorder a previous order <span class="ref-tag">(Ref: Req #48)</span></h4>
+    <ol>
+      <li>Go to "My Orders" and find any order marked "Delivered".</li>
+      <li>Tap the "Buy Again" button on that order (available from the orders list or the Order Details screen).</li>
+      <li>Go to your Cart and check the items.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The same items from that past order are added to your Cart, ready for you to check out again.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Rate and give feedback on a delivered order <span class="ref-tag">(Ref: Req #49)</span></h4>
+    <ol>
+      <li>Open a "Delivered" order from "My Orders".</li>
+      <li>Scroll to the "Rate your order" section listing the items you bought.</li>
+      <li>Tap the star rating for an item, optionally type a short comment, and submit.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A confirmation such as "Thanks for rating [item]!" appears, and your rating is saved against that product as a verified purchase.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Add a seller/store to favourites <span class="ref-tag">(Ref: Req #50)</span></h4>
+    <ol>
+      <li>Open any store's page (tap a store card from Home or Stores).</li>
+      <li>Tap the "Favorite" button (heart icon) near the store name.</li>
+      <li>Go to your Favourites/Favourite Stores screen from the profile menu to confirm.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The heart button changes to "Unlike" and shows the store as favourited, and the store now appears in your Favourite Stores list.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>View your previous orders <span class="ref-tag">(Ref: Req #51)</span></h4>
+    <ol>
+      <li>Open the menu/profile and tap "My Orders" (or "Orders").</li>
+      <li>Scroll through the list of past and current orders.</li>
+      <li>Tap any order to view its full details.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All your past orders are listed with date, store, item count, total amount, and status, and each one opens to show full details.</div>
+  </div>
+
+  <!-- ===================== 17.1 STORE / SHOP SECTION ===================== -->
+  <h2 class="section-title">17.1 Store / Shop Section in Customer App</h2>
+  <p class="section-desc">This section covers how store cards are shown to customers when browsing stores — logos, banners, ratings, and delivery time estimates.</p>
+
+  <div class="test-card">
+    <h4>Premium-looking store cards <span class="ref-tag">(Ref: Req #172)</span></h4>
+    <ol>
+      <li>Open the "Stores" section from the Home screen or bottom navigation.</li>
+      <li>Look at how each store is presented in the list — its card design, spacing, and images.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Store cards look polished and modern, with a clear image, name, rating, and delivery time — not a plain text list.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Store logo shown on the store card <span class="ref-tag">(Ref: Req #173)</span></h4>
+    <ol>
+      <li>On the "Stores" listing screen, look at the small image/icon on each store card.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Each store's own logo image is shown on its card (falling back to a neutral placeholder only if the seller has not uploaded a logo).</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Store banners <span class="ref-tag">(Ref: Req #174)</span></h4>
+    <ol>
+      <li>Open an individual store's page by tapping its card.</li>
+      <li>Look at the large banner image at the top of the store page (it may rotate automatically if the store has more than one banner).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The store's banner image(s) appear at the top of its store page. (Note: this banner currently appears on the store's own page, not on the smaller store card in the Stores list.)</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Ratings display on store cards <span class="ref-tag">(Ref: Req #175)</span></h4>
+    <ol>
+      <li>On the "Stores" listing screen, check each card for a star/number rating.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A rating out of 5 (e.g. "4.5/5") is shown on each store card that has received ratings.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Delivery time estimate display <span class="ref-tag">(Ref: Req #176)</span></h4>
+    <ol>
+      <li>On the "Stores" listing screen, check each card for an estimated delivery time (e.g. "10-15 mins").</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A delivery time estimate is visible on every store card.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Modern animations and gradient styling <span class="ref-tag">(Ref: Req #177)</span></h4>
+    <ol>
+      <li>Browse the Stores list and an individual store page, paying attention to colours, transitions, and loading effects (e.g. banners fading in, buttons highlighting on tap).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The store browsing screens use smooth colour gradients and subtle animation effects rather than a flat, static look.</div>
+  </div>
+
+  <!-- ===================== 17.2 SHOP MODULE DETAILS ===================== -->
+  <h2 class="section-title">17.2 Shop Module Details</h2>
+  <p class="section-desc">This section covers the richer content shown on an individual store's own page — video, banners, and its story.</p>
+
+  <div class="test-card">
+    <h4>Video banner on the shop page <span class="ref-tag">(Ref: Req #178)</span></h4>
+    <ol>
+      <li>Open a store's page that you know has added a promotional video (look for a "Store Spotlight" section).</li>
+      <li>Check whether the video plays inline on the page.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> If the seller has added a video, a "Store Spotlight" video player appears on their store page and plays correctly.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Shop page banner / YouTube video display <span class="ref-tag">(Ref: Req #179)</span></h4>
+    <ol>
+      <li>Open a store page and scroll through the top section.</li>
+      <li>Check for a "Sponsored" advertisement image and, separately, for an embedded YouTube video (via the "Store Spotlight" section if the seller has linked a YouTube video).</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Sponsored advertisement banners appear where relevant, and a YouTube video plays correctly if the store has one linked. (Note: a general decorative "shop banner" image separate from the advertisement banner is not yet available — only the top rotating store banner and the video spotlight exist today.)</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Signature products section on the shop page <span class="ref-tag">(Ref: Req #180)</span></h4>
+    <ol>
+      <li>Open a store's page that has marked some products as "signature" items.</li>
+      <li>Scroll down to look for a "Signature Products" section with a star icon.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Signature Products" section appears showing the store's highlighted/best products in a distinct styled block.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>"About My Shop" section <span class="ref-tag">(Ref: Req #181)</span></h4>
+    <ol>
+      <li>Open any store's page.</li>
+      <li>Scroll to the "About My Shop" heading.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A section titled "About My Shop" is visible, showing the store's own description written by the seller.</div>
+  </div>
+
+  <!-- ===================== 17.3 STORE MODEL REQUIREMENTS ===================== -->
+  <h2 class="section-title">17.3 Store Model Requirements</h2>
+  <p class="section-desc">This section covers the underlying store information — details, ratings, hours, and delivery coverage — and how quickly stores are expected to deliver.</p>
+
+  <div class="test-card">
+    <h4>Store details, ratings, operating hours, and delivery radius are all tracked <span class="ref-tag">(Ref: Req #182)</span></h4>
+    <ol>
+      <li>Open a store page and look for its shop name, description, rating, and any shown operating hours.</li>
+      <li>Try viewing the same store while set to a delivery address that is far away, and again from an address close to the store, to see whether availability changes based on distance.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The store page shows complete store information (name, description, rating), and stores that are outside your delivery area do not appear as deliverable to you, confirming a delivery radius is being applied.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Delivery target of 12-15 minutes <span class="ref-tag">(Ref: Req #183)</span></h4>
+    <p class="confirmed-note">How this is confirmed: This is a target service speed, not a single on-screen switch. Check it by placing a few real test orders from nearby stores and comparing the time estimate shown at checkout (and the actual delivery time) against the 12-15 minute goal — this should be reviewed with the Zinto team as a performance target rather than a single pass/fail click-test, since the final delivery-time promise has not yet been locked in.</p>
+  </div>
+
+  <!-- ===================== 19. ADVERTISEMENT & PROMOTIONAL VISIBILITY ===================== -->
+  <h2 class="section-title">19. Advertisement &amp; Promotional Visibility Module</h2>
+  <p class="section-desc">This section covers the different types of banners and ads a customer sees while browsing.</p>
+
+  <div class="test-card">
+    <h4>Banners on the homepage <span class="ref-tag">(Ref: Req #191)</span></h4>
+    <ol>
+      <li>Open the Home screen.</li>
+      <li>Look at the large rotating banner carousel near the top.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> One or more promotional banner images are shown at the top of the Home screen and rotate automatically.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Banners inside promotional sections <span class="ref-tag">(Ref: Req #192)</span></h4>
+    <ol>
+      <li>Scroll further down the Home screen past the top banner, through the category/offer sections.</li>
+      <li>Look for additional banner images placed between product sections.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Additional promotional banners appear within the page as you scroll, not only at the very top.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Banners for store/shop visibility <span class="ref-tag">(Ref: Req #193)</span></h4>
+    <ol>
+      <li>Browse Home and the Stores list, watching for any banner specifically promoting a particular store.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Banners that promote a specific store are visible to customers browsing the app.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Banners that redirect somewhere when tapped <span class="ref-tag">(Ref: Req #194)</span></h4>
+    <ol>
+      <li>Tap any promotional banner on the Home screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Tapping the banner takes you to the relevant destination — a product, a store, an offers page, or an external link, depending on how that banner was set up.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Super Ad / premium advertisement placement <span class="ref-tag">(Ref: Req #195)</span></h4>
+    <ol>
+      <li>Scroll through the Home screen looking for a strip of images labelled "Sponsored" in a small tag on the image.</li>
+      <li>Tap one of these "Sponsored" items.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Sponsored" advertisement strip is visible among the regular sections, and tapping an ad takes you to the seller's page or product it points to.</div>
+  </div>
+
+  <!-- ===================== 20. TERMS & CONDITIONS ===================== -->
+  <h2 class="section-title">20. Terms &amp; Conditions / Consent Requirements</h2>
+  <p class="section-desc">This section covers where customers are asked to agree to the platform's rules.</p>
+
+  <div class="test-card">
+    <h4>Mandatory Terms &amp; Conditions acceptance when signing up <span class="ref-tag">(Ref: Req #196)</span></h4>
+    <ol>
+      <li>Go to the login screen and choose to sign up as a new customer.</li>
+      <li>Fill in your details and try tapping "Continue" without ticking the Terms &amp; Conditions checkbox.</li>
+      <li>Then tick the checkbox and try again.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You cannot complete sign-up until you tick the box agreeing to the Terms &amp; Conditions and Privacy Policy; a message reminds you to agree if you try to skip it.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Mandatory Terms &amp; Conditions acceptance at checkout <span class="ref-tag">(Ref: Req #197)</span></h4>
+    <ol>
+      <li>Add an item to your cart and go to Checkout.</li>
+      <li>Try to place the order without ticking the "I agree to the Return & Exchange Policy" checkbox.</li>
+      <li>Then tick the checkbox and place the order.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The order cannot be placed until the policy checkbox is ticked; once ticked, the order goes through normally.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>"Accept & Agree" checkbox required everywhere consent is needed <span class="ref-tag">(Ref: Req #198)</span></h4>
+    <ol>
+      <li>Repeat the sign-up test (Req #196) and the checkout test (Req #197) above.</li>
+      <li>Check whether any other screen in the app asks you to agree to a policy (for example, when adding a payment method) and confirm a checkbox is present there too.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Every place in the app that requires you to accept a policy shows a clear checkbox that must be ticked before you can continue.</div>
+  </div>
+
+  <!-- ===================== 21.1 LOGIN / SIGNUP PAGE ===================== -->
+  <h2 class="section-title">21.1 Login / Signup Page</h2>
+  <p class="section-desc">This section covers the look, feel, and methods available for signing in.</p>
+
+  <div class="test-card">
+    <h4>Modern authentication screen design <span class="ref-tag">(Ref: Req #199)</span></h4>
+    <ol>
+      <li>Open the Zinto app while logged out and view the login/sign-up screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The login screen has a clean, modern design with clear category imagery, smooth transitions between login and sign-up, and easy-to-read fields.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>OTP verification during login <span class="ref-tag">(Ref: Req #200)</span></h4>
+    <ol>
+      <li>On the login screen, enter your mobile number and tap "Send OTP" / "Continue".</li>
+      <li>Enter the 4-digit code you receive and tap to verify.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> An OTP is sent and, once entered correctly (within the time shown by the countdown), you are logged in.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Login using email <span class="ref-tag">(Ref: Req #201)</span></h4>
+    <ol>
+      <li>On the login screen, tap the option to switch to "Login with Email instead".</li>
+      <li>Enter your email address and tap "Send OTP".</li>
+      <li>Enter the OTP received on your email and continue.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You can complete login using your email address and an OTP sent to that email, as an alternative to mobile number login.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Login using mobile number <span class="ref-tag">(Ref: Req #202)</span></h4>
+    <ol>
+      <li>On the login screen (default view), enter your mobile number.</li>
+      <li>Complete the OTP step as usual.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> You can log in successfully using just your mobile number and OTP.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Responsive, mobile-first design <span class="ref-tag">(Ref: Req #203)</span></h4>
+    <ol>
+      <li>Open the Zinto app on a phone (or resize a browser window to a narrow phone-sized width).</li>
+      <li>Browse the Home screen, a store page, the Cart, and Checkout.</li>
+      <li>Repeat on a tablet or desktop-sized screen if available.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All screens display cleanly and remain usable at phone width first, then adapt sensibly on larger screens, with no overlapping text or cut-off buttons.</div>
+  </div>
+
+  <!-- ===================== 21.2 HOME PAGE ===================== -->
+  <h2 class="section-title">21.2 Home Page</h2>
+  <p class="section-desc">This section covers the key building blocks of the Home screen customers see first.</p>
+
+  <div class="test-card">
+    <h4>Search bar on the Home screen <span class="ref-tag">(Ref: Req #204)</span></h4>
+    <ol>
+      <li>Open the Home screen and locate the search bar near the top.</li>
+      <li>Tap it and type a product name.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The search bar is clearly visible at the top of the Home screen and opens the search results screen when used.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Delivery location shown and changeable <span class="ref-tag">(Ref: Req #205)</span></h4>
+    <ol>
+      <li>Look at the top of the Home screen for your current delivery address/location.</li>
+      <li>Tap it to open the location picker and change your delivery address.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Your current delivery location is shown at the top of Home, and tapping it lets you pick or search for a new address, updating what is shown as deliverable.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Promotional banners on Home <span class="ref-tag">(Ref: Req #206)</span></h4>
+    <ol>
+      <li>Look at the rotating banner carousel on the Home screen.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Promotional banner images are shown and automatically rotate every few seconds.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Trending products section <span class="ref-tag">(Ref: Req #207)</span></h4>
+    <ol>
+      <li>Scroll down the Home screen to find a "Trending" products section.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Trending Products" section is visible with a horizontally scrollable list of popular items.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Recommended stores section <span class="ref-tag">(Ref: Req #208)</span></h4>
+    <ol>
+      <li>Scroll down the Home screen looking for a "Recommended Stores" section.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> A "Recommended Stores" section appears on the Home screen showing stores suggested for you.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Offers / recommended offers section <span class="ref-tag">(Ref: Req #209)</span></h4>
+    <ol>
+      <li>Scroll through Home to find any "Offers" section, or open the dedicated "Offers" screen from the menu.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Current offers/discounted products are displayed, either as a Home screen section or on a dedicated Offers page.</div>
+  </div>
+
+  <!-- ===================== 21.3 SEARCH FEATURES ===================== -->
+  <h2 class="section-title">21.3 Search Features</h2>
+  <p class="section-desc">This section covers the different ways a customer can search for what they want.</p>
+
+  <div class="test-card">
+    <h4>Text search <span class="ref-tag">(Ref: Req #210)</span></h4>
+    <ol>
+      <li>Tap the search bar and type a product name (e.g. "bread").</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Matching results appear as you type or after tapping search.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Voice search <span class="ref-tag">(Ref: Req #211)</span></h4>
+    <ol>
+      <li>On the search screen, tap the microphone icon inside the search bar.</li>
+      <li>Allow microphone access if prompted, then say a product name out loud.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The app listens (shown with a pulsing microphone animation), converts your speech to text, and shows matching search results.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search by store <span class="ref-tag">(Ref: Req #212)</span></h4>
+    <ol>
+      <li>On the search screen, type the name of a known store.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The matching store appears in the search results and can be opened directly.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search by category <span class="ref-tag">(Ref: Req #213)</span></h4>
+    <ol>
+      <li>Open the "Categories" screen from Home or the bottom navigation.</li>
+      <li>Tap a category (e.g. "Grocery") and check the products shown.</li>
+      <li>Optionally, use the subcategory tabs shown on that category's page to narrow results further.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Selecting a category (and any subcategory) shows only products belonging to it.</div>
+  </div>
+
+  <!-- ===================== 21.4 ATTRACTIVE STORE SECTION ===================== -->
+  <h2 class="section-title">21.4 Attractive Store Section</h2>
+  <p class="section-desc">This section covers the overall look and discoverability of the store browsing experience.</p>
+
+  <div class="test-card">
+    <h4>Store section with premium UI and strong discoverability <span class="ref-tag">(Ref: Req #214)</span></h4>
+    <ol>
+      <li>Open the "Stores" section from Home or the bottom navigation.</li>
+      <li>Check that stores are easy to filter/sort (for example, by nearest, top rated, or category) and that the visual design feels premium.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Stores are easy to find and browse, with clear categorisation/filters and an attractive, well-organised layout.</div>
+  </div>
+
+  <!-- ===================== 21.5 CLIENT UI EXPECTATIONS ===================== -->
+  <h2 class="section-title">21.5 Client UI Expectations</h2>
+  <p class="section-desc">This section covers overall look-and-feel and performance expectations across the app.</p>
+
+  <div class="test-card">
+    <h4>Premium overall UI quality <span class="ref-tag">(Ref: Req #215)</span></h4>
+    <ol>
+      <li>Browse through Home, a product page, Cart, and Checkout, paying attention to fonts, colours, spacing, and imagery.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The app feels consistent, modern, and polished throughout, not rough or unfinished.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Search is fast and intuitive <span class="ref-tag">(Ref: Req #216)</span></h4>
+    <ol>
+      <li>Use the search bar to search for a common product.</li>
+      <li>Note how quickly results appear and how easy the screen is to use.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Search results appear quickly (within a second or two) and the results screen is easy to understand at a glance.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Store browsing is highly attractive <span class="ref-tag">(Ref: Req #217)</span></h4>
+    <ol>
+      <li>Spend a minute scrolling through the Stores list and a couple of individual store pages.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Store browsing feels visually engaging with good use of images, banners, and layout — this is a design-quality check, so use your own judgement on whether it looks appealing.</div>
+  </div>
+
+  <!-- ===================== 33.1 FEEDBACK & RATING ===================== -->
+  <h2 class="section-title">33.1 Feedback &amp; Rating</h2>
+  <p class="section-desc">This section covers a customer's ability to leave feedback and ratings after an order is delivered.</p>
+
+  <div class="test-card">
+    <h4>Customer can provide order feedback <span class="ref-tag">(Ref: Req #355)</span></h4>
+    <ol>
+      <li>Open a "Delivered" order from "My Orders".</li>
+      <li>Scroll to the "Rate your order" section and, for any item, tap to expand the comment box.</li>
+      <li>Type a short comment about the product and submit it along with a star rating.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Your written comment is submitted successfully alongside your star rating, with a confirmation message shown.</div>
+  </div>
+
+  <div class="test-card">
+    <h4>Customer can provide a rating / review <span class="ref-tag">(Ref: Req #356)</span></h4>
+    <ol>
+      <li>Open a "Delivered" order from "My Orders".</li>
+      <li>In the "Rate your order" section, tap the stars (1 to 5) next to any item to set a rating.</li>
+      <li>Submit the rating.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The star rating is saved against that product, marked as a verified purchase, and a "Thanks for rating" confirmation appears. If you already rated that product before, you instead see "You've already rated [item]."</div>
+  </div>
+
+  <!-- ===================== 33.2 REORDER ===================== -->
+  <h2 class="section-title">33.2 Reorder</h2>
+  <p class="section-desc">This section confirms customers can quickly repeat a past order.</p>
+
+  <div class="test-card">
+    <h4>Customer can reorder a previously placed order <span class="ref-tag">(Ref: Req #357)</span></h4>
+    <ol>
+      <li>Go to "My Orders" and find a "Delivered" order.</li>
+      <li>Tap "Buy Again" on that order.</li>
+      <li>Open your Cart to confirm the same items were added.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> All items from the original order (that are still available) are added straight to your Cart, ready to check out again without re-searching for each product.</div>
+  </div>
+
+  <!-- ===================== 33.3 FAVOURITE SELLER ===================== -->
+  <h2 class="section-title">33.3 Favourite Seller</h2>
+  <p class="section-desc">This section confirms customers can save and revisit preferred stores.</p>
+
+  <div class="test-card">
+    <h4>Customer can add a seller/store to favourites <span class="ref-tag">(Ref: Req #358)</span></h4>
+    <ol>
+      <li>Open any store's page.</li>
+      <li>Tap the heart-shaped "Favorite" button next to the store name.</li>
+      <li>Go to your profile menu and open "Favourite Stores".</li>
+      <li>Confirm the store you favourited is listed, then try removing it by tapping "Unlike".</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> The store is added to (and can be removed from) your Favourite Stores list, and the favourite/unlike button state updates immediately on the store page.</div>
+  </div>
+
+  <!-- ===================== 33.4 PREVIOUS ORDERS ===================== -->
+  <h2 class="section-title">33.4 Previous Orders</h2>
+  <p class="section-desc">This section confirms customers can review their full order history.</p>
+
+  <div class="test-card">
+    <h4>Customer can view previous orders / order history <span class="ref-tag">(Ref: Req #359)</span></h4>
+    <ol>
+      <li>Open the profile/menu and tap "My Orders".</li>
+      <li>Scroll through the full list of orders, both past and current.</li>
+      <li>Tap on any past order to view its full item list, pricing, and status history.</li>
+    </ol>
+    <div class="expected"><b>✅ Expected Result:</b> Every order you have ever placed is listed and can be opened to see its full details, regardless of how long ago it was placed.</div>
+  </div>
+
+  <div class="footer-note">Zinto Platform — Manual Requirement Testing Guide · Part 1: Customer App (Shopping Experience)</div>
+
+</body>
+</html>

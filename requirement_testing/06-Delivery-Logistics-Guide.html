@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 6: Delivery / Logistics Flow</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  h3.subsection-title { color:#14532d; font-size:14.5px; margin-top:28px; margin-bottom:4px; border-left:4px solid #16a34a; padding-left:8px; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+  .actor-tag { display:inline-block; font-size:10px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; padding:2px 8px; border-radius:999px; margin-bottom:6px; }
+  .actor-admin { background:#fef3c7; color:#92400e; }
+  .actor-seller { background:#dbeafe; color:#1e40af; }
+  .actor-rider { background:#dcfce7; color:#166534; }
+  .actor-multi { background:#ede9fe; color:#5b21b6; }
+</style>
+</head>
+<body>
+
+  <div class="cover">
+    <h1>Zinto Manual Testing Guide — Part 6: Delivery / Logistics Flow</h1>
+    <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+    <p class="intro">
+      This document walks a non-technical reviewer through testing how orders get delivered on Zinto —
+      whether the platform's own delivery riders handle it, or the seller delivers it themselves.
+      It covers the whole journey: a seller packing an order, an admin assigning a delivery rider, the rider
+      picking up and delivering the order, and the settings that decide which delivery method is used for
+      each seller. Use it by logging in with the admin, seller, and delivery-rider accounts you have been
+      given, and following each numbered test in order.
+    </p>
+  </div>
+
+  <div class="howto">
+    <h3>How to use this guide</h3>
+    <p>Each test below has a number and a short title. Follow the numbered steps exactly, in the app or portal
+    named at the top of the test. After the steps, read the "✅ Expected Result" line and check that what you
+    see on your screen matches it. If it matches, tick it off as passed. If it doesn't, make a note of what you
+    saw instead so it can be reviewed. Some tests involve more than one person (for example, an admin doing one
+    step and a rider doing the next) — a coloured tag on each test tells you which app/role to use.</p>
+  </div>
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>18. Seller Logistics Flexibility / Logistics Participation Model
+        <ol type="a">
+          <li>18.1 Seller's own choice: which delivery method to use</li>
+          <li>18.2 The three delivery modes Zinto supports</li>
+          <li>18.3 Admin control over a seller's delivery mode</li>
+          <li>18.4 Admin assigning a delivery rider after the order is packed</li>
+          <li>18.5 Full delivery journey — end to end (rider app + admin)</li>
+        </ol>
+      </li>
+    </ol>
+  </div>
+
+  <h2 class="section-title">18. Seller Logistics Flexibility / Logistics Participation Model</h2>
+  <p class="section-desc">
+    This section covers how a delivery gets from the seller's shop to the customer's door — either through
+    Zinto's own delivery riders, or through the seller's own delivery staff — and how the admin manages that
+    choice and assigns riders once an order is ready.
+  </p>
+
+  <div class="flow">
+    <div class="flow-box">Seller packs order</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Admin/platform assigns delivery rider</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Rider picks up</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Out for delivery</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Delivered</div>
+  </div>
+  <p class="section-desc" style="margin-top:-10px;">
+    (If the seller has chosen self-delivery instead, the middle "admin assigns rider" step is skipped, and the
+    seller's own delivery staff carries out "picks up → out for delivery → delivered" using the Seller Panel
+    instead of the rider app — see test 18.6.)
+  </p>
+
+  <h3 class="subsection-title">18.1 Seller's own choice: which delivery method to use</h3>
+
+  <div class="test-card">
+    <span class="actor-tag actor-seller">Seller Panel</span>
+    <h4>Seller is not forced to use Zinto's delivery riders <span class="ref-tag">Ref: Req #184</span></h4>
+    <ol>
+      <li>Log in to the Seller Panel with a seller account.</li>
+      <li>Open the side menu and go to <b>Delivery Policy &amp; Availability</b> (found under the shop settings area).</li>
+      <li>Look at the "Fulfillment Methods" section at the top of the page.</li>
+      <li>Notice there are separate on/off switches for <b>Seller Self Delivery</b> and <b>Platform Logistics</b> — they are independent tick-boxes, not a locked single choice.</li>
+      <li>Turn off "Platform Logistics" and turn on "Seller Self Delivery" only, then tap <b>Save delivery policy</b>.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> The page saves without any error or warning that platform logistics is mandatory. A confirmation message "Delivery policy saved." appears, showing the seller is free to run deliveries themselves without being forced to use Zinto's delivery fleet.</div>
+  </div>
+
+  <h3 class="subsection-title">18.2 The three delivery modes Zinto supports</h3>
+
+  <div class="test-card">
+    <span class="actor-tag actor-seller">Seller Panel</span>
+    <h4>Platform-assigned delivery mode is available <span class="ref-tag">Ref: Req #185</span></h4>
+    <ol>
+      <li>In the Seller Panel, go to <b>Delivery Policy &amp; Availability</b>.</li>
+      <li>Turn on the <b>Platform Logistics</b> switch and save.</li>
+      <li>Place a small test order on the Customer App from this seller's shop (or ask someone to).</li>
+      <li>Back in the Seller Panel, open <b>Orders</b> and find the new order.</li>
+      <li>Confirm the order, then pack it: tap <b>Mark as Packed</b> when it becomes available.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> Once packed, the order's status shows "Updated by delivery partner" underneath it — meaning the order has been handed off to Zinto's delivery fleet and only a Zinto delivery rider (not the seller) can move it forward from here.</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-seller">Seller Panel</span>
+    <h4>Seller self-delivery mode is available <span class="ref-tag">Ref: Req #186</span></h4>
+    <ol>
+      <li>In the Seller Panel, go to <b>Delivery Policy &amp; Availability</b> and turn on only <b>Seller Self Delivery</b> (leave Platform Logistics off), then save.</li>
+      <li>Place a test order against this shop.</li>
+      <li>Open <b>Orders</b> in the Seller Panel and find the order.</li>
+      <li>Use the status drop-down on the order row to move it through <b>Confirmed → Packed → Out for Delivery → Delivered</b> yourself.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> The seller can change the order's status all the way to "Delivered" directly from the Seller Panel, without ever waiting for a Zinto delivery rider to be assigned — proving self-managed delivery works end to end.</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-seller">Seller Panel</span>
+    <h4>A mixed / configurable delivery setup is supported <span class="ref-tag">Ref: Req #187</span></h4>
+    <ol>
+      <li>In the Seller Panel, go to <b>Delivery Policy &amp; Availability</b>.</li>
+      <li>Turn ON both <b>Seller Self Delivery</b> and <b>Platform Logistics</b> at the same time, and also turn on <b>Auto-switch to platform when seller unavailable</b>.</li>
+      <li>Save the settings.</li>
+      <li>Place two separate test orders against this shop on different occasions (or ask the developer to confirm how the system chooses which method applies per order).</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> Both options stay switched on together without the page blocking it or forcing an "either/or" choice — confirming the seller can offer a hybrid setup (their own delivery for some orders, Zinto's riders for others, with an automatic fallback to Zinto when the seller can't deliver).</div>
+  </div>
+
+  <h3 class="subsection-title">18.3 Admin control over a seller's delivery mode</h3>
+
+  <div class="test-card">
+    <span class="actor-tag actor-admin">Admin Panel</span>
+    <h4>Admin can set/override a seller's delivery mode <span class="ref-tag">Ref: Req #188</span></h4>
+    <ol>
+      <li>Log in to the Admin Panel.</li>
+      <li>Open <b>Sellers</b> from the side menu and open the profile of a specific seller (the seller's detail page).</li>
+      <li>Look for a setting that lets the admin choose or override that seller's delivery method — platform logistics only, self-delivery only, or both.</li>
+      <li>If found, change it and save; if not visible anywhere on the seller's profile or in Admin Settings, note that this control could not be located.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> The admin can view and change, from the Admin Panel itself, which delivery method(s) a given seller is allowed to use — without needing the seller to change it themselves from their own Delivery Policy page. (Today this control is set by the seller only; if the admin-side control is genuinely missing, this should be flagged back to the development team rather than marked as passed.)</div>
+  </div>
+
+  <h3 class="subsection-title">18.4 Admin assigning a delivery rider after the order is packed</h3>
+
+  <div class="flow">
+    <div class="flow-box">Order confirmed</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Seller taps "Mark as Packed"</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Order appears in admin's "Awaiting Rider Assignment" list</div><div class="flow-arrow">→</div>
+    <div class="flow-box warn">Admin picks a rider and confirms</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Rider is notified</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-multi">Seller Panel + Admin Panel</span>
+    <h4>Admin can assign a delivery rider once the seller has packed the order <span class="ref-tag">Ref: Req #189</span></h4>
+    <ol>
+      <li><b>As the seller:</b> log in to the Seller Panel, open <b>Orders</b>, and for an order using platform delivery, tap <b>Mark as Packed</b> once it is ready.</li>
+      <li><b>As the admin:</b> log in to the Admin Panel and open <b>Fleet Tracking</b> from the side menu.</li>
+      <li>Look at the panel titled <b>"Orders Awaiting Rider Assignment"</b> near the top of the page — the order you just packed should appear there, showing the seller's name, the customer's name, and how long it has been waiting.</li>
+      <li>Tap the <b>Assign</b> button next to that order.</li>
+      <li>In the pop-up, choose an available delivery partner from the list and confirm the assignment.</li>
+      <li><i>Alternative route:</i> instead of Fleet Tracking, you can also open the order directly from <b>Orders</b> in the Admin Panel, open its order detail page, and use the <b>"Assign Fleet Rider"</b> button in the Delivery Partner section there — it does the same thing for one order at a time.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> The order disappears from the "Awaiting Rider Assignment" list and a success message such as "Rider assigned successfully" appears. The order now shows the assigned delivery partner's name and status "Assigned" on both the admin order detail page and (when you check the rider app in test 18.5) on the rider's own dashboard.</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-admin">Admin Panel</span>
+    <h4>Admin can hand an order to an outside courier instead of an in-house rider <span class="ref-tag">Ref: Req #189 (related)</span></h4>
+    <ol>
+      <li>Open an order's detail page in the Admin Panel (Orders → select an order that has been packed).</li>
+      <li>In the Delivery Partner section, tap <b>"+ Assign External Logistics (Dunzo / Porter / Delhivery)"</b>.</li>
+      <li>Type the name of the outside delivery service being used and tap <b>Save External Partner</b>.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> The order's delivery status changes to show "EXTERNAL LOGISTICS" along with the courier name that was typed in, confirming the admin has flexibility to route an order outside Zinto's own rider fleet when needed.</div>
+  </div>
+
+  <h3 class="subsection-title">18.5 Full delivery journey — end to end (rider app)</h3>
+  <p class="section-desc">This walks through the platform-logistics journey from the rider's point of view once an order has been assigned to them, so the whole chain from packing to doorstep delivery can be confirmed in one pass.</p>
+
+  <div class="flow">
+    <div class="flow-box">Rider goes Online on Dashboard</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Accepts assigned order</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Navigate to Store → At Store → Picked Up Order</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Start Delivery (Out for Delivery)</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Confirm Delivery with OTP → Delivered</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-rider">Delivery (Rider) App</span>
+    <h4>Rider sees the assigned order and can go pick it up <span class="ref-tag">Ref: Req #189 (rider side)</span></h4>
+    <ol>
+      <li>Log in to the Delivery App with the rider account that was just assigned the order in test 18.4.</li>
+      <li>On the <b>Dashboard</b>, make sure the "Online/Offline" toggle at the top is set to <b>Online</b>.</li>
+      <li>Open <b>Order Details</b> for the newly assigned order (it should also trigger a notification/alert).</li>
+      <li>Tap through the delivery steps shown at the bottom of the screen in order: <b>Navigate to Store</b> → confirm <b>"ARRIVED AT STORE"</b> → confirm <b>"PICKED UP ORDER"</b> at the "At Store" step.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> Each step updates the order's progress bar on the rider's screen, and the order status visible to the seller and admin changes accordingly (e.g. to "Out for Delivery" once picked up). The seller's Delivery Tracking screen and the admin's Fleet Tracking screen both reflect the same rider and status.</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-rider">Delivery (Rider) App</span>
+    <h4>Rider marks the order "Out for Delivery" and completes delivery with OTP <span class="ref-tag">Ref: Req #189 (rider side)</span></h4>
+    <ol>
+      <li>From the Order Details screen (after pickup), tap <b>Start Delivery</b>.</li>
+      <li>Use the <b>Navigation</b> screen to travel to the customer's address.</li>
+      <li>Once close to the customer (within the app's allowed distance), open <b>Confirm Delivery</b> and slide the on-screen button labelled <b>"Generate Delivery OTP"</b> to send a one-time code to the customer.</li>
+      <li>Ask the customer for the code they received and enter it in the app to confirm.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> Once the correct OTP is entered, the order is marked <b>Delivered</b> in the rider app, and this same "Delivered" status is instantly visible to the customer, the seller, and the admin. The delivery earns the rider a completed-delivery entry on their Earnings screen.</div>
+  </div>
+
+  <h3 class="subsection-title">18.6 Full delivery journey — end to end (seller self-delivery)</h3>
+
+  <div class="flow">
+    <div class="flow-box alt">Seller confirms order</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Seller marks Packed</div><div class="flow-arrow">→</div>
+    <div class="flow-box alt">Seller marks Out for Delivery</div><div class="flow-arrow">→</div>
+    <div class="flow-box">Seller marks Delivered</div>
+  </div>
+
+  <div class="test-card">
+    <span class="actor-tag actor-seller">Seller Panel</span>
+    <h4>Self-delivery orders can be fully managed by the seller, without a rider <span class="ref-tag">Ref: Req #190</span></h4>
+    <ol>
+      <li>Confirm the seller's <b>Delivery Policy &amp; Availability</b> has "Seller Self Delivery" turned on for this shop (see test 18.1).</li>
+      <li>Place a test order against this shop.</li>
+      <li>In the Seller Panel, open <b>Orders</b>, find the order, and change its status using the drop-down step by step: <b>Confirmed → Packed → Out for Delivery → Delivered</b>.</li>
+      <li>Open <b>Delivery Tracking</b> in the Seller Panel side menu and check the order appears there while it is in progress.</li>
+    </ol>
+    <div class="expected">✅ <b>Expected Result:</b> At no point does the order need a Zinto delivery rider to be assigned — the seller can move it all the way to "Delivered" themselves, and the order shows up correctly on the Delivery Tracking screen and to the customer as "Out for Delivery" and then "Delivered", exactly as if a rider had done it.</div>
+  </div>
+
+  <p class="footer-note">Zinto Manual Testing Guide — Part 6: Delivery / Logistics Flow — for internal client review use.</p>
+
+</body>
+</html>

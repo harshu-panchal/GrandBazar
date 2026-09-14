@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zinto Manual Testing Guide — Part 3: Seller Panel</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55; margin:0; font-size: 13px; }
+  .cover { text-align:center; padding: 60px 20px 40px; border-bottom: 4px solid #16a34a; margin-bottom: 30px; }
+  .cover h1 { font-size: 30px; color:#14532d; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 15px; color:#16a34a; font-weight:600; margin-bottom: 20px; }
+  .cover .intro { max-width: 620px; margin: 0 auto; color:#374151; font-size:13px; }
+  .howto { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px 20px; margin: 20px 0 30px; }
+  .howto h3 { margin-top:0; color:#166534; }
+  .toc { page-break-after: always; }
+  .toc h2 { color:#14532d; }
+  .toc ol { columns: 1; }
+  .toc li { margin-bottom:6px; }
+  h2.section-title { color:#ffffff; background:#16a34a; padding:10px 14px; border-radius:6px; margin-top:40px; font-size:17px; page-break-before: auto; }
+  .section-desc { color:#4b5563; font-style:italic; margin: 8px 0 16px; }
+  .test-card { border:1px solid #e5e7eb; border-left:5px solid #16a34a; border-radius:8px; padding:14px 18px; margin-bottom:16px; page-break-inside: avoid; background:#fafafa; }
+  .test-card h4 { margin:0 0 4px; font-size:14px; color:#111827; }
+  .ref-tag { font-size:10px; color:#6b7280; font-weight:normal; }
+  .test-card ol { margin: 8px 0; padding-left: 20px; }
+  .test-card li { margin-bottom:4px; }
+  .expected { background:#ecfdf5; border:1px dashed #16a34a; border-radius:6px; padding:8px 12px; margin-top:8px; font-size:12.5px; }
+  .expected b { color:#166534; }
+  .confirmed-note { background:#f3f4f6; border-radius:6px; padding:8px 12px; font-size:12.5px; color:#374151; }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin: 14px 0 20px; padding:14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; page-break-inside: avoid; }
+  .flow-box { background:#16a34a; color:#fff; padding:8px 12px; border-radius:6px; font-size:11.5px; text-align:center; min-width:90px; }
+  .flow-box.alt { background:#2563eb; }
+  .flow-box.warn { background:#d97706; }
+  .flow-arrow { font-size:16px; color:#9ca3af; }
+  .page-break { page-break-before: always; }
+  .footer-note { margin-top: 50px; text-align:center; color:#9ca3af; font-size:10.5px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Zinto Manual Testing Guide — Part 3: Seller Panel</h1>
+  <div class="subtitle">Zinto Platform — Manual Requirement Testing Guide</div>
+  <div class="intro">
+    This document walks a non-technical reviewer through every seller-related feature of the Zinto platform, one small test at a time. It covers logging into the Seller Panel, managing products and stock, processing orders, publishing future/pre-book items, and viewing settlements. Log in as a seller (and, for a small number of tests, as the admin) on the Zinto web app and follow each numbered test below in order, ticking off the Expected Result as you go.
+  </div>
+</div>
+
+<div class="howto">
+  <h3>How to use this guide</h3>
+  <p>Each test below has a <b>number</b> and a short, plain-language <b>title</b>. Follow the numbered steps exactly as written, in the app, on your own device. After the steps there is an <b>"✅ Expected Result"</b> line — if what you see on your screen matches that line, the test passes; tick it off on your printed copy. If a step mentions a screen or button name, look for that exact wording in the app. A few tests are marked "How this is confirmed" instead of steps — these describe behaviour that happens automatically in the background rather than something you click through.</p>
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>4.2 Seller Panel</li>
+    <li>5. Seller Onboarding &amp; Vendor Management</li>
+    <li>6. Seller Subscription Model &amp; Seller Limitation</li>
+    <li>18. Seller Logistics Flexibility / Logistics Participation Model</li>
+    <li>25.2 Order Management - Seller Responsibilities</li>
+    <li>26.2 Seller Future Order Panel</li>
+    <li>26.3 Future Product Configuration by Seller</li>
+    <li>27.4 Seller/Admin Cancellation</li>
+    <li>28.1 Shift Order to Next Day</li>
+    <li>28.5 Delivery Extension</li>
+    <li>30.1 Seller Settlement Management</li>
+    <li>30.5 Seller Settlement Visibility</li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">4.2 Seller Panel</h2>
+<p class="section-desc">This section covers the core, everyday tools a seller uses: logging in, running the shop profile, managing products and stock, and processing customer orders from start to finish.</p>
+
+<div class="test-card">
+  <h4>Test 1 — Logging in to the Seller Panel <span class="ref-tag">(Ref: Req #52)</span></h4>
+  <ol>
+    <li>Open the Zinto seller web address in your browser.</li>
+    <li>Enter your registered seller mobile number or email and password on the login screen.</li>
+    <li>Tap/click the login button.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> You land on the Seller Panel <b>Dashboard</b>, showing your shop's summary (orders, sales, etc.) and a left-hand menu with Products, Stock, Orders, and other sections.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 2 — Managing your shop/store profile <span class="ref-tag">(Ref: Req #53)</span></h4>
+  <ol>
+    <li>From the left-hand menu, click <b>Profile</b>.</li>
+    <li>Review or update your shop details (name, address, contact info, etc.) shown on this screen.</li>
+    <li>Make a small change (e.g. a contact number) and save it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Your change is saved and reflected immediately when you reopen the Profile screen.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 3 — Adding and managing products <span class="ref-tag">(Ref: Req #54)</span></h4>
+  <ol>
+    <li>Click <b>Products</b> in the left-hand menu.</li>
+    <li>Click the button to add a new product, fill in the product name, description, image, category, and price, then save.</li>
+    <li>Confirm the new product now appears in your Products list, and try editing or removing it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The product is created, appears in your product list, and can be edited or deleted afterwards.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 4 — Managing your product listing <span class="ref-tag">(Ref: Req #55)</span></h4>
+  <ol>
+    <li>On the <b>Products</b> screen, use the search box or category filters to find an existing product.</li>
+    <li>Open it and toggle it active/inactive (or edit its details) to control whether it is visible to customers.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The product's visibility/details update instantly and the change is reflected in your listing.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 5 — Setting product pricing <span class="ref-tag">(Ref: Req #56)</span></h4>
+  <ol>
+    <li>Open any product from the Products screen.</li>
+    <li>Find the pricing fields (regular price and sale price) and enter/update the values.</li>
+    <li>Save your changes.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The new price is saved and shows correctly on the product card, both in the Seller Panel and on the customer app.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 6 — Managing stock/inventory <span class="ref-tag">(Ref: Req #57)</span></h4>
+  <ol>
+    <li>Click <b>Stock</b> in the left-hand menu.</li>
+    <li>Find a product and update its "Current Stock" quantity.</li>
+    <li>Reduce a product's stock to a very low number (at or below its low-stock alert level) and refresh the screen.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The stock quantity updates, and the product is flagged as "Low Stock" on the Stock screen once it drops below its alert level.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 7 — Publishing future-order / pre-book products <span class="ref-tag">(Ref: Req #58)</span></h4>
+  <ol>
+    <li>Open a product on the <b>Products</b> screen and turn on the <b>"Available for future/pre-order"</b> option, then save.</li>
+    <li>Go to <b>Pre-Order Campaigns</b> in the left-hand menu and create a new campaign, adding that product along with the sale window and delivery dates.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Only products marked as pre-order-eligible can be added to a campaign, and the campaign is saved for customers to book ahead of the delivery date.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 8 — Viewing and processing incoming orders <span class="ref-tag">(Ref: Req #59)</span></h4>
+  <ol>
+    <li>Click <b>Orders</b> in the left-hand menu.</li>
+    <li>Look at the tabs across the top: All, Pending, Scheduled, Confirmed, Packed, Out for Delivery, Delivered, Cancelled.</li>
+    <li>Open the <b>Pending</b> tab and click any order to view its full details.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> New customer orders appear under "Pending", and clicking one shows the items, customer details, and available actions.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 9 — Accepting orders <span class="ref-tag">(Ref: Req #60)</span></h4>
+  <ol>
+    <li>On the <b>Orders → Pending</b> tab, open a new order.</li>
+    <li>Click the <b>Accept</b>/confirm action (or use "Accept" on the bulk-select toolbar for multiple orders at once).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order moves out of "Pending" into "Confirmed", and a success message such as "order(s) accepted" appears.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 10 — Packing orders <span class="ref-tag">(Ref: Req #61)</span></h4>
+  <ol>
+    <li>Open a <b>Confirmed</b> order.</li>
+    <li>Click <b>Mark as Packed</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order shows "Packed ✓" and moves to the Packed tab; the delivery rider is notified that the order is ready for pickup.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 11 — Suggesting replacement products <span class="ref-tag">(Ref: Req #62)</span></h4>
+  <ol>
+    <li>Open an order that has not yet been delivered and click on one of its items.</li>
+    <li>Click the option to mark that item as unavailable and suggest a <b>replacement</b>.</li>
+    <li>Pick a replacement product from your catalog, confirm its price, add a reason (e.g. "Item unavailable"), and submit.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A replacement request is sent for that item, and the customer is asked to approve or reject the suggested substitute.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 12 — Shifting delivery to the next day <span class="ref-tag">(Ref: Req #63)</span></h4>
+  <ol>
+    <li>Open an order that is not yet delivered/cancelled.</li>
+    <li>In the order details, find the <b>Delivery Schedule</b> box and click the calendar/<b>Reschedule</b> button.</li>
+    <li>Pick tomorrow's date and a delivery window from the "Reschedule Delivery" pop-up, then confirm.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A message "Order rescheduled" appears, and the order's delivery date now shows the new date you picked.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 13 — Cancelling orders with a reason <span class="ref-tag">(Ref: Req #64)</span></h4>
+  <ol>
+    <li>Open an order and click <b>Cancel</b>.</li>
+    <li>In the "Cancel Order" pop-up, type a reason of at least 10 characters explaining why (this is shown to the customer).</li>
+    <li>Click <b>Confirm Cancellation</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order moves to the Cancelled tab, and the reason you typed is visible to the customer.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 14 — Uploading a delivery-time proof photo <span class="ref-tag">(Ref: Req #65)</span></h4>
+  <p class="confirmed-note">How this is confirmed: for orders fulfilled through the seller's own (self) delivery, the proof-of-delivery photo is captured and uploaded as part of the delivery-completion step on the delivery side of the app rather than a separate seller-panel screen — confirm by completing a self-delivered order end-to-end and checking that a delivery photo is attached to it in the order's history.</p>
+</div>
+
+<div class="test-card">
+  <h4>Test 15 — Managing future-order configuration for selected products <span class="ref-tag">(Ref: Req #66)</span></h4>
+  <ol>
+    <li>Go to <b>Pre-Order Campaigns</b> and open (or create) a campaign.</li>
+    <li>Add or remove products from the campaign's product list and adjust its dates.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Only products individually marked "Available for future/pre-order" can be selected here, and your changes save against that campaign.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 16 — Viewing settlement-related data <span class="ref-tag">(Ref: Req #67)</span></h4>
+  <ol>
+    <li>Click <b>Earnings</b> in the left-hand menu.</li>
+    <li>Review your available balance, and the order-by-order table showing platform commission and packaging amounts.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Your current available balance is shown, along with a breakdown of commission/fees for each order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 17 — Operating with platform logistics or self-delivery mode <span class="ref-tag">(Ref: Req #68)</span></h4>
+  <ol>
+    <li>Go to <b>Delivery Policy</b> in the left-hand menu.</li>
+    <li>Check whether "Platform Logistics" and/or "Seller Delivery" (self-delivery) is switched on for your shop.</li>
+    <li>Place a test order against your shop and confirm it is routed the way you configured (a delivery rider assigned by Zinto, or handled by your own delivery staff).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Orders are fulfilled using whichever mode(s) are switched on for your shop in Delivery Policy.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">5. Seller Onboarding &amp; Vendor Management</h2>
+<p class="section-desc">This section covers how a new seller gets set up on Zinto — from the admin creating the account to the seller receiving their login details.</p>
+
+<div class="flow">
+  <div class="flow-box warn">Admin sends invite (email)</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Seller opens link &amp; applies</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Admin reviews application</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Seller account approved</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Seller logs in &amp; sets up shop</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 18 — Admin can create vendor/seller accounts <span class="ref-tag">(Ref: Req #88)</span></h4>
+  <ol>
+    <li>Log in to the <b>Admin Panel</b> and open the "New Seller Applications" (Pending Sellers) screen.</li>
+    <li>Click the button to <b>invite</b> a new seller and enter their email address (and phone, if asked).</li>
+    <li>Send the invite.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A confirmation message such as "Invite sent" appears, and the new invite shows up in the admin's list of sent invites.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 19 — Vendor login credentials shared through email <span class="ref-tag">(Ref: Req #89)</span></h4>
+  <p class="confirmed-note">How this is confirmed: after the admin creates/approves a seller account, check the inbox of the email address used for that seller — a message with their login details (or a link to set a password) should arrive automatically, without the admin having to do anything further.</p>
+</div>
+
+<div class="test-card">
+  <h4>Test 20 — Seller application link shared through email <span class="ref-tag">(Ref: Req #90)</span></h4>
+  <ol>
+    <li>After an admin sends a seller invite (Test 18), check the inbox of the email address that was invited.</li>
+    <li>Open the email and click the web link inside it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The link opens the Zinto seller application/sign-up page in a browser, ready for the new seller to fill in their details.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 21 — Admin can manage vendor accounts and onboarding centrally <span class="ref-tag">(Ref: Req #91)</span></h4>
+  <ol>
+    <li>In the Admin Panel, open "New Seller Applications" to review sellers awaiting approval, and "Active Sellers" to see approved ones.</li>
+    <li>Approve or reject a pending application, and confirm you can view/manage an already-active seller's account from the Active Sellers screen.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The admin can see every seller's status (pending or active) in one place and take action on each from these two screens.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">6. Seller Subscription Model &amp; Seller Limitation</h2>
+<p class="section-desc">This section covers the product-limit rules for sellers and how they can choose a subscription plan or a commission-based model.</p>
+
+<div class="test-card">
+  <h4>Test 22 — Up to 30 products under the base plan <span class="ref-tag">(Ref: Req #92)</span></h4>
+  <ol>
+    <li>As a seller who has not chosen a subscription plan, go to <b>Products</b> and add products one by one, keeping count.</li>
+    <li>Continue adding until you reach 30 products.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> You can freely add products up to 30 without being asked to subscribe.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 23 — Must choose a subscription plan to add more than 30 products <span class="ref-tag">(Ref: Req #93)</span></h4>
+  <ol>
+    <li>With 30 products already listed, try to add a 31st product.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> You are stopped and prompted to choose a monthly subscription plan (via <b>Subscription</b> in the left-hand menu) before you can add more products.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 24 — Higher commission if no subscription is chosen <span class="ref-tag">(Ref: Req #94)</span></h4>
+  <ol>
+    <li>As a seller who has stayed on the free/base plan at the 30-product limit, place a test order for one of your products.</li>
+    <li>Check the commission shown for that order on the <b>Earnings</b> screen and compare it with a seller who is on a paid subscription plan.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Sellers who have not taken a subscription plan are charged a higher commission rate than subscribed sellers.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 25 — Choosing subscription-basis or commission-basis model <span class="ref-tag">(Ref: Req #95)</span></h4>
+  <ol>
+    <li>During onboarding (or from your account settings), open the <b>"Choose your business model"</b> screen.</li>
+    <li>Review the two cards: <b>Commission model</b> (no upfront fee, commission per order) and <b>Subscription model</b> (pay a plan fee).</li>
+    <li>Select one and confirm.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Your shop is activated under the model you picked, and you can see this reflected in how orders are charged afterwards.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">18. Seller Logistics Flexibility / Logistics Participation Model</h2>
+<p class="section-desc">This section covers whether a seller must use Zinto's own delivery riders, or can deliver orders themselves, or both.</p>
+
+<div class="test-card">
+  <h4>Test 26 — Seller is not forced to use platform logistics <span class="ref-tag">(Ref: Req #184)</span></h4>
+  <ol>
+    <li>Go to <b>Delivery Policy</b> in the seller left-hand menu.</li>
+    <li>Confirm you can switch off "Platform Logistics" for your shop if you prefer to deliver yourself.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Platform Logistics can be turned off without blocking you from taking orders — you are not locked into using Zinto's riders.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 27 — Platform-assigned logistics mode <span class="ref-tag">(Ref: Req #185)</span></h4>
+  <ol>
+    <li>On <b>Delivery Policy</b>, turn on "Platform Logistics" and save.</li>
+    <li>Place a test order for your shop and pack it (Test 10).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Once packed, the order is picked up and delivered by a Zinto-assigned delivery rider.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 28 — Seller self-delivery mode <span class="ref-tag">(Ref: Req #186)</span></h4>
+  <ol>
+    <li>On <b>Delivery Policy</b>, turn on "Seller Delivery" (self-delivery) and save.</li>
+    <li>Place a test order for your shop and pack it.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order is fulfilled by your own delivery staff rather than a Zinto rider.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 29 — Hybrid / configurable logistics model <span class="ref-tag">(Ref: Req #187)</span></h4>
+  <ol>
+    <li>On <b>Delivery Policy</b>, switch on both "Platform Logistics" and "Seller Delivery" together, and save.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Both options can be enabled at the same time, letting your shop use a mix of platform riders and your own delivery.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 30 — Admin can configure a seller's logistics mode <span class="ref-tag">(Ref: Req #188)</span></h4>
+  <ol>
+    <li>Log in as admin, open the seller's account under <b>Active Sellers</b>.</li>
+    <li>Look for the option to control that seller's logistics mode (platform, self, or both) from the admin side.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> An admin can view and adjust which logistics mode(s) a given seller is allowed/set to use, independent of the seller's own setting.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 31 — Admin assigns logistics after seller packing <span class="ref-tag">(Ref: Req #189)</span></h4>
+  <ol>
+    <li>As a seller using platform logistics, pack an order (Test 10).</li>
+    <li>Log in as admin and open the <b>Delivery Management</b> / assignment screen for that order.</li>
+    <li>Assign a delivery rider to the packed order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Once the seller marks the order as packed, it becomes available for the admin to assign to a delivery rider.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 32 — Seller-managed fulfillment in self-delivery mode <span class="ref-tag">(Ref: Req #190)</span></h4>
+  <ol>
+    <li>With "Seller Delivery" switched on, pack a test order.</li>
+    <li>Confirm the order's status moves through to "Out for Delivery" and "Delivered" without needing an admin-assigned rider.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The whole delivery journey for that order is handled and updated by the seller's own team, end to end.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">25.2 Order Management - Seller Responsibilities</h2>
+<p class="section-desc">This section re-confirms the seller's day-to-day order-handling duties, from viewing a new order through to delivery.</p>
+
+<div class="flow">
+  <div class="flow-box">Order received (Pending)</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Seller accepts (Confirmed)</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Seller packs</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Out for delivery</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Delivered</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 33 — Seller views incoming orders <span class="ref-tag">(Ref: Req #265)</span></h4>
+  <ol>
+    <li>Open <b>Orders</b> and check the <b>Pending</b> tab for new orders.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> All new customer orders for your shop appear here as soon as they are placed.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 34 — Seller accepts and processes orders <span class="ref-tag">(Ref: Req #266)</span></h4>
+  <ol>
+    <li>Open a Pending order and click <b>Accept</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order moves to Confirmed and is ready for packing.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 35 — Seller packs orders <span class="ref-tag">(Ref: Req #267)</span></h4>
+  <ol>
+    <li>Open a Confirmed order and click <b>Mark as Packed</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order status changes to Packed and shows "Packed ✓".</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 36 — Seller may suggest replacement products <span class="ref-tag">(Ref: Req #268)</span></h4>
+  <ol>
+    <li>Open any active order, choose an item, and use the option to mark it unavailable and suggest a replacement product.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A replacement suggestion is sent to the customer for approval.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 37 — Seller may shift an order to next day <span class="ref-tag">(Ref: Req #269)</span></h4>
+  <ol>
+    <li>Open an active order, click the reschedule/calendar button next to "Delivery Schedule", and pick the next day's date and a delivery window.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order's delivery date updates to the next day and shows "Order rescheduled".</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 38 — Seller uploads/captures delivery-time proof photo <span class="ref-tag">(Ref: Req #270)</span></h4>
+  <p class="confirmed-note">How this is confirmed: for a self-delivered order, complete the delivery and check that a photo is captured/attached at the moment of delivery, confirming the order reached the customer.</p>
+</div>
+
+<div class="test-card">
+  <h4>Test 39 — Seller can cancel order with a valid reason <span class="ref-tag">(Ref: Req #271)</span></h4>
+  <ol>
+    <li>Open an order and click <b>Cancel</b>.</li>
+    <li>Enter a cancellation reason (at least 10 characters) and confirm.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order is cancelled and your reason is recorded and shown to the customer.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 40 — Fulfilling through platform logistics or self-delivery <span class="ref-tag">(Ref: Req #272)</span></h4>
+  <ol>
+    <li>Check your <b>Delivery Policy</b> setting, then pack a test order and follow it through to delivery.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order is fulfilled using whichever mode (platform rider or your own delivery staff) is configured for your shop.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.2 Seller Future Order Panel</h2>
+<p class="section-desc">This section covers the dedicated screen where a seller publishes products for future/pre-booked delivery.</p>
+
+<div class="test-card">
+  <h4>Test 41 — Dedicated Future Order / Pre-Booking panel <span class="ref-tag">(Ref: Req #274)</span></h4>
+  <ol>
+    <li>Click <b>Pre-Order Campaigns</b> in the left-hand menu.</li>
+    <li>Click the button to create a new campaign, giving it a title, description, and status.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A dedicated Pre-Order Campaigns screen opens where you can create and manage future-dated product listings, separate from your regular Products screen.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">26.3 Future Product Configuration by Seller</h2>
+<p class="section-desc">This section covers the specific settings a seller can configure for a future/pre-book product and its campaign.</p>
+
+<div class="flow">
+  <div class="flow-box">Mark product pre-order eligible</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Create campaign &amp; add product</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Set sale window &amp; delivery dates</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Set delivery window</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Customers can book ahead</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 42 — Marking a product as Future Order / Pre-Book <span class="ref-tag">(Ref: Req #275)</span></h4>
+  <ol>
+    <li>Open a product on the <b>Products</b> screen.</li>
+    <li>Turn on <b>"Available for future/pre-order"</b> and save.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The product is now eligible to be added to a Pre-Order Campaign.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 43 — Configuring the future delivery date <span class="ref-tag">(Ref: Req #276)</span></h4>
+  <ol>
+    <li>In Pre-Order Campaigns, open or create a campaign.</li>
+    <li>Set the <b>Delivery Start Date</b> field to the date customers will receive the product.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The chosen delivery date is saved with the campaign and shown to customers when they book.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 44 — Configuring the future delivery window <span class="ref-tag">(Ref: Req #277)</span></h4>
+  <ol>
+    <li>In the same campaign, set the <b>Delivery End Date</b> and/or the delivery windows for the campaign.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The delivery window (start-to-end range) is saved and applied to orders placed under this campaign.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 45 — Configuring the booking availability period <span class="ref-tag">(Ref: Req #278)</span></h4>
+  <ol>
+    <li>In the campaign form, set <b>Sale Start</b> and <b>Sale End</b> dates/times — this is the window during which customers may place a booking.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Customers can only book the product between the sale-start and sale-end times you configured.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 46 — Configuring the applicable scheduling range <span class="ref-tag">(Ref: Req #279)</span></h4>
+  <ol>
+    <li>In the campaign form, set <b>"Max Advance Booking Days"</b> — the number of days ahead a customer is allowed to book.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Customers cannot book delivery further ahead than the number of days you set here.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">27.4 Seller/Admin Cancellation</h2>
+<p class="section-desc">This section confirms that both sellers and admins are able to cancel orders, always with a stated reason.</p>
+
+<div class="test-card">
+  <h4>Test 47 — Seller and Admin can cancel orders <span class="ref-tag">(Ref: Req #291)</span></h4>
+  <ol>
+    <li>As a seller, open an order in <b>Orders</b> and click <b>Cancel</b> to cancel it.</li>
+    <li>Separately, log in as admin, open the same/another order under Order Management, and cancel it from there too.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Both the seller and the admin are able to cancel an order from their own respective panels.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 48 — Seller must provide a valid cancellation reason <span class="ref-tag">(Ref: Req #292)</span></h4>
+  <ol>
+    <li>Click <b>Cancel</b> on an order.</li>
+    <li>Try to confirm cancellation while leaving the reason box empty or with only a few characters.</li>
+    <li>Then type a proper reason (10+ characters) and confirm.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The cancellation is blocked until a reason of at least 10 characters is entered; the "CONFIRM CANCELLATION" button stays disabled until then.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">28.1 Shift Order to Next Day</h2>
+<p class="section-desc">This section covers a seller's ability to push a delivery to the next day when a product cannot go out today.</p>
+
+<div class="test-card">
+  <h4>Test 49 — Shift delivery date to next day <span class="ref-tag">(Ref: Req #293)</span></h4>
+  <ol>
+    <li>Open an active order that has not yet been delivered.</li>
+    <li>Click the reschedule (calendar) button beside "Delivery Schedule".</li>
+    <li>Choose tomorrow's date and a delivery window, add an optional note explaining why, then click <b>Confirm</b>.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order's delivery date shows the new (next) day, and the customer is informed of the updated delivery date.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">28.5 Delivery Extension</h2>
+<p class="section-desc">This section covers a seller being able to push delivery further out, beyond just the next day, when needed.</p>
+
+<div class="test-card">
+  <h4>Test 50 — Extending the delivery date <span class="ref-tag">(Ref: Req #302)</span></h4>
+  <ol>
+    <li>Open an active order and click the reschedule (calendar) button.</li>
+    <li>In the "Reschedule Delivery" pop-up, pick any later date allowed (up to the maximum days-ahead configured for your shop) and a delivery window.</li>
+    <li>Confirm the change.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The order's delivery date is pushed out to the new date you selected, and the customer sees the updated delivery date on their order.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">30.1 Seller Settlement Management</h2>
+<p class="section-desc">This section covers the payout/settlement tools sellers use to track and withdraw the money they've earned.</p>
+
+<div class="flow">
+  <div class="flow-box">Order delivered</div><div class="flow-arrow">→</div>
+  <div class="flow-box alt">Amount added to seller balance</div><div class="flow-arrow">→</div>
+  <div class="flow-box warn">Seller requests withdrawal</div><div class="flow-arrow">→</div>
+  <div class="flow-box">Admin processes payout</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 51 — Seller Settlement module for payouts <span class="ref-tag">(Ref: Req #312)</span></h4>
+  <ol>
+    <li>Click <b>Earnings</b> in the left-hand menu to see your available balance.</li>
+    <li>Click <b>Money Request</b> to request a withdrawal of your available balance.</li>
+    <li>Click <b>Payment History</b> and <b>Bulk Settlements</b> to review past payouts and any multi-order settlement batches.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> You can see your current balance, request a withdrawal, and review a history of past settlements/payouts across these three screens.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 class="section-title">30.5 Seller Settlement Visibility</h2>
+<p class="section-desc">This section covers exactly what settlement information a seller can see for their orders — amounts, deductions, history, and status.</p>
+
+<div class="test-card">
+  <h4>Test 52 — Seller panel shows total payable amount <span class="ref-tag">(Ref: Req #330)</span></h4>
+  <ol>
+    <li>Open <b>Earnings</b>.</li>
+    <li>Look for your overall available/payable balance shown at the top of the screen.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A clear total amount currently payable/available to you is displayed.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 53 — Seller panel shows order-wise settlement amount <span class="ref-tag">(Ref: Req #331)</span></h4>
+  <ol>
+    <li>On <b>Earnings</b>, scroll to the order-by-order table.</li>
+    <li>Check that each row shows the settlement amount for that specific order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Every delivered order has its own line with the amount settled/settleable for that order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 54 — Seller panel shows commission deductions <span class="ref-tag">(Ref: Req #332)</span></h4>
+  <ol>
+    <li>On <b>Earnings</b>, check the "Commission &amp; Fees" column for each order.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> The platform commission (and any packaging fee) deducted for that order is clearly shown alongside the order.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 55 — Seller panel shows settlement history <span class="ref-tag">(Ref: Req #333)</span></h4>
+  <ol>
+    <li>Click <b>Payment History</b> (Transactions) in the left-hand menu.</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> A full, searchable history of past settlements/payments is available to review, not just the current balance.</div>
+</div>
+
+<div class="test-card">
+  <h4>Test 56 — Seller panel shows settlement status <span class="ref-tag">(Ref: Req #334)</span></h4>
+  <ol>
+    <li>On <b>Earnings</b> or <b>Payment History</b>, check the status label next to each order/payment (for example: Pending, Settled, On Hold).</li>
+  </ol>
+  <div class="expected">✅ <b>Expected Result:</b> Each settlement clearly shows its current status, so you always know whether money is pending, on hold, or already settled.</div>
+</div>
+
+<div class="footer-note">Zinto Platform — Manual Requirement Testing Guide · Part 3: Seller Panel</div>
+
+</body>
+</html>
