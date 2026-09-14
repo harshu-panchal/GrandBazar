@@ -10,7 +10,7 @@ import { normalizeCityKey } from "../services/cityCommissionService.js";
 import { computeCustomerPriceForProduct } from "../services/finance/customerPriceService.js";
 
 const PRODUCT_SELECT =
-  "_id name price salePrice variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule subcategoryId sellerId";
+  "_id name price salePrice variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule subcategoryId categoryId headerId sellerId";
 const STORE_SELECT =
   "applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule city";
 const CITY_COMMISSION_SELECT =
@@ -50,10 +50,12 @@ async function recalcCustomerPriceForBatch(products, { storeCache, cityCache, ca
     return docs.map((doc) => ({ key: doc.cityKey, value: doc }));
   });
 
-  const subcategoryIds = Array.from(
-    new Set(products.map((p) => String(p.subcategoryId || "")).filter(Boolean)),
+  const categoryIds = Array.from(
+    new Set(
+      products.flatMap((p) => [p.subcategoryId, p.categoryId, p.headerId]).map(String).filter((id) => id && id !== "undefined"),
+    ),
   );
-  await fillMissing(categoryCache, subcategoryIds, async (missingIds) => {
+  await fillMissing(categoryCache, categoryIds, async (missingIds) => {
     const docs = await Category.find({ _id: { $in: missingIds } }).select(CATEGORY_SELECT).lean();
     return docs.map((doc) => ({ key: String(doc._id), value: doc }));
   });
@@ -63,9 +65,10 @@ async function recalcCustomerPriceForBatch(products, { storeCache, cityCache, ca
     const storeDoc = product.sellerId ? storeCache.get(String(product.sellerId)) || null : null;
     const cityKey = normalizeCityKey(storeDoc?.city || "");
     const cityCommission = cityKey ? cityCache.get(cityKey) || null : null;
-    const categoryById = product.subcategoryId
-      ? new Map([[String(product.subcategoryId), categoryCache.get(String(product.subcategoryId))]])
-      : new Map();
+    const categoryById = new Map();
+    for (const id of [product.subcategoryId, product.categoryId, product.headerId]) {
+      if (id) categoryById.set(String(id), categoryCache.get(String(id)));
+    }
 
     const { customerPrice, customerSalePrice, variantCustomerPrices } =
       await computeCustomerPriceForProduct(product, { categoryById, storeDoc, cityCommission });

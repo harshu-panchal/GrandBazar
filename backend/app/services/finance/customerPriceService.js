@@ -42,13 +42,15 @@ function buildOverrideConfig(source, fallbackId, fallbackName) {
   };
 }
 
-function resolveBaseConfig({ overrideConfig, subcategory, storeDoc, cityCommission }) {
+function resolveBaseConfig({ overrideConfig, subcategory, storeDoc, cityCommission, level2Category, headerCategory }) {
   const resolved = resolveEffectiveCommissionForLineItem({
     addonProduct: null,
     productCategory: overrideConfig,
     subcategory,
     shopCommission: storeDoc,
     cityCommission,
+    level2Category,
+    headerCategory,
   });
   return (
     resolved.category || {
@@ -90,6 +92,12 @@ export async function computeCustomerPriceForProduct(
   const subcategory = product.subcategoryId
     ? categoryById.get(String(product.subcategoryId))
     : null;
+  const level2Category = product.categoryId
+    ? categoryById.get(String(product.categoryId))
+    : null;
+  const headerCategory = product.headerId
+    ? categoryById.get(String(product.headerId))
+    : null;
 
   const productOverride = buildOverrideConfig(
     {
@@ -108,6 +116,8 @@ export async function computeCustomerPriceForProduct(
     subcategory,
     storeDoc,
     cityCommission,
+    level2Category,
+    headerCategory,
   });
 
   const customerPrice = priceWithCommission(product.price, productBaseConfig);
@@ -128,6 +138,8 @@ export async function computeCustomerPriceForProduct(
           subcategory,
           storeDoc,
           cityCommission,
+          level2Category,
+          headerCategory,
         })
       : productBaseConfig;
 
@@ -163,12 +175,17 @@ export async function computeCustomerPriceForProduct(
  */
 export async function computeCustomerPriceFieldsForWrite(productLike) {
   const subcategoryId = productLike.subcategoryId ? String(productLike.subcategoryId) : null;
+  const level2CategoryId = productLike.categoryId ? String(productLike.categoryId) : null;
+  const headerCategoryId = productLike.headerId ? String(productLike.headerId) : null;
+  const categoryIds = Array.from(
+    new Set([subcategoryId, level2CategoryId, headerCategoryId].filter(Boolean)),
+  );
   const categoryById = new Map();
-  if (subcategoryId) {
-    const subcategory = await Category.findById(subcategoryId)
+  if (categoryIds.length) {
+    const categoryDocs = await Category.find({ _id: { $in: categoryIds } })
       .select("_id name type applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
       .lean();
-    if (subcategory) categoryById.set(subcategoryId, subcategory);
+    for (const doc of categoryDocs) categoryById.set(String(doc._id), doc);
   }
 
   const sellerId = productLike.sellerId ? String(productLike.sellerId) : null;

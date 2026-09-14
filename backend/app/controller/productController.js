@@ -788,10 +788,10 @@ export const getSellerProducts = async (req, res) => {
    ESTIMATE CUSTOMER-FACING PRICE
    Seller-facing preview: given a draft price/salePrice (and optional
    variants) not yet saved, resolves the seller's own effective commission
-   (subcategory → shop → city hierarchy; sellers can't set a per-product
-   commission override themselves) and returns what the customer would pay.
-   Never authoritative for checkout — display-only, same as the stored
-   customerPrice field.
+   (subcategory → shop → city → category → header hierarchy; sellers can't
+   set a per-product commission override themselves) and returns what the
+   customer would pay. Never authoritative for checkout — display-only,
+   same as the stored customerPrice field.
 ================================ */
 export const estimateCustomerPrice = async (req, res) => {
   try {
@@ -799,11 +799,13 @@ export const estimateCustomerPrice = async (req, res) => {
     if (!sellerId) {
       return handleResponse(res, 401, "Unauthorized");
     }
-    const { price, salePrice, subcategoryId, variants } = req.body || {};
+    const { price, salePrice, subcategoryId, categoryId, headerId, variants } = req.body || {};
     const productLike = {
       price: Number(price) || 0,
       salePrice: Number(salePrice) || 0,
       subcategoryId: subcategoryId || null,
+      categoryId: categoryId || null,
+      headerId: headerId || null,
       sellerId,
       applyCommission: false,
       variants: Array.isArray(variants)

@@ -98,6 +98,8 @@ const AddProduct = () => {
           price: formData.price,
           salePrice: formData.salePrice,
           subcategoryId: formData.subcategory || null,
+          categoryId: formData.category || null,
+          headerId: formData.header || null,
           variants: formData.variants.map((v) => ({ name: v.name, sku: v.sku, price: v.price, salePrice: v.salePrice })),
         });
         if (res.data.success) {

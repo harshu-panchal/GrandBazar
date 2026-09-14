@@ -154,6 +154,8 @@ export function resolveEffectiveCommissionForLineItem({
   subcategory = null,
   shopCommission = null,
   cityCommission = null,
+  level2Category = null,
+  headerCategory = null,
 } = {}) {
   const chain = [
     { level: "addon", category: normalizeCommissionEntity(addonProduct) },
@@ -161,6 +163,12 @@ export function resolveEffectiveCommissionForLineItem({
     { level: "subcategory", category: normalizeCommissionEntity(subcategory) },
     { level: "shop", category: normalizeCommissionEntity(shopCommission) },
     { level: "city", category: normalizeCommissionEntity(cityCommission) },
+    // Admin-configured category defaults — last resort, after every
+    // seller/product/city-specific override, so a header/category-level
+    // commission still applies when nothing more specific was ever set
+    // (previously dead: these two levels were never consulted at all).
+    { level: "category", category: normalizeCommissionEntity(level2Category) },
+    { level: "header", category: normalizeCommissionEntity(headerCategory) },
   ];
 
   const fallbackTrail = [];
@@ -970,6 +978,8 @@ export async function resolveCommissionInclusiveLineTotals(hydratedItems, { sess
           subcategory,
           shopCommission: storeDoc,
           cityCommission,
+          level2Category,
+          headerCategory,
         })
       : resolveCategoryHierarchyCommission({
           productCategory,
@@ -1176,6 +1186,8 @@ export async function generateOrderPaymentBreakdown({
           subcategory,
           shopCommission: storeDoc,
           cityCommission,
+          level2Category,
+          headerCategory,
         })
       : (() => {
           const legacy = resolveCategoryHierarchyCommission({
