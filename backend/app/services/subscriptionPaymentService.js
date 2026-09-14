@@ -171,28 +171,43 @@ export async function createSubscriptionPhonePeCheckout({
 
   const response = await client.pay(request);
 
-  const payment = await SellerSubscriptionPayment.create({
-    sellerId,
-    planId: plan._id,
-    requestType: resolvedType,
-    gatewayName: PAYMENT_GATEWAY.PHONEPE,
-    gatewayOrderId: merchantOrderId,
-    amount: amountPaise,
-    currency: "INR",
-    status: PAYMENT_STATUS.PENDING,
-    planSnapshot: {
-      name: plan.name,
-      shopCount: plan.shopCount,
-      productCountPerShop: plan.productCountPerShop,
-      durationDays: plan.durationDays,
-      price: plan.price,
-    },
-    rawGatewayResponse: {
-      redirectUrl: response.redirectUrl,
-      merchantOrderId,
+  let payment;
+  let duplicate = false;
+  try {
+    payment = await SellerSubscriptionPayment.create({
+      sellerId,
+      planId: plan._id,
+      requestType: resolvedType,
+      gatewayName: PAYMENT_GATEWAY.PHONEPE,
+      gatewayOrderId: merchantOrderId,
       amount: amountPaise,
-    },
-  });
+      currency: "INR",
+      status: PAYMENT_STATUS.PENDING,
+      planSnapshot: {
+        name: plan.name,
+        shopCount: plan.shopCount,
+        productCountPerShop: plan.productCountPerShop,
+        durationDays: plan.durationDays,
+        price: plan.price,
+      },
+      rawGatewayResponse: {
+        redirectUrl: response.redirectUrl,
+        merchantOrderId,
+        amount: amountPaise,
+      },
+    });
+  } catch (error) {
+    // Concurrent duplicate request raced us to the same merchantOrderId
+    // (attemptCount was read before either insert landed). PhonePe already
+    // treats merchantOrderId as an idempotency key, so the safe response is
+    // to return whichever record won the insert, not to error out.
+    if (error?.code === 11000 && String(error?.message || "").includes("gatewayOrderId")) {
+      payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: merchantOrderId });
+      duplicate = true;
+    } else {
+      throw error;
+    }
+  }
 
   await Seller.findByIdAndUpdate(sellerId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
@@ -201,8 +216,8 @@ export async function createSubscriptionPhonePeCheckout({
 
   return {
     payment,
-    redirectUrl: response.redirectUrl,
-    duplicate: false,
+    redirectUrl: payment?.rawGatewayResponse?.redirectUrl || response.redirectUrl,
+    duplicate,
   };
 }
 
