@@ -41,7 +41,7 @@ export const getPublicOfferSections = async (req, res) => {
           .populate("sellerIds", "shopName name logo")
           .populate({
             path: "productIds",
-            select: "name slug price salePrice mainImage stock unit sellerId status approvalStatus",
+            select: "name slug price salePrice customerPrice customerSalePrice mainImage stock unit sellerId status approvalStatus",
             match: {
               status: "active",
               stock: { $gt: 0 },

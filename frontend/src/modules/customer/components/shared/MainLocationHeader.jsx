@@ -164,7 +164,7 @@ const MainLocationHeader = ({
   const { isOpen: isProductDetailOpen } = useProductDetail();
   const { settings } = useSettings();
   const appName = settings?.appName || "App";
-  const logoUrl = String(settings?.logoUrl || "").trim();
+  const logoUrl = String(settings?.faviconUrl || settings?.logoUrl || "").trim();
   const navigate = useNavigate();
 
   const locationLabel = isFetchingLocation
@@ -481,7 +481,7 @@ const MainLocationHeader = ({
                 {logoUrl ? (
                   // The logo asset is a full lockup (mascot + wordmark) — the
                   // pill chrome + duplicated app name text below clashed with it.
-                  <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-6 w-auto object-contain" />
+                  <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-12 w-auto object-contain" />
                 ) : (
                   <span
                     className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"

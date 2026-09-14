@@ -63,7 +63,7 @@ export async function computeTrendingProductsSnapshot() {
 }
 
 const PRODUCT_CARD_FIELDS =
-  "name slug price salePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
 
 export async function getTrendingProducts({ limit = 10 } = {}) {
   const snapshot = await TrendingProductSnapshot.findById("latest").lean();

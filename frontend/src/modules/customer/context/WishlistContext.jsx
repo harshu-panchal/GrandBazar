@@ -8,6 +8,14 @@ const WishlistContext =
   globalThis.__zintoWishlistContext ??
   (globalThis.__zintoWishlistContext = createContext());
 
+function withDisplayPrice(product) {
+  return {
+    ...product,
+    price: product.customerSalePrice ?? product.customerPrice ?? product.salePrice ?? product.price,
+    originalPrice: product.customerPrice ?? product.price,
+  };
+}
+
 const defaultWishlistContext = {
   wishlist: [],
   loading: false,
@@ -74,7 +82,7 @@ export const WishlistProvider = ({ children }) => {
         const response = await customerApi.getWishlist({ idsOnly: false });
         const products = response.data.result.products || [];
         const backendWishlist = products.map((product) => ({
-          ...product,
+          ...withDisplayPrice(product),
           id: product._id,
           image: product.mainImage,
         }));
