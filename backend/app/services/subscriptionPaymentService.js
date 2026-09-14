@@ -156,10 +156,51 @@ export async function createSubscriptionPhonePeCheckout({
     };
   }
 
-  const attemptCount =
-    (await SellerSubscriptionPayment.countDocuments({ sellerId, planId })) + 1;
-  const merchantOrderId = buildSubscriptionMerchantOrderId(sellerId, planId, attemptCount);
+  // Reserve a unique merchantOrderId via the DB's unique index BEFORE calling
+  // PhonePe. PhonePe rejects a second pay() call for an already-used
+  // merchantOrderId outright ("Duplicate merchantOrderId") rather than
+  // returning the first call's response, so the race has to be closed here —
+  // two concurrent requests reading the same countDocuments() value must not
+  // both be able to call PhonePe with the same id. The unique index makes
+  // exactly one of them win the insert; the loser retries with the next count.
+  let payment = null;
+  let attemptCount = await SellerSubscriptionPayment.countDocuments({ sellerId, planId }) + 1;
+  const MAX_RESERVE_ATTEMPTS = 5;
+  for (let i = 0; i < MAX_RESERVE_ATTEMPTS && !payment; i += 1) {
+    const candidateOrderId = buildSubscriptionMerchantOrderId(sellerId, planId, attemptCount);
+    try {
+      payment = await SellerSubscriptionPayment.create({
+        sellerId,
+        planId: plan._id,
+        requestType: resolvedType,
+        gatewayName: PAYMENT_GATEWAY.PHONEPE,
+        gatewayOrderId: candidateOrderId,
+        amount: amountPaise,
+        currency: "INR",
+        status: PAYMENT_STATUS.CREATED,
+        planSnapshot: {
+          name: plan.name,
+          shopCount: plan.shopCount,
+          productCountPerShop: plan.productCountPerShop,
+          durationDays: plan.durationDays,
+          price: plan.price,
+        },
+      });
+    } catch (error) {
+      if (error?.code === 11000 && String(error?.message || "").includes("gatewayOrderId")) {
+        attemptCount += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (!payment) {
+    const err = new Error("Could not reserve a unique subscription payment order id");
+    err.statusCode = 409;
+    throw err;
+  }
 
+  const merchantOrderId = payment.gatewayOrderId;
   const client = getPhonePeClient();
   const redirectUrl = `${process.env.FRONTEND_URL}/seller/subscription/payment-status?merchantOrderId=${merchantOrderId}`;
 
@@ -169,45 +210,24 @@ export async function createSubscriptionPhonePeCheckout({
     .redirectUrl(redirectUrl)
     .build();
 
-  const response = await client.pay(request);
-
-  let payment;
-  let duplicate = false;
+  let response;
   try {
-    payment = await SellerSubscriptionPayment.create({
-      sellerId,
-      planId: plan._id,
-      requestType: resolvedType,
-      gatewayName: PAYMENT_GATEWAY.PHONEPE,
-      gatewayOrderId: merchantOrderId,
-      amount: amountPaise,
-      currency: "INR",
-      status: PAYMENT_STATUS.PENDING,
-      planSnapshot: {
-        name: plan.name,
-        shopCount: plan.shopCount,
-        productCountPerShop: plan.productCountPerShop,
-        durationDays: plan.durationDays,
-        price: plan.price,
-      },
-      rawGatewayResponse: {
-        redirectUrl: response.redirectUrl,
-        merchantOrderId,
-        amount: amountPaise,
-      },
-    });
+    response = await client.pay(request);
   } catch (error) {
-    // Concurrent duplicate request raced us to the same merchantOrderId
-    // (attemptCount was read before either insert landed). PhonePe already
-    // treats merchantOrderId as an idempotency key, so the safe response is
-    // to return whichever record won the insert, not to error out.
-    if (error?.code === 11000 && String(error?.message || "").includes("gatewayOrderId")) {
-      payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: merchantOrderId });
-      duplicate = true;
-    } else {
-      throw error;
-    }
+    payment.status = PAYMENT_STATUS.FAILED;
+    payment.failedAt = new Date();
+    payment.failureReason = error?.message || "PhonePe pay() call failed";
+    await payment.save();
+    throw error;
   }
+
+  payment.status = PAYMENT_STATUS.PENDING;
+  payment.rawGatewayResponse = {
+    redirectUrl: response.redirectUrl,
+    merchantOrderId,
+    amount: amountPaise,
+  };
+  await payment.save();
 
   await Seller.findByIdAndUpdate(sellerId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
@@ -216,8 +236,8 @@ export async function createSubscriptionPhonePeCheckout({
 
   return {
     payment,
-    redirectUrl: payment?.rawGatewayResponse?.redirectUrl || response.redirectUrl,
-    duplicate,
+    redirectUrl: response.redirectUrl,
+    duplicate: false,
   };
 }
 
