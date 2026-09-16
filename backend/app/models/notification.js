@@ -106,7 +106,7 @@ const notificationSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-notificationSchema.pre("validate", function preValidate(next) {
+notificationSchema.pre("validate", function preValidate() {
   if (!this.userId && this.recipient) {
     this.userId = this.recipient;
   }
@@ -119,7 +119,6 @@ notificationSchema.pre("validate", function preValidate(next) {
   if (!this.message && this.body) {
     this.message = this.body;
   }
-  next();
 });
 
 notificationSchema.index({ recipient: 1, isRead: 1 });

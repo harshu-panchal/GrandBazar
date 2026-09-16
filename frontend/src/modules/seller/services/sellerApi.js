@@ -30,6 +30,7 @@ export const sellerApi = {
     claimCatalogProduct: (data) => axiosInstance.post('/catalog/claim', data),
     bulkClaimCatalogProducts: (data) => axiosInstance.post('/catalog/claim-bulk', data),
     getAvailableCatalogBundles: () => axiosInstance.get('/catalog/bundles/available'),
+    getCatalogBundleProducts: (id) => axiosInstance.get(`/catalog/bundles/${id}`),
     importCatalogBundles: (data) => axiosInstance.post('/catalog/bundles/import', data),
     getUnpublishedProducts: () => axiosInstance.get('/products/seller/unpublished'),
     publishProductPricing: (id, data) => axiosInstance.patch(`/products/seller/${id}/publish`, data),
@@ -78,6 +79,9 @@ export const sellerApi = {
     getNotifications: () => axiosInstance.get('/notifications'),
     markNotificationRead: (id) => axiosInstance.put(`/notifications/${id}/read`),
     markAllNotificationsRead: () => axiosInstance.put('/notifications/mark-all-read'),
+    getAdminMessages: (params) => axiosInstance.get('/seller/messages', { params }),
+    markAdminMessageRead: (id) => axiosInstance.patch(`/seller/messages/${id}/read`),
+    markAllAdminMessagesRead: () => axiosInstance.patch(`/seller/messages/all/read`, { markAll: true }),
 
     // Money Requests
     requestWithdrawal: (data) => axiosInstance.post('/seller/request-withdrawal', data),

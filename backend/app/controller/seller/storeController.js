@@ -1,6 +1,9 @@
 import Store from "../../models/store.js";
 import Seller from "../../models/seller.js";
+import Admin from "../../models/admin.js";
 import handleResponse from "../../utils/helper.js";
+import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
 import { uploadToCloudinary } from "../../services/mediaService.js";
 import {
   buildStorePayloadFromBody,
@@ -17,6 +20,11 @@ import {
 import { invalidateSellerName } from "../../services/entityNameCache.js";
 import { isOwnerAccountApproved } from "../../services/sellerAccountService.js";
 import { assertCanCreateStore } from "../../services/subscriptionService.js";
+
+async function getAdminIds() {
+  const admins = await Admin.find().select("_id").lean();
+  return (admins || []).map((a) => a?._id).filter(Boolean);
+}
 
 async function resolveUploadedDocs(req) {
   const documentFiles = req.files || [];
@@ -82,6 +90,18 @@ export const createStore = async (req, res) => {
 
     storePayload.ownerId = accountId;
     const store = await Store.create(storePayload);
+
+    // Notify admins so a new shop application waiting for review isn't missed.
+    getAdminIds()
+      .then((adminIds) =>
+        emitNotificationEvent(NOTIFICATION_EVENTS.NEW_SELLER_APPLICATION, {
+          sellerId: store._id,
+          shopName: store.shopName,
+          sellerName: ownerAccount?.name,
+          adminIds,
+        }),
+      )
+      .catch(() => {});
 
     return handleResponse(res, 201, "Store created and pending admin approval", store);
   } catch (error) {

@@ -22,6 +22,7 @@ import {
   HiOutlineMegaphone,
   HiOutlineGift,
   HiOutlineSquare3Stack3D,
+  HiOutlineChatBubbleLeftRight,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -42,6 +43,7 @@ const Transactions = React.lazy(() => import("../pages/Transactions"));
 const DeliveryTracking = React.lazy(() => import("../pages/DeliveryTracking"));
 const Profile = React.lazy(() => import("../pages/Profile"));
 const Notifications = React.lazy(() => import("../pages/Notifications"));
+const AdminMessages = React.lazy(() => import("../pages/AdminMessages"));
 const Withdrawals = React.lazy(() => import("../pages/Withdrawals"));
 const Storefront = React.lazy(() => import("../pages/Storefront"));
 const SellerCoupons = React.lazy(() => import("../pages/SellerCoupons"));
@@ -56,6 +58,7 @@ const SellerRewards = React.lazy(() => import("../pages/SellerRewards"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
+  { label: "Messages from Admin", path: "/seller/admin-messages", icon: HiOutlineChatBubbleLeftRight },
   { label: "Store Design", path: "/seller/storefront", icon: HiOutlinePhoto, permission: "storefront" },
   { label: "Products", path: "/seller/products", icon: HiOutlineCube, permission: "products", end: true },
   { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
@@ -132,6 +135,20 @@ const SellerRoutes = () => {
     return Boolean(user && !user?.subSellerId);
   }, [user]);
 
+  // Persistent guard: a seller (or their store) can be rejected by admin
+  // *while* they still hold a valid session/token — the login-moment
+  // redirect in Auth.jsx only fires once, at login. Without this, a
+  // rejected owner whose account already had an approved store (or a
+  // staff member whose store gets rejected mid-session) keeps the full
+  // dashboard shell with no further gate, since the backend's per-store
+  // approval check doesn't re-validate the owner account status either.
+  const isRejected = isOwner
+    ? user?.accountApplicationStatus === "rejected"
+    : user?.applicationStatus === "rejected";
+  if (user && isRejected) {
+    return <Navigate to="/seller/pending-approval" replace />;
+  }
+
   const hasPermission = React.useCallback((permissionKey, level = "read") => {
     if (isOwner) return true;
     return hasSellerModuleAccess(user?.allowedPermissions || [], permissionKey, level);
@@ -139,7 +156,7 @@ const SellerRoutes = () => {
 
   const filteredNavItems = React.useMemo(() => {
     return navItems.filter((item) => {
-      if (item.path === "/seller" || item.path === "/seller/profile") return true;
+      if (item.path === "/seller" || item.path === "/seller/profile" || item.path === "/seller/admin-messages") return true;
       if (item.ownerOnly) return isOwner;
       if (item.permission === "staff") return isOwner;
       if (isOwner) return true;
@@ -193,6 +210,7 @@ const SellerRoutes = () => {
         )}
         <Route path="profile" element={<Profile />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="admin-messages" element={<AdminMessages />} />
         {isOwner && <Route path="staff" element={<StaffManagement />} />}
         <Route path="*" element={<Navigate to="/seller" replace />} />
       </Routes>

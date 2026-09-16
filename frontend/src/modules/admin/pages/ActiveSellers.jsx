@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
 import MapPicker from "@/shared/components/MapPicker";
+import { getAvatarImageUrl, handleAvatarImageError, handleDocumentImageError } from "@core/utils/imageUtils";
 
 const SORT_OPTIONS = [
   { value: "recent", label: "Newest first" },
@@ -598,12 +599,10 @@ const ActiveSellers = () => {
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-2xl overflow-hidden bg-slate-100 ring-2 ring-slate-100 flex items-center justify-center">
                           <img
-                            src={seller.avatar}
+                            src={getAvatarImageUrl(seller.avatar)}
                             alt={seller.shopName}
                             className="h-full w-full object-cover"
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                            }}
+                            onError={handleAvatarImageError}
                           />
                         </div>
                         <div>
@@ -784,8 +783,9 @@ const ActiveSellers = () => {
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 rounded-2xl overflow-hidden bg-slate-100 ring-4 ring-white shadow-lg">
                     <img
-                      src={selectedSeller.avatar}
+                      src={getAvatarImageUrl(selectedSeller.avatar)}
                       alt={selectedSeller.shopName}
+                      onError={handleAvatarImageError}
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -1554,7 +1554,7 @@ const ActiveSellers = () => {
                           <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {createForm.aadharDoc.startsWith("data:image") || createForm.aadharDoc.startsWith("http") ? (
-                                <img src={createForm.aadharDoc} alt="Aadhaar preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                                <img src={createForm.aadharDoc} alt="Aadhaar preview" onError={handleDocumentImageError} className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
                               ) : (
                                 <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
                               )}
@@ -1617,7 +1617,7 @@ const ActiveSellers = () => {
                           <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {createForm.panDoc.startsWith("data:image") || createForm.panDoc.startsWith("http") ? (
-                                <img src={createForm.panDoc} alt="PAN preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                                <img src={createForm.panDoc} alt="PAN preview" onError={handleDocumentImageError} className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
                               ) : (
                                 <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
                               )}
@@ -1680,7 +1680,7 @@ const ActiveSellers = () => {
                           <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white p-2 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {createForm.gstDoc.startsWith("data:image") || createForm.gstDoc.startsWith("http") ? (
-                                <img src={createForm.gstDoc} alt="GST preview" className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
+                                <img src={createForm.gstDoc} alt="GST preview" onError={handleDocumentImageError} className="h-9 w-9 object-cover rounded-lg border border-slate-100 shrink-0" />
                               ) : (
                                 <div className="h-9 w-9 bg-brand-50 text-brand-600 font-bold text-[10px] flex items-center justify-center rounded-lg shrink-0">DOC</div>
                               )}

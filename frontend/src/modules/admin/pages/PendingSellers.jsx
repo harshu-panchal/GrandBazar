@@ -681,7 +681,11 @@ const PendingSellers = () => {
                                                         <Badge variant="info" className="text-[8px] uppercase">Admin Account</Badge>
                                                     )}
                                                 </div>
-                                                <p className="text-xs font-bold text-primary mt-1 uppercase tracking-widest">{viewingSeller.category || 'General'} PARTNER</p>
+                                                <p className="text-xs font-bold text-primary mt-1 uppercase tracking-widest">
+                                                    {(Array.isArray(viewingSeller.categories) && viewingSeller.categories.length > 0
+                                                        ? viewingSeller.categories.join(' + ')
+                                                        : viewingSeller.category || 'General')} PARTNER
+                                                </p>
                                             </div>
 
                                             <div className="space-y-4">

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import Pagination from "@shared/components/ui/Pagination";
+import { handleCategoryImageError } from "@core/utils/imageUtils";
 import {
   Plus,
   Search,
@@ -486,6 +487,7 @@ const Level2Categories = () => {
                           <img
                             src={typeof cat.image === 'string' ? cat.image : (cat.image.url || cat.image.secure_url || cat.image)}
                             alt={cat.name}
+                            onError={handleCategoryImageError}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -614,6 +616,7 @@ const Level2Categories = () => {
                         <img
                           src={previewUrl}
                           alt="Preview"
+                          onError={handleCategoryImageError}
                           className="w-full h-full object-cover"
                         />
                       ) : (

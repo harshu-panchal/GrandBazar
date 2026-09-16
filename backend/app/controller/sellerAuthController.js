@@ -1,6 +1,9 @@
 import Seller from "../models/seller.js";
 import Store from "../models/store.js";
+import Admin from "../models/admin.js";
 import handleResponse from "../utils/helper.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import {
     issueSellerVerificationOtp,
     verifySellerOtpCode,
@@ -27,6 +30,11 @@ import {
     validateSellerInviteToken,
     markSellerInviteUsed,
 } from "../services/admin/sellerApplicationService.js";
+
+async function getAdminIds() {
+    const admins = await Admin.find().select("_id").lean();
+    return (admins || []).map((a) => a?._id).filter(Boolean);
+}
 
 /* ===============================
    SELLER ADMIN SIGNUP (account only — shops added later)
@@ -96,6 +104,17 @@ export const signupSeller = async (req, res) => {
                 /* non-fatal */
             }
         }
+
+        // Notify admins so a new seller application waiting for review isn't missed.
+        getAdminIds()
+            .then((adminIds) =>
+                emitNotificationEvent(NOTIFICATION_EVENTS.NEW_SELLER_APPLICATION, {
+                    sellerId: account._id,
+                    sellerName: account.name,
+                    adminIds,
+                }),
+            )
+            .catch(() => {});
 
         const token = generateSellerToken({
             accountId: account._id,

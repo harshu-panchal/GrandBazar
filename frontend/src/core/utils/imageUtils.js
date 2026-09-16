@@ -1,5 +1,62 @@
+import categoryPlaceholder from "../../assets/category-placeholder.svg";
+import productPlaceholder from "../../assets/product-placeholder.svg";
+import avatarPlaceholder from "../../assets/avatar-placeholder.svg";
+import documentPlaceholder from "../../assets/document-placeholder.svg";
+
 const CLOUDINARY_REGEX = /res\.cloudinary\.com/i;
 const CLOUDINARY_UPLOAD_SEGMENT_REGEX = /\/upload\/([^/]+)\//i;
+
+/**
+ * Shared local placeholders shown across the app (customer-facing and
+ * admin panel alike) when a photo an admin/seller/delivery partner was
+ * meant to upload is missing or empty — replaces the several divergent
+ * third-party CDN fallback URLs, bare "hide the image" onError handlers,
+ * and unguarded <img> tags that used to leave a raw broken-image icon.
+ */
+export const CATEGORY_PLACEHOLDER_IMAGE = categoryPlaceholder;
+export const PRODUCT_PLACEHOLDER_IMAGE = productPlaceholder;
+export const AVATAR_PLACEHOLDER_IMAGE = avatarPlaceholder;
+export const DOCUMENT_PLACEHOLDER_IMAGE = documentPlaceholder;
+
+function getImageUrlWithFallback(image, placeholder) {
+  return image && String(image).trim() ? image : placeholder;
+}
+
+/**
+ * Returns an <img onError={...}> handler that swaps a dead/broken image URL
+ * for the given local placeholder — catches URLs that are non-empty but
+ * 404/fail to load, which a falsy check on the source value alone can't
+ * catch. Guards against an infinite error loop if the placeholder itself
+ * ever fails to load.
+ */
+function makeImageErrorHandler(placeholder) {
+  return function handleImageError(event) {
+    const img = event.currentTarget;
+    if (img.dataset.fallbackApplied) return;
+    img.dataset.fallbackApplied = "true";
+    img.src = placeholder;
+  };
+}
+
+export function getCategoryImageUrl(image) {
+  return getImageUrlWithFallback(image, CATEGORY_PLACEHOLDER_IMAGE);
+}
+export const handleCategoryImageError = makeImageErrorHandler(CATEGORY_PLACEHOLDER_IMAGE);
+
+export function getProductImageUrl(image) {
+  return getImageUrlWithFallback(image, PRODUCT_PLACEHOLDER_IMAGE);
+}
+export const handleProductImageError = makeImageErrorHandler(PRODUCT_PLACEHOLDER_IMAGE);
+
+export function getAvatarImageUrl(image) {
+  return getImageUrlWithFallback(image, AVATAR_PLACEHOLDER_IMAGE);
+}
+export const handleAvatarImageError = makeImageErrorHandler(AVATAR_PLACEHOLDER_IMAGE);
+
+export function getDocumentImageUrl(image) {
+  return getImageUrlWithFallback(image, DOCUMENT_PLACEHOLDER_IMAGE);
+}
+export const handleDocumentImageError = makeImageErrorHandler(DOCUMENT_PLACEHOLDER_IMAGE);
 
 /**
  * Appends Cloudinary optimisation transforms to a URL.

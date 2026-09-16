@@ -325,6 +325,7 @@ const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
   const { user } = useAuth();
   const [pendingDeliveryCount, setPendingDeliveryCount] = React.useState(0);
+  const [pendingSellerCount, setPendingSellerCount] = React.useState(0);
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
     const r = user?.role;
@@ -357,6 +358,27 @@ const AdminRoutes = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdminOrAdmin]);
 
+  React.useEffect(() => {
+    if (!hasPermission("sellers")) return undefined;
+    let cancelled = false;
+    const fetchPendingSellerCount = async () => {
+      try {
+        const res = await adminApi.getPendingSellers({ limit: 1 });
+        const total = Number(res?.data?.result?.total ?? 0);
+        if (!cancelled) setPendingSellerCount(Number.isFinite(total) ? total : 0);
+      } catch {
+        // Non-fatal — badge just stays at its last known value.
+      }
+    };
+    fetchPendingSellerCount();
+    const poll = setInterval(fetchPendingSellerCount, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdminOrAdmin]);
+
   const navItemsWithBadges = React.useMemo(() => {
     const filteredItems = navItems.filter((item) => {
       if (item.label === "My Profile") return true;
@@ -367,6 +389,7 @@ const AdminRoutes = () => {
 
     const supportCount = Number.isFinite(totalUnread) ? totalUnread : 0;
     const deliveryCount = Number.isFinite(pendingDeliveryCount) ? pendingDeliveryCount : 0;
+    const sellerCount = Number.isFinite(pendingSellerCount) ? pendingSellerCount : 0;
 
     return filteredItems.map((item) => {
       if (item?.label === "Customer Support" && supportCount > 0) {
@@ -375,9 +398,12 @@ const AdminRoutes = () => {
       if (item?.label === "Delivery Drivers" && deliveryCount > 0) {
         return { ...item, badgeCount: deliveryCount, badgePath: "/admin/delivery-boys/pending" };
       }
+      if (item?.label === "Sellers" && sellerCount > 0) {
+        return { ...item, badgeCount: sellerCount, badgePath: "/admin/sellers/pending" };
+      }
       return item;
     });
-  }, [totalUnread, pendingDeliveryCount, user, isSuperAdminOrAdmin]);
+  }, [totalUnread, pendingDeliveryCount, pendingSellerCount, user, isSuperAdminOrAdmin]);
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">

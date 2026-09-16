@@ -131,7 +131,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
 
     const hideHeaderRoutes = ['/', '/categories', '/orders', '/transactions', '/profile', '/profile/edit', '/wishlist', '/addresses', '/wallet', '/rewards', '/support', '/privacy', '/about', '/terms', '/checkout', '/search', '/chat'];
     const hideBottomNavRoutes = ['/checkout', '/search', '/chat', '/return-policy', '/returns'];
-    const hideCartRoutes = ['/checkout', '/search', '/chat'];
+    const hideCartRoutes = ['/checkout', '/search', '/chat', '/terms', '/privacy', '/return-policy'];
 
     // If props are passed, use them. Otherwise, use route-based logic.
     const showHeader = showHeaderProp !== undefined ? showHeaderProp : (!hideHeaderRoutes.includes(path) && !path.startsWith('/category') && !path.startsWith('/orders') && !path.startsWith('/store') && !path.startsWith('/preorder'));

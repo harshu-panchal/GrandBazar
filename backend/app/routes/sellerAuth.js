@@ -9,7 +9,7 @@ import {
     resetSellerPassword,
     validateSellerInvite,
 } from "../controller/sellerAuthController.js";
-import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings, getStoreAlternatives } from "../controller/sellerController.js";
+import { getSellerProfile, updateSellerProfile, requestWithdrawal, getNearbySellers, getPublicSellerProfile, getSellerDeliverySettings, getStoreAlternatives, getSellerMessages, markSellerMessageRead } from "../controller/sellerController.js";
 import { getSellerStats, getSellerEarnings } from "../controller/sellerStatsController.js";
 import { getSellerDashboard } from "../controller/seller/dashboardController.js";
 import {
@@ -165,6 +165,9 @@ router.put(
 );
 
 // Analytics & Financials
+router.get("/messages", ...sellerAuthChain, getSellerMessages);
+router.patch("/messages/:id/read", ...sellerAuthChain, markSellerMessageRead);
+
 router.get("/dashboard", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerDashboard);
 router.get("/stats", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerStats);
 router.get("/earnings", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerEarnings);

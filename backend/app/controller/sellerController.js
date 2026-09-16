@@ -4,7 +4,9 @@ import Transaction from "../models/transaction.js";
 import Wallet from "../models/wallet.js";
 import Product from "../models/product.js";
 import Setting from "../models/setting.js";
+import SellerMessage from "../models/sellerMessage.js";
 import { handleResponse } from "../utils/helper.js";
+import getPagination from "../utils/pagination.js";
 import mongoose from "mongoose";
 import { invalidateSellerName } from "../services/entityNameCache.js";
 import { loadOwnerStores, getStoreCategoryList } from "../services/storeService.js";
@@ -17,6 +19,59 @@ import { getSellerSubscriptionSummary } from "../services/subscriptionService.js
 import { getPlatformDeliveryProvider } from "../services/finance/financeSettingsService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance, computeStoreDistanceKm } from "../services/deliveryEtaService.js";
 import { getNearbySellersWithDistanceForCustomer } from "../services/customerVisibilityService.js";
+
+/* ===============================
+   ADMIN MESSAGES (seller inbox)
+================================ */
+export const getSellerMessages = async (req, res) => {
+  try {
+    const sellerId = req.user.id;
+    const { page, limit, skip } = getPagination(req, {
+      defaultLimit: 20,
+      maxLimit: 100,
+    });
+
+    const [messages, total, unreadCount] = await Promise.all([
+      SellerMessage.find({ sellerId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      SellerMessage.countDocuments({ sellerId }),
+      SellerMessage.countDocuments({ sellerId, isRead: false }),
+    ]);
+
+    return handleResponse(res, 200, "Messages fetched successfully", {
+      items: messages,
+      unreadCount,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+export const markSellerMessageRead = async (req, res) => {
+  try {
+    const sellerId = req.user.id;
+    const { id } = req.params;
+    const markAll = String(req.body?.markAll || "").toLowerCase() === "true";
+
+    const filter = markAll ? { sellerId, isRead: false } : { _id: id, sellerId };
+    const result = await SellerMessage.updateMany(filter, {
+      $set: { isRead: true, readAt: new Date() },
+    });
+
+    return handleResponse(res, 200, "Marked as read", {
+      modifiedCount: Number(result.modifiedCount || 0),
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
 
 /* ===============================
    GET NEARBY STORES (public)

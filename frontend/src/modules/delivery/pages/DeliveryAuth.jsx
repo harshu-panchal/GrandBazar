@@ -71,7 +71,6 @@ const DeliveryAuth = () => {
 
   // OTP state
   const [otp, setOtp] = useState(["", "", "", ""]);
-  const [agreed, setAgreed] = useState(false);
   const [registrationAgreed, setRegistrationAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(30);
@@ -148,7 +147,7 @@ const DeliveryAuth = () => {
   };
 
   const handleVerifyOtp = async () => {
-    if (otp.some((d) => d === "") || !agreed) return;
+    if (otp.some((d) => d === "")) return;
     setLoading(true);
     try {
       const phone = mode === "login" ? loginPhone : signupPhone;
@@ -203,7 +202,6 @@ const DeliveryAuth = () => {
     setAadharFile(null);
     setPanFile(null);
     setDlFile(null);
-    setAgreed(false);
     setRegistrationAgreed(false);
     setProfileImageFile(null);
     setProfileImagePreview("");
@@ -845,26 +843,10 @@ const DeliveryAuth = () => {
                     )}
                   </div>
 
-                  {/* Terms checkbox */}
-                  <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                    <input
-                      id="terms"
-                      type="checkbox"
-                      checked={agreed}
-                      onChange={(e) => setAgreed(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-brand-600 cursor-pointer"
-                    />
-                    <label htmlFor="terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
-                      I confirm my phone number is correct and I agree to the{" "}
-                      <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Terms of Service</a> &amp;{" "}
-                      <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 font-bold hover:underline">Privacy Policy</a>.
-                    </label>
-                  </div>
-
                   {/* Verify Button */}
                   <button
                     onClick={handleVerifyOtp}
-                    disabled={!agreed || otp.some((d) => !d) || loading}
+                    disabled={otp.some((d) => !d) || loading}
                     className="w-full py-4 bg-brand-600 text-white rounded-2xl text-sm font-black tracking-widest uppercase shadow-lg shadow-brand-200 hover:bg-brand-700 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {loading ? (

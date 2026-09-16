@@ -24,6 +24,7 @@ import Pagination from "@shared/components/ui/Pagination";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from '@core/api/axios'; // Direct import for uploading images to media upload
+import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
 
 const WEIGHT_UNITS = ["kg", "gm", "pack", "lit", "ml", "box"];
 
@@ -563,8 +564,9 @@ const CatalogManagement = () => {
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
                           <img
-                            src={item.mainImage || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=200&h=200"}
+                            src={getProductImageUrl(item.mainImage)}
                             alt={item.name}
+                            onError={handleProductImageError}
                             className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-300"
                           />
                         </div>
@@ -899,7 +901,7 @@ const CatalogManagement = () => {
                         <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center min-h-[140px] relative overflow-hidden bg-slate-50 hover:bg-slate-100/50 transition-colors">
                           {formData.mainImage ? (
                             <>
-                              <img src={formData.mainImage} alt="Main" className="absolute inset-0 w-full h-full object-cover" />
+                              <img src={formData.mainImage} alt="Main" onError={handleProductImageError} className="absolute inset-0 w-full h-full object-cover" />
                               <button
                                 type="button"
                                 onClick={() => setFormData(prev => ({ ...prev, mainImage: "" }))}
@@ -925,7 +927,7 @@ const CatalogManagement = () => {
                         {/* Gallery Images Boxes */}
                         {formData.galleryImages.map((img, idx) => (
                           <div key={idx} className="border border-slate-200 rounded-xl min-h-[140px] relative overflow-hidden">
-                            <img src={img} alt="Gallery" className="absolute inset-0 w-full h-full object-cover" />
+                            <img src={img} alt="Gallery" onError={handleProductImageError} className="absolute inset-0 w-full h-full object-cover" />
                             <button
                               type="button"
                               onClick={() => setFormData(prev => ({ ...prev, galleryImages: prev.galleryImages.filter((_, i) => i !== idx) }))}
@@ -1164,7 +1166,7 @@ const CatalogManagement = () => {
                             <div className="flex items-center gap-4">
                               <div className="h-14 w-14 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden relative flex items-center justify-center shrink-0">
                                 {row.mainImage ? (
-                                  <img src={row.mainImage} alt="Preview" className="h-full w-full object-cover" />
+                                  <img src={row.mainImage} alt="Preview" onError={handleProductImageError} className="h-full w-full object-cover" />
                                 ) : (
                                   <HiOutlinePhoto className="h-6 w-6 text-slate-400" />
                                 )}

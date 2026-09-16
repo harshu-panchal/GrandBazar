@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Card from "@shared/components/ui/Card";
+import { getProductImageUrl, handleProductImageError } from "@core/utils/imageUtils";
 import Badge from "@shared/components/ui/Badge";
 import Modal from "@shared/components/ui/Modal";
 import { useToast } from "@shared/components/ui/Toast";
@@ -567,8 +568,9 @@ const OfferSectionsManagement = () => {
                   )}
                 >
                   <img
-                    src={opt.imageUrl}
+                    src={getProductImageUrl(opt.imageUrl)}
                     alt={opt.label}
+                    onError={handleProductImageError}
                     className="w-full h-full object-cover"
                   />
                   <span className="block text-[10px] font-bold text-slate-600 p-1 truncate">

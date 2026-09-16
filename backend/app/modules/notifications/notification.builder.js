@@ -69,6 +69,11 @@ function buildAdminPendingDeliveryLink() {
   return `${baseUrl}/admin/delivery-boys/pending`;
 }
 
+function buildAdminPendingSellerLink() {
+  const baseUrl = getFrontendBaseUrl();
+  return `${baseUrl}/admin/sellers/pending`;
+}
+
 function eventDefinition(eventType) {
   switch (eventType) {
     case NOTIFICATION_EVENTS.ORDER_PLACED:
@@ -454,6 +459,18 @@ function eventDefinition(eventType) {
             ? `${payload.riderName} has applied to become a delivery partner and is waiting for review.`
             : "A new delivery partner application is waiting for review.",
       };
+    case NOTIFICATION_EVENTS.NEW_SELLER_APPLICATION:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: () => "New Seller/Shop Application",
+        body: (payload) =>
+          payload.shopName
+            ? `${payload.shopName} (${payload.sellerName || "new seller"}) has applied and is waiting for approval.`
+            : payload.sellerName
+              ? `${payload.sellerName} has applied to become a seller and is waiting for approval.`
+              : "A new seller application is waiting for approval.",
+      };
     // ── Order Lifecycle: scheduling / reschedule / price / preorder / dispute ──
     case NOTIFICATION_EVENTS.RESCHEDULE_REQUESTED:
       return {
@@ -724,6 +741,16 @@ function eventData(eventType, payload = {}, role) {
       eventType,
       deliveryId,
       link: buildAdminPendingDeliveryLink(),
+      ...(payload.data || {}),
+    };
+  }
+
+  if (eventType === NOTIFICATION_EVENTS.NEW_SELLER_APPLICATION) {
+    const sellerId = String(payload.sellerId || "").trim() || undefined;
+    return {
+      eventType,
+      sellerId,
+      link: buildAdminPendingSellerLink(),
       ...(payload.data || {}),
     };
   }

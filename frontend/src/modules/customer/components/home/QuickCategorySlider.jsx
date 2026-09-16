@@ -2,7 +2,7 @@ import React, { useRef } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { QUICK_CATEGORY_PALETTES } from "../../constants/homeConstants";
-import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import { applyCloudinaryTransform, getCategoryImageUrl, handleCategoryImageError } from "@/core/utils/imageUtils";
 import QuickCategoriesBg from "@/assets/Catagorysection_bg.png";
 
 const QuickCategorySlider = ({ categories, onCategoryClick }) => {
@@ -57,9 +57,10 @@ const QuickCategorySlider = ({ categories, onCategoryClick }) => {
                   className="w-[64px] h-[64px] md:w-[76px] md:h-[76px] rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.06)] bg-white p-0.5 transition-all duration-300 group-hover/item:-translate-y-1 group-hover/item:shadow-[0_8px_16px_rgba(0,0,0,0.1)]">
                   <div className="w-full h-full rounded-full overflow-hidden bg-slate-50 relative">
                     <img
-                      src={applyCloudinaryTransform(cat.image, "f_auto,q_auto,w_150")}
+                      src={applyCloudinaryTransform(getCategoryImageUrl(cat.image), "f_auto,q_auto,w_150")}
                       alt={cat.name}
                       loading="lazy"
+                      onError={handleCategoryImageError}
                       className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-500"
                     />
                   </div>

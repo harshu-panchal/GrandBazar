@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import { getAvatarImageUrl, handleAvatarImageError, handleDocumentImageError } from '@core/utils/imageUtils';
 import {
     Users,
     UserCheck,
@@ -311,8 +312,9 @@ const ActiveDeliveryBoys = () => {
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
                                             <img
-                                                src={rider.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
+                                                src={getAvatarImageUrl(rider.profileImage)}
                                                 alt={rider.name}
+                                                onError={handleAvatarImageError}
                                                 className="h-10 w-10 rounded-2xl bg-slate-100 object-cover border border-slate-200"
                                             />
                                             <div>
@@ -399,8 +401,9 @@ const ActiveDeliveryBoys = () => {
                                 <div className="space-y-6">
                                     <div className="text-center">
                                         <img
-                                            src={viewingRider.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
+                                            src={getAvatarImageUrl(viewingRider.profileImage)}
                                             alt={viewingRider.name}
+                                            onError={handleAvatarImageError}
                                             className="h-24 w-24 rounded-3xl bg-white shadow-xl object-cover ring-4 ring-white mx-auto mb-3"
                                         />
                                         <h3 className="text-lg font-black text-slate-900">{viewingRider.name}</h3>
@@ -479,7 +482,7 @@ const ActiveDeliveryBoys = () => {
                                                 >
                                                     <span className="text-xs font-bold text-slate-900 uppercase">{doc.name}</span>
                                                     {doc.url ? (
-                                                        <img src={doc.url} alt={doc.name} className="h-24 w-full object-cover rounded-xl mt-2" />
+                                                        <img src={doc.url} alt={doc.name} onError={handleDocumentImageError} className="h-24 w-full object-cover rounded-xl mt-2" />
                                                     ) : (
                                                         <div className="h-20 w-full bg-slate-200 rounded-xl flex items-center justify-center mt-2">
                                                             <FileSearch size={20} className="text-slate-400" />
@@ -715,9 +718,10 @@ const ActiveDeliveryBoys = () => {
                                 </button>
                             </div>
                             <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-slate-950 rounded-2xl p-2">
-                                <img 
-                                    src={previewDoc.url} 
-                                    alt={previewDoc.name} 
+                                <img
+                                    src={previewDoc.url}
+                                    alt={previewDoc.name}
+                                    onError={handleDocumentImageError}
                                     className="max-h-[70vh] w-auto object-contain rounded-xl"
                                 />
                             </div>

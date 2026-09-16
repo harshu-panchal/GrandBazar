@@ -20,6 +20,7 @@ import {
 import { FaFacebook as Facebook, FaTwitter as Twitter, FaInstagram as Instagram, FaLinkedin as Linkedin, FaYoutube as Youtube } from 'react-icons/fa';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
+import { handleAvatarImageError } from '@core/utils/imageUtils';
 import { adminApi } from '../services/adminApi';
 import { useSettings } from '@core/context/SettingsContext';
 
@@ -587,7 +588,7 @@ const AdminSettings = () => {
                                                 <Loader2 className="h-10 w-10 text-brand-600 animate-spin" />
                                             ) : settings.logoUrl ? (
                                                 <>
-                                                    <img src={settings.logoUrl} alt="App logo" className="max-h-24 w-auto object-contain" />
+                                                    <img src={settings.logoUrl} alt="App logo" onError={handleAvatarImageError} className="max-h-24 w-auto object-contain" />
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-xs font-bold text-slate-500">Click to replace</span>
                                                         <button type="button" onClick={(e) => { e.stopPropagation(); handleInputChange('logoUrl', ''); }} className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600" title="Remove logo"><X className="h-4 w-4" /></button>
@@ -620,7 +621,7 @@ const AdminSettings = () => {
                                                 <Loader2 className="h-10 w-10 text-brand-600 animate-spin" />
                                             ) : settings.faviconUrl ? (
                                                 <>
-                                                    <img src={settings.faviconUrl} alt="Favicon" className="max-h-16 w-auto object-contain" />
+                                                    <img src={settings.faviconUrl} alt="Favicon" onError={handleAvatarImageError} className="max-h-16 w-auto object-contain" />
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-xs font-bold text-slate-500">Click to replace</span>
                                                         <button type="button" onClick={(e) => { e.stopPropagation(); handleInputChange('faviconUrl', ''); }} className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600" title="Remove favicon"><X className="h-4 w-4" /></button>

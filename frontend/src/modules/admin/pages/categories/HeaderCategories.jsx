@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { handleCategoryImageError } from "@core/utils/imageUtils";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "../../services/adminApi";
 import { toast } from "sonner";
@@ -232,7 +233,10 @@ const HeaderCategories = () => {
       fetchCategories(page);
     } catch (error) {
       console.error(error);
-      toast.error(editingItem ? "Failed to update" : "Failed to create");
+      toast.error(
+        error?.response?.data?.message ||
+          (editingItem ? "Failed to update" : "Failed to create"),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -432,6 +436,7 @@ const HeaderCategories = () => {
                           <img
                             src={cat.image}
                             alt={cat.name}
+                            onError={handleCategoryImageError}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -579,6 +584,7 @@ const HeaderCategories = () => {
                           <img
                             src={previewUrl}
                             alt="Preview"
+                            onError={handleCategoryImageError}
                             className="w-full h-full object-cover"
                           />
                         ) : (

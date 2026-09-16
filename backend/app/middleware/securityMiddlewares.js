@@ -8,12 +8,12 @@ const GLOBAL_RATE_LIMIT_MAX = () =>
 const AUTH_RATE_LIMIT_WINDOW_MS = () =>
   parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || "60000", 10);
 const AUTH_RATE_LIMIT_MAX = () =>
-  parseInt(process.env.AUTH_RATE_LIMIT_MAX || "40", 10);
+  parseInt(process.env.AUTH_RATE_LIMIT_MAX || "80", 10);
 
 const OTP_RATE_LIMIT_WINDOW_MS = () =>
   parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS || "60000", 10);
 const OTP_RATE_LIMIT_MAX = () =>
-  parseInt(process.env.OTP_RATE_LIMIT_MAX || "15", 10);
+  parseInt(process.env.OTP_RATE_LIMIT_MAX || "30", 10);
 
 const PAYMENT_RATE_LIMIT_WINDOW_MS = () =>
   parseInt(process.env.PAYMENT_RATE_LIMIT_WINDOW_MS || "60000", 10);

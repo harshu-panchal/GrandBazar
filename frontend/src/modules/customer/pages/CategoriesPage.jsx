@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import MainLocationHeader from '../components/shared/MainLocationHeader';
 import { customerApi } from '../services/customerApi';
-import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
+import { applyCloudinaryTransform, getCategoryImageUrl, handleCategoryImageError } from '@/core/utils/imageUtils';
 
 const COLORS = [
     "#F2EEE4", "#EFE7E2", "#EAF1F4", "#F0E8F2",
@@ -32,7 +32,7 @@ const CategoriesPage = () => {
                         const categories = (header.children || []).map((cat, cIdx) => ({
                             id: cat._id,
                             name: cat.name,
-                            image: cat.image || "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=270/layout-engine/2022-11/Slice-1_9.png",
+                            image: getCategoryImageUrl(cat.image),
                             color: COLORS[(idx + cIdx) % COLORS.length]
                         }));
 
@@ -177,6 +177,7 @@ const CategoriesPage = () => {
                                                         src={applyCloudinaryTransform(category.image)}
                                                         alt={category.name}
                                                         loading="lazy"
+                                                        onError={handleCategoryImageError}
                                                         className="w-full h-full rounded-full object-cover"
                                                     />
                                                 </div>

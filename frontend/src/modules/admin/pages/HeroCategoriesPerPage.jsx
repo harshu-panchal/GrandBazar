@@ -7,6 +7,7 @@ import {
 } from "react-icons/hi2";
 import { adminApi } from "../services/adminApi";
 import Card from "@shared/components/ui/Card";
+import { handleProductImageError } from "@core/utils/imageUtils";
 import Modal from "@shared/components/ui/Modal";
 import { useToast } from "@shared/components/ui/Toast";
 import { cn } from "@/lib/utils";
@@ -345,6 +346,7 @@ export default function HeroCategoriesPerPage() {
                               <img
                                 src={item.imageUrl}
                                 alt={item.title || `Banner ${idx + 1}`}
+                                onError={handleProductImageError}
                                 className="w-full h-full object-cover"
                               />
                             ) : (

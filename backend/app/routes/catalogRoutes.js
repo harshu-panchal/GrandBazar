@@ -90,10 +90,17 @@ router.post(
   importCatalogBundles,
 );
 
+// Products list included — sellers use this to preview a bundle's contents
+// (which products it contains) before importing it, not just admin edit.
 router.get(
   "/bundles/:id",
   verifyToken,
-  allowRoles("admin"),
+  allowRoles("admin", "seller"),
+  resolveActiveStore,
+  requireApprovedSeller,
+  requireBusinessModelChosen,
+  requireSellerOperational,
+  checkSubSellerPermission("products", "read"),
   getCatalogBundle,
 );
 

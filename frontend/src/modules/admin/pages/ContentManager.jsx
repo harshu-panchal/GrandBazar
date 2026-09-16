@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
+import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
 import Badge from '@shared/components/ui/Badge';
 import Modal from '@shared/components/ui/Modal';
 import { useToast } from '@shared/components/ui/Toast';
@@ -729,6 +730,7 @@ const ContentManager = () => {
                                                             <img
                                                                 src={item.imageUrl}
                                                                 alt={item.title || `Banner ${idx + 1}`}
+                                                                onError={handleProductImageError}
                                                                 className="w-full h-full object-cover"
                                                             />
                                                         ) : (
@@ -1181,7 +1183,7 @@ const ContentManager = () => {
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ad Image</label>
                                         {item.imageUrl ? (
                                             <div className="relative w-40 h-24 rounded-xl overflow-hidden bg-slate-200">
-                                                <img src={item.imageUrl} alt="Ad" className="w-full h-full object-cover" />
+                                                <img src={item.imageUrl} alt="Ad" onError={handleProductImageError} className="w-full h-full object-cover" />
                                                 <button
                                                     type="button"
                                                     onClick={() => updateSuperAdItem(idx, { imageUrl: '' })}

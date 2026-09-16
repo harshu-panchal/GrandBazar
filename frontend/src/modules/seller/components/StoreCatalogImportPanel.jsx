@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { HiOutlineInboxStack, HiOutlineArrowPath } from "react-icons/hi2";
+import { HiOutlineInboxStack, HiOutlineArrowPath, HiOutlineChevronDown, HiOutlineChevronUp } from "react-icons/hi2";
 import { sellerApi } from "../services/sellerApi";
 import Button from "@shared/components/ui/Button";
+import { getProductImageUrl, handleProductImageError } from "@core/utils/imageUtils";
 
 const StoreCatalogImportPanel = ({ className = "" }) => {
   const navigate = useNavigate();
@@ -11,6 +12,29 @@ const StoreCatalogImportPanel = ({ className = "" }) => {
   const [selectedBundleIds, setSelectedBundleIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
+  const [expandedBundleId, setExpandedBundleId] = useState(null);
+  const [bundleProducts, setBundleProducts] = useState({});
+  const [loadingProductsFor, setLoadingProductsFor] = useState(null);
+
+  const toggleExpand = async (bundleId) => {
+    if (expandedBundleId === bundleId) {
+      setExpandedBundleId(null);
+      return;
+    }
+    setExpandedBundleId(bundleId);
+    if (bundleProducts[bundleId]) return;
+    setLoadingProductsFor(bundleId);
+    try {
+      const response = await sellerApi.getCatalogBundleProducts(bundleId);
+      const products = response.data?.result?.products || [];
+      setBundleProducts((prev) => ({ ...prev, [bundleId]: products }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load products in this bundle");
+      setBundleProducts((prev) => ({ ...prev, [bundleId]: [] }));
+    } finally {
+      setLoadingProductsFor(null);
+    }
+  };
 
   const loadBundles = async () => {
     setIsLoading(true);
@@ -85,25 +109,62 @@ const StoreCatalogImportPanel = ({ className = "" }) => {
         {bundles.map((bundle) => {
           const bundleId = String(bundle.id || bundle._id);
           const checked = selectedBundleIds.includes(bundleId);
+          const isExpanded = expandedBundleId === bundleId;
+          const products = bundleProducts[bundleId];
+          const isLoadingProducts = loadingProductsFor === bundleId;
           return (
-            <label
+            <div
               key={bundleId}
-              className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer ${
-                checked ? "border-brand-300 bg-white" : "border-transparent bg-white/70"
-              }`}
+              className={`rounded-lg border ${checked ? "border-brand-300 bg-white" : "border-transparent bg-white/70"}`}
             >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleBundle(bundleId)}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-800">{bundle.name}</p>
-                <p className="text-xs text-slate-500">
-                  {bundle.headerName} · {bundle.productCount || 0} products
-                </p>
+              <div className="flex items-center gap-3 px-3 py-2">
+                <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBundle(bundleId)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{bundle.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {bundle.headerName} · {bundle.productCount || 0} products
+                    </p>
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(bundleId)}
+                  className="shrink-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  title="View products in this bundle"
+                >
+                  {isExpanded ? <HiOutlineChevronUp className="h-4 w-4" /> : <HiOutlineChevronDown className="h-4 w-4" />}
+                </button>
               </div>
-            </label>
+
+              {isExpanded && (
+                <div className="border-t border-slate-100 px-3 py-2">
+                  {isLoadingProducts ? (
+                    <p className="text-xs text-slate-400 py-1">Loading products...</p>
+                  ) : !products || !products.length ? (
+                    <p className="text-xs text-slate-400 py-1">No products found in this bundle.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {products.map((product) => (
+                        <div key={product._id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5">
+                          <img
+                            src={getProductImageUrl(product.mainImage || product.images?.[0])}
+                            onError={handleProductImageError}
+                            alt={product.name}
+                            className="h-8 w-8 rounded object-cover shrink-0"
+                          />
+                          <span className="text-xs text-slate-700 truncate">{product.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

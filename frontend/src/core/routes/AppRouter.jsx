@@ -201,7 +201,7 @@ const router = createBrowserRouter([
                         { path: 'addresses', element: <ProtectedRoute><AddressesPage /></ProtectedRoute> },
                         { path: 'settings', element: <ProtectedRoute><SettingsPage /></ProtectedRoute> },
                         { path: 'notifications', element: <ProtectedRoute><NotificationsPage /></ProtectedRoute> },
-                        { path: 'support', element: <ProtectedRoute><SupportPage /></ProtectedRoute> },
+                        { path: 'support', element: <SupportPage /> },
                         { path: 'chat', element: <ProtectedRoute><ChatPage /></ProtectedRoute> },
                         { path: 'cart', element: <CartPage /> },
                         { path: 'checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute> },

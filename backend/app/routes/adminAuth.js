@@ -68,6 +68,7 @@ import {
     getUserById,
     getSellers,
     getSellerLocations,
+    sendMessageToSeller,
     getPlatformSettings,
     updatePlatformSettings,
      getStaff,
@@ -304,6 +305,7 @@ router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSelle
 router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
 router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), updateSellerStoreSetup);
 router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), resendSellerCredentials);
+router.post("/sellers/:id/message", verifyToken, allowRoles("admin"), sendMessageToSeller);
 router.post("/sellers/invite", verifyToken, allowRoles("admin"), inviteSeller);
 router.get("/sellers/invites", verifyToken, allowRoles("admin"), listSellerInvites);
 router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);

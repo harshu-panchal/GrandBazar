@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { handleCategoryImageError } from "@core/utils/imageUtils";
 import {
   LayoutGrid,
   List,
@@ -137,6 +138,7 @@ const CategoryHierarchy = () => {
               <img
                 src={item.image?.url || item.image}
                 alt=""
+                onError={handleCategoryImageError}
                 className="w-full h-full object-cover rounded-lg"
               />
             ) : type === "header" ? (

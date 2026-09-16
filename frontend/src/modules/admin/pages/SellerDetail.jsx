@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
@@ -37,6 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
+import { getProductImageUrl, handleProductImageError, getAvatarImageUrl, handleAvatarImageError } from '@core/utils/imageUtils';
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
 import MapPicker from '@/shared/components/MapPicker';
@@ -91,6 +92,9 @@ const SellerDetail = () => {
         adminCommissionFixedRule: 'per_qty',
     });
     const [isSendingCredentials, setIsSendingCredentials] = useState(false);
+    const [sellerMessageText, setSellerMessageText] = useState('');
+    const [isSendingSellerMessage, setIsSendingSellerMessage] = useState(false);
+    const sellerMessageRef = useRef(null);
     const [isSavingShopSetup, setIsSavingShopSetup] = useState(false);
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [shopSetupForm, setShopSetupForm] = useState({
@@ -440,6 +444,25 @@ const SellerDetail = () => {
             showToast(err.response?.data?.message || 'Failed to resend credentials', 'error');
         } finally {
             setIsSendingCredentials(false);
+        }
+    };
+
+    const focusSellerMessageBox = () => {
+        sellerMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        sellerMessageRef.current?.focus();
+    };
+
+    const handleSendSellerMessage = async () => {
+        if (!id || !sellerMessageText.trim()) return;
+        setIsSendingSellerMessage(true);
+        try {
+            const res = await adminApi.messageSeller(id, { message: sellerMessageText.trim() });
+            showToast(res.data?.message || 'Message sent to seller', 'success');
+            setSellerMessageText('');
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to send message', 'error');
+        } finally {
+            setIsSendingSellerMessage(false);
         }
     };
 
@@ -1052,7 +1075,7 @@ const SellerDetail = () => {
                                             <div key={product._id} className="flex items-center gap-4 p-3 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all">
                                                 <div className="h-12 w-12 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
                                                     {product.mainImage ? (
-                                                        <img src={product.mainImage} alt={product.name} className="w-full h-full object-cover" />
+                                                        <img src={product.mainImage} alt={product.name} onError={handleProductImageError} className="w-full h-full object-cover" />
                                                     ) : null}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -1439,7 +1462,7 @@ const SellerDetail = () => {
                                             <div className="flex items-center gap-4">
                                                 <div className="h-16 w-16 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
                                                     {shopSetupForm.logoUrl ? (
-                                                        <img src={shopSetupForm.logoUrl} alt="Store logo" className="w-full h-full object-cover" />
+                                                        <img src={shopSetupForm.logoUrl} alt="Store logo" onError={handleAvatarImageError} className="w-full h-full object-cover" />
                                                     ) : (
                                                         <ImageIcon className="h-5 w-5 text-slate-300" />
                                                     )}
@@ -1464,7 +1487,7 @@ const SellerDetail = () => {
                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                                 {shopSetupForm.banners.map((banner, index) => (
                                                     <div key={index} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-[21/9] bg-slate-50">
-                                                        <img src={banner} alt={`Banner ${index + 1}`} className="w-full h-full object-cover" />
+                                                        <img src={getProductImageUrl(banner)} alt={`Banner ${index + 1}`} onError={handleProductImageError} className="w-full h-full object-cover" />
                                                         <button
                                                             type="button"
                                                             onClick={() => handleRemoveBanner(index)}
@@ -1796,7 +1819,10 @@ const SellerDetail = () => {
                             </div>
                         </div>
 
-                        <button className="w-full relative z-10 mt-8 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm">
+                        <button
+                            onClick={focusSellerMessageBox}
+                            className="w-full relative z-10 mt-8 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+                        >
                             Message Owner
                         </button>
                     </Card>
@@ -1808,11 +1834,18 @@ const SellerDetail = () => {
                         <div className="space-y-4">
                             <p className="text-[13px] text-slate-400 leading-relaxed font-medium">Send a top-priority push notification directly to the shop manager's device.</p>
                             <textarea
+                                ref={sellerMessageRef}
+                                value={sellerMessageText}
+                                onChange={(e) => setSellerMessageText(e.target.value)}
                                 placeholder="Write message..."
                                 className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 text-[13px] text-white placeholder-slate-500 font-medium outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all min-h-[90px] resize-none"
                             />
-                            <button className="w-full py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-lg shadow-white/5 transition-all">
-                                Send Alert
+                            <button
+                                onClick={handleSendSellerMessage}
+                                disabled={isSendingSellerMessage || !sellerMessageText.trim()}
+                                className="w-full py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-lg shadow-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSendingSellerMessage ? 'Sending...' : 'Send Alert'}
                             </button>
                         </div>
                     </Card>

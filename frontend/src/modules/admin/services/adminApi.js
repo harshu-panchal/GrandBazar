@@ -17,6 +17,7 @@ export const adminApi = {
     createVendorAccount: (data) => axiosInstance.post('/admin/sellers/create', data),
     updateSellerStoreSetup: (id, data) => axiosInstance.put(`/admin/sellers/${id}/store-setup`, data),
     resendSellerCredentials: (id) => axiosInstance.post(`/admin/sellers/${id}/resend-credentials`),
+    messageSeller: (id, data) => axiosInstance.post(`/admin/sellers/${id}/message`, data),
     inviteSeller: (data) => axiosInstance.post('/admin/sellers/invite', data),
     listSellerInvites: (params) => axiosInstance.get('/admin/sellers/invites', { params }),
     approveSeller: (id, data) => axiosInstance.patch(`/admin/sellers/approve/${id}`, data),

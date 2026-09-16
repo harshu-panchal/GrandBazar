@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageCircle, Phone, Mail, ChevronDown, ChevronUp, FileText, ChevronLeft, PlusCircle, X, Send } from 'lucide-react';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
+import { useAuth } from '@core/context/AuthContext';
 import { customerApi } from '../services/customerApi';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +23,13 @@ const SupportPage = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
     const { settings } = useSettings();
+    const { token } = useAuth();
+    const isAuthenticated = Boolean(token);
+
+    const requireLogin = (action) => {
+        showToast('Please log in to ' + action, 'info');
+        navigate('/login', { state: { from: '/support' } });
+    };
     const supportEmail = settings?.supportEmail || '';
     const supportPhone = settings?.supportPhone || '';
     const [searchParams] = useSearchParams();
@@ -108,12 +116,18 @@ const SupportPage = () => {
             <div className="max-w-2xl mx-auto px-4 pt-1 relative z-20 space-y-5">
                 {/* Contact Channels */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <ContactCard icon={MessageCircle} label="Chat Us" sub="Instant Support" to="/chat" />
+                    <ContactCard
+                        icon={MessageCircle}
+                        label="Chat Us"
+                        sub="Instant Support"
+                        to={isAuthenticated ? "/chat" : undefined}
+                        onClick={isAuthenticated ? undefined : () => requireLogin('start a chat')}
+                    />
                     <ContactCard
                         icon={PlusCircle}
                         label="Raise Ticket"
                         sub="Formal Request"
-                        onClick={() => setIsTicketModalOpen(true)}
+                        onClick={() => isAuthenticated ? setIsTicketModalOpen(true) : requireLogin('raise a ticket')}
                     />
                     <ContactCard
                         icon={Phone}

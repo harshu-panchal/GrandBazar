@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import { getAvatarImageUrl, handleAvatarImageError, handleDocumentImageError } from '@core/utils/imageUtils';
 import {
     Search,
     Filter,
@@ -239,10 +240,11 @@ const PendingDeliveryBoys = () => {
                                     <tr key={rider.id} className="hover:bg-slate-50/80 transition-colors">
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                <img 
-                                                    src={rider.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
-                                                    alt={rider.name} 
-                                                    className="h-11 w-11 rounded-2xl bg-slate-100 object-cover border border-slate-200" 
+                                                <img
+                                                    src={getAvatarImageUrl(rider.profileImage)}
+                                                    alt={rider.name}
+                                                    onError={handleAvatarImageError}
+                                                    className="h-11 w-11 rounded-2xl bg-slate-100 object-cover border border-slate-200"
                                                 />
                                                 <div>
                                                     <h4 className="text-sm font-black text-slate-900">{rider.name}</h4>
@@ -308,10 +310,11 @@ const PendingDeliveryBoys = () => {
                                 <div className="space-y-6">
                                     <div className="text-center">
                                         <div className="relative inline-block mb-3">
-                                            <img 
-                                                src={viewingRider.profileImage || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
-                                                alt={viewingRider.name} 
-                                                className="h-28 w-28 rounded-3xl bg-white shadow-xl object-cover ring-4 ring-white border border-slate-100" 
+                                            <img
+                                                src={getAvatarImageUrl(viewingRider.profileImage)}
+                                                alt={viewingRider.name}
+                                                onError={handleAvatarImageError}
+                                                className="h-28 w-28 rounded-3xl bg-white shadow-xl object-cover ring-4 ring-white border border-slate-100"
                                             />
                                             {viewingRider.profileImage && (
                                                 <button
@@ -475,13 +478,11 @@ const PendingDeliveryBoys = () => {
 
                                                     {doc.url ? (
                                                         <div className="h-32 w-full rounded-xl bg-slate-200 overflow-hidden relative">
-                                                            <img 
-                                                                src={doc.url} 
-                                                                alt={doc.name} 
+                                                            <img
+                                                                src={doc.url}
+                                                                alt={doc.name}
                                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                                onError={(e) => {
-                                                                    e.currentTarget.style.display = 'none';
-                                                                }}
+                                                                onError={handleDocumentImageError}
                                                             />
                                                             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5">
                                                                 <Maximize2 size={16} />
@@ -558,9 +559,10 @@ const PendingDeliveryBoys = () => {
                                 </button>
                             </div>
                             <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-slate-950 rounded-2xl p-2">
-                                <img 
-                                    src={previewDoc.url} 
-                                    alt={previewDoc.name} 
+                                <img
+                                    src={previewDoc.url}
+                                    alt={previewDoc.name}
+                                    onError={handleDocumentImageError}
                                     className="max-h-[70vh] w-auto object-contain rounded-xl"
                                 />
                             </div>

@@ -214,6 +214,32 @@ export const requireApprovedSeller = async (req, res, next) => {
       return next();
     }
 
+    // Account-level gate, independent of any individual store's status.
+    // A seller whose OWNER ACCOUNT was rejected/deactivated after they
+    // already had an approved store must still be blocked here — without
+    // this, resolving an already-approved store below would let every
+    // request through even though the account itself is no longer valid.
+    if (req.user.accountId) {
+      const owner = await Seller.findById(req.user.accountId)
+        .select("applicationStatus isVerified isActive rejectionReason")
+        .lean();
+      if (owner) {
+        const ownerStatus =
+          owner.applicationStatus || (owner.isVerified ? "approved" : "pending");
+        if (ownerStatus === "rejected" || owner.isActive === false) {
+          const message =
+            ownerStatus === "rejected"
+              ? "Your seller account application was rejected. Please contact admin support."
+              : "Your seller account has been deactivated. Please contact admin support.";
+          return handleResponse(res, 403, message, {
+            applicationStatus: ownerStatus,
+            isActive: owner.isActive === true,
+            rejectionReason: owner.rejectionReason || "",
+          });
+        }
+      }
+    }
+
     const resolved = await resolveSellerStoreRecord(req);
     if (!resolved?.store) {
       return handleResponse(res, 403, "No store found for this seller account.", {

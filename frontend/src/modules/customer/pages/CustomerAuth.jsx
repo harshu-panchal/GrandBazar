@@ -19,7 +19,8 @@ import {
     Star,
     ChevronLeft,
     Mail,
-    Gift
+    Gift,
+    LifeBuoy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerApi } from '../services/customerApi';
@@ -145,6 +146,11 @@ const CustomerAuth = () => {
     });
     const [isEmailLoading, setIsEmailLoading] = useState(false);
     const [otpExpiryTimer, setOtpExpiryTimer] = useState(300);
+    // Bumped on every OTP send/resend so the expiry-countdown effect below
+    // (keyed only on `showOtp`, which stays true across a resend) re-runs
+    // and picks up the freshly cleared sessionStorage expiry time instead of
+    // continuing to count down from the original send.
+    const [otpRequestId, setOtpRequestId] = useState(0);
 
     const activeCategory = CATEGORIES[carouselIndex];
 
@@ -203,18 +209,24 @@ const CustomerAuth = () => {
             sessionStorage.setItem('auth_otpExpiryTime', String(targetTime));
         }
         
+        let hasShownExpiredToast = false;
+        let interval;
         const updateTimer = () => {
             const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
             setOtpExpiryTimer(remaining);
             if (remaining === 0) {
-                toast.error('OTP has expired. Please request a new code.');
+                if (!hasShownExpiredToast) {
+                    hasShownExpiredToast = true;
+                    toast.error('OTP has expired. Please request a new code.');
+                }
+                clearInterval(interval);
             }
         };
-        
+
         updateTimer();
-        const interval = setInterval(updateTimer, 1000);
+        interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [showOtp]);
+    }, [showOtp, otpRequestId]);
 
     useEffect(() => {
         // Trap hardware back button (especially for Flutter WebView APK)
@@ -276,6 +288,7 @@ const CustomerAuth = () => {
             setShowOtp(true);
             setTimer(30);
             setOtpExpiryTimer(300);
+            setOtpRequestId((id) => id + 1);
             toast.success('OTP sent!');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
@@ -298,6 +311,7 @@ const CustomerAuth = () => {
             setShowOtp(true);
             setTimer(30);
             setOtpExpiryTimer(300);
+            setOtpRequestId((id) => id + 1);
             toast.success('OTP sent to your email!');
         } catch (error) {
             const apiMessage = error?.response?.data?.message;
@@ -357,6 +371,16 @@ const CustomerAuth = () => {
                 className="absolute top-1.5 left-3 md:top-3 md:left-4 z-[100] w-10 h-10 md:w-12 md:h-12 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
             >
                 <ChevronLeft size={24} />
+            </button>
+
+            {/* Support access — users may need help during login/signup itself
+                (OTP not arriving, account issues, etc.), before they have an
+                account to unlock the normal in-app support centre. */}
+            <button
+                onClick={() => navigate('/support')}
+                className="absolute top-1.5 right-3 md:top-3 md:right-4 z-[100] h-10 md:h-12 px-4 bg-white/10 backdrop-blur-md rounded-xl flex items-center gap-2 text-white text-xs font-black uppercase tracking-widest border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
+            >
+                <LifeBuoy size={18} /> <span className="hidden sm:inline">Need Help?</span>
             </button>
 
             {/* Dynamic Atmospheric Background */}

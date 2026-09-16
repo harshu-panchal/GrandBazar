@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '@shared/components/ui/Toast';
 import { cn } from '@/lib/utils';
-import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
+import { applyCloudinaryTransform, getCategoryImageUrl, CATEGORY_PLACEHOLDER_IMAGE, handleCategoryImageError } from '@/core/utils/imageUtils';
 
 import ProductCard from '../components/shared/ProductCard';
 import ProductDetailSheet from '../components/shared/ProductDetailSheet';
@@ -31,7 +31,7 @@ const CategoryProductsPage = () => {
     const { isOpen: isProductDetailOpen } = useProductDetail();
     const [selectedSubCategory, setSelectedSubCategory] = useState(initialSubcategoryId);
     const [category, setCategory] = useState(null);
-    const [subCategories, setSubCategories] = useState([{ id: 'all', name: 'All', icon: 'https://cdn-icons-png.flaticon.com/128/2321/2321831.png' }]);
+    const [subCategories, setSubCategories] = useState([{ id: 'all', name: 'All', icon: CATEGORY_PLACEHOLDER_IMAGE }]);
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [noServiceData, setNoServiceData] = useState(null);
@@ -87,9 +87,9 @@ const CategoryProductsPage = () => {
                     const subs = (currentCat.children || []).map(s => ({
                         id: s._id,
                         name: s.name,
-                        icon: s.image || 'https://cdn-icons-png.flaticon.com/128/2321/2321801.png'
+                        icon: getCategoryImageUrl(s.image)
                     }));
-                    setSubCategories([{ id: 'all', name: 'All', icon: 'https://cdn-icons-png.flaticon.com/128/2321/2321831.png' }, ...subs]);
+                    setSubCategories([{ id: 'all', name: 'All', icon: CATEGORY_PLACEHOLDER_IMAGE }, ...subs]);
                 }
             })
             .catch((error) => console.error("Error fetching category tree:", error));
@@ -281,7 +281,7 @@ const CategoryProductsPage = () => {
                                         "w-[50px] h-[50px] rounded-full overflow-hidden bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] border transition-all duration-300",
                                         selectedSubCategory === cat.id ? "scale-110 shadow-md border-primary ring-2 ring-primary/20" : "border-slate-100 opacity-90 hover:opacity-100"
                                     )}>
-                                        <img src={applyCloudinaryTransform(cat.icon)} alt={cat.name} loading="lazy" className="w-full h-full object-cover" />
+                                        <img src={applyCloudinaryTransform(cat.icon)} alt={cat.name} loading="lazy" onError={handleCategoryImageError} className="w-full h-full object-cover" />
                                     </div>
                                     <span className={cn(
                                         "text-[10px] text-center font-bold font-sans leading-tight px-1",
