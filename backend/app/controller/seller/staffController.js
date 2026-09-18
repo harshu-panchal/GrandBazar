@@ -166,7 +166,7 @@ export const updateSellerStaff = async (req, res) => {
   try {
     const accountId = req.user.accountId;
     const { id } = req.params;
-    const { name, email, password, phone, role, allowedPermissions, storeId } = req.body;
+    const { name, email, password, phone, role, allowedPermissions, storeId, isActive } = req.body;
 
     const staff = await Seller.findOne({ _id: id, accountType: "staff" });
     if (!staff) {
@@ -201,6 +201,7 @@ export const updateSellerStaff = async (req, res) => {
       staff.password = password;
     }
     if (role) staff.role = role;
+    if (typeof isActive === "boolean") staff.isActive = isActive;
 
     if (allowedPermissions !== undefined) {
       const permissionValidation = validateSellerPermissionsInput(allowedPermissions);

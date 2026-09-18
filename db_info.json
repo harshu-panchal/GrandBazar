@@ -1,0 +1,190 @@
+{
+  "admins": [
+    {
+      "email": "ankit@appzeto.com",
+      "role": "admin",
+      "name": "Ankit Ahirwar",
+      "pwd_prefix": "$2b$10$WpxJ3MwadumfYUruyrpG/O2"
+    },
+    {
+      "email": "admin@admin.com",
+      "role": "admin",
+      "name": "Admin",
+      "pwd_prefix": "$2b$10$M0dWX2ORPAZtjUZWME1R0uO"
+    },
+    {
+      "email": "ankit@gmail.com",
+      "role": "admin",
+      "name": "Ankit",
+      "pwd_prefix": "$2b$10$K7W39YZ7RsMwKT5p/G8rguu"
+    },
+    {
+      "email": "harshvardhanpanc145@gmail.com",
+      "role": "admin",
+      "name": "Harshvardhan Panchal",
+      "pwd_prefix": "$2b$10$gMSEN6on6Avur.OICrzcouU"
+    },
+    {
+      "email": "ankit1@gmail.com",
+      "role": "admin",
+      "name": "Ankit",
+      "pwd_prefix": "$2b$10$eEMgGoViMkR.bCSiXCm.I.0"
+    },
+    {
+      "email": "prachi.porwal06@gmail.com",
+      "role": "assistant",
+      "name": "test",
+      "pwd_prefix": "$2b$10$uw8WFn.WIMoI.nYEWpZ8qeb"
+    }
+  ],
+  "sellers": [
+    {
+      "email": "indore@gmail.com",
+      "name": "Indore",
+      "phone": "6666666666",
+      "status": null
+    },
+    {
+      "email": "test145@gmail.com",
+      "name": "Harshvardhan Panchal",
+      "phone": "8989898989",
+      "status": null
+    },
+    {
+      "email": "appzeto@gmail.com",
+      "name": "Appzeto",
+      "phone": "9999999999",
+      "status": null
+    },
+    {
+      "email": "priyank4u777@gmail.com",
+      "name": "dummy seller",
+      "phone": "8305357624",
+      "status": null
+    },
+    {
+      "email": "harsh@appzeto.com",
+      "name": "Harsh",
+      "phone": "6268423925",
+      "status": null
+    },
+    {
+      "email": "test@gmail.com",
+      "name": "prachi",
+      "phone": "6264715409",
+      "status": null
+    },
+    {
+      "email": "amit@appzeto.com",
+      "name": "Amit Sharma",
+      "phone": "5555555555",
+      "status": null
+    },
+    {
+      "email": "rahul@appzeto.com",
+      "name": "Rahul Soni",
+      "phone": "2222222222",
+      "status": null
+    },
+    {
+      "email": "harshvardhanpanc145@gmail.com",
+      "name": "Jiya",
+      "phone": "9874563210",
+      "status": null
+    },
+    {
+      "email": "pporwalrtm@gmail.com",
+      "name": "test seller",
+      "phone": "9999999986",
+      "status": null
+    }
+  ],
+  "customers": [],
+  "delivery": [],
+  "collections": [
+    "settings",
+    "auditlogentries",
+    "deliverycodremittances",
+    "favoritestores",
+    "sellermetrics",
+    "orderchats",
+    "checkoutgroups",
+    "refunds",
+    "sellersubscriptions",
+    "stockhistories",
+    "quick_users",
+    "reviews",
+    "purchaserequests",
+    "heroconfigs",
+    "admins",
+    "pickuppartners",
+    "financeauditlogs",
+    "searchindexfailures",
+    "tickets",
+    "otpsessions",
+    "seva",
+    "subscriptionpaymentrequests",
+    "users",
+    "wishlists",
+    "pushtokens",
+    "trendingsearchsnapshots",
+    "rewardtransactions",
+    "payments",
+    "deliveries",
+    "catalogproducts",
+    "mapmetrics",
+    "offers",
+    "subscriptionplans",
+    "quick_sellers",
+    "catalogbundles",
+    "paymentwebhookevents",
+    "quick_products",
+    "products",
+    "quick_categories",
+    "storebundleimports",
+    "categories",
+    "hubinventories",
+    "coupons",
+    "sellermessages",
+    "bulksettlements",
+    "loginactivities",
+    "transactions",
+    "citycommissions",
+    "carts",
+    "payouts",
+    "stores",
+    "creditnotes",
+    "otpverifications",
+    "invoices",
+    "rewardgrants",
+    "orders",
+    "hubinwards",
+    "offersections",
+    "sellersubscriptionpayments",
+    "sellers",
+    "productaddonmappings",
+    "quick_admins",
+    "referrals",
+    "faqs",
+    "trendingproductsnapshots",
+    "ledgerentries",
+    "rewardcampaigns",
+    "Quick_commerce",
+    "financereports",
+    "notificationpreferences",
+    "couponredemptions",
+    "experiencesections",
+    "mediametadatas",
+    "orderotps",
+    "sellerinvites",
+    "counters",
+    "disputes",
+    "deliveryassignments",
+    "dashboardstats",
+    "preordercampaigns",
+    "notifications",
+    "wallets",
+    "searchquerylogs",
+    "geocodecaches"
+  ]
+}

@@ -18,6 +18,7 @@ export const WORKFLOW_STATUS = {
   SELLER_ACCEPTED: "SELLER_ACCEPTED",
   SCHEDULED_HOLD: "SCHEDULED_HOLD",
   AWAITING_EXTRA_PAYMENT: "AWAITING_EXTRA_PAYMENT",
+  RESCUE_PENDING: "RESCUE_PENDING",
   DELIVERY_SEARCH: "DELIVERY_SEARCH",
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
@@ -41,6 +42,7 @@ const LEGACY_ENUM = new Set([
   "rescheduled",
   "price_revised",
   "awaiting_extra_payment",
+  "rescue_pending",
   "partial_cancelled",
   "partial_updated",
   "customer_confirmation",
@@ -71,6 +73,8 @@ function legacyFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT:
       return "awaiting_extra_payment";
+    case WORKFLOW_STATUS.RESCUE_PENDING:
+      return "rescue_pending";
     case WORKFLOW_STATUS.DELIVERY_ASSIGNED:
       return "confirmed";
     case WORKFLOW_STATUS.PICKUP_READY:
@@ -108,6 +112,7 @@ export function getLegacyStatusFromOrder(order) {
       "rescheduled",
       "price_revised",
       "awaiting_extra_payment",
+      "rescue_pending",
       "partial_cancelled",
       "partial_updated",
       "customer_confirmation",
@@ -230,6 +235,7 @@ const DISPLAY_LABELS = {
   rescheduled: "Rescheduled",
   price_revised: "Price revised",
   awaiting_extra_payment: "Awaiting extra payment",
+  rescue_pending: "Finding you another seller",
   partial_cancelled: "Partially cancelled",
   partial_updated: "Partially updated",
   customer_confirmation: "Awaiting customer confirmation",
@@ -321,12 +327,27 @@ export function canCustomerAddItems(order) {
       "refunded",
       "disputed",
       "awaiting_extra_payment",
+      "rescue_pending",
     ].includes(legacy)
   ) {
     return false;
   }
 
   return true;
+}
+
+/**
+ * Customers can remove a line item themselves, self-service, only while the
+ * order is still awaiting seller acceptance — mirrors the backend's
+ * customerRemoveOrderItem guard in orderPriceAdjustmentService.js. Once the
+ * seller has accepted, removing an item goes through the seller/admin
+ * partial-cancel flow instead.
+ */
+export function canCustomerRemoveItems(order) {
+  if (!order) return false;
+  const ws = String(order?.workflowStatus || "").toUpperCase();
+  if (ws !== WORKFLOW_STATUS.SELLER_PENDING) return false;
+  return Array.isArray(order.items) && order.items.length > 1;
 }
 
 /**
@@ -452,6 +473,7 @@ const WORKFLOW_STAGE_INDEX = {
   SELLER_ACCEPTED: 2,
   SCHEDULED_HOLD: 2,
   AWAITING_EXTRA_PAYMENT: 2,
+  RESCUE_PENDING: 1,
   DELIVERY_SEARCH: 2,
   EXTERNAL_LOGISTICS_PENDING: 2,
   DELIVERY_ASSIGNED: 3,
@@ -491,7 +513,7 @@ export function adminRouteMatchesOrder(routeStatus, order) {
   if (routeStatus === "all") return true;
   if (routeStatus === "pending") return legacy === "pending" || legacy === "preorder_confirmed";
   if (routeStatus === "processed") {
-    return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
+    return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "rescue_pending", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
   }
   // "scheduled" was never a legal legacy-status value (see legacyFromWorkflow
   // above) — isScheduledHoldOrder reads workflowStatus directly instead of

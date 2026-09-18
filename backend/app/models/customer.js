@@ -143,6 +143,22 @@ const userSchema = new mongoose.Schema(
             default: true,
         },
 
+        // Admin-initiated restriction — distinct from isActive (which means
+        // "account deleted"). A blocked account still exists and can be
+        // unblocked; a deleted (isActive:false) one is gone for good.
+        isBlocked: {
+            type: Boolean,
+            default: false,
+        },
+        blockedReason: {
+            type: String,
+            default: null,
+        },
+        blockedAt: {
+            type: Date,
+            default: null,
+        },
+
         /** Customer-controlled preference: whether push notifications should be sent to this account. */
         notificationsEnabled: {
             type: Boolean,

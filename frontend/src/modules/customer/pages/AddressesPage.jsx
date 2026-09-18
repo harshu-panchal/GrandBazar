@@ -137,13 +137,21 @@ const AddressesPage = () => {
             toast.error('Please enter the address');
             return;
         }
+        if (!city) {
+            toast.error('Please enter the city');
+            return;
+        }
+        if (!pincode) {
+            toast.error('Please enter the pincode');
+            return;
+        }
         const newAddr = {
             label: addForm.type.toLowerCase(),
             fullAddress: address,
             ...(landmark && { landmark }),
-            ...(city && { city }),
+            city,
             ...(state && { state }),
-            ...(pincode && { pincode })
+            pincode,
         };
         setSaving(true);
         try {
@@ -220,8 +228,18 @@ const AddressesPage = () => {
     const handleUpdateAddress = async () => {
         if (!selectedAddress) return;
         const address = editForm.address?.trim();
+        const city = editForm.city?.trim();
+        const pincode = editForm.pincode?.trim();
         if (!address) {
             toast.error('Please enter the address');
+            return;
+        }
+        if (!city) {
+            toast.error('Please enter the city');
+            return;
+        }
+        if (!pincode) {
+            toast.error('Please enter the pincode');
             return;
         }
         const idx = addresses.findIndex(a => (a.id === selectedAddress.id) || (a.address === selectedAddress.address && a.type === selectedAddress.type));
@@ -234,9 +252,9 @@ const AddressesPage = () => {
             label: editForm.type.toLowerCase(),
             fullAddress: address,
             ...(editForm.landmark?.trim() && { landmark: editForm.landmark.trim() }),
-            ...(editForm.city?.trim() && { city: editForm.city.trim() }),
+            city,
             ...(editForm.state?.trim() && { state: editForm.state.trim() }),
-            ...(editForm.pincode?.trim() && { pincode: editForm.pincode.trim() })
+            pincode,
         };
 
         if (editPinnedLocation) {
@@ -499,8 +517,8 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="city">City</Label>
-                                <Input id="city" placeholder="New Delhi" value={addForm.city} onChange={e => setAddForm(f => ({ ...f, city: e.target.value }))} />
+                                <Label htmlFor="city">City *</Label>
+                                <Input id="city" required placeholder="New Delhi" value={addForm.city} onChange={e => setAddForm(f => ({ ...f, city: e.target.value }))} />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="state">State</Label>
@@ -508,8 +526,8 @@ const AddressesPage = () => {
                             </div>
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="pincode">Pincode</Label>
-                            <Input id="pincode" type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
+                            <Label htmlFor="pincode">Pincode *</Label>
+                            <Input id="pincode" required type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={addForm.pincode} onChange={e => setAddForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
                         </div>
                     </div>
                     <DialogFooter>
@@ -575,8 +593,8 @@ const AddressesPage = () => {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="edit-city">City</Label>
-                                <Input id="edit-city" placeholder="New Delhi" value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
+                                <Label htmlFor="edit-city">City *</Label>
+                                <Input id="edit-city" required placeholder="New Delhi" value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="edit-state">State</Label>
@@ -584,8 +602,8 @@ const AddressesPage = () => {
                             </div>
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="edit-pincode">Pincode</Label>
-                            <Input id="edit-pincode" type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
+                            <Label htmlFor="edit-pincode">Pincode *</Label>
+                            <Input id="edit-pincode" required type="text" inputMode="numeric" maxLength={6} placeholder="110075" value={editForm.pincode} onChange={e => setEditForm(f => ({ ...f, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
                         </div>
                     </div>
                     <DialogFooter>

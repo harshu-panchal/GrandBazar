@@ -5,6 +5,8 @@ import {
   getActiveSellerByIdData,
   getSellerLocationsData,
   getSellerOptions,
+  suspendStoreById,
+  reactivateStoreById,
 } from "../../services/admin/sellerDirectoryService.js";
 import SellerMessage from "../../models/sellerMessage.js";
 
@@ -74,6 +76,25 @@ export const getActiveSellerById = async (req, res) => {
     return handleResponse(res, 200, "Active seller fetched successfully", data);
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const suspendStore = async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const store = await suspendStoreById(req.params.id, { reason });
+    return handleResponse(res, 200, "Store suspended", store);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const reactivateStore = async (req, res) => {
+  try {
+    const store = await reactivateStoreById(req.params.id);
+    return handleResponse(res, 200, "Store reactivated", store);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

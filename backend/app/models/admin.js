@@ -32,7 +32,11 @@ const adminSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["admin", "superadmin", "accountant", "assistant"],
+      // "operator": cross-shop OPERATIONAL visibility (orders, sellers,
+      // delivery/fleet, the stuck-order queue) with NO financial or
+      // configuration access — the mirror image of "accountant" (finance
+      // read/export only, no operational control).
+      enum: ["admin", "superadmin", "accountant", "assistant", "operator"],
       default: "admin",
     },
     allowedPermissions: {

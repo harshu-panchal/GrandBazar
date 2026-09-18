@@ -92,8 +92,11 @@ export const customerApi = {
   // Explicit timeout so checkout never waits forever if the server blocks (e.g. Redis/Bull).
   checkoutPreview: (data) =>
     axiosInstance.post("/orders/checkout/preview", data, { timeout: 120000 }),
-  createOrder: (data) =>
-    axiosInstance.post("/orders", data, { timeout: 120000 }),
+  createOrder: (data, idempotencyKey) =>
+    axiosInstance.post("/orders", data, {
+      timeout: 120000,
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
   verifyOnlineOrderPayment: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/payment/verify-online`, data),
   markOrderDelivered: (orderId, data) =>
@@ -133,10 +136,23 @@ export const customerApi = {
     axiosInstance.post(`/orders/${orderId}/adjustment/approve`),
   rejectOrderAdjustment: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/adjustment/reject`, data),
+  approveOrderRescue: (orderId) =>
+    axiosInstance.post(`/orders/${orderId}/rescue/approve`),
+  rejectOrderRescue: (orderId) =>
+    axiosInstance.post(`/orders/${orderId}/rescue/reject`),
+  approveSplitDelivery: (orderId) =>
+    axiosInstance.post(`/orders/${orderId}/split-delivery/approve`),
+  rejectSplitDelivery: (orderId, data) =>
+    axiosInstance.post(`/orders/${orderId}/split-delivery/reject`, data),
   addOrderItems: (orderId, data) => {
     invalidateCache("/orders/my-orders");
     invalidateCache("/orders/details/");
     return axiosInstance.post(`/orders/${orderId}/add-items`, data);
+  },
+  removeOrderItems: (orderId, data) => {
+    invalidateCache("/orders/my-orders");
+    invalidateCache("/orders/details/");
+    return axiosInstance.post(`/orders/${orderId}/remove-items`, data);
   },
   reviewReplacementRequest: (orderId, requestId, data) =>
     axiosInstance.put(`/orders/${orderId}/replacements/${requestId}/review`, data),

@@ -12,6 +12,9 @@ import { getRedisClient } from "../config/redis.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { roundCurrency } from "../utils/money.js";
+import { emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
 const LOC_MIN_INTERVAL_MS = () =>
   parseInt(process.env.LOCATION_MIN_INTERVAL_MS || "3000", 10);
@@ -572,7 +575,28 @@ export const getMyDeliveryOrders = async (req, res) => {
             query = assignedToPartner;
         }
 
+        // Riders need the collectable total (pricing.total) and order/item
+        // details to complete a delivery — but never the internal financial
+        // breakdown (paymentBreakdown has seller commission/GST/platform
+        // earnings, financeFlags/settlementStatus are admin-internal). This
+        // was previously returning the full Order document with no
+        // projection at all.
         const orders = await Order.find(query)
+            .select(
+                "orderId customer seller items address status orderStatus workflowStatus " +
+                "paymentMode paymentStatus pricing.total deliveryBoy deliveryPartner deliveredAt " +
+                "createdAt cancelReason cancelledBy returnStatus schedule fulfillmentType " +
+                "fulfillmentMethod otpValidatedAt deliveryProofImages " +
+                // Only the rider's own payout/tip/distance/COD figures — never
+                // sellerPayoutTotal/adminProductCommissionTotal/platformTotalEarning
+                // or any tax/commission breakdown, which are seller/admin internal.
+                "paymentBreakdown.riderPayoutTotal paymentBreakdown.riderPayoutBase " +
+                "paymentBreakdown.riderPayoutDistance paymentBreakdown.riderPayoutBonus " +
+                "paymentBreakdown.riderTipAmount paymentBreakdown.distanceKmActual " +
+                "paymentBreakdown.distanceKmRounded paymentBreakdown.grandTotal " +
+                "paymentBreakdown.codCollectedAmount paymentBreakdown.codRemittedAmount " +
+                "paymentBreakdown.codPendingAmount",
+            )
             .sort({ createdAt: -1 })
             .limit(100)
             .populate("seller", "shopName address")
@@ -938,6 +962,81 @@ export const generateDeliveryOtp = async (req, res) => {
 };
 
 /* ===============================
+   REPORT DELIVERY EXCEPTION
+   (customer unreachable, wrong address, refused, store closed, etc.)
+================================ */
+export const reportDeliveryException = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { category, note, lat, lng } = req.body || {};
+        const deliveryBoyId = req.user.id;
+
+        const VALID_CATEGORIES = ["customer_unreachable", "wrong_address", "customer_refused", "store_closed", "other"];
+        const normalizedCategory = VALID_CATEGORIES.includes(category) ? category : "other";
+
+        const orderKey = orderMatchQueryFromRouteParam(orderId);
+        if (!orderKey) {
+            return handleResponse(res, 404, "Order not found");
+        }
+
+        const order = await Order.findOne(orderKey).populate("customer", "name");
+        if (!order) {
+            return handleResponse(res, 404, "Order not found");
+        }
+        if (order.deliveryBoy?.toString() !== deliveryBoyId && order.returnDeliveryBoy?.toString() !== deliveryBoyId) {
+            return handleResponse(res, 403, "This order is not assigned to you");
+        }
+
+        order.deliveryExceptions.push({
+            reportedBy: deliveryBoyId,
+            category: normalizedCategory,
+            note: String(note || "").trim().slice(0, 500),
+            location: Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+                ? { lat: Number(lat), lng: Number(lng) }
+                : undefined,
+            reportedAt: new Date(),
+        });
+        await order.save();
+
+        const categoryLabels = {
+            customer_unreachable: "Customer unreachable",
+            wrong_address: "Wrong/incomplete address",
+            customer_refused: "Customer refused delivery",
+            store_closed: "Store was closed",
+            other: "Delivery issue",
+        };
+
+        emitNotificationEvent(NOTIFICATION_EVENTS.DELIVERY_EXCEPTION_REPORTED, {
+            orderId: order.orderId,
+            customerId: order.customer?._id || order.customer,
+            userId: order.customer?._id || order.customer,
+            sellerId: order.seller,
+            category: normalizedCategory,
+            categoryLabel: categoryLabels[normalizedCategory],
+        });
+
+        // Surface it to Operator/Admin the same way any other stuck order is —
+        // a delivery exception is exactly the kind of thing that queue exists for.
+        try {
+            const { escalateOrder } = await import("../services/operationsQueueService.js");
+            await escalateOrder(order.orderId, {
+                reason: `Delivery exception: ${categoryLabels[normalizedCategory]}${note ? ` — ${note}` : ""}`,
+                actorId: deliveryBoyId,
+                actorRole: "delivery",
+            });
+        } catch (escalationError) {
+            console.error("[reportDeliveryException] escalation failed:", escalationError);
+        }
+
+        return handleResponse(res, 200, "Delivery exception reported", order);
+    } catch (error) {
+        return handleResponse(res, 500, "Failed to report delivery exception", {
+            error: { code: "REPORT_FAILED", message: error.message },
+        });
+    }
+};
+
+/* ===============================
    VALIDATE DELIVERY OTP
 ================================ */
 export const validateDeliveryOtp = async (req, res) => {
@@ -1077,7 +1176,8 @@ export const validateDeliveryOtp = async (req, res) => {
             }
         }
 
-        // Emit Socket.IO event to customer
+        // Emit Socket.IO event to customer (bespoke event the customer app's
+        // OTP screen specifically listens for)
         try {
             const { getIO } = await import('../socket/socketManager.js');
             const io = getIO();
@@ -1100,6 +1200,31 @@ export const validateDeliveryOtp = async (req, res) => {
         } catch (socketError) {
             console.error('Error emitting Socket.IO event:', socketError);
             // Don't fail the request if socket emission fails
+        }
+
+        // Standard status broadcast + persisted notification pipeline —
+        // previously this route only fired the bespoke socket event above,
+        // so the seller/admin never learned a delivery had completed, and
+        // the customer had no persisted notification/push fallback if their
+        // socket wasn't connected at that exact moment.
+        try {
+            emitOrderStatusUpdate(
+                order.orderId,
+                { workflowStatus: WORKFLOW_STATUS.DELIVERED },
+                updatedOrder?.customer || order.customer?._id,
+                updatedOrder?.seller || order.seller,
+            );
+            emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
+                orderId: order.orderId,
+                customerId: updatedOrder?.customer || order.customer?._id,
+                userId: updatedOrder?.customer || order.customer?._id,
+                deliveryId: deliveryBoyId,
+                sellerId: updatedOrder?.seller || order.seller,
+            });
+        } catch (notifyError) {
+            console.error('[validateDeliveryOtp] notification dispatch failed:', notifyError);
+            // Delivery is already finalized — a notification failure must not
+            // fail the OTP validation response.
         }
 
         return handleResponse(res, 200, "Order delivered successfully", {

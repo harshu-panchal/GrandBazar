@@ -675,3 +675,42 @@ export async function getSellerOptions() {
     .sort({ shopName: 1 })
     .lean();
 }
+
+// Admin "Block seller" / "Suspend store" action for an already-active,
+// approved store — previously the SellerDetail.jsx buttons for this had no
+// backend at all. Deactivates the store (hides it from customers, same
+// isActive flag every other visibility gate already checks) and unpublishes
+// its products so a suspended seller can't keep selling through direct
+// product links.
+export async function suspendStoreById(storeId, { reason = "" } = {}) {
+  const store = await Store.findByIdAndUpdate(
+    storeId,
+    { $set: { isActive: false, suspendedAt: new Date(), suspendedReason: reason || null } },
+    { new: true },
+  );
+  if (!store) {
+    const err = new Error("Store not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  await Product.updateMany({ sellerId: storeId }, { $set: { isPublished: false } });
+  return store;
+}
+
+export async function reactivateStoreById(storeId) {
+  const store = await Store.findByIdAndUpdate(
+    storeId,
+    { $set: { isActive: true, suspendedAt: null, suspendedReason: null } },
+    { new: true },
+  );
+  if (!store) {
+    const err = new Error("Store not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  // Manual admin reactivation restores full visibility, including products
+  // — unlike the subscription-expiry path, an admin suspension wasn't tied
+  // to any product-count limit, so nothing needs re-checking here.
+  await Product.updateMany({ sellerId: storeId }, { $set: { isPublished: true } });
+  return store;
+}

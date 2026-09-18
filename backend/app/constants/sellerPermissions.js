@@ -17,6 +17,12 @@ export const SELLER_PERMISSION_MODULES = Object.freeze([
 
 export const SELLER_MODULE_IDS = SELLER_PERMISSION_MODULES.map((m) => m.id);
 
+// Modules that must always stay Owner-only — no assistant/staff tier can
+// ever be granted access, regardless of what an owner tries to assign.
+// "withdrawals" (Money & Earnings) is the current example: moving real
+// money out of the platform is never delegable.
+export const OWNER_ONLY_SELLER_MODULES = Object.freeze(["withdrawals"]);
+
 export const SELLER_PERMISSION_LEVELS = Object.freeze(["read", "write"]);
 
 export const PLATFORM_ADMIN_PERMISSIONS = Object.freeze([

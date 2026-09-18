@@ -9,6 +9,10 @@ export const WORKFLOW_STATUS = {
   SELLER_ACCEPTED: "SELLER_ACCEPTED",
   SCHEDULED_HOLD: "SCHEDULED_HOLD",
   AWAITING_EXTRA_PAYMENT: "AWAITING_EXTRA_PAYMENT",
+  // Order Rescue Engine found a replacement store at a higher price and is
+  // waiting on the customer to approve/reject before the reassignment (and
+  // any extra charge) actually lands. See services/orderRescueService.js.
+  RESCUE_PENDING: "RESCUE_PENDING",
   DELIVERY_SEARCH: "DELIVERY_SEARCH",
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
@@ -62,6 +66,8 @@ export function legacyStatusFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT:
       return "awaiting_extra_payment";
+    case WORKFLOW_STATUS.RESCUE_PENDING:
+      return "rescue_pending";
     case WORKFLOW_STATUS.DELIVERY_SEARCH:
       return "confirmed";
     case WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING:
@@ -98,6 +104,7 @@ export function workflowFromLegacyStatus(legacy) {
   if (s === "delivered") return WORKFLOW_STATUS.DELIVERED;
   if (s === "disputed") return WORKFLOW_STATUS.DISPUTED;
   if (s === "awaiting_extra_payment") return WORKFLOW_STATUS.AWAITING_EXTRA_PAYMENT;
+  if (s === "rescue_pending") return WORKFLOW_STATUS.RESCUE_PENDING;
   if (s === "reschedule_requested") return WORKFLOW_STATUS.SCHEDULED_HOLD;
   if (s === "rescheduled") return WORKFLOW_STATUS.SCHEDULED_HOLD;
   if (s === "price_revised") return WORKFLOW_STATUS.SCHEDULED_HOLD;

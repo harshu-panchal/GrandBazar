@@ -104,7 +104,12 @@ jest.unstable_mockModule("../app/config/redis.js", () => ({
   getRedisClient: jest.fn(() => null),
 }));
 
-const { sellerAcceptAtomic, sellerMarkPackedSignalAtomic } = await import("../app/services/orderWorkflowService.js");
+const mockAttemptOrderRescue = jest.fn();
+jest.unstable_mockModule("../app/services/orderRescueService.js", () => ({
+  attemptOrderRescue: mockAttemptOrderRescue,
+}));
+
+const { sellerAcceptAtomic, sellerRejectAtomic, sellerMarkPackedSignalAtomic } = await import("../app/services/orderWorkflowService.js");
 const { WORKFLOW_STATUS } = await import("../app/constants/orderWorkflow.js");
 
 describe("orderWorkflowService sellerAcceptAtomic", () => {
@@ -208,5 +213,91 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
       "cust3",
       "store3",
     );
+  });
+
+  // TC-DASH-012 regression: the seller dashboard's per-assistant Orders /
+  // Acceptance % columns had no data source (always null) because nothing
+  // recorded which staff member actually accepted/rejected an order.
+  // sellerAcceptAtomic now stamps sellerActionBy.acceptedByStaffId whenever
+  // the caller passes the acting sub-seller's own id.
+  it("stamps sellerActionBy.acceptedByStaffId when a sub-seller (assistant) accepts the order", async () => {
+    mockOrderFindOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ logisticsMode: "zinto" }),
+    });
+    mockGetPlatformDeliveryProvider.mockResolvedValue("zinto");
+
+    const updatedOrder = {
+      _id: "mongo4",
+      orderId: "ORD-400",
+      workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
+      deliverySearchExpiresAt: new Date(),
+      customer: { _id: "cust4" },
+      seller: { _id: "store4", shopName: "Shop" },
+      address: { address: "123 Main St" },
+    };
+    const populateChain = { populate: jest.fn(function acceptPopulate() { return this; }) };
+    populateChain.then = (resolve) => resolve(updatedOrder);
+    mockOrderFindOneAndUpdate.mockReturnValue(populateChain);
+
+    await sellerAcceptAtomic("store4", "ORD-400", "staff-123");
+
+    const [, updatePayload] = mockOrderFindOneAndUpdate.mock.calls[0];
+    expect(updatePayload.$set["sellerActionBy.acceptedByStaffId"]).toBe("staff-123");
+  });
+
+  it("does not set sellerActionBy when the owner (not a sub-seller) accepts the order", async () => {
+    mockOrderFindOne.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ logisticsMode: "zinto" }),
+    });
+    mockGetPlatformDeliveryProvider.mockResolvedValue("zinto");
+
+    const updatedOrder = {
+      _id: "mongo5",
+      orderId: "ORD-500",
+      workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
+      deliverySearchExpiresAt: new Date(),
+      customer: { _id: "cust5" },
+      seller: { _id: "store5" },
+    };
+    const populateChain = { populate: jest.fn(function ownerAcceptPopulate() { return this; }) };
+    populateChain.then = (resolve) => resolve(updatedOrder);
+    mockOrderFindOneAndUpdate.mockReturnValue(populateChain);
+
+    await sellerAcceptAtomic("store5", "ORD-500");
+
+    const [, updatePayload] = mockOrderFindOneAndUpdate.mock.calls[0];
+    expect(updatePayload.$set).not.toHaveProperty("sellerActionBy.acceptedByStaffId");
+  });
+});
+
+describe("orderWorkflowService sellerRejectAtomic (TC-DASH-012 staff attribution)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRequireCanonicalOrderId.mockImplementation(async (id) => id);
+    mockAttemptOrderRescue.mockResolvedValue({ orderId: "ORD-600", rescued: true });
+  });
+
+  it("stamps sellerActionBy.rejectedByStaffId when a sub-seller rejects the order", async () => {
+    mockOrderFindOneAndUpdate.mockResolvedValue({ orderId: "ORD-600" });
+
+    await sellerRejectAtomic("store6", "ORD-600", "Out of stock for this item", "staff-456");
+
+    const [, updatePayload] = mockOrderFindOneAndUpdate.mock.calls[0];
+    expect(updatePayload.$set["sellerActionBy.rejectedByStaffId"]).toBe("staff-456");
+    expect(mockAttemptOrderRescue).toHaveBeenCalledWith("ORD-600", {
+      trigger: "seller_rejected",
+      actorLabel: "system",
+    });
+  });
+
+  it("does not set sellerActionBy when the owner rejects the order", async () => {
+    mockOrderFindOneAndUpdate.mockResolvedValue({ orderId: "ORD-700" });
+
+    await sellerRejectAtomic("store7", "ORD-700", "Out of stock for this item");
+
+    const [, updatePayload] = mockOrderFindOneAndUpdate.mock.calls[0];
+    expect(updatePayload.$set).not.toHaveProperty("sellerActionBy.rejectedByStaffId");
   });
 });

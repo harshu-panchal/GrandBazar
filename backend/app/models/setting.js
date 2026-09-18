@@ -258,6 +258,32 @@ const settingSchema = new mongoose.Schema(
             min: 1,
             max: 20,
         },
+        // Order Rescue Engine — when a seller rejects/times out, the system
+        // automatically searches for an alternative store before falling
+        // back to cancellation. All limits below are admin-tunable.
+        rescueEngineEnabled: {
+            type: Boolean,
+            default: true,
+        },
+        rescueMaxAttempts: {
+            type: Number,
+            default: 3,
+            min: 1,
+            max: 10,
+        },
+        // A candidate priced more than this % above the original total is
+        // skipped rather than proposed to the customer.
+        rescueMaxPriceIncreasePercent: {
+            type: Number,
+            default: 15,
+            min: 0,
+        },
+        rescueApprovalDeadlineMinutes: {
+            type: Number,
+            default: 30,
+            min: 5,
+            max: 240,
+        },
         lowStockAlertsEnabled: {
             type: Boolean,
             default: true,

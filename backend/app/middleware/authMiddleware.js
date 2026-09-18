@@ -89,7 +89,7 @@ import { updateLastActive } from "../services/loginActivityService.js";
 /* ===============================
    Verify Token
 ================================ */
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   try {
     const token = extractJwtFromHeaders(req);
 
@@ -101,6 +101,22 @@ export const verifyToken = (req, res, next) => {
 
     if (decoded?.purpose === "password_reset") {
       return handleResponse(res, 401, "Invalid or expired token");
+    }
+
+    // An assistant/staff JWT bakes in allowedPermissions at login (7-day
+    // expiry) and was never re-checked against the DB — so a seller
+    // revoking/editing an assistant's permissions, or deleting the account
+    // outright, had zero effect until the token happened to expire. Refresh
+    // from the live Seller record on every request for these tokens (a
+    // minority of traffic) instead of trusting the stale JWT claims.
+    if (decoded?.subSellerId) {
+      const staffRecord = await Seller.findById(decoded.subSellerId)
+        .select("isActive allowedPermissions accountType")
+        .lean();
+      if (!staffRecord || staffRecord.isActive === false || staffRecord.accountType !== "staff") {
+        return handleResponse(res, 401, "This staff account has been removed. Please contact the store owner.");
+      }
+      decoded.allowedPermissions = staffRecord.allowedPermissions || [];
     }
 
     req.user = decoded;
@@ -147,7 +163,13 @@ export const allowRoles = (...roles) => {
   return (req, res, next) => {
     let authorizedRoles = [...roles];
     if (roles.includes("admin")) {
-      authorizedRoles = [...authorizedRoles, "superadmin", "accountant", "assistant"];
+      // "accountant" (Finance/Tax) is deliberately NOT auto-granted every
+      // admin route — it previously inherited full admin write access
+      // wherever a route wasn't separately gated by checkAdminPermission.
+      // It's opted in explicitly, per-route, only where Finance/Tax should
+      // actually have access (see the finance/* read+export routes in
+      // adminAuth.js), keeping it read/export-scoped as required.
+      authorizedRoles = [...authorizedRoles, "superadmin", "assistant"];
     }
     if (!authorizedRoles.includes(req.user.role)) {
       return handleResponse(res, 403, "Access denied");
@@ -354,6 +376,33 @@ export const requireSellerOperational = async (req, res, next) => {
       const { isSellerSubscriptionOperational } = await import("../services/subscriptionService.js");
       const operational = await isSellerSubscriptionOperational(ownerId);
       if (!operational) {
+        // A lapsed subscription must only block NEW commitments (accepting a
+        // new order, adding products, etc) — not progressing an order that
+        // was already accepted and paid for before the lapse. If this route
+        // targets a specific order that's already past SELLER_PENDING, let
+        // it through regardless of subscription status.
+        const orderIdParam = req.params?.orderId;
+        if (orderIdParam) {
+          const [{ default: Order }, { requireCanonicalOrderId }, { WORKFLOW_STATUS }] = await Promise.all([
+            import("../models/order.js"),
+            import("../utils/orderLookup.js"),
+            import("../constants/orderWorkflow.js"),
+          ]);
+          try {
+            const canonicalId = await requireCanonicalOrderId(orderIdParam);
+            const order = await Order.findOne({ orderId: canonicalId }).select("workflowStatus seller").lean();
+            const alreadyCommitted = order
+              && String(order.seller) === String(ownerId)
+              && order.workflowStatus
+              && order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING;
+            if (alreadyCommitted) {
+              return next();
+            }
+          } catch {
+            // Order lookup failing just falls through to the standard block below.
+          }
+        }
+
         return handleResponse(res, 403, "Active subscription required. Complete payment or renew your plan.", {
           subscriptionRequired: true,
         });

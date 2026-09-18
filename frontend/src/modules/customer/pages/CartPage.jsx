@@ -47,9 +47,10 @@ const CartPage = () => {
     // A pre-order/future-order product carries a campaignId, resolved and
     // persisted server-side the moment it's added to cart (see
     // backend/app/controller/cartController.js). When present, the whole
-    // cart is treated as a scheduled pre-order — the backend already
-    // enforces that a cart can't mix pre-order and regular lines, or lines
-    // from two different campaigns, so it's safe to key off the first match.
+    // cart (including any regular in-stock lines from the same store) is
+    // auto-aligned to the campaign's delivery window at checkout — the
+    // backend only still blocks lines from two different campaigns, so
+    // it's safe to key the pre-order UI off the first match.
     const preorderItem = cart.find((item) => item.campaignId);
     const isPreorderCart = Boolean(preorderItem);
     const preorderMeta = preorderItem?.advanceBooking || null;

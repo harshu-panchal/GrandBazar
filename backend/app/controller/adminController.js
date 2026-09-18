@@ -9,3 +9,5 @@ export * from "./admin/sellerDirectoryController.js";
 export * from "./admin/userController.js";
 export * from "./admin/staffController.js";
 export * from "./admin/loginActivityController.js";
+export * from "./admin/operationsQueueController.js";
+export * from "./admin/analyticsReportController.js";

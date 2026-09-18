@@ -4,8 +4,8 @@ import { sendStaffWelcomeEmail } from "../../services/emailService.js";
 
 export const getStaff = async (req, res) => {
   try {
-    // Return only staff members (accountant and assistant roles)
-    const staffList = await Admin.find({ role: { $in: ["accountant", "assistant"] } }).sort({ createdAt: -1 });
+    // Return only staff members (not admin/superadmin accounts)
+    const staffList = await Admin.find({ role: { $in: ["accountant", "assistant", "operator"] } }).sort({ createdAt: -1 });
     return handleResponse(res, 200, "Staff members fetched successfully", staffList);
   } catch (error) {
     return handleResponse(res, 500, error.message);

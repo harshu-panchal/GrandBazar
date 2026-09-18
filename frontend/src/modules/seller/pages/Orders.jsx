@@ -229,6 +229,16 @@ const Orders = () => {
     const [cancelItemIndexes, setCancelItemIndexes] = useState([]);
     const [cancelItemsReason, setCancelItemsReason] = useState('');
     const [cancelItemsSaving, setCancelItemsSaving] = useState(false);
+    // "Add item before packing" — mirrors the customer add-items feature, but
+    // seller-initiated changes need the customer to confirm/pay the extra
+    // amount, so this reuses the same propose/approve adjustment flow as
+    // Adjust Price rather than charging the customer directly.
+    const [addItemsMode, setAddItemsMode] = useState(false);
+    const [addItemsProducts, setAddItemsProducts] = useState([]);
+    const [addItemsProductsLoading, setAddItemsProductsLoading] = useState(false);
+    const [addItemsSelections, setAddItemsSelections] = useState({});
+    const [addItemsReason, setAddItemsReason] = useState('');
+    const [addItemsSaving, setAddItemsSaving] = useState(false);
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
@@ -966,6 +976,66 @@ const Orders = () => {
             showToast(error?.response?.data?.message || "Failed to cancel item(s)", "error");
         } finally {
             setCancelItemsSaving(false);
+        }
+    };
+
+    const openAddItemsEditor = async (order) => {
+        setAddItemsSelections({});
+        setAddItemsReason('');
+        setAddItemsMode(true);
+        setAddItemsProductsLoading(true);
+        try {
+            const productsRes = await sellerApi.getProducts({ limit: 100, status: 'active' });
+            let items = productsRes?.data?.result?.items
+                || productsRes?.data?.results
+                || productsRes?.data?.result
+                || [];
+            if (!Array.isArray(items)) items = [];
+            setAddItemsProducts(items.filter((p) => Number(p.stock || 0) > 0));
+        } catch {
+            setAddItemsProducts([]);
+        } finally {
+            setAddItemsProductsLoading(false);
+        }
+    };
+
+    const closeAddItemsEditor = () => {
+        setAddItemsMode(false);
+        setAddItemsProducts([]);
+        setAddItemsSelections({});
+        setAddItemsReason('');
+    };
+
+    const setAddItemsQty = (productId, qty, stock) => {
+        const clamped = Math.max(0, Math.min(Number(qty) || 0, stock));
+        setAddItemsSelections((prev) => {
+            const next = { ...prev };
+            if (clamped <= 0) delete next[productId];
+            else next[productId] = clamped;
+            return next;
+        });
+    };
+
+    const handleApplyAddItems = async () => {
+        const entries = Object.entries(addItemsSelections);
+        if (!entries.length) {
+            showToast("Select at least one item to add", "error");
+            return;
+        }
+        try {
+            setAddItemsSaving(true);
+            await sellerApi.addOrderItems(selectedOrder._id || selectedOrder.id, {
+                items: entries.map(([productId, quantity]) => ({ product: productId, quantity })),
+                reason: addItemsReason.trim() || "Item added by seller before packing",
+            });
+            showToast("Item added — customer will confirm the extra amount", "success");
+            closeAddItemsEditor();
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to add item", "error");
+        } finally {
+            setAddItemsSaving(false);
         }
     };
 
@@ -2593,7 +2663,8 @@ const Orders = () => {
                                                 && selectedOrder.priceAdjustment?.status !== 'pending';
                                             const canSplitOrReplace = canSellerSplitOrReplace(selectedOrder);
                                             const canCancelItems = canAdjustPrice && selectedOrder.items.length > 1;
-                                            const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode && !cancelItemsMode;
+                                            const canAddItems = canAdjustPrice && !selectedOrder.deliveryBoy;
+                                            const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode && !cancelItemsMode && !addItemsMode;
                                             return (
                                                 <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
                                                     <h4 className="text-xs font-black text-slate-600 uppercase tracking-widest">Items Ordered ({selectedOrder.items.length})</h4>
@@ -2601,6 +2672,9 @@ const Orders = () => {
                                                         <div className="flex flex-wrap justify-end gap-2">
                                                             {canAdjustPrice && (
                                                                 <button onClick={() => openAdjustEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 transition-all">Adjust Price</button>
+                                                            )}
+                                                            {canAddItems && (
+                                                                <button onClick={() => openAddItemsEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all">Add Item</button>
                                                             )}
                                                             {canCancelItems && (
                                                                 <button onClick={() => openCancelItemsEditor(selectedOrder)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all">Item Unavailable</button>
@@ -2623,10 +2697,69 @@ const Orders = () => {
                                                     {cancelItemsMode && (
                                                         <button onClick={closeCancelItemsEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
                                                     )}
+                                                    {addItemsMode && (
+                                                        <button onClick={closeAddItemsEditor} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Cancel Edit</button>
+                                                    )}
                                                 </div>
                                             );
                                         })()}
-                                        {cancelItemsMode ? (
+                                        {addItemsMode ? (
+                                            <div className="space-y-3">
+                                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                                    Select item(s) to add. The customer will be asked to confirm (and pay any extra amount) before this is final — it won't be packed until they do.
+                                                </p>
+                                                {addItemsProductsLoading ? (
+                                                    <div className="flex justify-center py-8">
+                                                        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                                                    </div>
+                                                ) : addItemsProducts.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 text-center py-8">No active products available to add.</p>
+                                                ) : (
+                                                    <div className="space-y-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
+                                                        {addItemsProducts.map((product) => {
+                                                            const qty = addItemsSelections[product._id] || 0;
+                                                            const stock = Number(product.stock || 0);
+                                                            return (
+                                                                <div key={product._id} className="flex items-center justify-between gap-2 p-3 rounded-2xl ring-1 ring-slate-100 bg-white">
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className="h-10 w-10 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 shrink-0">
+                                                                            <img src={product.mainImage} alt={product.name} className="h-full w-full object-cover" />
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="text-xs font-bold text-slate-900 truncate">{product.name}</p>
+                                                                            <p className="text-xs font-semibold text-slate-600 mt-0.5">₹{Number(product.salePrice || product.price || 0).toFixed(2)} · {stock} in stock</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 shrink-0">
+                                                                        <button onClick={() => setAddItemsQty(product._id, qty - 1, stock)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">−</button>
+                                                                        <span className="w-5 text-center text-xs font-bold text-slate-900">{qty}</span>
+                                                                        <button onClick={() => setAddItemsQty(product._id, qty + 1, stock)} className="h-7 w-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-black text-slate-700">+</button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                <textarea
+                                                    value={addItemsReason}
+                                                    onChange={(e) => setAddItemsReason(e.target.value)}
+                                                    placeholder="Reason (shared with customer, optional)"
+                                                    rows={2}
+                                                    className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                                />
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={closeAddItemsEditor} disabled={addItemsSaving} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">Discard</button>
+                                                    <button
+                                                        onClick={handleApplyAddItems}
+                                                        disabled={addItemsSaving || Object.keys(addItemsSelections).length === 0}
+                                                        className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {addItemsSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                                        Add {Object.keys(addItemsSelections).length || ''} Item{Object.keys(addItemsSelections).length === 1 ? '' : 's'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : cancelItemsMode ? (
                                             <div className="space-y-3">
                                                 <p className="text-[10px] text-slate-500 leading-relaxed">
                                                     Select the item(s) that are unavailable. The customer is refunded for exactly those items and the remaining items continue as normal — stock reserved for the cancelled item(s) is released.

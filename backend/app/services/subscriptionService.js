@@ -13,6 +13,7 @@ import {
 } from "../constants/subscription.js";
 import { PAYMENT_STATUS } from "../constants/payment.js";
 import { BUSINESS_MODEL } from "./sellerBusinessModelService.js";
+import logger from "./logger.js";
 
 function buildPlanSnapshot(plan) {
   return {
@@ -387,6 +388,20 @@ export async function activateSubscriptionFromPaymentRequest(request) {
 
   await restoreSellerVisibility(request.sellerId);
   await enforceSubscriptionLimits(request.sellerId, subscription.planSnapshot);
+
+  // Seller-referral reward requires BOTH KYC approval and a subscription
+  // purchase — this is the "subscription purchase" half of that gate. The
+  // function itself checks both conditions and is idempotent, so it's safe
+  // to call unconditionally on every activation (including renewals).
+  try {
+    const { processSellerReferralReward } = await import("../modules/rewards/services/referralService.js");
+    await processSellerReferralReward(request.sellerId);
+  } catch (referralError) {
+    logger.error("[activateSubscriptionFromPaymentRequest] referral reward check failed", {
+      sellerId: String(request.sellerId),
+      message: referralError.message,
+    });
+  }
 
   return subscription;
 }

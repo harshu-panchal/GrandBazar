@@ -62,10 +62,19 @@ export const extraPaymentDeadlineQueue = isRedisEnabled()
     })
   : createNoopQueue();
 
+export const rescueApprovalDeadlineQueue = isRedisEnabled()
+  ? new Bull("rescue-approval-deadline", {
+      redis: redisOpts,
+      createClient: createBullRedisClient,
+      settings: queueSettings,
+    })
+  : createNoopQueue();
+
 export const JOB_NAMES = {
   SELLER_TIMEOUT: "seller-timeout",
   DELIVERY_TIMEOUT: "delivery-timeout",
   ORDER_ACTIVATION: "order-activation",
   PREORDER_SALE_START: "preorder-sale-start",
   EXTRA_PAYMENT_DEADLINE: "extra-payment-deadline",
+  RESCUE_APPROVAL_DEADLINE: "rescue-approval-deadline",
 };

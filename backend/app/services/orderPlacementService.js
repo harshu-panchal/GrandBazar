@@ -55,6 +55,7 @@ import {
   validatePreorderPlacement,
   reserveCampaignAllocation,
   assertCartPreorderRules,
+  getCampaignProductIdSet,
 } from "./preOrderCampaignService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
@@ -651,16 +652,26 @@ export async function placeOrderAtomic({
           paymentMode === "COD" ? WORKFLOW_STATUS.SELLER_PENDING : WORKFLOW_STATUS.CREATED;
       } else if (fulfillmentType === FULFILLMENT_TYPE.PREORDER) {
         const campaignId = normalizedPayload.campaignId || normalizedPayload.preOrderCampaignId;
+        // The cart may mix this store's pre-order campaign items with its
+        // regular in-stock items — split them here so only the campaign
+        // subset is validated against the campaign window/allocation; the
+        // regular subset just rides along on the same schedule (normal
+        // stock reservation for those already happens below regardless of
+        // fulfillmentType).
+        const campaignProductIds = await getCampaignProductIdSet(campaignId, entry.sellerId);
+        const campaignItems = campaignProductIds.size
+          ? entry.items.filter((item) => campaignProductIds.has(String(item.productId)))
+          : entry.items;
         const { campaign, scheduleMeta } = await validatePreorderPlacement({
           campaignId,
           sellerId: entry.sellerId,
-          items: entry.items,
+          items: campaignItems,
           deliveryDate: normalizedPayload.deliveryDate,
           windowLabel: normalizedPayload.windowLabel,
         });
         preOrderCampaignRef = campaign._id;
         scheduleFields = scheduleMeta;
-        for (const item of entry.items) {
+        for (const item of campaignItems) {
           await reserveCampaignAllocation(campaign.campaignId, item.productId, item.quantity, session);
         }
         initialWorkflow = WORKFLOW_STATUS.PREORDER_HOLD;

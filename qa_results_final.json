@@ -1,0 +1,561 @@
+[
+  {
+    "tc_id": "TC-EXT-001",
+    "sheet": "Extras",
+    "scenario": "Backend health check",
+    "status": "PASS",
+    "actual": "HTTP 200, service UP",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148161"
+  },
+  {
+    "tc_id": "TC-EXT-002",
+    "sheet": "Extras",
+    "scenario": "Public settings endpoint accesible",
+    "status": "PASS",
+    "actual": "HTTP 200",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148247"
+  },
+  {
+    "tc_id": "TC-RP-001",
+    "sheet": "Roles & Permissions",
+    "scenario": "Admin login with valid credentials",
+    "status": "FAIL",
+    "actual": "All passwords failed including DB-reset attempt",
+    "expected": "HTTP 200 + token",
+    "severity": "Critical",
+    "timestamp": "2026-09-17T13:20:29.148318"
+  },
+  {
+    "tc_id": "TC-RP-002",
+    "sheet": "Roles & Permissions",
+    "scenario": "Wrong password rejected at admin login",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148390"
+  },
+  {
+    "tc_id": "TC-RP-003",
+    "sheet": "Roles & Permissions",
+    "scenario": "Empty credentials rejected at admin login",
+    "status": "PASS",
+    "actual": "HTTP 400",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148458"
+  },
+  {
+    "tc_id": "TC-RP-004",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "NoSQL injection in admin login rejected",
+    "status": "PASS",
+    "actual": "HTTP 400",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148529"
+  },
+  {
+    "tc_id": "TC-COM-001",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Customer OTP send (mobile+userType+purpose)",
+    "status": "PASS",
+    "actual": "OTP send HTTP 200 with correct field names (mobile/Customer/LOGIN)",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:29.148587"
+  },
+  {
+    "tc_id": "TC-COM-002",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Customer OTP verify and login",
+    "status": "FAIL",
+    "actual": "Mock OTP 1234 rejected, DB OTP lookup failed",
+    "expected": "HTTP 200 + customer token",
+    "severity": "High",
+    "timestamp": "2026-09-17T13:20:29.148648"
+  },
+  {
+    "tc_id": "TC-CSD-001",
+    "sheet": "Catalog, Search & Discovery",
+    "scenario": "Public categories listing",
+    "status": "PASS",
+    "actual": "HTTP 200, 0 categories",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:31.553315"
+  },
+  {
+    "tc_id": "TC-CSD-005",
+    "sheet": "Catalog, Search & Discovery",
+    "scenario": "Catalog search endpoint",
+    "status": "BLOCKED",
+    "actual": "HTTP 401: {'success': False, 'error': True, 'message': 'Unauthorized, token missing', 'result': {}}",
+    "expected": "HTTP 200 search results",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:33.599193"
+  },
+  {
+    "tc_id": "TC-CSD-010",
+    "sheet": "Catalog, Search & Discovery",
+    "scenario": "Store catalog listing",
+    "status": "BLOCKED",
+    "actual": "HTTP 401: {'success': False, 'error': True, 'message': 'Unauthorized, token missing', 'result': {}}",
+    "expected": "HTTP 200 stores",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:35.659559"
+  },
+  {
+    "tc_id": "TC-CSD-015",
+    "sheet": "Catalog, Search & Discovery",
+    "scenario": "Offers listing accessible",
+    "status": "PASS",
+    "actual": "HTTP 200",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:37.746403"
+  },
+  {
+    "tc_id": "TC-CSD-020",
+    "sheet": "Catalog, Search & Discovery",
+    "scenario": "Public FAQs",
+    "status": "PASS",
+    "actual": "HTTP 200",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:39.849964"
+  },
+  {
+    "tc_id": "TC-POS-001",
+    "sheet": "Partial Order & Seller Ops",
+    "scenario": "Seller profile",
+    "status": "BLOCKED",
+    "actual": "No seller token - seller OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:39.850741"
+  },
+  {
+    "tc_id": "TC-POS-002",
+    "sheet": "Partial Order & Seller Ops",
+    "scenario": "Seller orders",
+    "status": "BLOCKED",
+    "actual": "No seller token - seller OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:39.851789"
+  },
+  {
+    "tc_id": "TC-POS-003",
+    "sheet": "Partial Order & Seller Ops",
+    "scenario": "Seller products",
+    "status": "BLOCKED",
+    "actual": "No seller token - seller OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:39.851943"
+  },
+  {
+    "tc_id": "TC-LD-040",
+    "sheet": "Logistics & Delivery",
+    "scenario": "Delivery partner flows",
+    "status": "BLOCKED",
+    "actual": "No delivery token",
+    "expected": "",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:39.852252"
+  },
+  {
+    "tc_id": "TC-RP-UNAUTH-cart",
+    "sheet": "Roles & Permissions",
+    "scenario": "Unauthenticated cart blocked",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "401/403",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:41.883743"
+  },
+  {
+    "tc_id": "TC-RP-UNAUTH-customer_profile",
+    "sheet": "Roles & Permissions",
+    "scenario": "Unauthenticated customer profile blocked",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "401/403",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:43.931169"
+  },
+  {
+    "tc_id": "TC-RP-UNAUTH-notifications",
+    "sheet": "Roles & Permissions",
+    "scenario": "Unauthenticated notifications blocked",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "401/403",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:45.988805"
+  },
+  {
+    "tc_id": "TC-RP-JWT",
+    "sheet": "Roles & Permissions",
+    "scenario": "Invalid JWT rejected",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "401/403",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:48.082113"
+  },
+  {
+    "tc_id": "TC-ENT-001",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Invalid ObjectId product",
+    "status": "FAIL",
+    "actual": "HTTP 500: {'success': False, 'error': True, 'message': 'Cast to ObjectId failed for value \"INVALID_ID\" (type s",
+    "expected": "400 validation",
+    "severity": "High",
+    "timestamp": "2026-09-17T13:20:50.153466"
+  },
+  {
+    "tc_id": "TC-ENT-002",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Empty body admin login",
+    "status": "PASS",
+    "actual": "HTTP 400: {'success': False, 'error': True, 'message': '\"email\" is required; \"password\" is required', 'result'",
+    "expected": "4xx",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:52.197457"
+  },
+  {
+    "tc_id": "TC-ENT-003",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Nonexistent order 404",
+    "status": "PASS",
+    "actual": "HTTP 404: {'success': False, 'error': True, 'message': 'Route not found', 'result': {'correlationId': 'a331e01",
+    "expected": "404",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:54.249882"
+  },
+  {
+    "tc_id": "TC-ENT-004",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Invalid coupon 404",
+    "status": "PASS",
+    "actual": "HTTP 404: {'success': False, 'error': True, 'message': 'Invalid coupon code', 'result': {}}",
+    "expected": "404",
+    "severity": "",
+    "timestamp": "2026-09-17T13:20:56.360374"
+  },
+  {
+    "tc_id": "TC-ENT-BUG-500",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Invalid product ID causes HTTP 500 (should be 400/404)",
+    "status": "FAIL",
+    "actual": "HTTP 500 - CastError leaked to client: {'success': False, 'error': True, 'message': 'Cast to ObjectId failed for value \"INVALID_ID\" (type string) at path \"_id\" for model \"Product\"', 'result': {}}",
+    "expected": "HTTP 400/404 with validation message",
+    "severity": "High",
+    "timestamp": "2026-09-17T13:20:58.416128"
+  },
+  {
+    "tc_id": "TC-SEO-001",
+    "sheet": "SEO & Discoverability",
+    "scenario": "robots.txt accessible",
+    "status": "PASS",
+    "actual": "HTTP 200, content: User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /seller\nDisallow: /delivery\nDisallow: /api/private",
+    "expected": "HTTP 200 robots.txt",
+    "severity": "",
+    "timestamp": "2026-09-17T13:21:00.450929"
+  },
+  {
+    "tc_id": "TC-SEO-002",
+    "sheet": "SEO & Discoverability",
+    "scenario": "robots.txt disallows admin crawling",
+    "status": "PASS",
+    "actual": "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /seller\nDisallow: /delivery\nDisallow: /api/private\nDisallow: /login\nDisallow: /signup\nSitemap: http://localhost:7000/sitemap.xml",
+    "expected": "Disallow: /admin",
+    "severity": "Medium",
+    "timestamp": "2026-09-17T13:21:00.451736"
+  },
+  {
+    "tc_id": "TC-SEO-003",
+    "sheet": "SEO & Discoverability",
+    "scenario": "sitemap.xml valid XML",
+    "status": "PASS",
+    "actual": "HTTP 200, XML=True",
+    "expected": "Valid XML sitemap",
+    "severity": "",
+    "timestamp": "2026-09-17T13:21:04.716973"
+  },
+  {
+    "tc_id": "TC-PUX-001",
+    "sheet": "Performance & UX",
+    "scenario": "Health endpoint < 500ms",
+    "status": "FAIL",
+    "actual": "Avg 2040ms",
+    "expected": "< 500ms",
+    "severity": "Medium",
+    "timestamp": "2026-09-17T13:21:10.839102"
+  },
+  {
+    "tc_id": "TC-PUX-002",
+    "sheet": "Performance & UX",
+    "scenario": "Categories < 3s",
+    "status": "PASS",
+    "actual": "Avg 2525ms",
+    "expected": "< 3000ms",
+    "severity": "",
+    "timestamp": "2026-09-17T13:21:18.415937"
+  },
+  {
+    "tc_id": "TC-PUX-003",
+    "sheet": "Performance & UX",
+    "scenario": "Settings < 2s",
+    "status": "FAIL",
+    "actual": "Avg 2089ms",
+    "expected": "< 2000ms",
+    "severity": "Medium",
+    "timestamp": "2026-09-17T13:21:24.683569"
+  },
+  {
+    "tc_id": "TC-INT-001",
+    "sheet": "Integration Testing",
+    "scenario": "Payment gateway responds",
+    "status": "PASS",
+    "actual": "HTTP 404: {'success': False, 'error': True, 'message': 'Route not found', 'result': {'correlationId': '6ffbf63d-83ea-4b50-8f7b-4ee1b85f167d', 'code': 'ROUTE_NOT",
+    "expected": "Payment gateway reachable",
+    "severity": "",
+    "timestamp": "2026-09-17T13:21:26.719453"
+  },
+  {
+    "tc_id": "TC-INT-002",
+    "sheet": "Integration Testing",
+    "scenario": "MongoDB connected",
+    "status": "PASS",
+    "actual": "Health HTTP 200, status=UP",
+    "expected": "DB connected",
+    "severity": "",
+    "timestamp": "2026-09-17T13:21:28.755429"
+  },
+  {
+    "tc_id": "TC-E2E-001",
+    "sheet": "E2E Business Flow",
+    "scenario": "E2E precondition check",
+    "status": "FAIL",
+    "actual": "Missing tokens: admin=False, customer=False",
+    "expected": "Both admin and customer tokens required",
+    "severity": "High",
+    "timestamp": "2026-09-17T13:21:28.755602"
+  },
+  {
+    "tc_id": "TC-RP-010",
+    "sheet": "Roles & Permissions",
+    "scenario": "Seller login with valid credentials",
+    "status": "BLOCKED",
+    "actual": "All seller credential combinations failed - credentials unknown",
+    "expected": "HTTP 200 + token",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:14.150582"
+  },
+  {
+    "tc_id": "TC-COM-010",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Customer profile",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738213"
+  },
+  {
+    "tc_id": "TC-COM-020",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Cart access",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738301"
+  },
+  {
+    "tc_id": "TC-COM-025",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Add to cart",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738390"
+  },
+  {
+    "tc_id": "TC-COM-030",
+    "sheet": "Customer Order Mgmt",
+    "scenario": "Order history",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738520"
+  },
+  {
+    "tc_id": "TC-NPO-001",
+    "sheet": "Notifications & Post-Order",
+    "scenario": "Notifications",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738641"
+  },
+  {
+    "tc_id": "TC-RE-001",
+    "sheet": "Reward Engine",
+    "scenario": "Reward balance",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738727"
+  },
+  {
+    "tc_id": "TC-PCS-030",
+    "sheet": "Pricing, Charges & Settlement",
+    "scenario": "Wallet balance",
+    "status": "BLOCKED",
+    "actual": "No customer token - OTP auth failed",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:26.738815"
+  },
+  {
+    "tc_id": "TC-RP-UNAUTH-cart_endpoint",
+    "sheet": "Roles & Permissions",
+    "scenario": "Unauthenticated access to cart endpoint blocked",
+    "status": "PASS",
+    "actual": "HTTP 401",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:28.774626"
+  },
+  {
+    "tc_id": "TC-RP-UNAUTH-orders_listing",
+    "sheet": "Roles & Permissions",
+    "scenario": "Unauthenticated access to orders listing blocked",
+    "status": "FAIL",
+    "actual": "HTTP 404 - no auth required for orders listing",
+    "expected": "401/403",
+    "severity": "Critical",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:32.854861"
+  },
+  {
+    "tc_id": "TC-ENT-005",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Register with duplicate phone",
+    "status": "FAIL",
+    "actual": "HTTP 400: {'success': False, 'error': True, 'message': '\"userType\" must be one of [Admin, Seller, Customer, Delivery]; \"purpose\" must be one of [LOGIN, SIGNUP, ",
+    "expected": "200 (OTP resent) or 409 (duplicate)",
+    "severity": "High",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:47.271944"
+  },
+  {
+    "tc_id": "TC-ENT-006",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Very long search query",
+    "status": "FAIL",
+    "actual": "HTTP 401: {'success': False, 'error': True, 'message': 'Unauthorized, token missing', 'result': {}}",
+    "expected": "Should not crash server",
+    "severity": "High",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:49.331533"
+  },
+  {
+    "tc_id": "TC-ENT-007",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "Order with quantity 0",
+    "status": "FAIL",
+    "actual": "HTTP 401: {'success': False, 'error': True, 'message': 'Unauthorized, token missing', 'result': {}}",
+    "expected": "Validation error for qty=0",
+    "severity": "High",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:51.369672"
+  },
+  {
+    "tc_id": "TC-ENT-008",
+    "sheet": "Exception & Negative Testing",
+    "scenario": "XSS payload in search",
+    "status": "FAIL",
+    "actual": "HTTP 401: {'success': False, 'error': True, 'message': 'Unauthorized, token missing', 'result': {}}",
+    "expected": "XSS not reflected",
+    "severity": "High",
+    "notes": "",
+    "timestamp": "2026-09-17T13:16:53.431972"
+  },
+  {
+    "tc_id": "TC-SEO-005",
+    "sheet": "SEO & Discoverability",
+    "scenario": "Public stores endpoint for SEO crawling",
+    "status": "BLOCKED",
+    "actual": "HTTP 404 and 401",
+    "expected": "HTTP 200",
+    "severity": "Medium",
+    "notes": "",
+    "timestamp": "2026-09-17T13:17:01.861304"
+  },
+  {
+    "tc_id": "TC-SEO-006",
+    "sheet": "SEO & Discoverability",
+    "scenario": "Public categories for SEO",
+    "status": "BLOCKED",
+    "actual": "HTTP 404",
+    "expected": "HTTP 200",
+    "severity": "Low",
+    "notes": "",
+    "timestamp": "2026-09-17T13:17:03.919578"
+  },
+  {
+    "tc_id": "TC-PUX-004",
+    "sheet": "Performance & UX",
+    "scenario": "Settings endpoint < 2s",
+    "status": "FAIL",
+    "actual": "Avg 2091ms EXCEEDS 2000ms SLA",
+    "expected": "< 2000ms",
+    "severity": "High",
+    "notes": "",
+    "timestamp": "2026-09-17T13:17:20.647611"
+  },
+  {
+    "tc_id": "TC-INT-003",
+    "sheet": "Integration Testing",
+    "scenario": "Push notification subscription endpoint",
+    "status": "PASS",
+    "actual": "HTTP 401 - endpoint responds",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:17:26.763551"
+  },
+  {
+    "tc_id": "TC-INT-004",
+    "sheet": "Integration Testing",
+    "scenario": "MongoDB database connectivity",
+    "status": "PASS",
+    "actual": "Database status: unknown",
+    "expected": "",
+    "severity": "",
+    "notes": "",
+    "timestamp": "2026-09-17T13:17:28.818858"
+  }
+]

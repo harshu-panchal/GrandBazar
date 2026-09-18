@@ -21,8 +21,16 @@ export async function getUsersData({ page, limit, skip }) {
         phone: 1,
         joinedDate: "$createdAt",
         status: {
-          $cond: [{ $eq: ["$isActive", false] }, "inactive", "active"],
+          $switch: {
+            branches: [
+              { case: { $eq: ["$isActive", false] }, then: "inactive" },
+              { case: { $eq: ["$isBlocked", true] }, then: "restricted" },
+            ],
+            default: "active",
+          },
         },
+        isBlocked: { $ifNull: ["$isBlocked", false] },
+        blockedReason: 1,
         totalOrders: { $size: "$userOrders" },
         totalSpent: { $sum: "$userOrders.pricing.total" },
         lastOrderDate: { $max: "$userOrders.createdAt" },
@@ -83,8 +91,16 @@ export async function getUserByIdData(id) {
         phone: 1,
         joinedDate: "$createdAt",
         status: {
-          $cond: [{ $eq: ["$isActive", false] }, "inactive", "active"],
+          $switch: {
+            branches: [
+              { case: { $eq: ["$isActive", false] }, then: "inactive" },
+              { case: { $eq: ["$isBlocked", true] }, then: "restricted" },
+            ],
+            default: "active",
+          },
         },
+        isBlocked: { $ifNull: ["$isBlocked", false] },
+        blockedReason: 1,
         totalOrders: { $size: "$userOrders" },
         totalSpent: { $sum: "$userOrders.pricing.total" },
         lastOrderDate: { $max: "$userOrders.createdAt" },
@@ -125,4 +141,32 @@ export async function getUserByIdData(id) {
       status: order.status,
     })),
   };
+}
+
+export async function blockUserById(id, { reason = "", adminId = null } = {}) {
+  const user = await User.findOneAndUpdate(
+    { _id: id, role: "user" },
+    { $set: { isBlocked: true, blockedReason: reason || null, blockedAt: new Date() } },
+    { new: true },
+  ).select("_id name email phone isBlocked blockedReason");
+  if (!user) {
+    const err = new Error("Customer not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  return user;
+}
+
+export async function unblockUserById(id) {
+  const user = await User.findOneAndUpdate(
+    { _id: id, role: "user" },
+    { $set: { isBlocked: false, blockedReason: null, blockedAt: null } },
+    { new: true },
+  ).select("_id name email phone isBlocked blockedReason");
+  if (!user) {
+    const err = new Error("Customer not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  return user;
 }

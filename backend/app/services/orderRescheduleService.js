@@ -48,7 +48,7 @@ function requiresApproval(order) {
   return [WORKFLOW_STATUS.SELLER_ACCEPTED, WORKFLOW_STATUS.SCHEDULED_HOLD].includes(ws);
 }
 
-async function applyReschedule(order, scheduleMeta, actor, note = "") {
+async function applyReschedule(order, scheduleMeta, actor, note = "", actorId = "") {
   const historyEntry = {
     fromDate: order.schedule?.deliveryDate || null,
     fromWindowLabel: order.schedule?.windowLabel || "",
@@ -80,11 +80,33 @@ async function applyReschedule(order, scheduleMeta, actor, note = "") {
     updateSet.orderStatus = "rescheduled";
   }
 
+  const nextVersion = Number(order.modificationVersion || 0) + 1;
+
   const updated = await Order.findOneAndUpdate(
     { _id: order._id, deliveryBoy: null },
     {
       $set: updateSet,
-      $push: { "reschedule.history": historyEntry },
+      $push: {
+        "reschedule.history": historyEntry,
+        // Previously reschedules only ever landed in this separate,
+        // unversioned reschedule.history array — invisible to anything
+        // reading the unified modificationTimeline (GET /:orderId/modifications).
+        modificationTimeline: {
+          version: nextVersion,
+          type: "rescheduled",
+          actorRole: actor,
+          actorId: String(actorId || ""),
+          note,
+          meta: {
+            fromDate: historyEntry.fromDate,
+            fromWindowLabel: historyEntry.fromWindowLabel,
+            toDate: historyEntry.toDate,
+            toWindowLabel: historyEntry.toWindowLabel,
+          },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
     },
     { new: true },
   );
@@ -150,7 +172,7 @@ export async function customerRescheduleInstant(customerId, orderId, { deliveryD
     checkRescheduleCutoff: true,
   });
 
-  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "customer", reason || "");
+  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "customer", reason || "", customerId);
 }
 
 export async function requestRescheduleApproval(customerId, orderId, { deliveryDate, windowLabel, reason }) {
@@ -251,6 +273,7 @@ export async function approveRescheduleRequest(reviewerId, reviewerModel, orderI
     buildSchedulePayload(scheduleMeta),
     reviewerModel === "Admin" ? "admin" : "seller",
     note || order.reschedule.reason,
+    reviewerId,
   );
   await Order.updateOne(
     { _id: updated._id },
@@ -274,6 +297,7 @@ export async function rejectRescheduleRequest(reviewerId, reviewerModel, orderId
   }
 
   const ws = resolveWorkflowStatus(order);
+  const nextVersion = Number(order.modificationVersion || 0) + 1;
   const updated = await Order.findOneAndUpdate(
     { orderId, "reschedule.status": "requested" },
     {
@@ -289,6 +313,18 @@ export async function rejectRescheduleRequest(reviewerId, reviewerModel, orderId
           reviewNote: String(note || "Reschedule request rejected").trim(),
         },
       },
+      $push: {
+        modificationTimeline: {
+          version: nextVersion,
+          type: "reschedule_rejected",
+          actorRole: reviewerModel === "Admin" ? "admin" : "seller",
+          actorId: String(reviewerId || ""),
+          note: String(note || "").trim(),
+          meta: {},
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
     },
     { new: true },
   );
@@ -324,10 +360,10 @@ export async function adminRescheduleOnBehalf(adminId, orderId, { deliveryDate, 
   if (order.schedule?.activationJobId) {
     await removeOrderActivationJob(orderId);
   }
-  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "admin", note || "");
+  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "admin", note || "", adminId);
 }
 
-export async function sellerRescheduleOnBehalf(sellerId, orderId, { deliveryDate, windowLabel, note }) {
+export async function sellerRescheduleOnBehalf(sellerId, orderId, { deliveryDate, windowLabel, note }, actorId = sellerId) {
   orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({ orderId, seller: sellerId });
   if (!order) {
@@ -351,7 +387,7 @@ export async function sellerRescheduleOnBehalf(sellerId, orderId, { deliveryDate
   if (order.schedule?.activationJobId) {
     await removeOrderActivationJob(orderId);
   }
-  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "seller", note || "");
+  return applyReschedule(order, buildSchedulePayload(scheduleMeta), "seller", note || "", actorId);
 }
 
 export { canReschedule, requiresApproval };

@@ -30,6 +30,7 @@ import {
 import { registerScheduledJob, startScheduledJobs } from "./app/services/distributedScheduler.js";
 import { getOrderAutoCancelJobHandler, getOrderAutoCancelJobInterval } from "./app/jobs/orderAutoCancelJob.js";
 import { getReturnWindowReleaseJobHandler, getReturnWindowReleaseJobInterval } from "./app/jobs/returnWindowReleaseJob.js";
+import { getRefundEscalationJobHandler, getRefundEscalationJobInterval } from "./app/jobs/refundEscalationJob.js";
 import {
   getSubscriptionExpiryJobHandler,
   getSubscriptionExpiryJobInterval,
@@ -305,6 +306,13 @@ async function startScheduler() {
     'returnWindowReleaseJob',
     getReturnWindowReleaseJobInterval(),
     getReturnWindowReleaseJobHandler()
+  );
+
+  // Re-alert admins on returns stuck awaiting QC beyond the configured SLA
+  registerScheduledJob(
+    'refundEscalationJob',
+    getRefundEscalationJobInterval(),
+    getRefundEscalationJobHandler()
   );
 
   registerScheduledJob(

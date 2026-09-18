@@ -168,6 +168,39 @@ const OrderDetails = () => {
   const [pickupProofSubmitted, setPickupProofSubmitted] = useState(false);
   const [routeStats, setRouteStats] = useState(null);
   const [clockTick, setClockTick] = useState(Date.now());
+  const [reportingIssue, setReportingIssue] = useState(false);
+
+  const EXCEPTION_CATEGORIES = [
+    ["customer_unreachable", "Customer unreachable"],
+    ["wrong_address", "Wrong/incomplete address"],
+    ["customer_refused", "Customer refused delivery"],
+    ["store_closed", "Store was closed"],
+    ["other", "Other"],
+  ];
+
+  const handleReportIssue = async () => {
+    const choices = EXCEPTION_CATEGORIES.map(([, label], i) => `${i + 1}. ${label}`).join("\n");
+    const pick = window.prompt(`What's the issue?\n${choices}\n\nEnter a number (1-${EXCEPTION_CATEGORIES.length}):`, "");
+    if (pick === null) return;
+    const idx = Number(pick) - 1;
+    if (!EXCEPTION_CATEGORIES[idx]) {
+      toast.error("Invalid choice");
+      return;
+    }
+    const note = window.prompt("Any additional details? (optional)", "") || "";
+    setReportingIssue(true);
+    try {
+      await deliveryApi.reportDeliveryException(order.orderId, {
+        category: EXCEPTION_CATEGORIES[idx][0],
+        note,
+      });
+      toast.success("Issue reported. The customer, seller, and our support team have been notified.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to report the issue. Please try again.");
+    } finally {
+      setReportingIssue(false);
+    }
+  };
 
   const isReturn = order?.returnStatus && order.returnStatus !== "none";
 
@@ -947,6 +980,16 @@ const OrderDetails = () => {
                       onClick={() => setShowChatModal(true)}
                     >
                       <MessageSquare size={18} />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-200"
+                      title="Report a delivery issue"
+                      disabled={reportingIssue}
+                      onClick={handleReportIssue}
+                    >
+                      <AlertTriangle size={18} />
                     </Button>
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
                       <Button

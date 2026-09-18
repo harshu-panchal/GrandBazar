@@ -50,6 +50,8 @@ const REASSIGNABLE_WORKFLOW = new Set([
     'EXTERNAL_LOGISTICS_PENDING',
 ]);
 
+const FORCE_CANCEL_BLOCKED_WORKFLOW = new Set(['CANCELLED', 'DELIVERED', 'OUT_FOR_DELIVERY']);
+
 const OrderDetail = () => {
     const { orderId } = useParams();
     const navigate = useNavigate();
@@ -67,6 +69,10 @@ const OrderDetail = () => {
     const [selectedStoreId, setSelectedStoreId] = useState("");
     const [reassignNote, setReassignNote] = useState("");
     const [isReassigning, setIsReassigning] = useState(false);
+    const [replacementOpen, setReplacementOpen] = useState(false);
+    const [replacementStores, setReplacementStores] = useState([]);
+    const [replacementStoreId, setReplacementStoreId] = useState("");
+    const [isCreatingReplacement, setIsCreatingReplacement] = useState(false);
     // Admin-side "item unavailable" partial cancellation — same endpoint the
     // seller uses, so an admin can act on a seller's behalf without waiting.
     const [cancelItemsMode, setCancelItemsMode] = useState(false);
@@ -274,6 +280,37 @@ const OrderDetail = () => {
     const canReassignStore = REASSIGNABLE_WORKFLOW.has(
         String(order?.workflowStatus || '').toUpperCase(),
     );
+    const canForceCancel = !!order && !FORCE_CANCEL_BLOCKED_WORKFLOW.has(
+        String(order?.workflowStatus || '').toUpperCase(),
+    );
+    const canCreateReplacement = !!order
+        && String(order?.workflowStatus || '').toUpperCase() === 'CANCELLED'
+        && order?.cancelledBy === 'seller'
+        && !order?.replacementOrderId;
+
+    const handleForceCancel = async () => {
+        if (!order?.orderId) return;
+        const reason = window.prompt(
+            'Reason for force-cancelling this order (min 10 characters, shown internally):',
+            '',
+        );
+        if (reason === null) return;
+        if (reason.trim().length < 10) {
+            showToast('Please provide a reason of at least 10 characters', 'error');
+            return;
+        }
+        setIsReviewingCancel(true);
+        try {
+            await adminApi.forceCancelOrder(order.orderId, reason.trim());
+            showToast('Order force-cancelled and refund initiated', 'success');
+            fetchDetail();
+        } catch (error) {
+            console.error('Failed to force-cancel order:', error);
+            showToast(error?.response?.data?.message || 'Failed to force-cancel order', 'error');
+        } finally {
+            setIsReviewingCancel(false);
+        }
+    };
 
     const loadReassignCandidates = async () => {
         if (!order?.orderId) return;
@@ -331,6 +368,54 @@ const OrderDetail = () => {
             );
         } finally {
             setIsReassigning(false);
+        }
+    };
+
+    const loadReplacementStores = async () => {
+        setReplacementOpen(true);
+        setReplacementStoreId("");
+        try {
+            const res = await adminApi.getSellers();
+            const list = (res.data?.result || []).filter(
+                (s) => String(s._id) !== String(order.seller?._id || order.seller),
+            );
+            setReplacementStores(list);
+        } catch (error) {
+            showToast('Failed to load stores', 'error');
+        }
+    };
+
+    const handleCreateReplacementOrder = async () => {
+        if (!replacementStoreId) {
+            showToast('Select a store for the replacement order first', 'error');
+            return;
+        }
+        const target = replacementStores.find((s) => String(s._id) === replacementStoreId);
+        if (!window.confirm(
+            `Create a new Cash-on-Delivery order for this customer at "${target?.shopName || 'selected store'}"? The customer was already refunded for the original order.`,
+        )) {
+            return;
+        }
+        setIsCreatingReplacement(true);
+        try {
+            const res = await adminApi.createReplacementOrder(order.orderId, {
+                targetStoreId: replacementStoreId,
+            });
+            const newOrderId = res.data?.result?.newOrder?.orderId;
+            showToast(`Replacement order ${newOrderId ? `#${newOrderId} ` : ''}created`, 'success');
+            setReplacementOpen(false);
+            fetchDetail();
+        } catch (error) {
+            const missing = error?.response?.data?.result?.details;
+            const detail = Array.isArray(missing) && missing.length
+                ? missing.map((m) => m.name || m.reason).join(', ')
+                : '';
+            showToast(
+                `${error?.response?.data?.message || 'Failed to create replacement order'}${detail ? `: ${detail}` : ''}`,
+                'error',
+            );
+        } finally {
+            setIsCreatingReplacement(false);
         }
     };
 
@@ -888,6 +973,83 @@ const OrderDetail = () => {
                             </div>
                         )}
                     </Card>
+
+                    {canForceCancel && (
+                        <Card className="border-none shadow-xl ring-1 ring-rose-100 bg-rose-50 rounded-2xl p-6">
+                            <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-2">
+                                Admin Safety Control
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mb-4">
+                                Force-cancel this order regardless of seller/customer state (e.g. seller unresponsive, order stuck beyond SLA). Any payment collected will be refunded to the customer's wallet.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={handleForceCancel}
+                                disabled={isReviewingCancel}
+                                className="w-full py-3 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all disabled:opacity-50"
+                            >
+                                {isReviewingCancel ? 'PLEASE WAIT...' : 'FORCE CANCEL ORDER'}
+                            </button>
+                        </Card>
+                    )}
+
+                    {canCreateReplacement && (
+                        <Card className="border-none shadow-xl ring-1 ring-amber-100 bg-amber-50 rounded-2xl p-6">
+                            <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2">
+                                Seller Rejected This Order
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mb-4">
+                                The customer was already refunded when this order was cancelled and cannot be un-refunded automatically. Instead, create a brand-new Cash-on-Delivery order for the same customer and items at a different store.
+                            </p>
+                            {!replacementOpen ? (
+                                <button
+                                    type="button"
+                                    onClick={loadReplacementStores}
+                                    className="w-full py-3 bg-amber-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-200 hover:bg-amber-700 transition-all"
+                                >
+                                    CREATE REPLACEMENT ORDER
+                                </button>
+                            ) : (
+                                <div className="space-y-3">
+                                    <select
+                                        value={replacementStoreId}
+                                        onChange={(e) => setReplacementStoreId(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-xl border border-amber-200 text-xs font-bold text-slate-700"
+                                    >
+                                        <option value="">Select target store…</option>
+                                        {replacementStores.map((s) => (
+                                            <option key={s._id} value={s._id}>{s.shopName}</option>
+                                        ))}
+                                    </select>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setReplacementOpen(false)}
+                                            className="flex-1 px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider hover:bg-slate-200"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateReplacementOrder}
+                                            disabled={isCreatingReplacement || !replacementStoreId}
+                                            className="flex-1 px-3 py-2 rounded-xl bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-amber-700 disabled:opacity-50"
+                                        >
+                                            {isCreatingReplacement ? 'Creating…' : 'Confirm'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    )}
+
+                    {order?.replacementOrderId && (
+                        <Card className="border-none shadow-xl ring-1 ring-emerald-100 bg-emerald-50 rounded-2xl p-6">
+                            <p className="text-[11px] font-bold text-emerald-700">
+                                A replacement order was created for this customer at a different store after the original seller rejected it.
+                            </p>
+                        </Card>
+                    )}
 
                     {/* Logistical Nodes */}
                     <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl p-6">

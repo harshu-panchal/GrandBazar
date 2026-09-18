@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import { adminApi } from '../services/adminApi';
 import {
     HiOutlineArrowTrendingUp,
     HiOutlineArrowTrendingDown,
@@ -36,46 +37,67 @@ import { cn } from '@/lib/utils';
 const AdvancedAnalytics = () => {
     const { showToast } = useToast();
     const [timeRange, setTimeRange] = useState('7d');
+    const [loading, setLoading] = useState(true);
+    const [salesData, setSalesData] = useState([]);
+    const [categoryData, setCategoryData] = useState([]);
+    const [hourlyHeatmap, setHourlyHeatmap] = useState([]);
+    const [summary, setSummary] = useState({
+        totalRevenue: 0, totalOrders: 0, activeSellers: 0, avgOrderValue: 0,
+        revenueGrowthPct: 0, orderGrowthPct: 0, avgOrderValueGrowthPct: 0,
+    });
 
-    // Mock functions
-    const handleDownloadReport = () => {
+    const fetchReport = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { data } = await adminApi.getAnalyticsReport({ range: timeRange });
+            if (data.success) {
+                setSalesData(data.result?.salesData || []);
+                setCategoryData(data.result?.categoryData || []);
+                setHourlyHeatmap(data.result?.hourlyHeatmap || []);
+                setSummary(data.result?.summary || {});
+            }
+        } catch (error) {
+            showToast('Failed to load analytics report', 'error');
+        } finally {
+            setLoading(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [timeRange]);
+
+    useEffect(() => {
+        fetchReport();
+    }, [fetchReport]);
+
+    const handleDownloadReport = async () => {
         showToast(`Preparing ${timeRange} performance report...`, 'info');
-        setTimeout(() => {
+        try {
+            const rangeDays = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[timeRange] || 7;
+            const toDate = new Date();
+            const fromDate = new Date(Date.now() - rangeDays * 86400000);
+            const res = await adminApi.exportFinanceStatement({
+                fromDate: fromDate.toISOString(),
+                toDate: toDate.toISOString(),
+            });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `analytics-report-${timeRange}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
             showToast('Report downloaded successfully', 'success');
-        }, 2000);
+        } catch (error) {
+            showToast('Failed to generate report', 'error');
+        }
     };
 
     const handleViewSegmentation = () => {
         showToast('Loading detailed customer segmentation data...', 'info');
     };
 
-    // Mock Data
-    const salesData = [
-        { name: 'Mon', revenue: 45000, orders: 120 },
-        { name: 'Tue', revenue: 52000, orders: 145 },
-        { name: 'Wed', revenue: 48000, orders: 132 },
-        { name: 'Thu', revenue: 61000, orders: 168 },
-        { name: 'Fri', revenue: 55000, orders: 154 },
-        { name: 'Sat', revenue: 82000, orders: 210 },
-        { name: 'Sun', revenue: 95000, orders: 245 },
-    ];
-
-    const categoryData = [
-        { name: 'Grocery', value: 45, color: '#6366f1' },
-        { name: 'Electronics', value: 25, color: '#f59e0b' },
-        { name: 'Daily Needs', value: 20, color: '#10b981' },
-        { name: 'Bakery', value: 10, color: '#f43f5e' },
-    ];
-
-    const hourlyHeatmap = [
-        { hour: '08:00', load: 30 },
-        { hour: '10:00', load: 65 },
-        { hour: '12:00', load: 85 },
-        { hour: '14:00', load: 45 },
-        { hour: '16:00', load: 55 },
-        { hour: '18:00', load: 95 },
-        { hour: '20:00', load: 75 },
-    ];
+    const topCategory = categoryData.length
+        ? [...categoryData].sort((a, b) => b.value - a.value)[0]
+        : null;
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -118,10 +140,10 @@ const AdvancedAnalytics = () => {
             {/* Goals Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                    { label: 'Gross Revenue', value: '₹5,42,000', trend: '+12.5%', icon: HiOutlineBanknotes, color: 'indigo' },
-                    { label: 'Total Orders', value: '1,248', trend: '+8.2%', icon: HiOutlineShoppingBag, color: 'emerald' },
-                    { label: 'Active Sellers', value: '84', trend: '+2', icon: HiOutlineUsers, color: 'amber' },
-                    { label: 'Avg Order Value', value: '₹434', trend: '-2.1%', icon: HiOutlineBolt, color: 'rose' },
+                    { label: 'Gross Revenue', value: `₹${(summary.totalRevenue || 0).toLocaleString('en-IN')}`, trend: `${summary.revenueGrowthPct >= 0 ? '+' : ''}${summary.revenueGrowthPct || 0}%`, icon: HiOutlineBanknotes, color: 'indigo' },
+                    { label: 'Total Orders', value: (summary.totalOrders || 0).toLocaleString('en-IN'), trend: `${summary.orderGrowthPct >= 0 ? '+' : ''}${summary.orderGrowthPct || 0}%`, icon: HiOutlineShoppingBag, color: 'emerald' },
+                    { label: 'Active Sellers', value: String(summary.activeSellers || 0), trend: '', icon: HiOutlineUsers, color: 'amber' },
+                    { label: 'Avg Order Value', value: `₹${summary.avgOrderValue || 0}`, trend: `${summary.avgOrderValueGrowthPct >= 0 ? '+' : ''}${summary.avgOrderValueGrowthPct || 0}%`, icon: HiOutlineBolt, color: 'rose' },
                 ].map((goal, i) => (
                     <Card key={i} className="p-6 border-none shadow-xl ring-1 ring-slate-100 bg-white group hover:scale-[1.02] transition-all">
                         <div className="flex items-center justify-between mb-4">
@@ -133,12 +155,14 @@ const AdvancedAnalytics = () => {
                             )}>
                                 <goal.icon className="h-6 w-6" />
                             </div>
-                            <div className={cn("flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black",
-                                goal.trend.startsWith('+') ? "bg-brand-50 text-brand-600" : "bg-rose-50 text-rose-600"
-                            )}>
-                                {goal.trend.startsWith('+') ? <HiOutlineArrowTrendingUp className="h-3 w-3" /> : <HiOutlineArrowTrendingDown className="h-3 w-3" />}
-                                {goal.trend}
-                            </div>
+                            {goal.trend && (
+                                <div className={cn("flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black",
+                                    goal.trend.startsWith('+') ? "bg-brand-50 text-brand-600" : "bg-rose-50 text-rose-600"
+                                )}>
+                                    {goal.trend.startsWith('+') ? <HiOutlineArrowTrendingUp className="h-3 w-3" /> : <HiOutlineArrowTrendingDown className="h-3 w-3" />}
+                                    {goal.trend}
+                                </div>
+                            )}
                         </div>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{goal.label}</p>
                         <h3 className="text-2xl font-black text-slate-900 leading-none">{goal.value}</h3>
@@ -238,7 +262,7 @@ const AdvancedAnalytics = () => {
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                             <span className="text-[10px] font-black text-slate-400 uppercase">Top category</span>
-                            <span className="text-xl font-black text-slate-900">Grocery</span>
+                            <span className="text-xl font-black text-slate-900">{topCategory?.name || '—'}</span>
                         </div>
                     </div>
                     <div className="mt-8 space-y-4">

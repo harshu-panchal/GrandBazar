@@ -848,6 +848,22 @@ export async function releaseCampaignAllocation(campaignId, productId, quantity)
   );
 }
 
+// Which of a seller's cart items actually belong to their active pre-order
+// campaign — used to split a mixed cart (campaign items + regular in-stock
+// items from the same store) so only the campaign subset goes through
+// allocation/window validation while the rest rides along as a normal
+// scheduled order on the same delivery window.
+export async function getCampaignProductIdSet(campaignId, sellerId) {
+  const campaign = await PreOrderCampaign.findOne({
+    campaignId,
+    seller: sellerId,
+    status: { $in: ["active", "sale_started"] },
+  })
+    .select("products.product")
+    .lean();
+  return new Set((campaign?.products || []).map((p) => String(p.product)));
+}
+
 export async function validatePreorderPlacement({
   campaignId,
   sellerId,
@@ -928,12 +944,9 @@ export async function assertCartPreorderRules(items = []) {
   }
   const hasPreorder = campaignIds.size === 1;
   const hasRegular = items.some((i) => !i.campaignId && !i.preOrderCampaignId);
-  if (hasPreorder && hasRegular) {
-    const err = new Error(
-      "If cart contains a pre-order item, entire cart must be within the campaign window",
-    );
-    err.statusCode = 400;
-    throw err;
-  }
-  return { hasPreorder, campaignId: [...campaignIds][0] || null };
+  // A mixed cart (one pre-order campaign line + regular in-stock lines from
+  // the same store) is allowed — checkout auto-aligns the regular lines to
+  // the campaign's delivery window instead of hard-blocking the whole cart
+  // (previously required splitting into two separate carts/orders).
+  return { hasPreorder, hasRegular, campaignId: [...campaignIds][0] || null };
 }

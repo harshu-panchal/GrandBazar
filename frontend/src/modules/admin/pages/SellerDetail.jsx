@@ -92,6 +92,7 @@ const SellerDetail = () => {
         adminCommissionFixedRule: 'per_qty',
     });
     const [isSendingCredentials, setIsSendingCredentials] = useState(false);
+    const [isTogglingSuspension, setIsTogglingSuspension] = useState(false);
     const [sellerMessageText, setSellerMessageText] = useState('');
     const [isSendingSellerMessage, setIsSendingSellerMessage] = useState(false);
     const sellerMessageRef = useRef(null);
@@ -444,6 +445,36 @@ const SellerDetail = () => {
             showToast(err.response?.data?.message || 'Failed to resend credentials', 'error');
         } finally {
             setIsSendingCredentials(false);
+        }
+    };
+
+    const handleToggleStoreSuspension = async () => {
+        if (!id) return;
+        const isCurrentlyActive = seller.status === 'active';
+        if (isCurrentlyActive) {
+            const reason = window.prompt('Reason for suspending this store (shown internally):', '');
+            if (reason === null) return; // cancelled
+            setIsTogglingSuspension(true);
+            try {
+                await adminApi.suspendStore(id, reason);
+                setSeller((prev) => ({ ...prev, status: 'inactive' }));
+                showToast('Store suspended', 'warning');
+            } catch (err) {
+                showToast(err.response?.data?.message || 'Failed to suspend store', 'error');
+            } finally {
+                setIsTogglingSuspension(false);
+            }
+        } else {
+            setIsTogglingSuspension(true);
+            try {
+                await adminApi.reactivateStore(id);
+                setSeller((prev) => ({ ...prev, status: 'active' }));
+                showToast('Store reactivated', 'success');
+            } catch (err) {
+                showToast(err.response?.data?.message || 'Failed to reactivate store', 'error');
+            } finally {
+                setIsTogglingSuspension(false);
+            }
         }
     };
 
@@ -1009,10 +1040,18 @@ const SellerDetail = () => {
                                             <div className="p-6 bg-slate-900 rounded-xl text-white">
                                                 <div className="flex items-center justify-between mb-6">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="h-2 w-2 rounded-full bg-brand-500 animate-pulse"></div>
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">LIVE NOW</span>
+                                                        <div className={cn("h-2 w-2 rounded-full", seller.status === 'active' ? "bg-brand-500 animate-pulse" : "bg-rose-500")}></div>
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">{seller.status === 'active' ? 'LIVE NOW' : 'SUSPENDED'}</span>
                                                     </div>
-                                                    <button className="text-[10px] font-black text-rose-400 uppercase hover:underline">Force Close</button>
+                                                    {seller.status === 'active' && (
+                                                        <button
+                                                            onClick={handleToggleStoreSuspension}
+                                                            disabled={isTogglingSuspension}
+                                                            className="text-[10px] font-black text-rose-400 uppercase hover:underline disabled:opacity-50"
+                                                        >
+                                                            Force Close
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <div className="space-y-4 opacity-70">
                                                     <div className="flex items-center justify-between py-2 border-b border-white/10">
@@ -1032,9 +1071,17 @@ const SellerDetail = () => {
                                                 <XCircle className="h-4 w-4" />
                                                 Safety Controls
                                             </h5>
-                                            <p className="text-[10px] font-bold text-slate-500 leading-relaxed">Suspend this store immediately from the consumer app in case of policy violations.</p>
-                                            <button className="w-full mt-4 py-3 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">
-                                                SUSPEND STORE
+                                            <p className="text-[10px] font-bold text-slate-500 leading-relaxed">
+                                                {seller.status === 'active'
+                                                    ? 'Suspend this store immediately from the consumer app in case of policy violations.'
+                                                    : 'This store is currently suspended and hidden from the consumer app.'}
+                                            </p>
+                                            <button
+                                                onClick={handleToggleStoreSuspension}
+                                                disabled={isTogglingSuspension}
+                                                className="w-full mt-4 py-3 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all disabled:opacity-50"
+                                            >
+                                                {isTogglingSuspension ? 'PLEASE WAIT...' : seller.status === 'active' ? 'SUSPEND STORE' : 'REACTIVATE STORE'}
                                             </button>
                                         </div>
                                     </div>

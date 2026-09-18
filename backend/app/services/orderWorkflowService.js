@@ -4,6 +4,7 @@ import DeliveryAssignment from "../models/deliveryAssignment.js";
 import Delivery from "../models/delivery.js";
 import OrderOtp from "../models/orderOtp.js";
 import Store from "../models/store.js";
+import Admin from "../models/admin.js";
 import {
   WORKFLOW_STATUS,
   legacyStatusFromWorkflow,
@@ -296,7 +297,7 @@ export async function removeDeliveryTimeoutJob(orderId, attempt = 1) {
 /**
  * Seller accepts: SELLER_PENDING -> DELIVERY_SEARCH (atomic).
  */
-export async function sellerAcceptAtomic(sellerId, orderId) {
+export async function sellerAcceptAtomic(sellerId, orderId, actorStaffId = null) {
   orderId = await requireCanonicalOrderId(orderId);
   const now = new Date();
   const sellerMs = DEFAULT_SELLER_TIMEOUT_MS();
@@ -339,6 +340,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
           workflowStatus: WORKFLOW_STATUS.SCHEDULED_HOLD,
           status: legacyStatusFromWorkflow(WORKFLOW_STATUS.SCHEDULED_HOLD),
           sellerAcceptedAt: now,
+          ...(actorStaffId ? { "sellerActionBy.acceptedByStaffId": actorStaffId } : {}),
         },
         $unset: { expiresAt: 1 },
       },
@@ -407,6 +409,9 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     fulfillmentMethod,
     logisticsMode,
   };
+  if (actorStaffId) {
+    updateSet["sellerActionBy.acceptedByStaffId"] = actorStaffId;
+  }
 
   if (acceptResolution.autoSwitched) {
     updateSet["fulfillmentMeta.autoSwitched"] = true;
@@ -505,9 +510,12 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
 }
 
 /**
- * Seller rejects: SELLER_PENDING -> CANCELLED + compensation.
+ * Seller rejects: SELLER_PENDING -> Order Rescue Engine (auto-search for an
+ * alternative store) -> CANCELLED + compensation only if rescue can't place
+ * it anywhere. Previously this jumped straight to cancellation with zero
+ * rescue attempt.
  */
-export async function sellerRejectAtomic(sellerId, orderId, reason) {
+export async function sellerRejectAtomic(sellerId, orderId, reason, actorStaffId = null) {
   const trimmedReason = String(reason || "").trim();
   if (trimmedReason.length < 10) {
     const err = new Error("Please provide a cancellation reason (at least 10 characters)");
@@ -527,11 +535,10 @@ export async function sellerRejectAtomic(sellerId, orderId, reason) {
     },
     {
       $set: {
-        workflowStatus: WORKFLOW_STATUS.CANCELLED,
-        status: "cancelled",
-        cancelledBy: "seller",
-        cancelReason: trimmedReason,
+        "rescue.lastRejectReason": trimmedReason,
+        ...(actorStaffId ? { "sellerActionBy.rejectedByStaffId": actorStaffId } : {}),
       },
+      $addToSet: { "rescue.triedStoreIds": String(sellerId) },
     },
     { new: true },
   );
@@ -543,27 +550,16 @@ export async function sellerRejectAtomic(sellerId, orderId, reason) {
   }
 
   await removeSellerTimeoutJob(orderId);
-  await compensateOrderCancellation(order, orderId);
 
-  emitOrderStatusUpdate(order.orderId, {
-    workflowStatus: WORKFLOW_STATUS.CANCELLED,
-  }, order.customer);
-  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
-    orderId: order.orderId,
-    customerId: order.customer,
-    userId: order.customer,
-    sellerId: order.seller,
-    customerMessage: `Your order was cancelled by the seller. Reason: ${trimmedReason}`,
-    sellerMessage: `Order #${order.orderId} was cancelled.`,
-  });
-  return order;
+  const { attemptOrderRescue } = await import("./orderRescueService.js");
+  return attemptOrderRescue(order.orderId, { trigger: "seller_rejected", actorLabel: "system" });
 }
 
 /**
  * Seller advances order after accept (self-delivery / external / customer pickup).
  * Platform logistics (rider flow) is rejected — rider updates those statuses.
  */
-export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStatus, additionalData = {}) {
+export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStatus, additionalData = {}, actorStaffId = null) {
   orderId = await requireCanonicalOrderId(orderId);
   const legacy = String(nextLegacyStatus || "").toLowerCase();
 
@@ -597,7 +593,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     if (alreadyAccepted) {
       return order; // idempotent
     }
-    return sellerAcceptAtomic(sellerId, orderId);
+    return sellerAcceptAtomic(sellerId, orderId, actorStaffId);
   }
 
   if (legacy === "cancelled") {
@@ -609,7 +605,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     }
 
     if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
-      return sellerRejectAtomic(sellerId, orderId, trimmedReason);
+      return sellerRejectAtomic(sellerId, orderId, trimmedReason, actorStaffId);
     }
 
     // Order already accepted / in progress — seller can no longer cancel it
@@ -1140,6 +1136,10 @@ export async function processSellerTimeoutJob({ orderId }) {
     return;
   }
 
+  // Previously this jumped straight to cancel+compensate with zero rescue
+  // attempt. Now: mark this seller as tried and hand off to the Order
+  // Rescue Engine, which searches for an alternative store before falling
+  // back to cancellation (see orderRescueService.js).
   const updated = await Order.findOneAndUpdate(
     {
       orderId,
@@ -1147,29 +1147,15 @@ export async function processSellerTimeoutJob({ orderId }) {
       workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
     },
     {
-      $set: {
-        workflowStatus: WORKFLOW_STATUS.CANCELLED,
-        status: "cancelled",
-        cancelledBy: "system",
-        cancelReason: "Seller timeout (60s)",
-      },
+      $addToSet: { "rescue.triedStoreIds": String(order.seller) },
     },
     { new: true },
   );
 
   if (!updated) return;
 
-  await compensateOrderCancellation(updated, orderId);
-
-  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer, updated.seller);
-  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
-    orderId: updated.orderId,
-    customerId: updated.customer,
-    userId: updated.customer,
-    sellerId: updated.seller,
-    customerMessage: "Your order was cancelled because seller did not accept in time.",
-    sellerMessage: `Order #${updated.orderId} was cancelled due to timeout.`,
-  });
+  const { attemptOrderRescue } = await import("./orderRescueService.js");
+  await attemptOrderRescue(updated.orderId, { trigger: "seller_timeout", actorLabel: "system" });
 }
 
 export async function processDeliveryTimeoutJob({ orderId, attempt }) {
@@ -1319,6 +1305,7 @@ export async function processDeliveryTimeoutJob({ orderId, attempt }) {
         status: "cancelled",
         cancelledBy: "system",
         cancelReason: "No delivery partner (timeout)",
+        needsManualReassignment: true,
       },
     },
     { new: true },
@@ -1338,6 +1325,20 @@ export async function processDeliveryTimeoutJob({ orderId, attempt }) {
     sellerMessage:
       `Order #${updated.orderId} was cancelled because no delivery partner was available.`,
   });
+
+  // Previously this scenario was indistinguishable from any other cancelled
+  // order — no admin alert, flag, or dashboard signal existed to prompt a
+  // manual reassignment/customer follow-up.
+  try {
+    const admins = await Admin.find().select("_id").lean();
+    const adminIds = (admins || []).map((a) => a?._id).filter(Boolean);
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_NEEDS_MANUAL_REASSIGNMENT, {
+      orderId: updated.orderId,
+      adminIds,
+    });
+  } catch (notifyError) {
+    // Best-effort — must never block the cancellation that already happened.
+  }
 }
 
 export async function customerCancelV2(customerId, orderId, reason) {
@@ -1389,6 +1390,91 @@ export async function customerCancelV2(customerId, orderId, reason) {
     sellerId: updated.seller,
     customerMessage: "Your order has been cancelled successfully.",
     sellerMessage: `Order #${updated.orderId} was cancelled by customer.`,
+  });
+  return updated;
+}
+
+// Previously there was no admin action to cancel an order stuck beyond SLA
+// (e.g. a seller who never accepts or rejects, or an order stalled mid
+// fulfillment) independent of a customer or seller having already initiated
+// a cancellation — only customer-initiated and seller-initiated cancellation
+// paths existed. This reuses the exact same compensation/refund logic as
+// every other cancellation path in the app.
+const FORCE_CANCEL_BLOCKED_STATUSES = new Set([
+  WORKFLOW_STATUS.CANCELLED,
+  WORKFLOW_STATUS.DELIVERED,
+  // A rider is already physically out with the goods — that needs a
+  // failed-delivery/return flow, not a DB-level force-cancel.
+  WORKFLOW_STATUS.OUT_FOR_DELIVERY,
+]);
+
+export async function adminForceCancelOrder(adminId, orderId, reason) {
+  const trimmedReason = String(reason || "").trim();
+  if (trimmedReason.length < 10) {
+    const err = new Error("Please provide a cancellation reason (at least 10 characters)");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const ws = resolveWorkflowStatus(order);
+  if (FORCE_CANCEL_BLOCKED_STATUSES.has(ws)) {
+    const err = new Error(`Order cannot be force-cancelled in its current state (${ws})`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, workflowStatus: ws },
+    {
+      $set: {
+        workflowStatus: WORKFLOW_STATUS.CANCELLED,
+        status: "cancelled",
+        orderStatus: "cancelled",
+        cancelledBy: "admin",
+        cancelReason: trimmedReason,
+      },
+      $push: {
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: "admin_force_cancelled",
+          actorRole: "admin",
+          actorId: String(adminId || ""),
+          note: trimmedReason,
+          meta: { previousWorkflowStatus: ws },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("Order was updated concurrently — please retry");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  await removeSellerTimeoutJob(orderId);
+  await removeDeliveryTimeoutJob(orderId);
+  await compensateOrderCancellation(updated, orderId);
+
+  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer);
+  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+    orderId: updated.orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    sellerId: updated.seller,
+    customerMessage: "Your order has been cancelled by our support team. Any payment made will be refunded to your wallet.",
+    sellerMessage: `Order #${updated.orderId} was cancelled by admin.`,
   });
   return updated;
 }

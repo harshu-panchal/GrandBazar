@@ -466,6 +466,7 @@ export const verifyReturnDropOtp = async (req, res) => {
     order.returnDeliveredBackAt = new Date();
     order.returnDropVerifiedAt = new Date();
     order.returnDropVerifiedBy = userId;
+    order.refundPendingSince = order.refundPendingSince || new Date();
     await order.save();
     emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 

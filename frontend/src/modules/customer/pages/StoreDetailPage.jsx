@@ -128,6 +128,7 @@ const StoreDetailPage = () => {
           name: seller.shopName || seller.name || "",
           description: seller.description || "",
           image: (seller.banners || []).filter(Boolean),
+          telephone: seller.phone || undefined,
           address: {
             "@type": "PostalAddress",
             addressLocality: seller.locality || "",

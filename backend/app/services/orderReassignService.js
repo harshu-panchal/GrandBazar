@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import Order from "../models/order.js";
 import Product from "../models/product.js";
 import Store from "../models/store.js";
+import User from "../models/customer.js";
+import Transaction from "../models/transaction.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
 import {
   WORKFLOW_STATUS,
@@ -27,6 +29,7 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { isStoreOperationallyOpen } from "./deliveryOptionResolver.js";
 import { calculateDistance } from "../utils/helper.js";
+import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
 
 const REASSIGNABLE_STATUSES = new Set([
   WORKFLOW_STATUS.SELLER_PENDING,
@@ -48,7 +51,7 @@ function httpError(message, statusCode = 400) {
   return err;
 }
 
-function resolveOrderCustomerCoords(order) {
+export function resolveOrderCustomerCoords(order) {
   const lat = Number(order?.address?.location?.lat);
   const lng = Number(order?.address?.location?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -60,7 +63,7 @@ function resolveOrderCustomerCoords(order) {
   return { valid: true, lat, lng };
 }
 
-function getStoreCoords(store) {
+export function getStoreCoords(store) {
   const coords = store?.location?.coordinates;
   if (!Array.isArray(coords) || coords.length < 2) {
     return { valid: false, lat: null, lng: null };
@@ -76,7 +79,7 @@ function getStoreCoords(store) {
 /**
  * Store must fall inside its own serviceRadius from the customer's delivery pin.
  */
-function evaluateStoreInCustomerRange(store, customerLat, customerLng) {
+export function evaluateStoreInCustomerRange(store, customerLat, customerLng) {
   const storeCoords = getStoreCoords(store);
   if (!storeCoords.valid) {
     return {
@@ -153,7 +156,7 @@ async function assertTargetStoreInCustomerRange(order, targetStore) {
  * Resolve each order line to a product on the target store via catalogProductId.
  * Keeps customer-facing price/name from the original line.
  */
-async function mapItemsToTargetStore(order, targetStoreId, { session = null } = {}) {
+export async function mapItemsToTargetStore(order, targetStoreId, { session = null } = {}) {
   const sourceProductIds = order.items
     .map((item) => item.product)
     .filter(Boolean);
@@ -222,12 +225,13 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
     }
 
     const variantSku = String(item.variantSku || item.variantSlot || "").trim();
+    let matchedVariant = null;
     if (variantSku) {
       const variants = Array.isArray(target.variants) ? target.variants : [];
-      const hit = variants.find(
+      matchedVariant = variants.find(
         (variant) => String(variant?.sku || "").trim() === variantSku,
       );
-      if (!hit) {
+      if (!matchedVariant) {
         missing.push({
           name: item.name || target.name,
           catalogProductId: catalogId,
@@ -235,11 +239,11 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
         });
         continue;
       }
-      if (Number(hit.stock || 0) < Number(item.quantity || 0)) {
+      if (Number(matchedVariant.stock || 0) < Number(item.quantity || 0)) {
         missing.push({
           name: item.name || target.name,
           catalogProductId: catalogId,
-          reason: `Insufficient variant stock (need ${item.quantity}, have ${hit.stock || 0})`,
+          reason: `Insufficient variant stock (need ${item.quantity}, have ${matchedVariant.stock || 0})`,
         });
         continue;
       }
@@ -252,11 +256,20 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
       continue;
     }
 
+    // Price the item at the TARGET store's own live price, not the
+    // original store's price — the two stores are independent sellers and
+    // may charge differently for the "same" catalog product. This was
+    // previously copied verbatim from the source order (item.price),
+    // silently over/under-charging whenever prices differed.
+    const freshPrice = matchedVariant
+      ? Number(matchedVariant.salePrice || matchedVariant.price || 0)
+      : Number(target.salePrice || target.price || 0);
+
     remappedItems.push({
       product: target._id,
       name: item.name || target.name,
       quantity: item.quantity,
-      price: item.price,
+      price: freshPrice,
       variantSlot: item.variantSlot || variantSku || "",
       variantSku: variantSku || undefined,
       image: item.image || target.mainImage || "",
@@ -282,7 +295,7 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
   return { remappedItems, reservePayload };
 }
 
-async function clearDeliveryState(order, { session = null } = {}) {
+export async function clearDeliveryState(order, { session = null } = {}) {
   await DeliveryAssignment.updateMany(
     {
       orderId: order.orderId,
@@ -301,7 +314,7 @@ async function clearDeliveryState(order, { session = null } = {}) {
   );
 }
 
-function sellerTimeoutMsForOrder(order) {
+export function sellerTimeoutMsForOrder(order) {
   if (
     order.fulfillmentType === FULFILLMENT_TYPE.SCHEDULED ||
     order.fulfillmentType === FULFILLMENT_TYPE.PREORDER
@@ -391,7 +404,7 @@ export async function getOrderReassignCandidates(orderId) {
     isVerified: true,
     applicationStatus: "approved",
   })
-    .select("_id shopName name address locality location serviceRadius isOpen availability timezone ownerId")
+    .select("_id shopName name address locality location serviceRadius isOpen availability timezone ownerId avgRating reviewCount")
     .limit(200)
     .lean();
 
@@ -461,6 +474,8 @@ export async function getOrderReassignCandidates(orderId) {
       serviceRadiusKm: range.serviceRadiusKm,
       rangeReason: range.rangeReason,
       canReassign: productsAvailable && range.inCustomerRange,
+      rating: Number(store.avgRating || 0),
+      reviewCount: Number(store.reviewCount || 0),
     });
   }
 
@@ -480,6 +495,30 @@ export async function getOrderReassignCandidates(orderId) {
     if (a.isOpenNow !== b.isOpenNow) return a.isOpenNow ? -1 : 1;
     return String(a.shopName).localeCompare(String(b.shopName));
   });
+
+  // Estimated price for the top few reassignable candidates only (pricing a
+  // full checkout snapshot per candidate is too expensive to do for all
+  // 200) — gives the admin picker the price signal it previously lacked
+  // entirely.
+  const priceableCandidates = candidates.filter((c) => c.canReassign).slice(0, 5);
+  if (priceableCandidates.length) {
+    const { computeReassignmentPricing } = await import("./orderRescueService.js");
+    await Promise.all(
+      priceableCandidates.map(async (c) => {
+        try {
+          const { remappedItems } = await mapItemsToTargetStore(order, c.storeId);
+          const pricing = await computeReassignmentPricing(order, c.storeId, remappedItems);
+          c.estimatedGrandTotal = pricing.newGrandTotal;
+          c.priceDirection = pricing.direction;
+          c.priceDeltaAmount = pricing.deltaAmount;
+        } catch {
+          c.estimatedGrandTotal = null;
+          c.priceDirection = null;
+          c.priceDeltaAmount = null;
+        }
+      }),
+    );
+  }
 
   return {
     orderId: order.orderId,
@@ -540,6 +579,35 @@ export async function adminReassignOrderToStore({
     : null;
   const fromShopName = fromStore?.shopName || fromStore?.name || "Previous store";
   const toShopName = targetStore.shopName || targetStore.name || "New store";
+
+  // Price the reassignment against the target store's own live prices
+  // BEFORE touching anything — previously this silently applied whatever
+  // the old store charged, either overcharging the customer (target store
+  // pricier) or never crediting the difference back (target store cheaper).
+  // A price increase needs the customer's approval, so it's handed off to
+  // the same propose-and-wait flow the automatic rescue engine uses instead
+  // of proceeding with this function's own transaction below.
+  const { remappedItems: pricedItems } = await mapItemsToTargetStore(order, toStoreId);
+  const {
+    computeReassignmentPricing,
+    proposeReassignmentForApproval,
+    getRescueSettings,
+  } = await import("./orderRescueService.js");
+  const pricing = await computeReassignmentPricing(order, toStoreId, pricedItems);
+  if (pricing.direction === "increase") {
+    const settings = await getRescueSettings();
+    const proposed = await proposeReassignmentForApproval(order, {
+      targetStoreId: toStoreId,
+      targetStore,
+      remappedItems: pricedItems,
+      breakdown: pricing.breakdown,
+      direction: pricing.direction,
+      deltaAmount: pricing.deltaAmount,
+      trigger: "admin_manual",
+      settings,
+    });
+    return { ...proposed.toObject?.() ?? proposed, pendingCustomerApproval: true };
+  }
 
   const session = await mongoose.startSession();
   let updatedOrder;
@@ -644,9 +712,37 @@ export async function adminReassignOrderToStore({
       },
     ];
 
+    freezeFinancialSnapshot(locked, pricing.breakdown);
+
+    let refundAmount = 0;
+    if (pricing.direction === "decrease" && pricing.deltaAmount > 0) {
+      refundAmount = pricing.deltaAmount;
+      await User.findByIdAndUpdate(
+        locked.customer,
+        { $inc: { walletBalance: refundAmount } },
+        { session },
+      );
+      await Transaction.create(
+        [
+          {
+            user: locked.customer,
+            userModel: "User",
+            order: locked._id,
+            type: "Refund",
+            amount: refundAmount,
+            status: "Settled",
+            reference: `REF-REASSIGN-${locked.orderId}`,
+            meta: { orderId: locked.orderId, kind: "admin_reassign_price_decrease_refund" },
+          },
+        ],
+        { session },
+      );
+    }
+
     await locked.save({ session });
     await session.commitTransaction();
     updatedOrder = locked;
+    updatedOrder._rescueRefundAmount = refundAmount;
   } catch (error) {
     await session.abortTransaction();
     throw error;
@@ -719,6 +815,7 @@ export async function adminReassignOrderToStore({
     fromStoreId,
     toStoreId,
     shopName: targetStore.shopName || targetStore.name,
+    refundAmount: updatedOrder._rescueRefundAmount || undefined,
   });
 
   const populated = await Order.findOne({ orderId: updatedOrder.orderId })
@@ -728,4 +825,205 @@ export async function adminReassignOrderToStore({
     .lean();
 
   return populated;
+}
+
+// Maps a rejected order's items onto an equivalent product at a different
+// store by catalogProductId (same matching key mapItemsToTargetStore uses),
+// but returns bare {product, quantity, variantSku} entries with NO price —
+// the normal checkout/placement pipeline (placeOrderAtomic) prices them
+// fresh from the target store's live product record, which is exactly what
+// we want here (unlike the in-place reassignment above, this is a brand new
+// order, not a mutation of the old one, so there's no stale-price copy to
+// worry about).
+async function matchItemsToStoreCatalogForNewOrder(items, targetStoreId) {
+  const sourceProductIds = items.map((item) => item.product).filter(Boolean);
+  const sourceProducts = await Product.find({ _id: { $in: sourceProductIds } })
+    .select("_id catalogProductId name")
+    .lean();
+  const sourceById = new Map(sourceProducts.map((p) => [String(p._id), p]));
+
+  const catalogIds = sourceProducts
+    .map((p) => p.catalogProductId)
+    .filter(Boolean)
+    .map(String);
+  if (!catalogIds.length) {
+    throw httpError(
+      "Order items are not linked to catalog products, so a replacement order cannot be created automatically.",
+      400,
+    );
+  }
+
+  const targetProducts = await Product.find({
+    sellerId: targetStoreId,
+    catalogProductId: { $in: catalogIds },
+    status: "active",
+    isPublished: { $ne: false },
+  })
+    .select("_id catalogProductId variants stock")
+    .lean();
+  const targetByCatalogId = new Map(
+    targetProducts.map((p) => [String(p.catalogProductId), p]),
+  );
+
+  const mapped = [];
+  const missing = [];
+  for (const item of items) {
+    const source = sourceById.get(String(item.product));
+    const catalogId = source?.catalogProductId ? String(source.catalogProductId) : null;
+    const target = catalogId ? targetByCatalogId.get(catalogId) : null;
+    if (!target) {
+      missing.push({
+        name: item.name || source?.name || "Unknown item",
+        reason: !catalogId
+          ? "No catalogProductId on source product"
+          : "Target store does not sell this catalog product",
+      });
+      continue;
+    }
+
+    const variantSku = String(item.variantSku || item.variantSlot || "").trim();
+    if (variantSku) {
+      const variants = Array.isArray(target.variants) ? target.variants : [];
+      const hit = variants.find((v) => String(v?.sku || "").trim() === variantSku);
+      if (!hit || Number(hit.stock || 0) < Number(item.quantity || 0)) {
+        missing.push({ name: item.name || "Unknown item", reason: `Variant ${variantSku} unavailable at required quantity` });
+        continue;
+      }
+    } else if (Number(target.stock || 0) < Number(item.quantity || 0)) {
+      missing.push({ name: item.name || "Unknown item", reason: `Insufficient stock (need ${item.quantity}, have ${target.stock || 0})` });
+      continue;
+    }
+
+    mapped.push({
+      product: String(target._id),
+      quantity: item.quantity,
+      variantSku: variantSku || undefined,
+    });
+  }
+
+  if (missing.length) {
+    const err = httpError(
+      `Cannot create replacement order: ${missing.length} item(s) unavailable at target store`,
+      400,
+    );
+    err.details = missing;
+    throw err;
+  }
+
+  return mapped;
+}
+
+// Admin action for TC-PART-021: a seller-rejected order has already been
+// fully cancelled — its stock released and its payment refunded to the
+// customer's wallet by the time this runs (see compensateOrderCancellation).
+// Reversing that safely would mean re-debiting a wallet balance the
+// customer may have already spent, or re-charging a payment gateway this
+// codebase has no refund/recharge integration for — both are real financial
+// risks that a "quick fix" shouldn't take on. Instead, this creates a
+// genuinely new, linked order for the same customer at a different store,
+// through the exact same placement pipeline (placeOrderAtomic) every normal
+// checkout uses — correct stock reservation and fresh pricing included —
+// defaulting to COD so no automatic money movement is needed at all.
+export async function adminCreateReplacementOrderForRejectedOrder({
+  originalOrderId,
+  targetStoreId,
+  adminId,
+  note = "",
+}) {
+  if (!targetStoreId || !mongoose.Types.ObjectId.isValid(String(targetStoreId))) {
+    throw httpError("Valid targetStoreId is required", 400);
+  }
+
+  const canonicalId = await requireCanonicalOrderId(originalOrderId);
+  const original = await Order.findOne({ orderId: canonicalId });
+  if (!original) throw httpError("Order not found", 404);
+
+  if (original.workflowStatus !== WORKFLOW_STATUS.CANCELLED || original.cancelledBy !== "seller") {
+    throw httpError(
+      "A replacement order can only be created for an order the seller rejected.",
+      400,
+    );
+  }
+  if (original.replacementOrderId) {
+    throw httpError("A replacement order already exists for this order.", 409);
+  }
+
+  const targetStore = await Store.findById(targetStoreId)
+    .select("_id shopName name ownerId isActive isVerified applicationStatus")
+    .lean();
+  if (!targetStore) throw httpError("Target store not found", 404);
+  if (!targetStore.isActive || !targetStore.isVerified) {
+    throw httpError("Target store is not active/verified", 400);
+  }
+  if (targetStore.applicationStatus && targetStore.applicationStatus !== "approved") {
+    throw httpError("Target store is not approved", 400);
+  }
+  if (String(targetStoreId) === toId(original.seller)) {
+    throw httpError("Target store is the same as the store that rejected this order", 400);
+  }
+
+  const mappedItems = await matchItemsToStoreCatalogForNewOrder(original.items, targetStoreId);
+
+  const { placeOrderAtomic } = await import("./orderPlacementService.js");
+  const placement = await placeOrderAtomic({
+    customerId: original.customer,
+    payload: {
+      items: mappedItems,
+      address: {
+        type: original.address?.type,
+        name: original.address?.name,
+        address: original.address?.address,
+        city: original.address?.city,
+        state: original.address?.state,
+        phone: original.address?.phone,
+        landmark: original.address?.landmark,
+        location: original.address?.location?.lat != null
+          ? { lat: original.address.location.lat, lng: original.address.location.lng }
+          : undefined,
+      },
+      // COD by default — the customer was already refunded for the original
+      // order, so this is a genuinely fresh purchase, not a continuation.
+      // No automatic wallet debit or gateway charge is attempted here.
+      paymentMode: "COD",
+      timeSlot: "now",
+    },
+  });
+
+  const newOrder = placement.order || (Array.isArray(placement.orders) ? placement.orders[0] : null);
+  if (!newOrder) {
+    throw httpError("Failed to create replacement order", 500);
+  }
+
+  await Order.updateOne(
+    { _id: original._id },
+    {
+      $set: { replacementOrderId: newOrder._id },
+      $push: {
+        modificationTimeline: {
+          version: Number(original.modificationVersion || 0) + 1,
+          type: "admin_created_replacement_order",
+          actorRole: "admin",
+          actorId: String(adminId || ""),
+          note: note || `Replacement order ${newOrder.orderId} created at ${targetStore.shopName || targetStore.name}`,
+          meta: { replacementOrderId: String(newOrder._id), targetStoreId: String(targetStoreId) },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+  );
+  await Order.updateOne(
+    { _id: newOrder._id },
+    { $set: { replacedFromOrderId: original._id } },
+  );
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_REASSIGNED, {
+    orderId: original.orderId,
+    customerId: original.customer,
+    userId: original.customer,
+    shopName: targetStore.shopName || targetStore.name,
+    customerMessage: `Since your original seller couldn't fulfill order #${original.orderId}, we've placed a replacement order (#${newOrder.orderId}) with ${targetStore.shopName || targetStore.name} for you. It's Cash on Delivery — you were already refunded for the original order.`,
+  });
+
+  return { originalOrder: original, newOrder: placement.order || newOrder, placement };
 }

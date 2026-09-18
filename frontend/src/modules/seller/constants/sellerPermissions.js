@@ -59,11 +59,9 @@ export const SELLER_PERMISSION_MODULES = [
     label: 'Sales Reports',
     description: 'Analytics and performance metrics',
   },
-  {
-    id: 'withdrawals',
-    label: 'Money & Earnings',
-    description: 'Withdrawals, earnings, and transactions',
-  },
+  // 'withdrawals' (Money & Earnings) is intentionally not offered here —
+  // moving money out of the platform is always Owner-only and the backend
+  // hard-rejects it regardless, so it's not shown as an assignable option.
 ];
 
 export const permissionKey = (module, level) => `${module}:${level}`;

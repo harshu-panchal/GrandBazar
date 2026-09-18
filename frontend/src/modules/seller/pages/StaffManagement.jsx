@@ -15,6 +15,8 @@ import {
   HiOutlineEnvelope,
   HiOutlineUserGroup,
   HiOutlineBuildingStorefront,
+  HiOutlineNoSymbol,
+  HiOutlineCheckCircle,
 } from 'react-icons/hi2';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -257,6 +259,19 @@ const StaffManagement = () => {
     }
   };
 
+  const handleToggleActive = async (assistant) => {
+    const nextActive = !(assistant.isActive !== false);
+    try {
+      const res = await sellerApi.updateStaff(assistant._id, { isActive: nextActive });
+      if (res?.data?.success) {
+        toast.success(nextActive ? 'Assistant access re-enabled' : 'Assistant access disabled');
+        fetchOverview();
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to update assistant access');
+    }
+  };
+
   const handleMatrixChange = (moduleId, level, checked) => {
     setFormData((prev) => {
       const nextMatrix = {
@@ -493,6 +508,17 @@ const StaffManagement = () => {
                           title="Edit assistant"
                         >
                           <HiOutlinePencil className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(assistant)}
+                          className={`p-2 rounded-xl transition-all ${assistant.isActive === false ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                          title={assistant.isActive === false ? 'Re-enable access' : 'Disable access'}
+                        >
+                          {assistant.isActive === false ? (
+                            <HiOutlineCheckCircle className="h-5 w-5" />
+                          ) : (
+                            <HiOutlineNoSymbol className="h-5 w-5" />
+                          )}
                         </button>
                         <button
                           onClick={() => handleDelete(assistant._id)}

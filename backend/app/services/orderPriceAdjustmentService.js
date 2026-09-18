@@ -35,6 +35,7 @@ const ADD_ITEMS_BLOCKED_WORKFLOW_STATUSES = [
   WORKFLOW_STATUS.DELIVERED,
   WORKFLOW_STATUS.CANCELLED,
   WORKFLOW_STATUS.DISPUTED,
+  WORKFLOW_STATUS.RESCUE_PENDING,
 ];
 
 function generateCreditNoteId() {
@@ -219,6 +220,8 @@ export async function applyOrderPriceAdjustment({
   actorLabel = "seller",
   partialCancelIndexes = [],
   sellerId = null,
+  linkedReplacementRequestId = null,
+  actorId = "",
 }) {
   orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({ orderId });
@@ -235,7 +238,7 @@ export async function applyOrderPriceAdjustment({
   }
 
   const ws = resolveWorkflowStatus(order);
-  if ([WORKFLOW_STATUS.CANCELLED, WORKFLOW_STATUS.DELIVERED, WORKFLOW_STATUS.OUT_FOR_DELIVERY].includes(ws)) {
+  if ([WORKFLOW_STATUS.CANCELLED, WORKFLOW_STATUS.DELIVERED, WORKFLOW_STATUS.OUT_FOR_DELIVERY, WORKFLOW_STATUS.RESCUE_PENDING].includes(ws)) {
     const err = new Error("Order cannot be adjusted in current state");
     err.statusCode = 409;
     throw err;
@@ -304,7 +307,7 @@ export async function applyOrderPriceAdjustment({
             version: Number(order.modificationVersion || 0) + 1,
             type: "price_adjusted",
             actorRole: actorLabel,
-            actorId: "",
+            actorId: String(actorId || ""),
             note: reason || "",
             meta: { direction: "none", deltaAmount: 0, previousGrandTotal, newGrandTotal },
             createdAt: new Date(),
@@ -349,6 +352,7 @@ export async function applyOrderPriceAdjustment({
     "priceAdjustment.proposedPartialCancelIndexes": partialCancelIndexes,
     "priceAdjustment.extraPaymentDeadlineAt": deadline,
     "priceAdjustment.extraPaymentJobId": jobId,
+    "priceAdjustment.linkedReplacementRequestId": linkedReplacementRequestId,
   };
 
   const updated = await Order.findOneAndUpdate(
@@ -360,7 +364,7 @@ export async function applyOrderPriceAdjustment({
           version: Number(order.modificationVersion || 0) + 1,
           type: partialCancelIndexes.length > 0 ? "partial_cancel_proposed" : "price_adjustment_proposed",
           actorRole: actorLabel,
-          actorId: "",
+          actorId: String(actorId || ""),
           note: reason || "",
           meta: { direction, deltaAmount: Math.abs(delta), previousGrandTotal, newGrandTotal },
           createdAt: new Date(),
@@ -401,7 +405,7 @@ export async function applyOrderPriceAdjustment({
 // Shared by payPriceDifference (online-increase, after payment) and
 // approveOrderAdjustment (COD increase / decrease, no payment needed) — both
 // are "the customer signed off, now actually apply what was proposed."
-async function finalizePendingAdjustment(order, { actorRole, extraSet = {}, skipNotification = false }) {
+async function finalizePendingAdjustment(order, { actorRole, actorId = "", extraSet = {}, skipNotification = false }) {
   const pa = order.priceAdjustment || {};
   const direction = pa.direction || "none";
   const deltaAmount = Math.abs(Number(pa.deltaAmount || 0));
@@ -485,7 +489,7 @@ async function finalizePendingAdjustment(order, { actorRole, extraSet = {}, skip
           version: Number(order.modificationVersion || 0) + 1,
           type: proposedPartialCancelIndexes.length > 0 ? "partial_cancelled" : "price_adjusted",
           actorRole,
-          actorId: "",
+          actorId: String(actorId || ""),
           note: reason,
           meta: {
             direction,
@@ -516,6 +520,19 @@ async function finalizePendingAdjustment(order, { actorRole, extraSet = {}, skip
     await releaseReservedStockForOrder(updated, { reason: "Partial cancellation" });
   }
 
+  // The replacement request that originated this price change was left in a
+  // provisional "approved_pending_price" state (not a terminal "approved")
+  // until the price change/item swap actually landed — flip it now that it
+  // has, rather than the old behaviour of marking it "approved" the instant
+  // the customer picked an alternative even though nothing had actually been
+  // applied yet.
+  if (pa.linkedReplacementRequestId) {
+    await Order.updateOne(
+      { _id: updated._id, "replacementRequests.requestId": pa.linkedReplacementRequestId },
+      { $set: { "replacementRequests.$.status": "approved" } },
+    );
+  }
+
   await cancelAdjustmentDeadline(order);
   emitOrderStatusUpdate(order.orderId, { priceAdjusted: true, direction }, updated.customer);
   if (direction !== "none" && !skipNotification) {
@@ -534,7 +551,7 @@ async function finalizePendingAdjustment(order, { actorRole, extraSet = {}, skip
 // rejection and a deadline expiry. order.items was never touched while
 // "pending", so this only needs to move the workflow status back, never a
 // data revert.
-async function revertPendingAdjustment(order, { actorLabel, reason }) {
+async function revertPendingAdjustment(order, { actorLabel, actorId = "", reason }) {
   const pa = order.priceAdjustment || {};
   const priorWs = pa.priorWorkflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
 
@@ -562,7 +579,7 @@ async function revertPendingAdjustment(order, { actorLabel, reason }) {
           version: Number(order.modificationVersion || 0) + 1,
           type: "price_adjustment_rejected",
           actorRole: actorLabel,
-          actorId: "",
+          actorId: String(actorId || ""),
           note: reason || "",
           meta: { direction: pa.direction || "none" },
           createdAt: new Date(),
@@ -573,6 +590,17 @@ async function revertPendingAdjustment(order, { actorLabel, reason }) {
     { new: true },
   );
   if (!updated) return null;
+
+  // Mirror of the finalize-side flip in finalizePendingAdjustment — the
+  // replacement request that proposed this price change never actually
+  // landed (order.items was never touched while pending), so it must not be
+  // left showing "approved".
+  if (pa.linkedReplacementRequestId) {
+    await Order.updateOne(
+      { _id: updated._id, "replacementRequests.requestId": pa.linkedReplacementRequestId },
+      { $set: { "replacementRequests.$.status": "rejected", "replacementRequests.$.customerDecision": "rejected" } },
+    );
+  }
 
   await cancelAdjustmentDeadline(order);
   emitOrderStatusUpdate(order.orderId, { priceAdjustmentRejected: true }, updated.customer);
@@ -603,7 +631,7 @@ export async function approveOrderAdjustment(customerId, orderId) {
     err.statusCode = 400;
     throw err;
   }
-  return finalizePendingAdjustment(order, { actorRole: "customer" });
+  return finalizePendingAdjustment(order, { actorRole: "customer", actorId: customerId });
 }
 
 export async function rejectOrderAdjustment(customerId, orderId, { reason = "" } = {}) {
@@ -621,6 +649,7 @@ export async function rejectOrderAdjustment(customerId, orderId, { reason = "" }
   }
   const updated = await revertPendingAdjustment(order, {
     actorLabel: "customer",
+    actorId: customerId,
     reason: reason || "Declined by customer",
   });
   if (!updated) {
@@ -648,6 +677,19 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
 
   const delta = Number(order.priceAdjustment?.deltaAmount || 0);
   const walletUse = Math.min(Number(walletAmount || 0), delta);
+
+  // The customer must actually cover the full delta before this adjustment
+  // is finalized — an unpaid/underpaid "pay difference" call must never be
+  // allowed to silently unblock the order (previously walletAmount defaulted
+  // to 0 and finalizePendingAdjustment ran unconditionally, collecting Rs.0).
+  if (walletUse < delta) {
+    const err = new Error(
+      `Insufficient payment — Rs.${delta} is due but only Rs.${walletUse} was provided. Please pay the full price difference to continue.`,
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
   if (walletUse > 0) {
     const user = await User.findById(customerId);
     if (!user || user.walletBalance < walletUse) {
@@ -674,6 +716,7 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
   // does for the no-payment-needed cases.
   const updated = await finalizePendingAdjustment(order, {
     actorRole: "customer",
+    actorId: customerId,
     extraSet: { "priceAdjustment.extraPaymentRef": `EXTRA-${orderId}` },
     skipNotification: true,
   });
@@ -711,6 +754,7 @@ export async function partialCancelOrderItems({
   reason,
   actorLabel = "seller",
   sellerId = null,
+  actorId = "",
 }) {
   const order = await Order.findOne({ orderId: await requireCanonicalOrderId(orderId) });
   if (!order) {
@@ -740,6 +784,157 @@ export async function partialCancelOrderItems({
     actorLabel,
     partialCancelIndexes: itemIndexes,
     sellerId,
+    actorId,
+  });
+}
+
+/**
+ * Customer self-service: remove one or more line items from their own order
+ * while it's still awaiting seller acceptance. Reuses the seller/admin
+ * partial-cancel + adjustment machinery, but since the customer is both the
+ * requester and the only person who could "approve" it, the resulting
+ * price-decrease adjustment is finalized immediately instead of being left
+ * pending for a separate approval step.
+ */
+export async function customerRemoveOrderItem({ customerId, orderId, itemIndexes = [], reason = "" }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (String(order.customer) !== String(customerId)) {
+    const err = new Error("Access denied. This is not your order.");
+    err.statusCode = 403;
+    throw err;
+  }
+  if (resolveWorkflowStatus(order) !== WORKFLOW_STATUS.SELLER_PENDING) {
+    const err = new Error("Items can only be removed before the seller accepts the order");
+    err.statusCode = 409;
+    throw err;
+  }
+  if (!Array.isArray(itemIndexes) || itemIndexes.length === 0) {
+    const err = new Error("Select at least one item to remove");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const proposed = await partialCancelOrderItems({
+    orderId,
+    itemIndexes,
+    reason: reason || "Removed by customer before seller acceptance",
+    actorLabel: "customer",
+    actorId: customerId,
+  });
+
+  if (proposed.priceAdjustment?.status === "pending") {
+    return finalizePendingAdjustment(proposed, { actorRole: "customer", actorId: customerId });
+  }
+  return proposed;
+}
+
+/**
+ * Seller-initiated: add an item to an order they're still preparing (before
+ * it's packed/handed off — same boundary as the customer add-items feature).
+ * Unlike the customer version, this doesn't touch the customer's wallet
+ * directly — it goes through the same propose/approve adjustment flow as any
+ * other seller-initiated price change, so the customer explicitly signs off
+ * (or pays online) before the extra charge is final.
+ */
+export async function sellerAddOrderItems({ sellerId, orderId, items = [], reason = "", actorId = "" }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (String(order.seller) !== String(sellerId)) {
+    const err = new Error("Access denied. You are not authorized to adjust this order.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (ADD_ITEMS_BLOCKED_WORKFLOW_STATUSES.includes(resolveWorkflowStatus(order))) {
+    const err = new Error("This order has already been packed and can no longer be edited");
+    err.statusCode = 409;
+    throw err;
+  }
+  if (order.deliveryBoy) {
+    const err = new Error("Cannot edit order after delivery partner assignment");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const requested = (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      product: item.product || item.productId,
+      variantSku: String(item.variantSku || item.variantSlot || "").trim(),
+      quantity: Math.max(1, Math.trunc(Number(item.quantity) || 0)),
+    }))
+    .filter((item) => item.product && item.quantity > 0);
+  if (requested.length === 0) {
+    const err = new Error("Select at least one item to add");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const products = await Product.find({ _id: { $in: requested.map((i) => i.product) } })
+    .select("_id sellerId name")
+    .lean();
+  const productMap = new Map(products.map((p) => [String(p._id), p]));
+  for (const item of requested) {
+    const product = productMap.get(String(item.product));
+    if (!product) {
+      const err = new Error("One or more selected products no longer exist");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (String(product.sellerId) !== String(order.seller)) {
+      const err = new Error(`${product.name} is not in your store and can't be added to this order`);
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  const mergedItems = order.items.map((item) => ({
+    product: item.product,
+    variantSlot: item.variantSlot || "",
+    quantity: item.quantity,
+  }));
+  for (const item of requested) {
+    const existing = mergedItems.find(
+      (m) => String(m.product) === String(item.product) && (m.variantSlot || "") === item.variantSku,
+    );
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      mergedItems.push({ product: item.product, variantSlot: item.variantSku, quantity: item.quantity });
+    }
+  }
+
+  // Reserve stock for only the newly requested quantities — existing lines
+  // were already reserved when the order was first placed.
+  await reserveStockForItems({
+    items: requested.map((item) => ({
+      productId: item.product,
+      productName: productMap.get(String(item.product))?.name || "",
+      variantSku: item.variantSku,
+      quantity: item.quantity,
+    })),
+    sellerId: order.seller,
+    orderId,
+    paymentMode: order.paymentMode,
+  });
+
+  return applyOrderPriceAdjustment({
+    orderId,
+    items: mergedItems,
+    reason: reason || "Item added by seller before packing",
+    actorLabel: "seller",
+    sellerId,
+    actorId,
   });
 }
 

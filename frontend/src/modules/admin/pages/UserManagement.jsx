@@ -31,6 +31,7 @@ const PERMISSIONS_LIST = [
   { key: 'customers', label: 'Customers', desc: 'View end-user registry & logs' },
   { key: 'faqs', label: 'FAQs', desc: 'Publish static FAQ lists' },
   { key: 'orders', label: 'Orders', desc: 'Process live deliveries & return queues' },
+  { key: 'operations', label: 'Operations Queue', desc: 'Stuck/escalated orders needing manual attention' },
   { key: 'billing', label: 'Fees & Charges', desc: 'Define commissions & platform costs' },
   { key: 'settings', label: 'Settings', desc: 'Global platform configuration' },
   { key: 'system', label: 'System Settings', desc: 'Developer environment keys & config' }
@@ -198,6 +199,8 @@ const UserManagement = () => {
         return 'success';
       case 'assistant':
         return 'warning';
+      case 'operator':
+        return 'info';
       default:
         return 'neutral';
     }
@@ -414,6 +417,7 @@ const UserManagement = () => {
                     >
                       <option value="accountant">Accountant</option>
                       <option value="assistant">Assistant</option>
+                      <option value="operator">Operator</option>
                     </select>
                   </div>
                 </div>

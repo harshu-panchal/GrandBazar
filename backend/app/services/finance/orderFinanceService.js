@@ -857,13 +857,52 @@ export async function reverseOrderFinanceOnCancellation(
     let totalRefunded = 0;
 
     if (order.paymentMode === "ONLINE" && order.financeFlags?.onlinePaymentCaptured) {
-      const refundAmount = roundCurrency(order.paymentBreakdown?.grandTotal || 0);
-      if (refundAmount > 0) {
-        totalRefunded += refundAmount;
+      // Online-gateway-paid amount actually owed to the customer for this
+      // cancellation — the walletUsed portion below is handled separately
+      // since that money never reached the gateway in the first place.
+      const onlinePaidAmount = roundCurrency(
+        Math.max(
+          0,
+          (order.paymentBreakdown?.grandTotal || 0) -
+            (order.pricing?.walletAmount || order.paymentBreakdown?.walletAmount || 0),
+        ),
+      );
+      if (onlinePaidAmount > 0) {
+        totalRefunded += onlinePaidAmount;
+
+        // No live payment-gateway refund API is integrated in this codebase
+        // (checked paymentService.js / the PhonePe SDK usage — no refund call
+        // exists anywhere). Credit the customer's actual spendable wallet
+        // instead, which is the same pattern the return-refund flow already
+        // uses in orderController.js's completeReturnAndRefund, regardless of
+        // original payment mode. Previously this only debited an internal
+        // ADMIN ledger bucket with zero customer-facing effect — the
+        // customer's money never actually came back to them.
+        await User.findByIdAndUpdate(
+          order.customer,
+          { $inc: { walletBalance: onlinePaidAmount } },
+          { session },
+        );
+        await Transaction.create(
+          [
+            {
+              user: order.customer,
+              userModel: "User",
+              order: order._id,
+              type: "Refund",
+              amount: onlinePaidAmount,
+              status: "Settled",
+              reference: `REF-CANCEL-ONLINE-${order.orderId}`,
+              meta: { orderId: order.orderId, reason, kind: "cancellation_online_refund" },
+            },
+          ],
+          { session },
+        );
+
         const debitResult = await debitWallet({
           ownerType: OWNER_TYPE.ADMIN,
           ownerId: null,
-          amount: refundAmount,
+          amount: onlinePaidAmount,
           bucket: "available",
           session,
         });
@@ -876,7 +915,7 @@ export async function reverseOrderFinanceOnCancellation(
             actorId: null,
             type: LEDGER_TRANSACTION_TYPE.REFUND,
             direction: LEDGER_DIRECTION.DEBIT,
-            amount: refundAmount,
+            amount: onlinePaidAmount,
             paymentMode: "ONLINE",
             description: reason,
             reference: order.orderId,

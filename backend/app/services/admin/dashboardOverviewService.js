@@ -425,10 +425,26 @@ async function fetchOrderFacets(cityMatch, windows) {
    Entity / money counts (non-order collections)
 ---------------------------------------------------------------- */
 
-async function fetchEntityCounts(windows) {
+async function fetchEntityCounts(windows, normalizedCity = "") {
   const { todayStart, yesterdayStart, weekAgo, twoWeeksAgo, monthStart, prevMonthStart, now } = windows;
   const in30d = addDays(now, 30);
   const in7d = addDays(now, 7);
+
+  // Previously every count below ignored the selected city entirely — a
+  // seller/shop/rider count query and the Approval Center numbers stayed
+  // platform-wide regardless of the dashboard's city filter. Store has a
+  // direct `city` field; Seller (owner accounts) doesn't, so owner counts
+  // are scoped via the set of owner ids who have a store in that city.
+  // Delivery partners have no reliable city field (only a free-text
+  // `currentArea`), so rider counts remain platform-wide — a real data-model
+  // gap, not something safely fixable by regex-matching free text.
+  const storeCityMatch = normalizedCity
+    ? { city: { $regex: `^\\s*${normalizedCity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, $options: "i" } }
+    : {};
+  const ownerIdsInCity = normalizedCity
+    ? await Store.distinct("ownerId", storeCityMatch)
+    : null;
+  const ownerScope = ownerIdsInCity ? { _id: { $in: ownerIdsInCity } } : {};
 
   const [
     activeSellers,
@@ -460,17 +476,17 @@ async function fetchEntityCounts(windows) {
     lowStockProducts,
     avgRatingRow,
   ] = await Promise.all([
-    Seller.countDocuments({ accountType: "owner", applicationStatus: "approved", isActive: true }),
-    Seller.countDocuments({ accountType: "owner" }),
-    Seller.countDocuments({ accountType: "owner", applicationStatus: "approved" }),
-    Seller.countDocuments({ accountType: "owner", applicationStatus: "rejected" }),
-    Seller.countDocuments({ accountType: "owner", applicationStatus: "pending" }),
-    Seller.countDocuments({ accountType: "owner", createdAt: { $gte: weekAgo } }),
-    Seller.countDocuments({ accountType: "owner", createdAt: { $gte: twoWeeksAgo, $lt: weekAgo } }),
-    Store.countDocuments({ isVerified: true, isActive: true }),
-    Store.countDocuments({ applicationStatus: "pending" }),
-    Store.countDocuments({ applicationStatus: "approved", isActive: false }),
-    Store.countDocuments({ applicationStatus: "approved" }),
+    Seller.countDocuments({ accountType: "owner", applicationStatus: "approved", isActive: true, ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", applicationStatus: "approved", ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", applicationStatus: "rejected", ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", applicationStatus: "pending", ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", createdAt: { $gte: weekAgo }, ...ownerScope }),
+    Seller.countDocuments({ accountType: "owner", createdAt: { $gte: twoWeeksAgo, $lt: weekAgo }, ...ownerScope }),
+    Store.countDocuments({ isVerified: true, isActive: true, ...storeCityMatch }),
+    Store.countDocuments({ applicationStatus: "pending", ...storeCityMatch }),
+    Store.countDocuments({ applicationStatus: "approved", isActive: false, ...storeCityMatch }),
+    Store.countDocuments({ applicationStatus: "approved", ...storeCityMatch }),
     Delivery.countDocuments({ isVerified: true }),
     Delivery.countDocuments({ isVerified: true, isOnline: true }),
     Delivery.countDocuments({ isVerified: false }),
@@ -882,7 +898,7 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
   const [facets, counts, payouts, subscriptionRevenue, systemHealth, activityFeed, allCitiesRaw] =
     await Promise.all([
       fetchOrderFacets(cityMatch, windows),
-      fetchEntityCounts(windows),
+      fetchEntityCounts(windows, normalizedCity),
       safe(fetchPayoutOverview(), {
         totalAmount: 0, completedAmount: 0, pendingAmount: 0, completedPct: 0,
         counts: { total: 0, completed: 0, pending: 0, failed: 0 },
@@ -1078,7 +1094,7 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
     totalSellers: counts.totalSellers,
     approvedSellers: counts.approvedSellers,
     rejectedSellers: counts.rejectedSellers,
-    kycPending: counts.pendingShops,
+    kycPending: counts.pendingOwnerSellers,
     shopsPendingApproval: counts.pendingShops,
     activeShops: counts.activeShops,
     suspendedShops: counts.suspendedShops,
@@ -1089,7 +1105,7 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
   const approvalCenter = [
     { key: "sellerRegistrations", label: "Seller Registrations", count: counts.pendingOwnerSellers, link: "/admin/sellers/pending" },
     { key: "shopApprovals", label: "Shop Approvals", count: counts.pendingShops, link: "/admin/sellers/pending" },
-    { key: "kycVerifications", label: "KYC / Document Verifications", count: counts.pendingShops, link: "/admin/sellers/pending" },
+    { key: "kycVerifications", label: "KYC / Document Verifications", count: counts.pendingOwnerSellers, link: "/admin/sellers/pending" },
     { key: "subscriptionRequests", label: "Subscription Requests", count: counts.pendingSubscriptionRequests, link: "/admin/subscriptions" },
     { key: "deliveryPartners", label: "Delivery Partner Requests", count: counts.pendingRiders, link: "/admin/delivery-boys/pending" },
     { key: "withdrawals", label: "Withdrawal Requests", count: counts.pendingWithdrawals, link: "/admin/withdrawals" },
