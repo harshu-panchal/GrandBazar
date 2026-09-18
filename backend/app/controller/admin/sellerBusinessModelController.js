@@ -15,13 +15,7 @@ async function resolveOwnerFromParam(id) {
   const seller = await Seller.findById(normalizedId)
     .select("_id accountType")
     .lean();
-  // Only take the "id IS already the owner's own Seller doc" shortcut when a
-  // Seller doc was actually found — previously `!seller?.accountType` was
-  // also true when `seller` itself was null (the normal case here, since
-  // this id is a Store id for every caller), so this always short-circuited
-  // to a second failed Seller.findById() instead of ever falling through to
-  // the Store lookup below.
-  if (seller && (seller.accountType === "owner" || !seller.accountType)) {
+  if (seller?.accountType === "owner" || !seller?.accountType) {
     return Seller.findById(normalizedId);
   }
 

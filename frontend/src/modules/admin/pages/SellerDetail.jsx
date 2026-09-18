@@ -300,18 +300,6 @@ const SellerDetail = () => {
                         value: data.commissionConfig.value ?? 0,
                     });
                 }
-                // loadSellerData's shopSetupForm reset above never included
-                // businessModel — it silently reverted to `undefined` after
-                // the very first load, which the backend's update endpoint
-                // then rejects as "Invalid business model" (undefined isn't
-                // a valid enum value or the sentinel null). Hydrate it here
-                // from the seller's actual current choice (or the same
-                // "commission" default the initial state used, for a seller
-                // who hasn't chosen one yet).
-                setShopSetupForm((prev) => ({
-                    ...prev,
-                    businessModel: data.businessModel || 'commission',
-                }));
             }
 
             try {
@@ -324,19 +312,6 @@ const SellerDetail = () => {
                         adminCommissionValue: Number(payload.adminCommissionValue || 0),
                         adminCommissionFixedRule: payload.adminCommissionFixedRule || 'per_qty',
                     });
-                    // The Shop Setup tab has its own commission controls
-                    // (shopSetupForm.applyCommission/etc, saved via
-                    // handleSaveShopSetup) that were likewise never hydrated
-                    // from the real store commission record — keep both in
-                    // sync with the same source so Save doesn't silently
-                    // overwrite a real configured rate with stale defaults.
-                    setShopSetupForm((prev) => ({
-                        ...prev,
-                        applyCommission: payload.applyCommission === true,
-                        adminCommissionType: payload.adminCommissionType || 'percentage',
-                        adminCommissionValue: Number(payload.adminCommissionValue || 0),
-                        adminCommissionFixedRule: payload.adminCommissionFixedRule || 'per_qty',
-                    }));
                 }
             } catch {
                 // optional; seller detail should still load.
