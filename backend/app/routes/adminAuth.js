@@ -48,8 +48,6 @@ import {
     bulkSettleDelivery,
     getActiveSellers,
     getActiveSellerById,
-    suspendStore,
-    reactivateStore,
     getPendingSellers,
     approveSellerApplication,
     rejectSellerApplication,
@@ -68,12 +66,6 @@ import {
     getCashSettlementHistory,
     getUsers,
     getUserById,
-    blockUser,
-    unblockUser,
-    getOperationsQueueController,
-    escalateOrderController,
-    resolveEscalationController,
-    getAnalyticsReportController,
     getSellers,
     getSellerLocations,
     sendMessageToSeller,
@@ -181,61 +173,58 @@ router.get(
     allowRoles("admin"),
     getAdminStats
 );
-// Finance/Tax (accountant) is explicitly opted into these read/export-only
-// routes — everywhere else, removing it from allowRoles's blanket admin
-// expansion means it's denied by default (see authMiddleware.js).
 router.get(
     "/finance/summary",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAdminFinanceSummaryController,
 );
 router.get(
     "/finance/ledger",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAdminFinanceLedgerController,
 );
 router.get(
     "/finance/payouts",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAdminFinancePayoutsController,
 );
 router.get(
     "/finance/bulk-settlements",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAdminBulkSettlementsController,
 );
 router.get(
     "/finance/earnings-breakdown",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getEarningsBreakdownController,
 );
 router.get(
     "/finance/delivery-earnings-summary",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getDeliveryEarningsSummaryController,
 );
 router.get(
     "/finance/seller-earnings-summary",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getSellerEarningsSummaryController,
 );
 router.get(
     "/finance/refunds",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAdminRefundsController,
 );
 router.get(
     "/audit-logs",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     getAuditLogsController,
 );
 router.post(
@@ -271,7 +260,7 @@ router.post(
 router.get(
     "/finance/export-statement",
     verifyToken,
-    allowRoles("admin", "accountant"),
+    allowRoles("admin"),
     exportAdminFinanceStatementController,
 );
 router.get(
@@ -306,23 +295,12 @@ router.delete("/staff/:id", verifyToken, allowSuperAdminOnly, deleteStaff);
 
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);
-router.put("/users/:id/block", verifyToken, allowRoles("admin"), blockUser);
-router.put("/users/:id/unblock", verifyToken, allowRoles("admin"), unblockUser);
-
-// Operator role — cross-shop operational visibility, no financial/config access.
-router.get("/operations/queue", verifyToken, allowRoles("admin", "operator"), getOperationsQueueController);
-router.put("/operations/orders/:orderId/escalate", verifyToken, allowRoles("admin", "operator"), escalateOrderController);
-router.put("/operations/orders/:orderId/resolve", verifyToken, allowRoles("admin", "operator"), resolveEscalationController);
-
-router.get("/analytics/report", verifyToken, allowRoles("admin", "accountant"), getAnalyticsReportController);
 router.get("/login-activities", verifyToken, allowRoles("admin"), getLoginActivities);
 router.delete("/login-activities/:id", verifyToken, allowRoles("admin"), terminateSession);
 router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);
 router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLocations);
 router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers);
 router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), getActiveSellerById);
-router.put("/sellers/active/:id/suspend", verifyToken, allowRoles("admin"), suspendStore);
-router.put("/sellers/active/:id/reactivate", verifyToken, allowRoles("admin"), reactivateStore);
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
 router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
 router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), updateSellerStoreSetup);

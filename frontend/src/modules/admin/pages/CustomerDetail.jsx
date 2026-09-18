@@ -47,8 +47,6 @@ const CustomerDetail = () => {
 
     // Form states
     const [notifMessage, setNotifMessage] = useState('');
-    const [restrictReason, setRestrictReason] = useState('');
-    const [isRestricting, setIsRestricting] = useState(false);
     const [notes, setNotes] = useState('Prefer morning deliveries. Use the building entrance on the north side.');
 
     const [customer, setCustomer] = useState(null);
@@ -104,31 +102,11 @@ const CustomerDetail = () => {
         showToast('Notification sent to user', 'success');
     };
 
-    const handleRestrictAccount = async () => {
-        const isCurrentlyActive = customer.status === 'active';
-        setIsRestricting(true);
-        try {
-            const { data } = isCurrentlyActive
-                ? await adminApi.blockUser(id, restrictReason)
-                : await adminApi.unblockUser(id);
-            if (data.success) {
-                setCustomer({
-                    ...customer,
-                    status: isCurrentlyActive ? 'restricted' : 'active',
-                    isBlocked: isCurrentlyActive,
-                    blockedReason: isCurrentlyActive ? restrictReason : null,
-                });
-                showToast(`Account successfully ${isCurrentlyActive ? 'restricted' : 'restored'}`, isCurrentlyActive ? 'warning' : 'success');
-            } else {
-                showToast(data.message || 'Action failed', 'error');
-            }
-        } catch (error) {
-            showToast(error.response?.data?.message || 'Action failed', 'error');
-        } finally {
-            setIsRestricting(false);
-            setRestrictReason('');
-            setIsRestrictModalOpen(false);
-        }
+    const handleRestrictAccount = () => {
+        const newStatus = customer.status === 'active' ? 'restricted' : 'active';
+        setCustomer({ ...customer, status: newStatus });
+        setIsRestrictModalOpen(false);
+        showToast(`Account successfully ${newStatus === 'restricted' ? 'restricted' : 'activated'}`, newStatus === 'restricted' ? 'warning' : 'success');
     };
 
     const handleSaveNotes = () => {
@@ -533,21 +511,12 @@ const CustomerDetail = () => {
                             }
                         </p>
                     </div>
-                    {customer.status === 'active' && (
-                        <textarea
-                            value={restrictReason}
-                            onChange={(e) => setRestrictReason(e.target.value)}
-                            placeholder="Reason for restricting this account (shown to the customer)"
-                            className="w-full rounded-xl border border-slate-200 p-3 text-sm font-semibold text-slate-700"
-                            rows={3}
-                        />
-                    )}
                     <div className="flex gap-3">
                         <button onClick={() => setIsRestrictModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all">
                             CANCEL
                         </button>
-                        <button onClick={handleRestrictAccount} disabled={isRestricting} className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-rose-600 shadow-xl shadow-rose-200 transition-all disabled:opacity-50">
-                            {isRestricting ? 'PLEASE WAIT...' : 'CONFIRM'}
+                        <button onClick={handleRestrictAccount} className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-rose-600 shadow-xl shadow-rose-200 transition-all">
+                            CONFIRM
                         </button>
                     </div>
                 </div>

@@ -59,7 +59,6 @@ export const signupSeller = async (req, res) => {
             emailVerificationToken,
             phoneVerificationToken,
             invite,
-            referralCode,
         } = req.body || {};
 
         if (!name || !email || !phone || !password) {
@@ -101,19 +100,6 @@ export const signupSeller = async (req, res) => {
         if (invite) {
             try {
                 await markSellerInviteUsed(invite, account._id);
-            } catch {
-                /* non-fatal */
-            }
-        }
-
-        // Best-effort — capture who referred this seller, if a valid code was
-        // supplied. Never blocks signup on an invalid/unknown code.
-        if (referralCode) {
-            try {
-                const { attachSellerReferralOnSignup } = await import(
-                    "../modules/rewards/services/referralService.js"
-                );
-                await attachSellerReferralOnSignup({ refereeId: account._id, referralCode });
             } catch {
                 /* non-fatal */
             }

@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import Product from "../models/product.js";
 import Category from "../models/category.js";
 import { handleResponse } from "../utils/helper.js";
@@ -41,10 +40,6 @@ import {
 import { recordAuditLog } from "../services/auditTrailService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance } from "../services/deliveryEtaService.js";
 import { assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
-
-function escapeRegExp(value = "") {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function buildProductListKey(queryParams) {
   const sorted = Object.keys(queryParams)
@@ -275,18 +270,17 @@ export const getProducts = async (req, res) => {
     const enforceRadius = isCustomerVisibilityRequest(req);
 
     const query = {};
-    const searchRegexSafe = search ? escapeRegExp(String(search).trim()) : "";
     if (search) {
       const matchingCategories = await Category.find({
-        name: { $regex: searchRegexSafe, $options: "i" }
+        name: { $regex: search, $options: "i" }
       }).select("_id");
       const categoryIdsMatched = matchingCategories.map(c => c._id);
 
       query.$or = [
-        { name: { $regex: searchRegexSafe, $options: "i" } },
-        { brand: { $regex: searchRegexSafe, $options: "i" } },
-        { tags: { $regex: searchRegexSafe, $options: "i" } },
-        { description: { $regex: searchRegexSafe, $options: "i" } }
+        { name: { $regex: search, $options: "i" } },
+        { brand: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } }
       ];
 
       if (categoryIdsMatched.length > 0) {
@@ -425,62 +419,20 @@ export const getProducts = async (req, res) => {
     };
     const defaultSort = sellerId ? "display-asc" : "newest";
     const sortQuery = sortMap[String(sort || defaultSort).toLowerCase()] || sortMap[defaultSort];
-    // Previously keyword search results were sorted by recency/price like any
-    // other listing — a match buried in the description ranked identically to
-    // an exact name match. Rank by relevance instead, unless the caller asked
-    // for a specific non-relevance sort (e.g. "price-asc" from a filter bar).
-    const useRelevanceSort = Boolean(search) && (!sort || String(sort).toLowerCase() === "relevance");
-    const PRODUCT_LIST_FIELDS =
-      "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt";
 
     const fetchFn = async () => {
-      let rawProducts;
-      let total;
-
-      if (useRelevanceSort) {
-        const exact = new RegExp(`^${searchRegexSafe}$`, "i");
-        const startsWith = new RegExp(`^${searchRegexSafe}`, "i");
-        const contains = new RegExp(searchRegexSafe, "i");
-        const scoreOf = (doc) => {
-          let score = 0;
-          const name = doc.name || "";
-          if (exact.test(name)) score += 100;
-          else if (startsWith.test(name)) score += 50;
-          else if (contains.test(name)) score += 30;
-          if (contains.test(doc.brand || "")) score += 15;
-          if ((doc.tags || []).some((t) => contains.test(String(t || "")))) score += 10;
-          if (contains.test(doc.description || "")) score += 5;
-          return score;
-        };
-
-        const scoringDocs = await Product.find(finalQuery)
-          .select("name brand tags description createdAt")
-          .lean();
-        scoringDocs.sort((a, b) => {
-          const diff = scoreOf(b) - scoreOf(a);
-          if (diff !== 0) return diff;
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-
-        total = scoringDocs.length;
-        const pageIds = scoringDocs.slice(skip, skip + limit).map((d) => d._id);
-        const fullDocs = await Product.find({ _id: { $in: pageIds } })
-          .select(PRODUCT_LIST_FIELDS)
-          .lean();
-        const byId = new Map(fullDocs.map((d) => [String(d._id), d]));
-        rawProducts = pageIds.map((id) => byId.get(String(id))).filter(Boolean);
-      } else {
-        [rawProducts, total] = await Promise.all([
-          Product.find(finalQuery)
-            .select(PRODUCT_LIST_FIELDS)
-            // No .populate() — names resolved via cache-backed entityNameCache
-            .sort(sortQuery)
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-          Product.countDocuments(finalQuery),
-        ]);
-      }
+      const [rawProducts, total] = await Promise.all([
+        Product.find(finalQuery)
+          .select(
+            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
+          )
+          // No .populate() — names resolved via cache-backed entityNameCache
+          .sort(sortQuery)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Product.countDocuments(finalQuery),
+      ]);
 
       // Collect unique category IDs (headerId, categoryId, subcategoryId) and seller IDs
       const categoryIdSet = new Set();

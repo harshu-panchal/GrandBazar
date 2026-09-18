@@ -25,7 +25,6 @@ import {
   rejectCustomerCancellationRequest,
   resolveWorkflowStatus,
   sellerMarkPackedSignalAtomic,
-  adminForceCancelOrder,
 } from "../services/orderWorkflowService.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { attachDisplayStatus, attachDisplayStatusToList } from "../services/orderStatusResolver.js";
@@ -573,47 +572,12 @@ export const getOrderDetails = async (req, res) => {
     }
     // -----------------------------
 
-    // A delivery partner needs their own payout/tip/distance/COD figures to
-    // do the job, but never the seller's commission or admin's platform
-    // earnings — this endpoint previously returned the full document
-    // (paymentBreakdown, financeFlags, settlementStatus, priceAdjustment,
-    // rescue) to whichever role asked, with no field-level redaction at all.
-    if (roleNorm === "delivery") {
-      redactFinancialFieldsForDelivery(order);
-    }
-
     return handleResponse(res, 200, "Order details fetched", attachDisplayStatus(order));
   } catch (error) {
     console.error(`[ORDER_ERROR] Error fetching order details:`, error);
     return handleResponse(res, 500, error.message);
   }
 };
-
-function redactFinancialFieldsForDelivery(order) {
-  const pb = order.paymentBreakdown;
-  if (pb) {
-    order.paymentBreakdown = {
-      grandTotal: pb.grandTotal,
-      riderPayoutBase: pb.riderPayoutBase,
-      riderPayoutDistance: pb.riderPayoutDistance,
-      riderPayoutBonus: pb.riderPayoutBonus,
-      riderTipAmount: pb.riderTipAmount,
-      riderPayoutTotal: pb.riderPayoutTotal,
-      distanceKmActual: pb.distanceKmActual,
-      distanceKmRounded: pb.distanceKmRounded,
-      codCollectedAmount: pb.codCollectedAmount,
-      codRemittedAmount: pb.codRemittedAmount,
-      codPendingAmount: pb.codPendingAmount,
-    };
-  }
-  delete order.financeFlags;
-  delete order.settlementStatus;
-  delete order.priceAdjustment;
-  delete order.rescue;
-  delete order.storeReassignment;
-  delete order.pricingSnapshot;
-  return order;
-}
 
 /* ===============================
    REORDER ("Buy Again")
@@ -766,26 +730,6 @@ export const rejectCancelOrderRequest = async (req, res) => {
     }
 
     return handleResponse(res, 200, "Cancellation request rejected", updated);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const forceCancelOrder = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { reason } = req.body || {};
-    const adminId = req.user.id;
-
-    const updated = await adminForceCancelOrder(adminId, orderId, reason);
-
-    try {
-      await invalidate(buildKey("orders", "customer", `${updated.customer.toString()}:*`));
-    } catch (cacheErr) {
-      console.warn("[forceCancelOrder] cache invalidation failed:", cacheErr.message);
-    }
-
-    return handleResponse(res, 200, "Order force-cancelled", updated);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -1092,7 +1036,7 @@ export const updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status, deliveryBoyId, cancelReason } = req.body;
-    const { id: userId, role, subSellerId } = req.user;
+    const { id: userId, role } = req.user;
 
     const orderKey = orderMatchQueryFromRouteParam(orderId);
     if (!orderKey) {
@@ -1114,7 +1058,6 @@ export const updateOrderStatus = async (req, res) => {
           canonicalOrderId,
           String(status).toLowerCase(),
           { cancelReason, pickupProofImages: req.body.pickupProofImages, deliveryProofImages: req.body.deliveryProofImages },
-          subSellerId || null,
         );
         if (updated) {
           if (updated.__pendingApproval) {
@@ -1298,7 +1241,7 @@ export const markOrderPackedBySeller = async (req, res) => {
 ================================ */
 export const bulkUpdateOrderStatus = async (req, res) => {
   try {
-    const { id: sellerId, role, subSellerId } = req.user;
+    const { id: sellerId, role } = req.user;
     if (role !== "seller") {
       return handleResponse(res, 403, "Bulk status updates are available to sellers only");
     }
@@ -1319,7 +1262,7 @@ export const bulkUpdateOrderStatus = async (req, res) => {
     const results = [];
     for (const orderId of orderIds) {
       try {
-        const updated = await sellerUpdateStatusAtomic(sellerId, orderId, targetStatus, { cancelReason }, subSellerId || null);
+        const updated = await sellerUpdateStatusAtomic(sellerId, orderId, targetStatus, { cancelReason });
         results.push({
           orderId,
           success: true,
@@ -2303,7 +2246,6 @@ export const updateReturnStatus = async (req, res) => {
       if (!order.returnDeliveredBackAt) {
         order.returnDeliveredBackAt = now;
       }
-      order.refundPendingSince = order.refundPendingSince || now;
       await order.save();
       emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
 

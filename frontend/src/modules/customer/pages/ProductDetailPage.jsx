@@ -53,17 +53,8 @@ const ProductDetailPage = () => {
             name: product.name,
             description: product.description || "",
             image: [activeImage || product.mainImage || ""].filter(Boolean),
-            brand: product.brand ? { "@type": "Brand", name: product.brand } : undefined,
+            brand: product.brand || "",
             sku: product.sku || "",
-            aggregateRating: reviews.length > 0
-                ? {
-                    "@type": "AggregateRating",
-                    ratingValue: Number(
-                        (reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / reviews.length).toFixed(1),
-                    ),
-                    reviewCount: reviews.length,
-                }
-                : undefined,
             offers: {
                 "@type": "Offer",
                 priceCurrency: "INR",

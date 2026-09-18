@@ -1,4 +1,4 @@
-import { sellerTimeoutQueue, deliveryTimeoutQueue, orderActivationQueue, preorderActivationQueue, extraPaymentDeadlineQueue, rescueApprovalDeadlineQueue, JOB_NAMES } from "./orderQueues.js";
+import { sellerTimeoutQueue, deliveryTimeoutQueue, orderActivationQueue, preorderActivationQueue, extraPaymentDeadlineQueue, JOB_NAMES } from "./orderQueues.js";
 import {
   processSellerTimeoutJob,
   processDeliveryTimeoutJob,
@@ -6,7 +6,6 @@ import {
 import { processOrderActivationJob } from "../services/orderActivationService.js";
 import { processPreorderSaleStartJob } from "../services/preOrderCampaignService.js";
 import { processExtraPaymentDeadlineJob } from "../services/orderPriceAdjustmentService.js";
-import { processRescueApprovalDeadlineJob } from "../services/orderRescueService.js";
 import { isRedisEnabled } from "../config/redis.js";
 import logger from "../services/logger.js";
 import { incrementCounter, recordHistogram } from "../services/metrics.js";
@@ -167,7 +166,6 @@ export function registerOrderQueueProcessors() {
       JOB_NAMES.ORDER_ACTIVATION,
       JOB_NAMES.PREORDER_SALE_START,
       JOB_NAMES.EXTRA_PAYMENT_DEADLINE,
-      JOB_NAMES.RESCUE_APPROVAL_DEADLINE,
     ],
   });
 }
@@ -207,11 +205,5 @@ export function registerLifecycleQueueProcessors() {
     JOB_NAMES.EXTRA_PAYMENT_DEADLINE,
     processExtraPaymentDeadlineJob,
     "extra-payment-deadline",
-  );
-  registerDelayedQueueProcessor(
-    rescueApprovalDeadlineQueue,
-    JOB_NAMES.RESCUE_APPROVAL_DEADLINE,
-    processRescueApprovalDeadlineJob,
-    "rescue-approval-deadline",
   );
 }

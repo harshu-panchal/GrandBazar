@@ -52,11 +52,6 @@ const referralSchema = new mongoose.Schema(
       default: null,
     },
     invitedPhone: { type: String, default: null },
-    // Fraud signal: multiple referrals from the same device/network,
-    // regardless of which referrer code was used, is the classic
-    // signup-farm pattern the old phone-exact-match-only check couldn't
-    // catch (a fraud ring naturally uses many different phone numbers).
-    ipAddress: { type: String, default: null, index: true },
     meta: { type: Object, default: {} },
   },
   { timestamps: true },
@@ -64,6 +59,5 @@ const referralSchema = new mongoose.Schema(
 
 referralSchema.index({ referrerId: 1, refereeId: 1 });
 referralSchema.index({ referralCode: 1, refereeId: 1 });
-referralSchema.index({ ipAddress: 1, createdAt: -1 });
 
 export default mongoose.model("Referral", referralSchema);

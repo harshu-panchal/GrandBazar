@@ -95,31 +95,6 @@ const sellerSchema = new mongoose.Schema(
       default: true,
     },
 
-    referralCode: {
-      type: String,
-      unique: true,
-      sparse: true,
-      trim: true,
-      uppercase: true,
-    },
-
-    // The seller who referred this seller at signup — set once, never
-    // reassigned. Distinct from `referralCode` above (this seller's own
-    // outbound code others can use).
-    referredBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Seller",
-      default: null,
-    },
-
-    // Set once processSellerReferralReward() has actually credited the
-    // referrer, so a seller's KYC-approval/subscription events firing more
-    // than once (retries, re-approval) can never double-credit.
-    referralRewardCredited: {
-      type: Boolean,
-      default: false,
-    },
-
     businessModel: {
       type: String,
       enum: ["commission", "subscription", null],

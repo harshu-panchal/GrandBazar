@@ -1,19 +1,10 @@
 import Order from "../../../models/order.js";
-import Payout from "../../../models/payout.js";
 import { FUNDING_SOURCE } from "../reward.constants.js";
-import { PAYOUT_STATUS, OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } from "../../../constants/finance.js";
-import { getOrCreateWallet } from "../../../services/finance/walletService.js";
-import { createLedgerEntry } from "../../../services/finance/ledgerService.js";
-import { roundCurrency } from "../../../utils/money.js";
 import logger from "../../../services/logger.js";
 
 /**
- * Track seller-funded reward costs on order for settlement reporting, AND
- * actually deduct it from the seller's payout — this was previously
- * reporting-only ("Full ledger deduction hooks into orderFinanceService in
- * phase 3" never happened), so a seller-funded cashback cost the seller
- * nothing; the platform silently absorbed it while still crediting the
- * seller's payout in full.
+ * Track seller-funded reward costs on order for settlement reporting.
+ * Full ledger deduction hooks into orderFinanceService in phase 3.
  */
 export async function applySellerRewardSettlement({ order, campaign, amount }) {
   if (!campaign || !order) return;
@@ -41,76 +32,6 @@ export async function applySellerRewardSettlement({ order, campaign, amount }) {
       },
     },
   });
-
-  // Reward processing (this function) runs off the ORDER_DELIVERED event,
-  // fired AFTER settleDeliveredOrder/createPendingSellerPayout already
-  // queued the seller's payout for the full amount — so this always has to
-  // adjust an existing payout/wallet after the fact, never a fresh amount
-  // at creation time.
-  try {
-    const payout = await Payout.findOne({
-      payoutType: "SELLER",
-      relatedOrderIds: order._id,
-    }).sort({ createdAt: -1 });
-
-    if (payout && payout.status !== PAYOUT_STATUS.CANCELLED) {
-      const wallet = await getOrCreateWallet(OWNER_TYPE.SELLER, order.seller);
-      const deduction = roundCurrency(Math.min(sellerCost, payout.amount));
-
-      if (deduction > 0) {
-        if (payout.status === PAYOUT_STATUS.PENDING || payout.status === PAYOUT_STATUS.PROCESSING) {
-          payout.amount = roundCurrency(payout.amount - deduction);
-          wallet.pendingBalance = roundCurrency(Math.max(0, (wallet.pendingBalance || 0) - deduction));
-        } else {
-          // Already paid out — claw back from available balance if there's
-          // enough; if not, log it rather than pushing the wallet negative
-          // (the seller's next settlement's admin can true this up manually).
-          if ((wallet.availableBalance || 0) >= deduction) {
-            wallet.availableBalance = roundCurrency((wallet.availableBalance || 0) - deduction);
-          } else {
-            logger.warn("Seller-funded reward cost could not be fully clawed back — insufficient available balance", {
-              orderId: order.orderId,
-              sellerId: String(order.seller),
-              deduction,
-              availableBalance: wallet.availableBalance || 0,
-            });
-          }
-        }
-        wallet.totalDebited = roundCurrency((wallet.totalDebited || 0) + deduction);
-        payout.metadata = {
-          ...(payout.metadata || {}),
-          adjustments: [
-            ...((payout.metadata || {}).adjustments || []),
-            { amount: -deduction, reason: `Seller-funded reward cost (campaign ${campaign._id})`, at: new Date() },
-          ],
-        };
-        await Promise.all([payout.save(), wallet.save()]);
-
-        await createLedgerEntry({
-          orderId: order._id,
-          payoutId: payout._id,
-          walletId: wallet._id,
-          actorType: OWNER_TYPE.SELLER,
-          actorId: order.seller,
-          type: LEDGER_TRANSACTION_TYPE.ADJUSTMENT,
-          direction: LEDGER_DIRECTION.DEBIT,
-          amount: deduction,
-          description: `Seller-funded reward cost for order ${order.orderId}`,
-        });
-      }
-    } else {
-      logger.warn("Seller reward cost recorded but no payout found to deduct from yet", {
-        orderId: order.orderId,
-        sellerId: String(order.seller),
-        sellerCost,
-      });
-    }
-  } catch (deductionError) {
-    logger.error("Failed to deduct seller-funded reward cost from payout", {
-      orderId: order.orderId,
-      message: deductionError.message,
-    });
-  }
 
   logger.info("Seller reward cost recorded", {
     orderId: order.orderId,

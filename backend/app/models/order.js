@@ -323,7 +323,6 @@ const orderSchema = new mongoose.Schema(
         "rescheduled",
         "price_revised",
         "awaiting_extra_payment",
-        "rescue_pending",
         "partial_cancelled",
         "partial_updated",
         "customer_confirmation",
@@ -344,16 +343,6 @@ const orderSchema = new mongoose.Schema(
       default: 1,
     },
     sellerPendingExpiresAt: Date,
-    // Set once the "accept this order soon or it'll be auto-cancelled"
-    // reminder has fired, so the sweep job never sends it twice. Mainly
-    // matters for scheduled/pre-order fulfillment, which gets a 24h accept
-    // window instead of the usual ~60s — previously the seller was only
-    // ever notified once, at order placement, with no reminder before that
-    // long a window quietly expired.
-    sellerAcceptReminderSentAt: Date,
-    // Set once a pre-delivery stock-shortage alert has fired for this
-    // scheduled/pre-order, so the sweep job doesn't re-alert every tick.
-    stockShortageAlertSentAt: Date,
     deliverySearchExpiresAt: Date,
     sellerAcceptedAt: Date,
     assignedAt: Date,
@@ -480,14 +469,6 @@ const orderSchema = new mongoose.Schema(
       extraPaymentJobId: { type: String, default: null },
       priorWorkflowStatus: { type: String, default: "" },
       priorLegacyStatus: { type: String, default: "" },
-      // Set when this pending adjustment originated from a customer-approved
-      // replacement request — lets finalizePendingAdjustment/
-      // revertPendingAdjustment flip that replacementRequests entry to its
-      // real terminal state once the price change actually resolves, instead
-      // of it being marked "approved" the instant the customer picks an
-      // alternative even though the price change (and item swap) hasn't
-      // landed yet.
-      linkedReplacementRequestId: { type: String, default: null },
       // Every adjustment (any direction, any payment mode) is staged here and
       // only copied onto the order's real items/pricing once the customer
       // approves (or pays, for an online increase) — order.items/pricing
@@ -551,93 +532,13 @@ const orderSchema = new mongoose.Schema(
       reassignedBy: { type: String, default: "" },
       previousWorkflowStatus: { type: String, default: "" },
     },
-    // Set on a CANCELLED order (from a seller rejection) once an admin has
-    // spawned a brand-new linked order for the customer at a different
-    // store — see adminCreateReplacementOrderForRejectedOrder. Deliberately
-    // a separate order rather than reopening this one: this order's refund
-    // and stock release already happened and are not reversed.
-    replacementOrderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-      default: null,
-    },
-    // Order Rescue Engine state — populated when a seller rejects/times out
-    // and the system searches for an alternative store instead of
-    // cancelling outright. See services/orderRescueService.js.
-    rescue: {
-      status: {
-        type: String,
-        enum: ["none", "proposed_price_increase", "resolved", "failed"],
-        default: "none",
-      },
-      attempts: { type: Number, default: 0 },
-      lastRejectReason: { type: String, default: "" },
-      trigger: {
-        type: String,
-        enum: [null, "seller_rejected", "seller_timeout", "admin_manual"],
-        default: null,
-      },
-      triedStoreIds: { type: [String], default: [] },
-      candidateStoreId: { type: mongoose.Schema.Types.ObjectId, ref: "Store", default: null },
-      candidateShopName: { type: String, default: "" },
-      proposedItems: {
-        type: [
-          {
-            product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-            name: String,
-            quantity: Number,
-            price: Number,
-            variantSlot: String,
-            image: String,
-          },
-        ],
-        default: [],
-      },
-      proposedBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
-      direction: { type: String, enum: ["none", "increase", "decrease"], default: "none" },
-      deltaAmount: { type: Number, default: 0 },
-      previousGrandTotal: { type: Number, default: 0 },
-      newGrandTotal: { type: Number, default: 0 },
-      deadlineAt: { type: Date, default: null },
-      deadlineJobId: { type: String, default: null },
-      history: {
-        type: [
-          {
-            attempt: Number,
-            storeId: String,
-            shopName: String,
-            outcome: String,
-            direction: String,
-            deltaAmount: Number,
-            at: { type: Date, default: Date.now },
-          },
-        ],
-        default: [],
-      },
-    },
-    replacedFromOrderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-      default: null,
-    },
     replacementRequests: {
       type: [
         {
           requestId: { type: String, required: true },
           status: {
             type: String,
-            enum: [
-              "requested",
-              "approved",
-              "rejected",
-              "expired",
-              // Customer made a decision, but the resulting price change is
-              // still awaiting their separate approval/payment (or, for a
-              // rejection, the resulting refund is awaiting approval) — see
-              // priceAdjustment.linkedReplacementRequestId.
-              "approved_pending_price",
-              "rejected_pending_refund",
-            ],
+            enum: ["requested", "approved", "rejected", "expired"],
             default: "requested",
           },
           itemIndex: { type: Number, required: true },
@@ -686,23 +587,6 @@ const orderSchema = new mongoose.Schema(
         },
       ],
       default: [],
-    },
-    // Gates the split-delivery plan above and any extra delivery fee it
-    // carries — previously createSplitDeliveries applied both immediately,
-    // with no customer confirmation step at all (unlike every other
-    // price-changing seller action in the app).
-    splitDeliveryApproval: {
-      status: {
-        type: String,
-        enum: ["none", "pending", "approved", "rejected"],
-        default: "none",
-      },
-      extraDeliveryFee: { type: Number, default: 0 },
-      previousGrandTotal: { type: Number, default: 0 },
-      proposedGrandTotal: { type: Number, default: 0 },
-      proposedAt: { type: Date, default: null },
-      resolvedAt: { type: Date, default: null },
-      reason: { type: String, default: "" },
     },
     revisedInvoices: {
       type: [
@@ -769,37 +653,6 @@ const orderSchema = new mongoose.Schema(
       enum: ["customer", "seller", "admin", "system"],
     },
     cancelReason: String,
-    // Which store-staff (sub-seller) account accepted/rejected this order,
-    // when acted on by an assistant rather than the owner directly — powers
-    // the seller dashboard's per-assistant performance metrics, which had no
-    // data source before (accept/reject was only ever recorded against the
-    // store id, never the individual staff member who clicked it).
-    sellerActionBy: {
-      acceptedByStaffId: { type: mongoose.Schema.Types.ObjectId, ref: "Seller", default: null },
-      rejectedByStaffId: { type: mongoose.Schema.Types.ObjectId, ref: "Seller", default: null },
-    },
-    // Set when the system auto-cancelled an order because no delivery
-    // partner/pickup/self-delivery fallback was available — an actionable
-    // signal for admins (previously this was indistinguishable from any
-    // other cancelled order in the admin order list).
-    needsManualReassignment: {
-      type: Boolean,
-      default: false,
-    },
-    // Generic "flag this order for a human to look at" mechanism — any
-    // role (seller, admin) can raise it for any reason, and it surfaces in
-    // the Operator/Admin operations queue until explicitly resolved.
-    // Previously no escalation path existed in the system at all.
-    operationalEscalation: {
-      flagged: { type: Boolean, default: false },
-      reason: { type: String, default: "" },
-      flaggedBy: { type: String, default: "" },
-      flaggedByRole: { type: String, default: "" },
-      flaggedAt: { type: Date, default: null },
-      resolvedAt: { type: Date, default: null },
-      resolvedBy: { type: String, default: "" },
-      resolutionNote: { type: String, default: "" },
-    },
     cancellationRequest: {
       status: {
         type: String,
@@ -965,18 +818,6 @@ const orderSchema = new mongoose.Schema(
     returnDeliveredBackAt: {
       type: Date,
     },
-    // Set the moment a return enters "returned" (QC-pending) and never
-    // touched again — lets the SLA escalation job compute how long a refund
-    // has been waiting on admin QC, independent of returnDeliveredBackAt
-    // (which callers sometimes leave unset on retried/edge-case updates).
-    refundPendingSince: {
-      type: Date,
-      default: null,
-    },
-    refundEscalatedAt: {
-      type: Date,
-      default: null,
-    },
     returnQcStatus: {
       type: String,
       enum: ["passed", "failed"],
@@ -1006,25 +847,6 @@ const orderSchema = new mongoose.Schema(
     sellerPayoutReleasedAt: { type: Date },
     pickupProofImages: [{ type: String }],
     deliveryProofImages: [{ type: String }],
-    // Delivery exception reporting — previously there was no way for a
-    // rider to log "customer unreachable" / "wrong address" / etc; the only
-    // options were completing the OTP flow or doing nothing.
-    deliveryExceptions: {
-      type: [
-        {
-          reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Delivery" },
-          category: {
-            type: String,
-            enum: ["customer_unreachable", "wrong_address", "customer_refused", "store_closed", "other"],
-            default: "other",
-          },
-          note: { type: String, default: "" },
-          location: { lat: Number, lng: Number },
-          reportedAt: { type: Date, default: Date.now },
-        },
-      ],
-      default: [],
-    },
     otpValidatedAt: {
       type: Date,
     },

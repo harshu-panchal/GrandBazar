@@ -421,14 +421,6 @@ function eventDefinition(eventType) {
           return `Only ${currentStock} left for ${itemLabel}. Restock soon.`;
         },
       };
-    case NOTIFICATION_EVENTS.ORDER_NEEDS_MANUAL_REASSIGNMENT:
-      return {
-        role: NOTIFICATION_ROLES.ADMIN,
-        recipientIds: (payload) => normalizeIdList(payload.adminIds),
-        title: () => "Order Needs Manual Reassignment",
-        body: (payload) =>
-          `Order #${payload.orderId || ""} was auto-cancelled — no delivery partner, self-delivery, or pickup option was available. Customer has been refunded; consider manually re-placing the order with another store.`,
-      };
     case NOTIFICATION_EVENTS.SELLER_ACCOUNT_APPROVED:
       return {
         role: NOTIFICATION_ROLES.SELLER,
@@ -619,96 +611,10 @@ function eventDefinition(eventType) {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Order Store Updated",
-        body: (payload) => {
-          const base = payload.orderId
+        body: (payload) =>
+          payload.orderId
             ? `Order #${payload.orderId} was moved to ${payload.shopName || "another store"} so it can be fulfilled.`
-            : "Your order was moved to another store so it can be fulfilled.";
-          return payload.refundAmount ? `${base} ₹${payload.refundAmount} was credited to your wallet since the new price was lower.` : base;
-        },
-      };
-    case NOTIFICATION_EVENTS.ORDER_RESCUE_SEARCHING:
-      return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Finding You Another Seller",
-        body: (payload) =>
-          `Your original seller couldn't fulfill order #${payload.orderId || ""}. We're searching for an alternative store now.`,
-      };
-    case NOTIFICATION_EVENTS.ORDER_RESCUE_AUTO_REASSIGNED:
-      return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Order Moved to a New Seller",
-        body: (payload) =>
-          `Good news — order #${payload.orderId || ""} is now being fulfilled by ${payload.shopName || "another store"}${payload.refundAmount ? `. ₹${payload.refundAmount} was credited to your wallet since the new price was lower.` : " at the same price."}`,
-      };
-    case NOTIFICATION_EVENTS.ORDER_RESCUE_PRICE_APPROVAL_NEEDED:
-      return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Approve New Price to Continue",
-        body: (payload) =>
-          `${payload.shopName || "A new store"} can fulfill order #${payload.orderId || ""}, but at ₹${payload.deltaAmount || 0} more. Approve to continue, or we'll keep looking / cancel.`,
-      };
-    case NOTIFICATION_EVENTS.SCHEDULED_ORDER_CUTOFF_REMINDER:
-      return {
-        role: NOTIFICATION_ROLES.SELLER,
-        recipientIds: (payload) => normalizeIdList(payload.sellerId),
-        title: () => "Accept-Cutoff Approaching",
-        body: (payload) =>
-          `Order #${payload.orderId || ""} must be accepted within the next hour or it may be auto-cancelled.`,
-      };
-    case NOTIFICATION_EVENTS.SCHEDULED_ORDER_STOCK_SHORTAGE:
-      return {
-        role: NOTIFICATION_ROLES.SELLER,
-        recipientIds: (payload) => normalizeIdList(payload.sellerId),
-        title: () => "Stock Shortage — Scheduled Order",
-        body: (payload) =>
-          `Order #${payload.orderId || ""} is scheduled for ${payload.deliveryDateLabel || "soon"}, but ${payload.itemName || "an item"} is now short on stock. Update it before the delivery window or the order may fail.`,
-      };
-    case NOTIFICATION_EVENTS.SPLIT_DELIVERY_APPROVAL_NEEDED:
-      return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Approve Split Delivery",
-        body: (payload) =>
-          `The seller wants to split order #${payload.orderId || ""} into ${payload.splitCount || 2} deliveries${payload.extraDeliveryFee ? ` for an extra ₹${payload.extraDeliveryFee} delivery fee` : ""}. Approve to continue.`,
-      };
-    case NOTIFICATION_EVENTS.DELIVERY_EXCEPTION_REPORTED:
-      return {
-        multi: true,
-        definitions: [
-          {
-            role: NOTIFICATION_ROLES.CUSTOMER,
-            recipientIds: (payload) => normalizeIdList(payload.customerId || payload.userId),
-            title: () => "Delivery Issue Reported",
-            body: (payload) =>
-              `There's an issue delivering order #${payload.orderId || ""}: ${payload.categoryLabel || payload.category || "delivery issue"}.`,
-          },
-          {
-            role: NOTIFICATION_ROLES.SELLER,
-            recipientIds: (payload) => normalizeIdList(payload.sellerId),
-            title: () => "Delivery Issue Reported",
-            body: (payload) =>
-              `The delivery partner reported an issue with order #${payload.orderId || ""}: ${payload.categoryLabel || payload.category || "delivery issue"}.`,
-          },
-        ],
-      };
-    case NOTIFICATION_EVENTS.ORDER_ESCALATED:
-      return {
-        role: NOTIFICATION_ROLES.ADMIN,
-        recipientIds: (payload) => normalizeIdList(payload.adminIds),
-        title: () => "Order Escalated",
-        body: (payload) =>
-          `Order #${payload.orderId || ""} was escalated${payload.flaggedByRole ? ` by ${payload.flaggedByRole}` : ""}: ${payload.reason || "needs attention"}`,
-      };
-    case NOTIFICATION_EVENTS.ORDER_RESCUE_FAILED:
-      return {
-        role: NOTIFICATION_ROLES.CUSTOMER,
-        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Order Cancelled",
-        body: (payload) =>
-          `We couldn't find another seller for order #${payload.orderId || ""}, so it's been cancelled and refunded to your wallet.`,
+            : "Your order was moved to another store so it can be fulfilled.",
       };
     case NOTIFICATION_EVENTS.DISPUTE_RAISED:
       return {

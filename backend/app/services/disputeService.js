@@ -205,7 +205,6 @@ export async function resolveDispute({
       items: adjustItems,
       reason: `Dispute resolution: ${resolutionNote}`,
       actorLabel: "admin",
-      actorId: adminId,
     });
   }
 

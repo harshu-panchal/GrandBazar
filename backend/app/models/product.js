@@ -262,11 +262,11 @@ const productSchema = new mongoose.Schema(
         availability: {
             dailyStartTime: {
                 type: String,
-                default: null, // "HH:mm" in store timezone; recurring daily availability-window start
+                default: null, // "HH:mm" in store timezone; recurring hidden-window start
             },
             dailyEndTime: {
                 type: String,
-                default: null, // "HH:mm" in store timezone; recurring daily availability-window end
+                default: null, // "HH:mm" in store timezone; recurring hidden-window end
             },
             pausedUntil: {
                 type: Date,

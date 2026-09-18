@@ -231,10 +231,6 @@ const CheckoutPage = () => {
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
-  // One key per checkout attempt — stable across retries (e.g. a timed-out
-  // request the user resubmits) so the server's duplicate-order dedup can
-  // actually recognize a retry as the same attempt, not a new order.
-  const placeOrderIdempotencyKeyRef = useRef(null);
   const [currentAddress, setCurrentAddress] = useState(EMPTY_CHECKOUT_ADDRESS);
   const [isEditAddressOpen, setIsEditAddressOpen] = useState(false);
   const [editAddressForm, setEditAddressForm] = useState(EMPTY_CHECKOUT_ADDRESS);
@@ -1022,17 +1018,7 @@ const CheckoutPage = () => {
         })),
       };
 
-      if (!placeOrderIdempotencyKeyRef.current) {
-        placeOrderIdempotencyKeyRef.current =
-          (typeof crypto !== "undefined" && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      }
-      const response = await customerApi.createOrder(orderData, placeOrderIdempotencyKeyRef.current);
-      // A successful placement (or the server resolving it as the same
-      // duplicate attempt) closes out this attempt — the next "Place Order"
-      // click is a genuinely new order and needs a fresh key.
-      placeOrderIdempotencyKeyRef.current = null;
+      const response = await customerApi.createOrder(orderData);
 
       if (response.data.success) {
         const result = response.data.result;

@@ -3,12 +3,10 @@ import Order from "../models/order.js";
 import Product from "../models/product.js";
 import Setting from "../models/setting.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
-import { applyOrderPriceAdjustment, partialCancelOrderItems } from "./orderPriceAdjustmentService.js";
+import { applyOrderPriceAdjustment } from "./orderPriceAdjustmentService.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
 import { validateScheduleSelection } from "./orderSchedulingService.js";
 import { FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
-import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
-import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
 function nextVersion(order) {
   return Number(order.modificationVersion || 0) + 1;
@@ -199,7 +197,6 @@ export async function reviewReplacementRequest({
     throw err;
   }
 
-  let adjustedOrder = null;
   if (normalizedDecision === "approved") {
     const pickedIndex = Math.max(0, Number(selectedAlternativeIndex || 0));
     const picked = reqEntry.alternatives[pickedIndex];
@@ -231,58 +228,28 @@ export async function reviewReplacementRequest({
       };
     });
 
-    adjustedOrder = await applyOrderPriceAdjustment({
+    await applyOrderPriceAdjustment({
       orderId,
       items: nextItems,
       reason: `Replacement approved: ${note || reqEntry.reason || "customer approved replacement"}`,
       actorLabel: "seller",
-      linkedReplacementRequestId: requestId,
-      actorId: customerId,
     });
-  } else {
-    // Rejecting a replacement means the unavailable item must actually come
-    // off the order (with the standard partial-cancel refund flow), not just
-    // be left on the order at full price with a "rejected" label and no
-    // financial consequence.
-    adjustedOrder = await partialCancelOrderItems({
-      orderId,
-      itemIndexes: [reqEntry.itemIndex],
-      reason: note || reqEntry.reason || "Customer rejected the suggested replacement",
-      actorLabel: "seller",
-      actorId: customerId,
-    });
-  }
-
-  // If the approved replacement changed the price, applyOrderPriceAdjustment
-  // has already put the order into "awaiting the customer's approval/payment"
-  // — don't stomp that state here, and don't mark this request definitively
-  // "approved" yet (finalizePendingAdjustment/revertPendingAdjustment flip it
-  // once that resolves, via linkedReplacementRequestId). Same reasoning for a
-  // rejection that results in a price *decrease*: partialCancelOrderItems
-  // already proposed that adjustment and it needs the customer's approval
-  // before it's real.
-  const adjustmentIsPending = adjustedOrder?.priceAdjustment?.status === "pending";
-
-  const replacementStatusUpdate = normalizedDecision === "approved"
-    ? (adjustmentIsPending ? "approved_pending_price" : "approved")
-    : (adjustmentIsPending ? "rejected_pending_refund" : "rejected");
-
-  const setFields = {
-    "replacementRequests.$.customerDecision": normalizedDecision,
-    "replacementRequests.$.status": replacementStatusUpdate,
-    "replacementRequests.$.selectedAlternativeIndex":
-      normalizedDecision === "approved" ? Math.max(0, Number(selectedAlternativeIndex || 0)) : null,
-    "replacementRequests.$.customerDecisionAt": new Date(),
-    "replacementRequests.$.customerNote": String(note || "").trim(),
-  };
-  if (!adjustmentIsPending) {
-    setFields.status = normalizedDecision === "approved" ? "partial_updated" : "partial_cancelled";
-    setFields.orderStatus = normalizedDecision === "approved" ? "partial_updated" : "partial_cancelled";
   }
 
   const finalOrder = await Order.findOneAndUpdate(
     { orderId, "replacementRequests.requestId": requestId },
-    { $set: setFields },
+    {
+      $set: {
+        "replacementRequests.$.customerDecision": normalizedDecision,
+        "replacementRequests.$.status": normalizedDecision === "approved" ? "approved" : "rejected",
+        "replacementRequests.$.selectedAlternativeIndex":
+          normalizedDecision === "approved" ? Math.max(0, Number(selectedAlternativeIndex || 0)) : null,
+        "replacementRequests.$.customerDecisionAt": new Date(),
+        "replacementRequests.$.customerNote": String(note || "").trim(),
+        status: normalizedDecision === "approved" ? "partial_updated" : "confirmed",
+        orderStatus: normalizedDecision === "approved" ? "partial_updated" : "confirmed",
+      },
+    },
     { new: true },
   );
 
@@ -380,150 +347,34 @@ export async function createSplitDeliveries({
   }
 
   const extraDeliveryFee = mapped.reduce((sum, split) => sum + Number(split.additionalDeliveryFee || 0), 0);
+  const currentDeliveryFee = Number(order.pricing?.deliveryFee || order.paymentBreakdown?.deliveryFeeCharged || 0);
   const currentGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
   const nextGrandTotal = currentGrandTotal + extraDeliveryFee;
 
-  // The plan is recorded so the customer can see what's proposed, but goes
-  // no further than that: no extra fee is charged and no split can start
-  // fulfillment (see updateSplitDeliveryStatus's gate below) until the
-  // customer explicitly approves. Previously this applied both the plan
-  // and the fee immediately with no confirmation step at all.
   const updated = await Order.findOneAndUpdate(
     { orderId },
     {
       $set: {
         splitDeliveries: mapped,
-        "splitDeliveryApproval.status": "pending",
-        "splitDeliveryApproval.extraDeliveryFee": extraDeliveryFee,
-        "splitDeliveryApproval.previousGrandTotal": currentGrandTotal,
-        "splitDeliveryApproval.proposedGrandTotal": nextGrandTotal,
-        "splitDeliveryApproval.proposedAt": new Date(),
-        "splitDeliveryApproval.reason": "",
-      },
-    },
-    { new: true },
-  );
-
-  await pushTimeline(orderId, {
-    type: "split_delivery_proposed",
-    actorRole,
-    actorId: String(actorId || ""),
-    note: "Split delivery plan proposed — awaiting customer approval",
-    meta: { splitCount: mapped.length, extraDeliveryFee },
-  });
-  emitOrderStatusUpdate(orderId, { splitDeliveryProposed: true, splitCount: mapped.length, extraDeliveryFee }, updated?.customer);
-  emitNotificationEvent(NOTIFICATION_EVENTS.SPLIT_DELIVERY_APPROVAL_NEEDED, {
-    orderId: updated.orderId,
-    customerId: updated.customer,
-    userId: updated.customer,
-    splitCount: mapped.length,
-    extraDeliveryFee,
-  });
-  return updated;
-}
-
-export async function approveSplitDelivery(customerId, orderId) {
-  orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({
-    orderId,
-    customer: customerId,
-    "splitDeliveryApproval.status": "pending",
-  });
-  if (!order) {
-    const err = new Error("No pending split-delivery approval for this order");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const { extraDeliveryFee, proposedGrandTotal } = order.splitDeliveryApproval;
-  const currentDeliveryFee = Number(order.pricing?.deliveryFee || order.paymentBreakdown?.deliveryFeeCharged || 0);
-
-  const updated = await Order.findOneAndUpdate(
-    { _id: order._id, "splitDeliveryApproval.status": "pending" },
-    {
-      $set: {
         status: "partial_updated",
         orderStatus: "partial_updated",
         "pricing.deliveryFee": currentDeliveryFee + extraDeliveryFee,
-        "pricing.total": proposedGrandTotal,
+        "pricing.total": nextGrandTotal,
         "paymentBreakdown.deliveryFeeCharged": currentDeliveryFee + extraDeliveryFee,
-        "paymentBreakdown.grandTotal": proposedGrandTotal,
-        "splitDeliveryApproval.status": "approved",
-        "splitDeliveryApproval.resolvedAt": new Date(),
+        "paymentBreakdown.grandTotal": nextGrandTotal,
       },
     },
     { new: true },
   );
-  if (!updated) {
-    const err = new Error("This approval was already resolved");
-    err.statusCode = 409;
-    throw err;
-  }
 
   await pushTimeline(orderId, {
-    type: "split_delivery_approved",
-    actorRole: "customer",
-    actorId: String(customerId || ""),
-    note: "Customer approved the split-delivery plan",
-    meta: { extraDeliveryFee },
+    type: "split_delivery_created",
+    actorRole,
+    actorId: String(actorId || ""),
+    note: "Split delivery plan created",
+    meta: { splitCount: mapped.length, extraDeliveryFee },
   });
-  emitOrderStatusUpdate(orderId, { splitDeliveryApproved: true }, updated.customer);
-  return updated;
-}
-
-// The customer can reject a split-delivery plan outright — the seller then
-// has to find another way to fulfil the order (a partial cancel, a full
-// reschedule, etc.) using the existing tools, rather than the split
-// silently going ahead at the seller's chosen fee.
-export async function rejectSplitDelivery(customerId, orderId, { reason = "" } = {}) {
-  orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({
-    orderId,
-    customer: customerId,
-    "splitDeliveryApproval.status": "pending",
-  });
-  if (!order) {
-    const err = new Error("No pending split-delivery approval for this order");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const updated = await Order.findOneAndUpdate(
-    { _id: order._id, "splitDeliveryApproval.status": "pending" },
-    {
-      $set: {
-        splitDeliveries: [],
-        "splitDeliveryApproval.status": "rejected",
-        "splitDeliveryApproval.resolvedAt": new Date(),
-        "splitDeliveryApproval.reason": String(reason || "").trim(),
-      },
-    },
-    { new: true },
-  );
-  if (!updated) {
-    const err = new Error("This approval was already resolved");
-    err.statusCode = 409;
-    throw err;
-  }
-
-  await pushTimeline(orderId, {
-    type: "split_delivery_rejected",
-    actorRole: "customer",
-    actorId: String(customerId || ""),
-    note: reason || "Customer declined the split-delivery plan",
-    meta: {},
-  });
-  emitOrderStatusUpdate(orderId, { splitDeliveryRejected: true }, updated.customer);
-  try {
-    const { escalateOrder } = await import("./operationsQueueService.js");
-    await escalateOrder(updated.orderId, {
-      reason: `Customer declined the split-delivery plan${reason ? `: ${reason}` : ""} — seller needs another fulfilment option.`,
-      actorId: customerId,
-      actorRole: "customer",
-    });
-  } catch (escalationError) {
-    // Best-effort — the rejection itself already succeeded.
-  }
+  emitOrderStatusUpdate(orderId, { splitDeliveryCreated: true, splitCount: mapped.length }, updated?.customer);
   return updated;
 }
 
@@ -560,11 +411,6 @@ export async function markSplitDeliveryStage({ orderId, splitId, status, actorRo
   if (!order) {
     const err = new Error("Order or split delivery not found");
     err.statusCode = 404;
-    throw err;
-  }
-  if (order.splitDeliveryApproval?.status !== "approved") {
-    const err = new Error("The customer hasn't approved this split-delivery plan yet");
-    err.statusCode = 409;
     throw err;
   }
 

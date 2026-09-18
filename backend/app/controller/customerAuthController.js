@@ -102,11 +102,6 @@ export const verifyCustomerLoginOtpEmail = async (req, res) => {
         if (customer.isActive === false) {
             return handleResponse(res, 403, "This account has been deleted. Please contact support.");
         }
-        if (customer.isBlocked) {
-            return handleResponse(res, 403, customer.blockedReason
-                ? `Your account has been restricted: ${customer.blockedReason}`
-                : "Your account has been restricted. Please contact support.");
-        }
 
         const token = generateToken(customer);
         await recordLogin(customer, "Customer", req.ip, req.headers["user-agent"]).catch(() => {});
@@ -136,18 +131,12 @@ export const verifyCustomerOTP = async (req, res) => {
         if (customer.isActive === false) {
             return handleResponse(res, 403, "This account has been deleted. Please contact support.");
         }
-        if (customer.isBlocked) {
-            return handleResponse(res, 403, customer.blockedReason
-                ? `Your account has been restricted: ${customer.blockedReason}`
-                : "Your account has been restricted. Please contact support.");
-        }
 
         if (payload.referralCode) {
             const { attachReferralOnSignup } = await import("../modules/rewards/services/referralService.js");
             await attachReferralOnSignup({
                 refereeId: customer._id,
                 referralCode: payload.referralCode,
-                ipAddress: req.ip,
             }).catch(() => {});
         }
 
@@ -213,23 +202,7 @@ export const updateCustomerProfile = async (req, res) => {
             }
             customer.email = normalizedEmail;
         }
-        if (addresses) {
-            // City/pincode are required for every address the customer submits going
-            // forward — previously neither was enforced anywhere (model, controller,
-            // or form), so incomplete addresses could reach checkout and break
-            // delivery-radius/pincode-based routing downstream. Pre-existing
-            // addresses already saved without them are left alone here (this only
-            // gates what's being written in this request) so older accounts aren't
-            // locked out of unrelated profile edits.
-            if (Array.isArray(addresses)) {
-                for (const addr of addresses) {
-                    if (!String(addr?.city || "").trim() || !String(addr?.pincode || "").trim()) {
-                        return handleResponse(res, 400, "City and pincode are required for every address.");
-                    }
-                }
-            }
-            customer.addresses = addresses;
-        }
+        if (addresses) customer.addresses = addresses;
         if (profileImage !== undefined) customer.profileImage = profileImage || null;
         if (notificationsEnabled !== undefined) {
             customer.notificationsEnabled = Boolean(notificationsEnabled);

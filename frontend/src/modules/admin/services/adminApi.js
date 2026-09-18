@@ -10,12 +10,8 @@ export const adminApi = {
     getDashboardOverview: (params) => axiosInstance.get('/admin/dashboard', { params }),
     getUsers: (params) => axiosInstance.get('/admin/users', { params }),
     getUserById: (id) => axiosInstance.get(`/admin/users/${id}`),
-    blockUser: (id, reason) => axiosInstance.put(`/admin/users/${id}/block`, { reason }),
-    unblockUser: (id) => axiosInstance.put(`/admin/users/${id}/unblock`),
     getActiveSellers: (params) => axiosInstance.get('/admin/sellers/active', { params }),
     getActiveSellerById: (id) => axiosInstance.get(`/admin/sellers/active/${id}`),
-    suspendStore: (id, reason) => axiosInstance.put(`/admin/sellers/active/${id}/suspend`, { reason }),
-    reactivateStore: (id) => axiosInstance.put(`/admin/sellers/active/${id}/reactivate`),
     getSellerLocations: (params) => axiosInstance.get('/admin/sellers/locations', { params }),
     getPendingSellers: (params) => axiosInstance.get('/admin/sellers/pending', { params }),
     createVendorAccount: (data) => axiosInstance.post('/admin/sellers/create', data),
@@ -128,14 +124,10 @@ export const adminApi = {
         axiosInstance.get(`/orders/${orderId}/reassign-candidates`),
     reassignOrderStore: (orderId, data) =>
         axiosInstance.put(`/orders/${orderId}/reassign-store`, data),
-    createReplacementOrder: (orderId, data) =>
-        axiosInstance.post(`/orders/${orderId}/create-replacement`, data),
     approveOrderCancellationRequest: (orderId, data = {}) =>
         axiosInstance.put(`/orders/cancel/${orderId}/approve`, data),
     rejectOrderCancellationRequest: (orderId, data = {}) =>
         axiosInstance.put(`/orders/cancel/${orderId}/reject`, data),
-    forceCancelOrder: (orderId, reason) =>
-        axiosInstance.put(`/orders/cancel/${orderId}/force`, { reason }),
     partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
     // Returns
     getReturns: (params) => axiosInstance.get('/orders/seller-returns', { params }),
@@ -245,14 +237,6 @@ export const adminApi = {
     // Active Sessions & Login Activity
     getLoginActivities: (params) => axiosInstance.get('/admin/login-activities', { params }),
     terminateSession: (id) => axiosInstance.delete(`/admin/login-activities/${id}`),
-
-    // Analytics report (real data)
-    getAnalyticsReport: (params) => axiosInstance.get('/admin/analytics/report', { params }),
-
-    // Operations Queue (Operator role)
-    getOperationsQueue: (params) => axiosInstance.get('/admin/operations/queue', { params }),
-    escalateOrder: (orderId, reason) => axiosInstance.put(`/admin/operations/orders/${orderId}/escalate`, { reason }),
-    resolveEscalation: (orderId, note) => axiosInstance.put(`/admin/operations/orders/${orderId}/resolve`, { note }),
 
     // Order lifecycle
     listDisputes: (params) => axiosInstance.get('/orders/disputes', { params }),

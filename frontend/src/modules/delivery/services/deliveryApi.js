@@ -30,8 +30,6 @@ export const deliveryApi = {
     axiosInstance.put(`/orders/skip/${encodeURIComponent(String(orderId))}`),
   postLocation: (body, config = {}) =>
     axiosInstance.post("/delivery/location", body, config),
-  reportDeliveryException: (orderId, body) =>
-    axiosInstance.post(`/delivery/orders/${encodeURIComponent(String(orderId))}/report-exception`, body),
   confirmPickup: (orderId, body) =>
     axiosInstance.post(`/orders/workflow/${orderId}/pickup/confirm`, body),
   markArrivedAtStore: (orderId, body) =>

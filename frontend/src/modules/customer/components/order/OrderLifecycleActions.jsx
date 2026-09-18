@@ -2,8 +2,7 @@ import React, { useState, useEffect } from "react";
 import { customerApi } from "../../services/customerApi";
 import DeliverySlotPicker from "../checkout/DeliverySlotPicker";
 import AddOrderItemsModal from "./AddOrderItemsModal";
-import RemoveOrderItemsModal from "./RemoveOrderItemsModal";
-import { canCustomerAddItems, canCustomerRemoveItems, getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
+import { canCustomerAddItems, getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 import { toast } from "sonner";
 
 // Complaints share the exact same post-delivery window as returns/refunds
@@ -18,7 +17,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const [reviewingReplacement, setReviewingReplacement] = useState("");
   const [disputeCountdown, setDisputeCountdown] = useState(null);
   const [showAddItems, setShowAddItems] = useState(false);
-  const [showRemoveItems, setShowRemoveItems] = useState(false);
 
   const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
 
@@ -62,7 +60,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   // complaint the backend is going to refuse anyway.
   const canDispute = isDelivered && disputeCountdown !== 0;
   const canAddItems = canCustomerAddItems(order);
-  const canRemoveItems = canCustomerRemoveItems(order);
   const pendingReplacementRequests = Array.isArray(order.replacementRequests)
     ? order.replacementRequests.filter((request) => request?.customerDecision === "pending")
     : [];
@@ -89,8 +86,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const payDifference = async () => {
     try {
       setPaying(true);
-      const delta = Number(order.priceAdjustment?.deltaAmount || 0);
-      await customerApi.payOrderDifference(order.orderId, { walletAmount: delta });
+      await customerApi.payOrderDifference(order.orderId, {});
       toast.success("Extra payment recorded");
       onRefresh?.();
     } catch (e) {
@@ -121,58 +117,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
       onRefresh?.();
     } catch (e) {
       toast.error(e.response?.data?.message || "Could not decline adjustment");
-    } finally {
-      setResolvingAdjustment("");
-    }
-  };
-
-  const approveRescue = async () => {
-    try {
-      setResolvingAdjustment("rescue-approve");
-      await customerApi.approveOrderRescue(order.orderId);
-      toast.success("New seller confirmed — your order is moving forward");
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Could not confirm the new seller");
-    } finally {
-      setResolvingAdjustment("");
-    }
-  };
-
-  const rejectRescue = async () => {
-    try {
-      setResolvingAdjustment("rescue-reject");
-      await customerApi.rejectOrderRescue(order.orderId);
-      toast.success("Looking for another seller for you");
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Could not decline the new seller");
-    } finally {
-      setResolvingAdjustment("");
-    }
-  };
-
-  const approveSplit = async () => {
-    try {
-      setResolvingAdjustment("split-approve");
-      await customerApi.approveSplitDelivery(order.orderId);
-      toast.success("Split delivery approved");
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Could not approve the split delivery");
-    } finally {
-      setResolvingAdjustment("");
-    }
-  };
-
-  const rejectSplit = async () => {
-    try {
-      setResolvingAdjustment("split-reject");
-      await customerApi.rejectSplitDelivery(order.orderId, {});
-      toast.success("Split delivery declined");
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Could not decline the split delivery");
     } finally {
       setResolvingAdjustment("");
     }
@@ -221,17 +165,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const isAdjustmentPending = priceAdjustment?.status === "pending";
   const adjustmentNeedsPayment = isAdjustmentPending && priceAdjustment?.requiresPayment;
   const adjustmentNeedsApproval = isAdjustmentPending && !priceAdjustment?.requiresPayment;
-
-  // Order Rescue Engine: the original seller couldn't fulfil this order and
-  // the system found a replacement at a higher price — nothing moves until
-  // the customer approves (same-price/cheaper replacements apply instantly
-  // with no action needed, so there's nothing to show for those).
-  const rescue = order.rescue;
-  const rescueNeedsApproval = rescue?.status === "proposed_price_increase";
-  const isSearchingForSeller = order.workflowStatus === "RESCUE_PENDING" && !rescueNeedsApproval;
-
-  const splitApproval = order.splitDeliveryApproval;
-  const splitNeedsApproval = splitApproval?.status === "pending";
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
@@ -304,76 +237,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         </div>
       )}
 
-      {isSearchingForSeller && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          <p className="font-bold">Finding you another seller</p>
-          <p className="mt-0.5 text-xs opacity-80">
-            Your original seller couldn't fulfil this order. We're searching for an alternative store now — no action needed.
-          </p>
-        </div>
-      )}
-
-      {rescueNeedsApproval && (
-        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">
-            Approve New Seller
-          </h4>
-          <p className="text-xs text-slate-700">
-            {rescue.candidateShopName || "A new store"} can fulfil this order, but it costs ₹{rescue.deltaAmount || 0} more.
-            Approve to continue with them, or decline and we'll keep looking for another option.
-          </p>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              disabled={resolvingAdjustment === "rescue-approve"}
-              onClick={approveRescue}
-              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
-            >
-              Approve (+₹{rescue.deltaAmount || 0})
-            </button>
-            <button
-              type="button"
-              disabled={resolvingAdjustment === "rescue-reject"}
-              onClick={rejectRescue}
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
-            >
-              Decline
-            </button>
-          </div>
-        </div>
-      )}
-
-      {splitNeedsApproval && (
-        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">
-            Approve Split Delivery
-          </h4>
-          <p className="text-xs text-slate-700">
-            The seller wants to deliver this order in multiple parts
-            {splitApproval.extraDeliveryFee ? `, for an extra ₹${splitApproval.extraDeliveryFee} delivery fee` : ""}.
-            Approve to continue, or decline and the seller will need another option.
-          </p>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              disabled={resolvingAdjustment === "split-approve"}
-              onClick={approveSplit}
-              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
-            >
-              Approve{splitApproval.extraDeliveryFee ? ` (+₹${splitApproval.extraDeliveryFee})` : ""}
-            </button>
-            <button
-              type="button"
-              disabled={resolvingAdjustment === "split-reject"}
-              onClick={rejectSplit}
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
-            >
-              Decline
-            </button>
-          </div>
-        </div>
-      )}
-
       {canAddItems && (
         <button
           type="button"
@@ -388,23 +251,6 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
           order={order}
           onClose={() => setShowAddItems(false)}
           onAdded={() => onRefresh?.()}
-        />
-      )}
-
-      {canRemoveItems && (
-        <button
-          type="button"
-          onClick={() => setShowRemoveItems(true)}
-          className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600"
-        >
-          Remove an item from this order
-        </button>
-      )}
-      {showRemoveItems && (
-        <RemoveOrderItemsModal
-          order={order}
-          onClose={() => setShowRemoveItems(false)}
-          onRemoved={() => onRefresh?.()}
         />
       )}
 

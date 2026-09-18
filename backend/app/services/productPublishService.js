@@ -168,8 +168,8 @@ export async function unpauseProduct({ productId, storeId }) {
           parseTimeToMinutes(dailyStartTime),
           parseTimeToMinutes(dailyEndTime),
         )
-      : true;
-  product.isCurrentlyAvailable = withinDailyWindow;
+      : false;
+  product.isCurrentlyAvailable = !withinDailyWindow;
   await product.save();
   await invalidateProductCaches(product);
 

@@ -52,10 +52,6 @@ const recomputeProductAvailability = async () => {
       const pauseActive = Boolean(pausedUntil && pausedUntil.getTime() > now.getTime());
       const pauseExpired = Boolean(pausedUntil && !pauseActive);
 
-      // No window configured means "always orderable" (subject only to the
-      // pause flag) — the window only restricts availability when the
-      // seller has actually set one, so an unconfigured window must count
-      // as "within" rather than "outside".
       const withinDailyWindow =
         availability.dailyStartTime && availability.dailyEndTime
           ? isMinutesWithinWindow(
@@ -63,9 +59,9 @@ const recomputeProductAvailability = async () => {
               parseTimeToMinutes(availability.dailyStartTime),
               parseTimeToMinutes(availability.dailyEndTime),
             )
-          : true;
+          : false;
 
-      const shouldBeAvailable = !pauseActive && withinDailyWindow;
+      const shouldBeAvailable = !pauseActive && !withinDailyWindow;
       const set = {};
       if (shouldBeAvailable !== (product.isCurrentlyAvailable !== false)) {
         set.isCurrentlyAvailable = shouldBeAvailable;

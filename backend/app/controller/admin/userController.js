@@ -3,8 +3,6 @@ import getPagination from "../../utils/pagination.js";
 import {
   getUserByIdData,
   getUsersData,
-  blockUserById,
-  unblockUserById,
 } from "../../services/admin/userAdminService.js";
 
 export const getUsers = async (req, res) => {
@@ -38,26 +36,5 @@ export const getUserById = async (req, res) => {
     );
   } catch (error) {
     return handleResponse(res, 500, error.message);
-  }
-};
-
-export const blockUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason } = req.body || {};
-    const user = await blockUserById(id, { reason, adminId: req.user?.id });
-    return handleResponse(res, 200, "Customer account restricted", user);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const unblockUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await unblockUserById(id);
-    return handleResponse(res, 200, "Customer account restored", user);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };

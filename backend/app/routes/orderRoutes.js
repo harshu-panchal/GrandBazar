@@ -11,7 +11,6 @@ import {
   cancelOrder,
   approveCancelOrderRequest,
   rejectCancelOrderRequest,
-  forceCancelOrder,
   updateOrderStatus,
   markOrderPackedBySeller,
   bulkUpdateOrderStatus,
@@ -80,17 +79,11 @@ import {
   payOrderDifference,
   approveOrderAdjustmentController,
   rejectOrderAdjustmentController,
-  approveOrderRescueController,
-  rejectOrderRescueController,
   addOrderItems,
-  removeOrderItems,
-  sellerAddOrderItemsController,
   requestProductReplacement,
   reviewProductReplacement,
   splitOrderDelivery,
   updateSplitDeliveryStatus,
-  approveSplitDeliveryController,
-  rejectSplitDeliveryController,
   getOrderModificationHistory,
   createDispute,
   resolveDisputeHandler,
@@ -111,7 +104,6 @@ import {
   adminLogisticsOverride,
   getReassignCandidates,
   adminReassignOrder,
-  adminCreateReplacementOrder,
 } from "../controller/orderLifecycleController.js";
 import {
   getDeliveryOptionsForStore,
@@ -201,12 +193,6 @@ router.put(
   verifyToken,
   allowRoles("admin"),
   rejectCancelOrderRequest,
-);
-router.put(
-  "/cancel/:orderId/force",
-  verifyToken,
-  allowRoles("admin", "operator"),
-  forceCancelOrder,
 );
 router.post("/:orderId/returns", verifyToken, requestReturn);
 router.get("/:orderId/returns", verifyToken, getReturnDetails);
@@ -473,14 +459,6 @@ router.put(
   partialCancelOrder,
 );
 router.post(
-  "/:orderId/seller-add-items",
-  verifyToken,
-  allowRoles("seller", "admin"),
-  requireApprovedSeller,
-  checkSubSellerPermission("adjustments", "write"),
-  sellerAddOrderItemsController,
-);
-router.post(
   "/:orderId/pay-difference",
   verifyToken,
   allowRoles("customer", "user"),
@@ -499,28 +477,10 @@ router.post(
   rejectOrderAdjustmentController,
 );
 router.post(
-  "/:orderId/rescue/approve",
-  verifyToken,
-  allowRoles("customer", "user"),
-  approveOrderRescueController,
-);
-router.post(
-  "/:orderId/rescue/reject",
-  verifyToken,
-  allowRoles("customer", "user"),
-  rejectOrderRescueController,
-);
-router.post(
   "/:orderId/add-items",
   verifyToken,
   allowRoles("customer", "user"),
   addOrderItems,
-);
-router.post(
-  "/:orderId/remove-items",
-  verifyToken,
-  allowRoles("customer", "user"),
-  removeOrderItems,
 );
 router.post(
   "/:orderId/replacements",
@@ -551,18 +511,6 @@ router.put(
   requireApprovedSeller,
   checkSubSellerPermission("adjustments", "write"),
   updateSplitDeliveryStatus,
-);
-router.post(
-  "/:orderId/split-delivery/approve",
-  verifyToken,
-  allowRoles("customer", "user"),
-  approveSplitDeliveryController,
-);
-router.post(
-  "/:orderId/split-delivery/reject",
-  verifyToken,
-  allowRoles("customer", "user"),
-  rejectSplitDeliveryController,
 );
 router.get(
   "/:orderId/modifications",
@@ -672,22 +620,15 @@ router.put(
 router.get(
   "/:orderId/reassign-candidates",
   verifyToken,
-  allowRoles("admin", "operator"),
+  allowRoles("admin"),
   getReassignCandidates,
 );
 
 router.put(
   "/:orderId/reassign-store",
   verifyToken,
-  allowRoles("admin", "operator"),
+  allowRoles("admin"),
   adminReassignOrder,
-);
-
-router.post(
-  "/:orderId/create-replacement",
-  verifyToken,
-  allowRoles("admin", "operator"),
-  adminCreateReplacementOrder,
 );
 
 // Customer pickup verification

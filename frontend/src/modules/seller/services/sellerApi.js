@@ -147,7 +147,6 @@ export const sellerApi = {
     getAvailableDeliverySlots: (params) => axiosInstance.get(`/orders/scheduling/slots`, { params }),
     adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
     partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),
-    addOrderItems: (orderId, data) => axiosInstance.post(`/orders/${orderId}/seller-add-items`, data),
     requestProductReplacement: (orderId, data) => axiosInstance.post(`/orders/${orderId}/replacements`, data),
     splitOrderDelivery: (orderId, data) => axiosInstance.post(`/orders/${orderId}/split-delivery`, data),
     updateSplitDeliveryStatus: (orderId, splitId, data) =>

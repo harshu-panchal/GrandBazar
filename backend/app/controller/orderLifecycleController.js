@@ -20,8 +20,6 @@ import {
   rejectOrderAdjustment,
   partialCancelOrderItems,
   addItemsToOrder,
-  customerRemoveOrderItem,
-  sellerAddOrderItems,
 } from "../services/orderPriceAdjustmentService.js";
 import {
   raiseDispute,
@@ -50,8 +48,6 @@ import {
   reviewReplacementRequest,
   createSplitDeliveries,
   markSplitDeliveryStage,
-  approveSplitDelivery,
-  rejectSplitDelivery,
   getOrderModificationTimeline,
 } from "../services/orderModificationService.js";
 import Order from "../models/order.js";
@@ -64,7 +60,6 @@ import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import {
   getOrderReassignCandidates,
   adminReassignOrderToStore,
-  adminCreateReplacementOrderForRejectedOrder,
 } from "../services/orderReassignService.js";
 
 export const getSellerSchedulingSettings = async (req, res) => {
@@ -233,12 +228,7 @@ export const adminRescheduleOrder = async (req, res) => {
 
 export const sellerRescheduleOrder = async (req, res) => {
   try {
-    const order = await sellerRescheduleOnBehalf(
-      req.user.id,
-      req.params.orderId,
-      req.body,
-      req.user.subSellerId || req.user.accountId || req.user.id,
-    );
+    const order = await sellerRescheduleOnBehalf(req.user.id, req.params.orderId, req.body);
     return handleResponse(res, 200, "Order rescheduled", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -262,10 +252,6 @@ export const adjustOrder = async (req, res) => {
       reason,
       actorLabel: isSeller ? "seller" : "admin",
       sellerId: isSeller ? req.user.id : null,
-      // For a staff/assistant token, subSellerId (their own staff record)
-      // is the real actor — req.user.id is the shared store id. Previously
-      // every adjustment logged an empty actorId regardless of who acted.
-      actorId: req.user.subSellerId || req.user.accountId || req.user.id,
     });
     return handleResponse(res, 200, "Order adjusted", order);
   } catch (error) {
@@ -289,43 +275,8 @@ export const partialCancelOrder = async (req, res) => {
       reason,
       actorLabel: isSeller ? "seller" : "admin",
       sellerId: isSeller ? req.user.id : null,
-      actorId: req.user.subSellerId || req.user.accountId || req.user.id,
     });
     return handleResponse(res, 200, "Partial cancellation applied", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const removeOrderItems = async (req, res) => {
-  try {
-    const { itemIndexes, reason } = req.body || {};
-    if (!Array.isArray(itemIndexes) || !itemIndexes.length) {
-      return handleResponse(res, 400, "Select at least one item to remove");
-    }
-    const order = await customerRemoveOrderItem({
-      customerId: req.user.id,
-      orderId: req.params.orderId,
-      itemIndexes,
-      reason,
-    });
-    return handleResponse(res, 200, "Item removed from order", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const sellerAddOrderItemsController = async (req, res) => {
-  try {
-    const { items, reason } = req.body || {};
-    const order = await sellerAddOrderItems({
-      sellerId: req.user.id,
-      orderId: req.params.orderId,
-      items,
-      reason,
-      actorId: req.user.subSellerId || req.user.accountId || req.user.id,
-    });
-    return handleResponse(res, 200, "Item added — awaiting customer confirmation", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -373,26 +324,6 @@ export const rejectOrderAdjustmentController = async (req, res) => {
   }
 };
 
-export const approveOrderRescueController = async (req, res) => {
-  try {
-    const { customerApproveRescue } = await import("../services/orderRescueService.js");
-    const order = await customerApproveRescue(req.user.id, req.params.orderId);
-    return handleResponse(res, 200, "Replacement seller approved", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const rejectOrderRescueController = async (req, res) => {
-  try {
-    const { customerRejectRescue } = await import("../services/orderRescueService.js");
-    const order = await customerRejectRescue(req.user.id, req.params.orderId);
-    return handleResponse(res, 200, "Continuing to search for another seller", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
 export const requestProductReplacement = async (req, res) => {
   try {
     const { itemIndex, alternatives, reason } = req.body || {};
@@ -435,28 +366,10 @@ export const splitOrderDelivery = async (req, res) => {
       orderId: req.params.orderId,
       splits,
       actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
-      actorId: req.user?.subSellerId || req.user?.accountId || req.user?.id,
+      actorId: req.user?.id,
       sellerId: isAdmin ? null : req.user?.id,
     });
     return handleResponse(res, 200, "Split delivery plan saved", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const approveSplitDeliveryController = async (req, res) => {
-  try {
-    const order = await approveSplitDelivery(req.user.id, req.params.orderId);
-    return handleResponse(res, 200, "Split delivery approved", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
-};
-
-export const rejectSplitDeliveryController = async (req, res) => {
-  try {
-    const order = await rejectSplitDelivery(req.user.id, req.params.orderId, req.body || {});
-    return handleResponse(res, 200, "Split delivery declined", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -471,7 +384,7 @@ export const updateSplitDeliveryStatus = async (req, res) => {
       splitId: req.params.splitId,
       status,
       actorRole: isAdmin ? "admin" : req.user?.subSellerId ? "assistant" : "seller",
-      actorId: req.user?.subSellerId || req.user?.accountId || req.user?.id,
+      actorId: req.user?.id,
       sellerId: isAdmin ? null : req.user?.id,
     });
     return handleResponse(res, 200, "Split delivery status updated", order);
@@ -769,29 +682,6 @@ export const adminReassignOrder = async (req, res) => {
       reason: reason || "seller_unavailable",
     });
     return handleResponse(res, 200, "Order reassigned to another store", order);
-  } catch (error) {
-    return handleResponse(
-      res,
-      error.statusCode || 500,
-      error.message,
-      error.details || {},
-    );
-  }
-};
-
-export const adminCreateReplacementOrder = async (req, res) => {
-  try {
-    const { targetStoreId, note } = req.body || {};
-    const result = await adminCreateReplacementOrderForRejectedOrder({
-      originalOrderId: req.params.orderId,
-      targetStoreId,
-      adminId: req.user?.id,
-      note,
-    });
-    return handleResponse(res, 200, "Replacement order created", {
-      originalOrder: result.originalOrder,
-      newOrder: result.newOrder,
-    });
   } catch (error) {
     return handleResponse(
       res,

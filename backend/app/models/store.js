@@ -196,18 +196,6 @@ const storeSchema = new mongoose.Schema(
       default: false,
     },
 
-    // Admin-initiated safety suspension — distinct from the subscription/KYC
-    // driven isActive toggles elsewhere. Kept only for traceability; the
-    // actual enforcement is still just isActive:false.
-    suspendedAt: {
-      type: Date,
-      default: null,
-    },
-    suspendedReason: {
-      type: String,
-      default: null,
-    },
-
     /** Seller open/close for orders. Closed stores stay listed but show as Off to customers. */
     isOpen: {
       type: Boolean,

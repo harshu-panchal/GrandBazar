@@ -1047,31 +1047,6 @@ const OrderDetailPage = () => {
           );
         })()}
 
-        {Array.isArray(order?.revisedInvoices) && order.revisedInvoices.length > 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Revised Invoices</p>
-            <div className="space-y-2">
-              {order.revisedInvoices.map((rev, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs border-b border-slate-100 last:border-0 pb-2 last:pb-0">
-                  <div>
-                    <p className="font-semibold text-slate-700">
-                      {rev.direction === "decrease" ? "Refunded" : rev.direction === "increase" ? "Extra charged" : "Adjusted"}
-                      {rev.note ? ` — ${rev.note}` : ""}
-                    </p>
-                    <p className="text-slate-400">{new Date(rev.createdAt).toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-bold ${rev.direction === "decrease" ? "text-emerald-600" : rev.direction === "increase" ? "text-amber-600" : "text-slate-600"}`}>
-                      {rev.direction === "decrease" ? "-" : rev.direction === "increase" ? "+" : ""}₹{Number(rev.deltaAmount || 0).toFixed(0)}
-                    </p>
-                    <p className="text-slate-400">New total: ₹{Number(rev.grandTotal || 0).toFixed(0)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Order Progress Tracker - New Component */}
         {!isAwaitingOnlinePayment && (
           <OrderProgressTracker

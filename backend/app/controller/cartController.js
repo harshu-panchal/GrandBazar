@@ -233,10 +233,9 @@ export const addToCart = async (req, res) => {
       });
     }
 
-    // A cart may not mix lines from two different pre-order campaigns
-    // (mixing one campaign's items with regular in-stock lines from the
-    // same store is fine — checkout auto-aligns them) — give the customer
-    // instant feedback here instead of only failing at final checkout.
+    // A cart may not mix a pre-order line with a regular line, nor mix lines
+    // from two different pre-order campaigns — give the customer instant
+    // feedback here instead of only failing at final checkout.
     try {
       await assertCartPreorderRules(cart.items);
     } catch (preorderRuleError) {

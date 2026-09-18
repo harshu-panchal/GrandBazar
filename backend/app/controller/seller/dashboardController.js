@@ -972,71 +972,18 @@ export const getSellerDashboard = async (req, res) => {
       subscriptionDaysRemaining,
     });
 
-    /* ---------- Assistants (owner only) ----------
-       Orders/acceptance-rate are computed from sellerActionBy.acceptedByStaffId /
-       rejectedByStaffId, which orderWorkflowService now stamps on the order
-       whenever a sub-seller (rather than the owner) accepts/rejects it.
-       Rating has no per-staff data source (reviews rate the store, not the
-       individual staff member who handled the order) so it stays null. */
-    let assistantMetrics = new Map();
-    if (staff && staff.length) {
-      const staffIds = staff.map((s) => s._id);
-      const [acceptedRows, rejectedRows] = await Promise.all([
-        safe(
-          Order.aggregate([
-            {
-              $match: {
-                seller: storeOid,
-                createdAt: { $gte: monthStart },
-                "sellerActionBy.acceptedByStaffId": { $in: staffIds },
-              },
-            },
-            { $group: { _id: "$sellerActionBy.acceptedByStaffId", count: { $sum: 1 } } },
-          ]),
-          [],
-        ),
-        safe(
-          Order.aggregate([
-            {
-              $match: {
-                seller: storeOid,
-                createdAt: { $gte: monthStart },
-                "sellerActionBy.rejectedByStaffId": { $in: staffIds },
-              },
-            },
-            { $group: { _id: "$sellerActionBy.rejectedByStaffId", count: { $sum: 1 } } },
-          ]),
-          [],
-        ),
-      ]);
-      const acceptedById = new Map((acceptedRows || []).map((r) => [String(r._id), r.count]));
-      const rejectedById = new Map((rejectedRows || []).map((r) => [String(r._id), r.count]));
-      for (const s of staff) {
-        const key = String(s._id);
-        const accepted = acceptedById.get(key) || 0;
-        const rejected = rejectedById.get(key) || 0;
-        const denominator = accepted + rejected;
-        assistantMetrics.set(key, {
-          orders: accepted,
-          acceptancePct: denominator > 0 ? Math.round((accepted / denominator) * 100) : null,
-        });
-      }
-    }
-
+    /* ---------- Assistants (owner only; per-staff order metrics have no data source yet) ---------- */
     const assistants = staff === null
       ? null
-      : (staff || []).map((s) => {
-          const metrics = assistantMetrics.get(String(s._id)) || { orders: null, acceptancePct: null };
-          return {
-            id: s._id,
-            name: s.name,
-            isActive: s.isActive !== false,
-            since: s.createdAt,
-            orders: metrics.orders,
-            acceptancePct: metrics.acceptancePct,
-            rating: null,
-          };
-        });
+      : (staff || []).map((s) => ({
+          id: s._id,
+          name: s.name,
+          isActive: s.isActive !== false,
+          since: s.createdAt,
+          orders: null,
+          acceptancePct: null,
+          rating: null,
+        }));
 
     return handleResponse(res, 200, "Dashboard fetched successfully", {
       kpis,

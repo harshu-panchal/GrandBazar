@@ -25,7 +25,6 @@ import {
   User,
   Activity,
   Library,
-  AlertTriangle,
 } from "lucide-react";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -270,13 +269,6 @@ const navItems = [
     ],
   },
   {
-    label: "Operations Queue",
-    path: "/admin/operations",
-    icon: AlertTriangle,
-    color: "rose",
-    permission: "operations",
-  },
-  {
     label: "Fees & Charges",
     path: "/admin/billing",
     icon: RotateCcw,
@@ -328,7 +320,6 @@ const navItems = [
 
 const BillingCharges = React.lazy(() => import("../pages/BillingCharges"));
 const CityCommissions = React.lazy(() => import("../pages/CityCommissions"));
-const OperationsQueue = React.lazy(() => import("../pages/OperationsQueue"));
 
 const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
@@ -504,7 +495,6 @@ const AdminRoutes = () => {
           </>
         )}
         
-        {hasPermission("operations") && <Route path="/operations" element={<OperationsQueue />} />}
         {hasPermission("billing") && <Route path="/billing" element={<BillingCharges />} />}
         {hasPermission("billing") && <Route path="/city-commissions" element={<CityCommissions />} />}
         {hasPermission("settings") && <Route path="/settings" element={<AdminSettings />} />}

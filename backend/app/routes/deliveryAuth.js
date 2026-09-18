@@ -16,7 +16,6 @@ import {
   updateDeliveryLocation,
   generateDeliveryOtp,
   validateDeliveryOtp,
-  reportDeliveryException,
   initiateCodRemittancePhonePe,
   checkCodRemittancePhonePeStatus,
 } from "../controller/deliveryController.js";
@@ -54,14 +53,6 @@ router.get(
 );
 router.post("/request-withdrawal", verifyToken, requestWithdrawal);
 router.post("/location", verifyToken, updateDeliveryLocation);
-
-// Delivery exception reporting (customer unreachable, wrong address, etc.)
-router.post(
-  "/orders/:orderId/report-exception",
-  verifyToken,
-  allowRoles("delivery"),
-  reportDeliveryException
-);
 
 // OTP generation for delivery completion
 router.post(
