@@ -750,13 +750,14 @@ const ProductManagement = () => {
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[1180px] table-fixed text-left border-collapse">
                         <colgroup>
-                            <col className="w-[24%]" />
-                            <col className="w-[13%]" />
-                            <col className="w-[11%]" />
+                            <col className="w-[22%]" />
                             <col className="w-[12%]" />
-                            <col className="w-[14%]" />
+                            <col className="w-[10%]" />
                             <col className="w-[11%]" />
-                            <col className="w-[15%]" />
+                            <col className="w-[13%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[14%]" />
                         </colgroup>
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
@@ -765,6 +766,7 @@ const ProductManagement = () => {
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Variant</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Category</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Subcategory</th>
+                                <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Commission</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Status</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Actions</th>
                             </tr>
@@ -772,7 +774,7 @@ const ProductManagement = () => {
                         <tbody className="divide-y divide-slate-50">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-20 text-center">
+                                    <td colSpan="8" className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center gap-3">
                                             <HiOutlineArrowPath className="h-8 w-8 text-primary animate-spin" />
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Products...</p>
@@ -781,7 +783,7 @@ const ProductManagement = () => {
                                 </tr>
                             ) : productsList.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
+                                    <td colSpan="8" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
                                 </tr>
                             ) : productsList.map((p, idx) => {
                                 const isGrouped = sortBy === 'seller-asc';
@@ -792,7 +794,7 @@ const ProductManagement = () => {
                                 <React.Fragment key={p._id}>
                                     {showSellerHeader && (
                                         <tr className="bg-slate-100/80">
-                                            <td colSpan="7" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                                            <td colSpan="8" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
                                                 {p.sellerId?.shopName || 'Admin'}
                                                 <span className="ml-2 font-medium normal-case text-slate-400">
                                                     {productsList.filter((item) => (item.sellerId?._id || item.sellerId) === currentSellerId).length} product(s) on this page
@@ -875,6 +877,28 @@ const ProductManagement = () => {
                                         </span>
                                     </td>
 
+                                    {/* Commission Column — effective commission the checkout engine would
+                                        actually apply (product override, else inherited from subcategory /
+                                        shop / city / category / header), not just this product's own toggle. */}
+                                    <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
+                                        {p.effectiveCommission?.value > 0 ? (
+                                            <span
+                                                className="inline-flex flex-col items-center gap-0.5"
+                                                title={`Applied at ${p.effectiveCommission.level || 'product'} level`}
+                                            >
+                                                <span className="text-[12px] font-bold text-emerald-700">
+                                                    {p.effectiveCommission.type === 'fixed'
+                                                        ? `₹${p.effectiveCommission.value}`
+                                                        : `${p.effectiveCommission.value}%`}
+                                                </span>
+                                                <span className="text-[9px] font-medium uppercase tracking-widest text-slate-400">
+                                                    {p.effectiveCommission.level || 'product'}
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <span className="text-[12px] font-medium text-slate-400">None</span>
+                                        )}
+                                    </td>
 
                                     {/* Status Column */}
                                     <td className="px-4 py-5 text-center align-middle whitespace-nowrap">

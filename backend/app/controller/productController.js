@@ -1,6 +1,10 @@
 import Product from "../models/product.js";
 import Category from "../models/category.js";
+import Store from "../models/store.js";
+import CityCommission from "../models/cityCommission.js";
 import { handleResponse } from "../utils/helper.js";
+import { resolveEffectiveCommissionForLineItem } from "../services/finance/pricingService.js";
+import { normalizeCityKey } from "../services/cityCommissionService.js";
 import { slugify } from "../utils/slugify.js";
 import getPagination from "../utils/pagination.js";
 import {
@@ -197,6 +201,109 @@ function normalizeProductDocumentModeration(product) {
 function normalizeProductListModeration(items = []) {
   if (!Array.isArray(items)) return [];
   return items.map((item) => normalizeProductDocumentModeration(item));
+}
+
+const COMMISSION_CATEGORY_SELECT =
+  "_id name applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule enabled";
+const COMMISSION_STORE_SELECT =
+  "applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule city enabled";
+const COMMISSION_CITY_SELECT =
+  "cityKey cityName enabled applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule";
+
+/**
+ * Computes, for each product in the list, the same effective commission the
+ * checkout pricing engine would resolve for it (product -> subcategory ->
+ * shop -> city -> category -> header), so the admin product list can show
+ * what will actually be charged instead of only the product's own override.
+ */
+async function attachEffectiveCommission(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+
+  const categoryIds = Array.from(
+    new Set(
+      items
+        .flatMap((item) => [
+          item.headerId?._id || item.headerId,
+          item.categoryId?._id || item.categoryId,
+          item.subcategoryId?._id || item.subcategoryId,
+        ])
+        .filter(Boolean)
+        .map(String),
+    ),
+  );
+  const sellerIds = Array.from(
+    new Set(
+      items
+        .map((item) => item.sellerId?._id || item.sellerId)
+        .filter(Boolean)
+        .map(String),
+    ),
+  );
+
+  const [categories, stores] = await Promise.all([
+    categoryIds.length
+      ? Category.find({ _id: { $in: categoryIds } }).select(COMMISSION_CATEGORY_SELECT).lean()
+      : [],
+    sellerIds.length
+      ? Store.find({ _id: { $in: sellerIds } }).select(COMMISSION_STORE_SELECT).lean()
+      : [],
+  ]);
+
+  const categoryById = new Map(categories.map((cat) => [String(cat._id), cat]));
+  const storeById = new Map(stores.map((store) => [String(store._id), store]));
+
+  const cityKeys = Array.from(
+    new Set(
+      stores.map((store) => normalizeCityKey(store.city || "")).filter(Boolean),
+    ),
+  );
+  const cityCommissions = cityKeys.length
+    ? await CityCommission.find({ cityKey: { $in: cityKeys } }).select(COMMISSION_CITY_SELECT).lean()
+    : [];
+  const cityByKey = new Map(cityCommissions.map((doc) => [doc.cityKey, doc]));
+
+  return items.map((item) => {
+    const headerId = item.headerId?._id || item.headerId;
+    const categoryId = item.categoryId?._id || item.categoryId;
+    const subcategoryId = item.subcategoryId?._id || item.subcategoryId;
+    const sellerId = item.sellerId?._id || item.sellerId;
+
+    const productCategory =
+      item.applyCommission === true
+        ? {
+            _id: item._id,
+            name: item.name,
+            applyCommission: true,
+            adminCommissionType: item.adminCommissionType,
+            adminCommissionValue: item.adminCommissionValue ?? item.adminCommission,
+            adminCommissionFixedRule: item.adminCommissionFixedRule,
+          }
+        : null;
+
+    const storeDoc = sellerId ? storeById.get(String(sellerId)) || null : null;
+    const cityKey = storeDoc ? normalizeCityKey(storeDoc.city || "") : "";
+    const cityCommission = cityKey ? cityByKey.get(cityKey) || null : null;
+
+    const resolved = resolveEffectiveCommissionForLineItem({
+      productCategory,
+      subcategory: subcategoryId ? categoryById.get(String(subcategoryId)) : null,
+      shopCommission: storeDoc,
+      cityCommission,
+      level2Category: categoryId ? categoryById.get(String(categoryId)) : null,
+      headerCategory: headerId ? categoryById.get(String(headerId)) : null,
+    });
+
+    return {
+      ...item,
+      effectiveCommission: resolved.category
+        ? {
+            level: resolved.level,
+            type: resolved.category.adminCommissionType || "percentage",
+            value: Number(resolved.category.adminCommissionValue || 0),
+          }
+        : { level: null, type: "percentage", value: 0 },
+    };
+  });
 }
 
 function buildSellerPendingModerationUpdate() {
@@ -1592,8 +1699,10 @@ export const getModerationProducts = async (req, res) => {
         }),
       ]);
 
+    const itemsWithCommission = await attachEffectiveCommission(items);
+
     return handleResponse(res, 200, "Moderation products fetched", {
-      items: normalizeProductListModeration(items),
+      items: normalizeProductListModeration(itemsWithCommission),
       page,
       limit,
       total,

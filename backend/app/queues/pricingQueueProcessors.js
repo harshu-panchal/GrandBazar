@@ -192,8 +192,26 @@ export function registerPricingQueueProcessors() {
 // blocks the admin write (category/store/city commission update) that
 // triggered it. See searchSyncService.js's enqueueProductIndex for the same
 // convention.
+//
+// Without Redis, customerPriceRecalcQueue is a no-op queue (see
+// pricingQueues.js's createNoopQueue) — `.add()` resolves immediately and
+// nothing ever recomputes. That silently left already-existing products'
+// cached customerPrice stale forever after any category/store/city
+// commission change. Fall back to recomputing directly in that case, same
+// as this codebase's other Redis-optional jobs (see orderAutoCancelJob).
 export async function enqueueRecalcByCategory(categoryId) {
   if (!categoryId) return;
+  if (!isRedisEnabled()) {
+    try {
+      await processRecalcByCategory({ categoryId: String(categoryId) });
+    } catch (error) {
+      logger.error("[pricingQueue] Direct category recalc failed", {
+        categoryId,
+        error: error.message,
+      });
+    }
+    return;
+  }
   try {
     await customerPriceRecalcQueue.add(
       JOB_NAMES.RECALC_BY_CATEGORY,
@@ -210,6 +228,17 @@ export async function enqueueRecalcByCategory(categoryId) {
 
 export async function enqueueRecalcBySeller(sellerId) {
   if (!sellerId) return;
+  if (!isRedisEnabled()) {
+    try {
+      await processRecalcBySeller({ sellerId: String(sellerId) });
+    } catch (error) {
+      logger.error("[pricingQueue] Direct seller recalc failed", {
+        sellerId,
+        error: error.message,
+      });
+    }
+    return;
+  }
   try {
     await customerPriceRecalcQueue.add(
       JOB_NAMES.RECALC_BY_SELLER,
@@ -226,6 +255,17 @@ export async function enqueueRecalcBySeller(sellerId) {
 
 export async function enqueueRecalcByCity(cityKey) {
   if (!cityKey) return;
+  if (!isRedisEnabled()) {
+    try {
+      await processRecalcByCity({ cityKey: String(cityKey) });
+    } catch (error) {
+      logger.error("[pricingQueue] Direct city recalc failed", {
+        cityKey,
+        error: error.message,
+      });
+    }
+    return;
+  }
   try {
     await customerPriceRecalcQueue.add(
       JOB_NAMES.RECALC_BY_CITY,
