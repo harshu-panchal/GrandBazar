@@ -432,9 +432,29 @@ export const updateCatalogProduct = async (req, res) => {
 
     const updated = await CatalogProduct.findByIdAndUpdate(id, updateData, { new: true });
 
-    // Sync changes to all claimed seller products if requested
+    // Commission fields always propagate to already-claimed seller products —
+    // a catalogue commission edit must never silently diverge from what's charged at checkout.
+    const commissionFieldsChanged =
+      updateData.applyCommission !== undefined ||
+      updateData.adminCommission !== undefined ||
+      updateData.adminCommissionValue !== undefined ||
+      updateData.adminCommissionType !== undefined ||
+      updateData.adminCommissionFixedRule !== undefined;
+
+    const fieldsToSync = {};
+    if (commissionFieldsChanged) {
+      Object.assign(fieldsToSync, {
+        applyCommission: updated.applyCommission === true,
+        adminCommission: updated.adminCommission || 0,
+        adminCommissionType: updated.adminCommissionType || "percentage",
+        adminCommissionValue: updated.adminCommissionValue || 0,
+        adminCommissionFixedRule: updated.adminCommissionFixedRule || "per_qty",
+      });
+    }
+
+    // Remaining catalogue fields (display/catalog data) still sync only when requested.
     if (syncToSellers === "true" || syncToSellers === true) {
-      const fieldsToSync = {
+      Object.assign(fieldsToSync, {
         name: updated.name,
         description: updated.description,
         brand: updated.brand,
@@ -445,13 +465,10 @@ export const updateCatalogProduct = async (req, res) => {
         headerId: updated.headerId,
         categoryId: updated.categoryId,
         subcategoryId: updated.subcategoryId,
-        applyCommission: updated.applyCommission === true,
-        adminCommission: updated.adminCommission || 0,
-        adminCommissionType: updated.adminCommissionType || "percentage",
-        adminCommissionValue: updated.adminCommissionValue || 0,
-        adminCommissionFixedRule: updated.adminCommissionFixedRule || "per_qty",
-      };
+      });
+    }
 
+    if (Object.keys(fieldsToSync).length > 0) {
       const affectedProducts = await Product.find({ catalogProductId: id });
       await Product.updateMany({ catalogProductId: id }, { $set: fieldsToSync });
 

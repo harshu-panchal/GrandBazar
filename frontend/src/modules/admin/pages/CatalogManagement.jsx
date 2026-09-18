@@ -966,7 +966,8 @@ const CatalogManagement = () => {
                           className="h-4 w-4 rounded border-brand-300 text-black focus:ring-black"
                         />
                         <label htmlFor="syncToSellers" className="text-xs font-bold text-brand-700 cursor-pointer">
-                          Sync updates to all active seller product listings linked to this catalog item.
+                          Sync catalog/display updates (name, images, category, etc.) to all active seller product listings linked to this catalog item.
+                          <span className="block font-normal text-brand-500 mt-1">Commission changes always sync automatically, regardless of this checkbox.</span>
                         </label>
                       </div>
                     )}
