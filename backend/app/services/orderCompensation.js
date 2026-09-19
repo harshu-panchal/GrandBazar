@@ -2,6 +2,7 @@ import Transaction from "../models/transaction.js";
 import Order from "../models/order.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
+import { releaseCouponUsageForOrder } from "./couponUsageService.js";
 import { reverseOrderFinanceOnCancellation } from "./finance/orderFinanceService.js";
 import logger from "./logger.js";
 
@@ -20,6 +21,10 @@ export async function compensateOrderCancellation(order, orderIdString) {
       reason: "Cancelled",
     });
     await existing.save();
+
+    // The cancelled order no longer uses its coupon — hand the use back so
+    // cancellations and expired unpaid orders don't permanently eat the limit.
+    await releaseCouponUsageForOrder(existing);
 
     try {
       await reverseOrderFinanceOnCancellation(existing._id, {

@@ -18,6 +18,7 @@ import { DEFAULT_SELLER_TIMEOUT_MS, WORKFLOW_STATUS } from "../constants/orderWo
 import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import { computeSellerPendingExpiry } from "./orderSchedulingService.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
+import { releaseCouponUsageForOrder } from "./couponUsageService.js";
 import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
 import { processCodRemittancePhonePeWebhook, isCodRemittanceMerchantOrderId } from "./codRemittanceService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -444,6 +445,7 @@ async function handleOrderSideEffectsFromPaymentStatus(payment, nextStatus, reas
             session,
             reason: reason || "Payment failed",
           });
+          await releaseCouponUsageForOrder(orderForUpdate, { session });
           orderForUpdate.status = "cancelled";
           orderForUpdate.orderStatus = "cancelled";
           orderForUpdate.workflowStatus = WORKFLOW_STATUS.CANCELLED;

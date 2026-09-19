@@ -6,9 +6,8 @@ import Product from "../models/product.js";
 import Store from "../models/store.js";
 import User from "../models/customer.js";
 import Transaction from "../models/transaction.js";
-import Coupon from "../models/coupon.js";
-import CouponRedemption from "../modules/rewards/models/couponRedemption.model.js";
 import { applySingleCoupon } from "./couponApplicationService.js";
+import { consumeCouponUsageAtomic } from "./couponUsageService.js";
 import { markGrantRedeemedForCoupon } from "../modules/rewards/services/couponService.js";
 import { applyWalletSpendToGrants } from "../modules/rewards/services/cashbackService.js";
 import { DEFAULT_WALLET_REDEMPTION } from "../modules/rewards/reward.constants.js";
@@ -360,6 +359,52 @@ function buildCheckoutGroupPaymentStatus(paymentMode) {
     : ORDER_PAYMENT_STATUS.PENDING_CASH_COLLECTION;
 }
 
+// Concurrent checkouts touching the same hot document (a popular product's
+// stock, a shared coupon) make MongoDB abort the loser with a write conflict
+// straight away instead of queueing it. The server has rolled that attempt
+// back completely, so re-running it is always safe.
+const MAX_TRANSIENT_RETRIES = parseInt(process.env.CHECKOUT_TRANSIENT_RETRIES || "6", 10);
+
+function hasErrorLabel(error, label) {
+  return typeof error?.hasErrorLabel === "function" && error.hasErrorLabel(label);
+}
+
+function isTransientTransactionError(error) {
+  return (
+    hasErrorLabel(error, "TransientTransactionError") ||
+    error?.code === 112 ||
+    error?.codeName === "WriteConflict"
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Exponential backoff with full jitter so a burst of conflicting checkouts
+// doesn't retry in lockstep and collide again.
+function transientBackoffMs(attempt) {
+  const ceiling = Math.min(1000, 50 * 2 ** attempt);
+  return Math.floor(Math.random() * ceiling) + 20;
+}
+
+// An UnknownTransactionCommitResult means the commit may or may not have
+// landed. Re-running the whole placement could duplicate the order, so the
+// only safe recovery is to retry the commit itself.
+async function commitWithRetry(session, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await session.commitTransaction();
+      return;
+    } catch (error) {
+      if (hasErrorLabel(error, "UnknownTransactionCommitResult") && attempt < attempts) {
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function placeOrderAtomic({
   customerId,
   payload,
@@ -370,6 +415,10 @@ export async function placeOrderAtomic({
     ...(payload || {}),
     paymentMode: normalizePaymentMode(payload?.paymentMode),
   };
+  // normalizedPayload is mutated during placement (resolved coupon code,
+  // discount, campaign ids). The idempotency checksum must be taken from the
+  // request as the client sent it, or a genuine duplicate would never match.
+  const idempotencyPayload = { ...normalizedPayload };
 
   if (idempotencyKey) {
     if (!validateIdempotencyKey(idempotencyKey)) {
@@ -378,7 +427,7 @@ export async function placeOrderAtomic({
       throw error;
     }
 
-    const idempotencyCheck = await checkIdempotency(idempotencyKey, normalizedPayload);
+    const idempotencyCheck = await checkIdempotency(idempotencyKey, idempotencyPayload);
     if (idempotencyCheck.exists && !idempotencyCheck.checksumMismatch) {
       if (idempotencyCheck.result.status === "error") {
         const error = new Error(idempotencyCheck.result.error.message);
@@ -416,12 +465,17 @@ export async function placeOrderAtomic({
       orders: existingByIdempotency.orders,
     });
     if (idempotencyKey) {
-      await storeIdempotencyResult(idempotencyKey, existingResult, normalizedPayload);
+      await storeIdempotencyResult(idempotencyKey, existingResult, idempotencyPayload);
     }
     return { ...existingResult, duplicate: true };
   }
 
   const session = await mongoose.startSession();
+  // Once true the order is durably written: nothing after that point may
+  // report failure to the caller, or a customer whose order exists would be
+  // told it failed and place it a second time.
+  let committed = false;
+  let committedResult = null;
   try {
     session.startTransaction({
       readConcern: { level: "snapshot" },
@@ -849,31 +903,50 @@ export async function placeOrderAtomic({
       cartDocument,
     });
 
-    await session.commitTransaction();
-
-    // Increment coupon usedCount and record redemption after successful order placement
+    // Claim the coupon use in this same transaction, last, so the shared
+    // coupon document is write-locked for as short a window as possible. If
+    // the limit was hit by a concurrent checkout this throws and the whole
+    // order (stock, cart, transactions) rolls back with it.
     const couponId = normalizedPayload.couponId;
     if (couponId) {
-      Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
-      const primaryOrder = orders[0];
-      CouponRedemption.create({
+      await consumeCouponUsageAtomic({
         couponId,
         customerId,
-        orderId: primaryOrder?._id || null,
-        orderPublicId: primaryOrder?.orderId || null,
+        order: orders[0],
         couponCode: normalizedPayload.couponCode || null,
-        discountAmount: Math.max(0, Number(normalizedPayload.discountTotal || 0)),
-      }).catch(() => {});
-      markGrantRedeemedForCoupon({ customerId, couponId }).catch(() => {});
+        discountAmount: normalizedPayload.discountTotal,
+        session,
+      });
     }
+
+    await commitWithRetry(session);
+    committed = true;
 
     const resultPayload = buildResultPayload({
       checkoutGroup,
       orders,
     });
+    committedResult = resultPayload;
+
+    if (couponId) {
+      markGrantRedeemedForCoupon({ customerId, couponId }).catch((grantError) => {
+        logger.warn("[placeOrderAtomic] markGrantRedeemedForCoupon failed", {
+          couponId: String(couponId),
+          message: grantError.message,
+        });
+      });
+    }
 
     if (idempotencyKey) {
-      await storeIdempotencyResult(idempotencyKey, resultPayload, normalizedPayload);
+      try {
+        await storeIdempotencyResult(idempotencyKey, resultPayload, idempotencyPayload);
+      } catch (storeError) {
+        // The order is committed; the DB-backed lookup in
+        // findExistingCheckoutByIdempotency still dedupes a retry.
+        logger.warn("[placeOrderAtomic] storeIdempotencyResult failed", {
+          message: storeError.message,
+        });
+      }
     }
 
     if (shouldStartSellerWorkflow) {
@@ -922,17 +995,50 @@ export async function placeOrderAtomic({
 
     return { ...resultPayload, duplicate: false };
   } catch (error) {
-    await session.abortTransaction();
+    if (committed) {
+      // Only post-commit side effects (notifications, cache, idempotency
+      // bookkeeping) can land here. The order exists — tell the caller so.
+      logger.error("[placeOrderAtomic] post-commit step failed; order was placed", {
+        message: error.message,
+      });
+      return { ...committedResult, duplicate: false };
+    }
 
-    if (idempotencyKey) {
-      if (isRetryableError(error)) {
-        await releaseIdempotencyLock(idempotencyKey);
-      } else {
-        await storeIdempotencyError(idempotencyKey, error, normalizedPayload);
+    try {
+      if (session.inTransaction()) {
+        await session.abortTransaction();
       }
+    } catch (abortError) {
+      logger.warn("[placeOrderAtomic] abortTransaction failed", { message: abortError.message });
+    }
+
+    // A retry re-enters this function and re-acquires the idempotency lock,
+    // so it must be released first or the retry would see "in progress".
+    const releaseLockForRetry = async () => {
+      if (!idempotencyKey) return;
+      try {
+        await releaseIdempotencyLock(idempotencyKey);
+      } catch (releaseError) {
+        logger.warn("[placeOrderAtomic] releaseIdempotencyLock failed", {
+          message: releaseError.message,
+        });
+      }
+    };
+
+    if (isTransientTransactionError(error) && retryCount < MAX_TRANSIENT_RETRIES) {
+      await releaseLockForRetry();
+      await sleep(transientBackoffMs(retryCount));
+      return placeOrderAtomic({
+        customerId,
+        payload,
+        idempotencyKey,
+        retryCount: retryCount + 1,
+      });
     }
 
     if (error?.code === 11000) {
+      // Same key raced in from another request: the winner's order is the
+      // answer, and nothing about this attempt should be cached as an error.
       if (idempotencyKey) {
         const existing = await findExistingCheckoutByIdempotency(customerId, idempotencyKey);
         if (existing) {
@@ -940,19 +1046,48 @@ export async function placeOrderAtomic({
             checkoutGroup: existing.checkoutGroup,
             orders: existing.orders,
           });
-          await storeIdempotencyResult(idempotencyKey, existingResult, normalizedPayload);
+          try {
+            await storeIdempotencyResult(idempotencyKey, existingResult, idempotencyPayload);
+          } catch (storeError) {
+            logger.warn("[placeOrderAtomic] storeIdempotencyResult failed", {
+              message: storeError.message,
+            });
+          }
           return { ...existingResult, duplicate: true };
         }
       }
 
       if (retryCount < 2 && /orderId|checkoutGroupId/i.test(String(error.message || ""))) {
+        await releaseLockForRetry();
         return placeOrderAtomic({
           customerId,
-          payload: normalizedPayload,
+          payload,
           idempotencyKey,
           retryCount: retryCount + 1,
         });
       }
+    }
+
+    if (idempotencyKey) {
+      try {
+        // Exhausted transient retries are worth retrying later, so they go
+        // back as retryable instead of being cached against the key.
+        if (isRetryableError(error) || isTransientTransactionError(error)) {
+          await releaseIdempotencyLock(idempotencyKey);
+        } else {
+          await storeIdempotencyError(idempotencyKey, error, idempotencyPayload);
+        }
+      } catch (idempotencyError) {
+        logger.warn("[placeOrderAtomic] idempotency cleanup failed", {
+          message: idempotencyError.message,
+        });
+      }
+    }
+
+    if (isTransientTransactionError(error)) {
+      const busy = new Error("We're processing a lot of orders right now. Please try again in a moment.");
+      busy.statusCode = 503;
+      throw busy;
     }
 
     throw error;

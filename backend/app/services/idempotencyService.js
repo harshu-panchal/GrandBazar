@@ -72,7 +72,15 @@ export async function checkIdempotency(key, payload = null) {
   const resultKey = RESULT_KEY_PREFIX + key;
   const lockKey = LOCK_KEY_PREFIX + key;
   const errorKey = ERROR_KEY_PREFIX + key;
-  
+
+  // Redis is only the fast path. Without it (dev, or an outage) duplicates are
+  // still caught by the unique (customer, idempotencyKey) index on
+  // CheckoutGroup and the DB lookup in placeOrderAtomic, so checkout must not
+  // fail just because the cache is unreachable.
+  if (!redis) {
+    return { exists: false, inProgress: false, checksumMismatch: false };
+  }
+
   try {
     // Check for existing result
     const [resultData, lockExists, errorData] = await Promise.all([
@@ -154,7 +162,7 @@ export async function checkIdempotency(key, payload = null) {
     
   } catch (error) {
     logger.error(`[Idempotency] Error checking idempotency for key ${key}:`, error);
-    throw error;
+    return { exists: false, inProgress: false, checksumMismatch: false };
   }
 }
 
@@ -172,7 +180,9 @@ export async function acquireIdempotencyLock(key, ttlSeconds = LOCK_TTL_SECONDS)
   const redis = getRedisClient();
   const lockKey = LOCK_KEY_PREFIX + key;
   const lockValue = `${Date.now()}`; // Timestamp as lock value
-  
+
+  if (!redis) return true;
+
   try {
     // Use SET with NX (only if not exists) and EX (expiration) for atomic lock acquisition
     const result = await redis.set(lockKey, lockValue, "EX", ttlSeconds, "NX");
@@ -186,8 +196,9 @@ export async function acquireIdempotencyLock(key, ttlSeconds = LOCK_TTL_SECONDS)
     return false;
     
   } catch (error) {
+    // Fail open: the DB unique index is the authoritative duplicate guard.
     logger.error(`[Idempotency] Error acquiring lock for key ${key}:`, error);
-    throw error;
+    return true;
   }
 }
 
@@ -207,10 +218,12 @@ export async function storeIdempotencyResult(key, result, payload = null, ttlSec
   const redis = getRedisClient();
   const resultKey = RESULT_KEY_PREFIX + key;
   const lockKey = LOCK_KEY_PREFIX + key;
-  
+
+  if (!redis) return;
+
   try {
     const checksum = payload ? generatePayloadChecksum(payload) : null;
-    
+
     const cacheData = {
       status: "success",
       data: result,
@@ -248,7 +261,9 @@ export async function storeIdempotencyError(key, error, payload = null, ttlSecon
   const redis = getRedisClient();
   const errorKey = ERROR_KEY_PREFIX + key;
   const lockKey = LOCK_KEY_PREFIX + key;
-  
+
+  if (!redis) return;
+
   try {
     const checksum = payload ? generatePayloadChecksum(payload) : null;
     
@@ -289,7 +304,9 @@ export async function releaseIdempotencyLock(key) {
   
   const redis = getRedisClient();
   const lockKey = LOCK_KEY_PREFIX + key;
-  
+
+  if (!redis) return;
+
   try {
     await redis.del(lockKey);
     logger.info(`[Idempotency] Lock released for key: ${key}`);

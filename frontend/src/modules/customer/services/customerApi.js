@@ -92,8 +92,11 @@ export const customerApi = {
   // Explicit timeout so checkout never waits forever if the server blocks (e.g. Redis/Bull).
   checkoutPreview: (data) =>
     axiosInstance.post("/orders/checkout/preview", data, { timeout: 120000 }),
-  createOrder: (data) =>
-    axiosInstance.post("/orders", data, { timeout: 120000 }),
+  createOrder: (data, { idempotencyKey } = {}) =>
+    axiosInstance.post("/orders", data, {
+      timeout: 120000,
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+    }),
   verifyOnlineOrderPayment: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/payment/verify-online`, data),
   markOrderDelivered: (orderId, data) =>

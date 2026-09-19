@@ -15,6 +15,7 @@ import {
 } from "../services/orderRescheduleService.js";
 import {
   applyOrderPriceAdjustment,
+  previewOrderPriceAdjustment,
   payPriceDifference,
   approveOrderAdjustment,
   rejectOrderAdjustment,
@@ -254,6 +255,24 @@ export const adjustOrder = async (req, res) => {
       sellerId: isSeller ? req.user.id : null,
     });
     return handleResponse(res, 200, "Order adjusted", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const previewAdjustOrder = async (req, res) => {
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return handleResponse(res, 400, "Items are required to preview an adjustment");
+    }
+    const isSeller = req.user.role === "seller";
+    const preview = await previewOrderPriceAdjustment({
+      orderId: req.params.orderId,
+      items,
+      sellerId: isSeller ? req.user.id : null,
+    });
+    return handleResponse(res, 200, "Adjustment preview computed", preview);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

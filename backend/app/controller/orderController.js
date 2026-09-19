@@ -50,6 +50,7 @@ import {
 } from "../utils/orderLookup.js";
 import { createFinanceOrderSchema } from "../validation/financeValidation.js";
 import { placeOrderAtomic } from "../services/orderPlacementService.js";
+import { releaseCouponUsageForOrder } from "../services/couponUsageService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import {
@@ -662,6 +663,7 @@ export const cancelOrder = async (req, res) => {
     order.cancelledBy = "customer";
     order.cancelReason = reason || "Cancelled by user";
     await order.save();
+    await releaseCouponUsageForOrder(order);
 
     emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
       orderId: order.orderId,

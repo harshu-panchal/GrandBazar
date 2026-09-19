@@ -212,6 +212,60 @@ function buildRevisedInvoiceEntry(order, { source, direction, deltaAmount, note,
   };
 }
 
+/**
+ * Read-only counterpart to applyOrderPriceAdjustment: recomputes what the
+ * customer's real grand total would become for a proposed set of item
+ * price/quantity edits, without saving anything. The seller-side adjust
+ * editor only shows a naive sum of price*quantity — it has no idea that a
+ * per-line commission markup and GST both ride on top of a product's raw
+ * price, so a seller cutting a product's own price by ₹100 can swing the
+ * customer-facing total by much more than ₹100. This lets the UI show the
+ * real number before the seller commits to it.
+ */
+export async function previewOrderPriceAdjustment({ orderId, items, sellerId = null }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (sellerId && String(order.seller) !== String(sellerId)) {
+    const err = new Error("Access denied. You are not authorized to view this order.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const previousGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
+  const pricingSnapshot = await buildCheckoutPricingSnapshot({
+    orderItems: mapItemsForPricing(items),
+    address: order.address,
+    tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
+    discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
+    enforceServerPricing: false,
+  });
+
+  const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(
+    (e) => String(e.sellerId) === String(order.seller),
+  );
+  if (!sellerEntry) {
+    const err = new Error("Unable to recompute pricing for seller");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const newGrandTotal = Number(sellerEntry.breakdown?.grandTotal || 0);
+  const delta = Math.round((newGrandTotal - previousGrandTotal) * 100) / 100;
+  const direction = delta > 0 ? "increase" : delta < 0 ? "decrease" : "none";
+
+  return {
+    previousGrandTotal,
+    newGrandTotal,
+    deltaAmount: Math.abs(delta),
+    direction,
+  };
+}
+
 export async function applyOrderPriceAdjustment({
   orderId,
   items,

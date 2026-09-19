@@ -220,6 +220,8 @@ const Orders = () => {
     const [adjustItems, setAdjustItems] = useState([]);
     const [adjustReason, setAdjustReason] = useState('');
     const [adjustSaving, setAdjustSaving] = useState(false);
+    const [adjustRealPreview, setAdjustRealPreview] = useState(null);
+    const [adjustPreviewLoading, setAdjustPreviewLoading] = useState(false);
     // Dedicated "item unavailable" flow — distinct from Adjust Price. Calls
     // the partial-cancel endpoint so stock is released and the customer sees
     // the proper cancelled-item refund + updated-ETA banner, instead of the
@@ -858,6 +860,7 @@ const Orders = () => {
         setAdjustMode(false);
         setAdjustItems([]);
         setAdjustReason('');
+        setAdjustRealPreview(null);
     };
 
     const updateAdjustQty = (idx, qty) => {
@@ -880,6 +883,42 @@ const Orders = () => {
         () => adjustItems.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0),
         [adjustItems]
     );
+
+    // A product's raw price can carry its own commission markup and GST on
+    // top — cutting the sticker price by ₹100 doesn't mean the customer's
+    // total drops by ₹100. adjustPreviewTotal above is just a raw sum and
+    // hides that; fetch the real recomputed customer-facing delta so the
+    // seller isn't surprised by what the customer actually sees.
+    useEffect(() => {
+        if (!adjustMode || !selectedOrder) {
+            setAdjustRealPreview(null);
+            return;
+        }
+        const kept = adjustItems.filter((it) => Number(it.quantity) > 0 && Number(it.price) > 0);
+        if (!kept.length) {
+            setAdjustRealPreview(null);
+            return;
+        }
+        const timer = setTimeout(async () => {
+            setAdjustPreviewLoading(true);
+            try {
+                const res = await sellerApi.previewAdjustOrder(selectedOrder._id || selectedOrder.id, {
+                    items: kept.map((it) => ({
+                        product: it.product,
+                        variantSlot: it.variantSlot,
+                        quantity: Number(it.quantity),
+                        price: Number(it.price),
+                    })),
+                });
+                setAdjustRealPreview(res?.data?.result || null);
+            } catch {
+                setAdjustRealPreview(null);
+            } finally {
+                setAdjustPreviewLoading(false);
+            }
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [adjustItems, adjustMode, selectedOrder]);
 
     const handleApplyAdjustment = async () => {
         const kept = adjustItems.filter((it) => Number(it.quantity) > 0);
@@ -2725,6 +2764,21 @@ const Orders = () => {
                                                     <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">New Items Subtotal</span>
                                                     <span className="text-sm font-black text-primary">₹{adjustPreviewTotal.toFixed(2)}</span>
                                                 </div>
+                                                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-amber-50 ring-1 ring-amber-100">
+                                                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">
+                                                        Customer's actual total will {adjustRealPreview?.direction === 'increase' ? 'increase' : 'decrease'} by
+                                                    </span>
+                                                    <span className="text-sm font-black text-amber-800">
+                                                        {adjustPreviewLoading
+                                                            ? '…'
+                                                            : adjustRealPreview
+                                                                ? `₹${Number(adjustRealPreview.deltaAmount || 0).toFixed(2)}`
+                                                                : '—'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 px-1">
+                                                    This includes commission markup and GST riding on top of each item's price — it will usually differ from the raw price change above.
+                                                </p>
                                                 <textarea
                                                     value={adjustReason}
                                                     onChange={(e) => setAdjustReason(e.target.value)}

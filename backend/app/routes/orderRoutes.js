@@ -75,6 +75,7 @@ import {
   adminRescheduleOrder,
   sellerRescheduleOrder,
   adjustOrder,
+  previewAdjustOrder,
   partialCancelOrder,
   payOrderDifference,
   approveOrderAdjustmentController,
@@ -449,6 +450,14 @@ router.put(
   requireApprovedSeller,
   checkSubSellerPermission("adjustments", "write"),
   adjustOrder,
+);
+router.post(
+  "/:orderId/adjust-preview",
+  verifyToken,
+  allowRoles("seller", "admin"),
+  requireApprovedSeller,
+  checkSubSellerPermission("adjustments", "write"),
+  previewAdjustOrder,
 );
 router.put(
   "/:orderId/partial-cancel",

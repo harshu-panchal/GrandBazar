@@ -150,6 +150,15 @@ function buildCheckoutAddressFromSources({
   };
 }
 
+// Must match the server's /^[a-zA-Z0-9-]{32,64}$/ idempotency-key format.
+const generateCheckoutIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const rand = () => Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+  return `${Date.now().toString(36)}-${rand()}-${rand()}-${rand()}-${rand()}`;
+};
+
 const CheckoutPage = () => {
   const {
     cart,
@@ -231,6 +240,10 @@ const CheckoutPage = () => {
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
+  // One Idempotency-Key per distinct checkout payload. It is kept across a
+  // timeout/network drop (no server answer) so a retry resolves to the order
+  // that may already have been created instead of placing a second one.
+  const checkoutAttemptRef = useRef({ key: null, signature: null });
   const [currentAddress, setCurrentAddress] = useState(EMPTY_CHECKOUT_ADDRESS);
   const [isEditAddressOpen, setIsEditAddressOpen] = useState(false);
   const [editAddressForm, setEditAddressForm] = useState(EMPTY_CHECKOUT_ADDRESS);
@@ -1018,7 +1031,15 @@ const CheckoutPage = () => {
         })),
       };
 
-      const response = await customerApi.createOrder(orderData);
+      const signature = JSON.stringify(orderData);
+      if (!checkoutAttemptRef.current.key || checkoutAttemptRef.current.signature !== signature) {
+        checkoutAttemptRef.current = { key: generateCheckoutIdempotencyKey(), signature };
+      }
+
+      const response = await customerApi.createOrder(orderData, {
+        idempotencyKey: checkoutAttemptRef.current.key,
+      });
+      checkoutAttemptRef.current = { key: null, signature: null };
 
       if (response.data.success) {
         const result = response.data.result;
@@ -1086,6 +1107,11 @@ const CheckoutPage = () => {
       }
     } catch (error) {
       setIsPlacingOrder(false);
+      // A real server answer means nothing was placed under this key, so the
+      // next attempt gets a fresh one. No answer (timeout/offline) keeps it.
+      if (error.response) {
+        checkoutAttemptRef.current = { key: null, signature: null };
+      }
       showToast(
         error.response?.data?.message ||
           "Failed to place order. Please try again.",

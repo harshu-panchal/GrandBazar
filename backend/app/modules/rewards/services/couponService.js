@@ -101,7 +101,26 @@ export async function markGrantRedeemedForCoupon({ customerId, couponId }) {
   return grant;
 }
 
+// Reverse of markGrantRedeemedForCoupon — a reward voucher whose order was
+// cancelled/expired must become usable again, not stay burned.
+export async function restoreGrantForCoupon({ customerId, couponId, session = null }) {
+  if (!customerId || !couponId) return null;
+  const query = RewardGrant.findOne({
+    customerId,
+    linkedCouponId: couponId,
+    status: GRANT_STATUS.REDEEMED,
+  });
+  if (session) query.session(session);
+  const grant = await query;
+  if (!grant) return null;
+  grant.status = GRANT_STATUS.ACTIVE;
+  grant.redeemedAt = null;
+  await grant.save(session ? { session } : undefined);
+  return grant;
+}
+
 export default {
   listCustomerCoupons,
   markGrantRedeemedForCoupon,
+  restoreGrantForCoupon,
 };
