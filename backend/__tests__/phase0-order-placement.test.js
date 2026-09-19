@@ -5,6 +5,7 @@ const mockSession = {
   commitTransaction: jest.fn(),
   abortTransaction: jest.fn(),
   endSession: jest.fn(),
+  inTransaction: jest.fn().mockReturnValue(true),
 };
 const mockStartSession = jest.fn().mockResolvedValue(mockSession);
 
@@ -53,9 +54,32 @@ const OrderMock = jest.fn().mockImplementation((doc) => {
 OrderMock.find = mockOrderFind;
 OrderMock.findOne = mockOrderFindOne;
 
-jest.unstable_mockModule("mongoose", () => ({
+jest.unstable_mockModule("mongoose", async () => {
+  const actual = await jest.requireActual("mongoose");
+  return {
+    ...actual,
+    default: {
+      ...actual.default,
+      startSession: mockStartSession,
+    },
+  };
+});
+
+const mockProductFind = jest.fn();
+
+jest.unstable_mockModule("../app/models/product.js", () => ({
   default: {
-    startSession: mockStartSession,
+    find: mockProductFind,
+  },
+}));
+
+jest.unstable_mockModule("../app/models/store.js", () => ({
+  default: {
+    findById: jest.fn().mockReturnValue({
+      session: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "67f000000000000000000001", name: "Test Store" }),
+      }),
+    }),
   },
 }));
 
@@ -94,10 +118,20 @@ jest.unstable_mockModule("../app/models/transaction.js", () => ({
 jest.unstable_mockModule("../app/services/orderIdService.js", () => ({
   generateUniqueCheckoutGroupId: mockGenerateUniqueCheckoutGroupId,
   generateUniquePublicOrderId: mockGenerateUniquePublicOrderId,
+  generateUniqueShortOrderId: jest.fn().mockResolvedValue("ORD-SHORT-1234"),
 }));
 
 jest.unstable_mockModule("../app/services/checkoutPricingService.js", () => ({
   buildCheckoutPricingSnapshot: mockBuildCheckoutPricingSnapshot,
+  groupHydratedItemsBySeller: jest.fn().mockImplementation((items = []) => {
+    const map = new Map();
+    for (const item of items) {
+      const sellerId = String(item.seller || item.sellerId || "67f000000000000000000001");
+      if (!map.has(sellerId)) map.set(sellerId, []);
+      map.get(sellerId).push(item);
+    }
+    return map;
+  }),
 }));
 
 jest.unstable_mockModule("../app/services/stockService.js", () => ({
@@ -108,6 +142,7 @@ jest.unstable_mockModule("../app/services/stockService.js", () => ({
     releasedAt: null,
   })),
   reserveStockForItems: mockReserveStockForItems,
+  releaseReservedStockForOrder: jest.fn(),
 }));
 
 jest.unstable_mockModule("../app/services/orderWorkflowService.js", () => ({
@@ -118,6 +153,50 @@ jest.unstable_mockModule("../app/services/finance/orderFinanceService.js", () =>
   freezeFinancialSnapshot: jest.fn((order, breakdown) => {
     order.paymentBreakdown = breakdown;
     order.pricing = { total: breakdown.grandTotal || 0 };
+  }),
+  createPendingSellerPayout: jest.fn(),
+  createPendingRiderPayout: jest.fn(),
+  creditAdminEarning: jest.fn(),
+  reverseOrderFinanceOnCancellation: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/finance/pricingService.js", () => ({
+  hydrateOrderItems: jest.fn().mockImplementation((items = []) => Promise.resolve(items)),
+  resolveCommissionInclusiveLineTotals: jest.fn().mockImplementation((items = []) => Promise.resolve(items)),
+  calculateHandlingFee: jest.fn().mockReturnValue({ handlingFeeCharged: 0, handlingCategoryUsed: null }),
+  calculatePackingFee: jest.fn().mockReturnValue({ packingFeeCharged: 0, packingCategoryUsed: null }),
+  generateOrderPaymentBreakdown: jest.fn().mockResolvedValue({
+    currency: "INR",
+    productSubtotal: 100,
+    deliveryFeeCharged: 20,
+    handlingFeeCharged: 0,
+    packingFeeCharged: 0,
+    tipTotal: 0,
+    discountTotal: 0,
+    taxTotal: 0,
+    cgstTotal: 0,
+    sgstTotal: 0,
+    igstTotal: 0,
+    grandTotal: 120,
+    sellerPayoutTotal: 90,
+    adminProductCommissionTotal: 10,
+    riderPayoutTotal: 10,
+    platformTotalEarning: 20,
+    lineItems: [],
+    snapshots: {},
+  }),
+  isWithinOddHourWindow: jest.fn().mockReturnValue(false),
+}));
+
+jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", () => ({
+  getOrCreateFinanceSettings: jest.fn().mockResolvedValue({
+    freeDeliveryThreshold: 0,
+    platformFee: 0,
+    customerSurchargeEnabled: false,
+    customerSurchargeAmount: 0,
+    customerSurchargeReason: "",
+    oddHourSurcharge: { enabled: false },
+    weatherSurcharge: { enabled: false },
   }),
 }));
 
@@ -131,12 +210,49 @@ jest.unstable_mockModule("../app/services/idempotencyService.js", () => ({
   validateIdempotencyKey: mockValidateIdempotencyKey,
 }));
 
-jest.unstable_mockModule("../app/services/logger.js", () => ({
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  debug: jest.fn(),
+jest.unstable_mockModule("../app/services/couponApplicationService.js", () => ({
+  applySingleCoupon: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/couponUsageService.js", () => ({
+  consumeCouponUsageAtomic: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/modules/rewards/services/couponService.js", () => ({
+  markGrantRedeemedForCoupon: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/lowStockAlertService.js", () => ({
+  isLowStockAlertsEnabled: jest.fn().mockResolvedValue(false),
+}));
+
+jest.unstable_mockModule("../app/services/deliveryOptionResolver.js", () => ({
+  resolveChosenFulfillmentMethod: jest.fn().mockResolvedValue({
+    fulfillmentMethod: "PLATFORM_LOGISTICS",
+    logisticsMode: "PLATFORM",
+  }),
+}));
+
+jest.unstable_mockModule("../app/services/orderSchedulingService.js", () => ({
+  inferFulfillmentType: jest.fn().mockReturnValue("INSTANT"),
+  validateScheduleSelection: jest.fn(),
+  buildSchedulePayload: jest.fn(),
+  computeSellerPendingExpiry: jest.fn(),
+  isInstantFulfillment: jest.fn().mockReturnValue(true),
+}));
+
+jest.unstable_mockModule("../app/services/preOrderCampaignService.js", () => ({
+  validatePreorderPlacement: jest.fn(),
+  reserveCampaignAllocation: jest.fn(),
+  assertCartPreorderRules: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/modules/notifications/notification.emitter.js", () => ({
+  emitNotificationEvent: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/modules/rewards/services/cashbackService.js", () => ({
+  applyWalletSpendToGrants: jest.fn().mockResolvedValue(true),
 }));
 
 const { placeOrderAtomic } = await import("../app/services/orderPlacementService.js");
@@ -152,6 +268,15 @@ describe("Phase 0 atomic order placement", () => {
     jest.clearAllMocks();
     sequence = 0;
 
+    mockProductFind.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        session: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            { _id: "67f000000000000000000011", name: "Apple", stock: 100 },
+          ]),
+        }),
+      }),
+    });
     mockCheckoutGroupSave.mockResolvedValue(true);
     mockTransactionCreate.mockResolvedValue([]);
     mockGenerateUniqueCheckoutGroupId.mockResolvedValue("CHK-01JSRPHASE0000000000000000");
@@ -287,5 +412,42 @@ describe("Phase 0 atomic order placement", () => {
     expect(mockSession.abortTransaction).toHaveBeenCalled();
     expect(mockSession.commitTransaction).not.toHaveBeenCalled();
     expect(mockTransactionCreate).not.toHaveBeenCalled();
+  });
+
+  it("creates wallet deduction transaction as an array when placing order with wallet balance", async () => {
+    const userSaveMock = jest.fn().mockResolvedValue(true);
+    mockCustomerFindById.mockReturnValue({
+      session: jest.fn().mockResolvedValue({
+        _id: "67f0000000000000000000c1",
+        walletBalance: 200,
+        save: userSaveMock,
+      }),
+    });
+
+    const result = await placeOrderAtomic({
+      customerId: "67f0000000000000000000c1",
+      payload: {
+        items: [{ product: "67f000000000000000000011", quantity: 1 }],
+        address: { city: "Indore" },
+        paymentMode: "COD",
+        walletAmount: 50,
+      },
+      idempotencyKey: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    });
+
+    expect(result.duplicate).toBe(false);
+    expect(mockTransactionCreate).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          user: "67f0000000000000000000c1",
+          userModel: "User",
+          type: "Order Payment",
+          amount: -50,
+          status: "Settled",
+          paymentMethod: "WALLET",
+        }),
+      ],
+      { session: mockSession }
+    );
   });
 });

@@ -852,16 +852,21 @@ export async function placeOrderAtomic({
       await user.save({ session });
       const balanceAfter = Number(user.walletBalance || 0);
 
-      await Transaction.create({
-        user: customerId,
-        userModel: "User",
-        type: "Order Payment",
-        amount: -walletAmount,
-        status: "Settled",
-        reference: `WLT-CHOUT-${checkoutGroupId}`,
-        paymentMethod: "WALLET",
-        meta: { checkoutGroupId }
-      }, { session });
+      await Transaction.create(
+        [
+          {
+            user: customerId,
+            userModel: "User",
+            type: "Order Payment",
+            amount: -walletAmount,
+            status: "Settled",
+            reference: `WLT-CHOUT-${checkoutGroupId}`,
+            paymentMethod: "WALLET",
+            meta: { checkoutGroupId },
+          },
+        ],
+        { session }
+      );
 
       const primaryOrder = orders[0];
       void applyWalletSpendToGrants({
