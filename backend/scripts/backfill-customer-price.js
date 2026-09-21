@@ -7,7 +7,10 @@
 // customerPrice as if it's fully populated. See
 // C:\Users\harsh\.claude\plans\iridescent-dazzling-falcon.md, Phase 7.
 //
-// Usage: node scripts/backfill-customer-price.js
+// Usage: node scripts/backfill-customer-price.js [--missing-only]
+//   --missing-only  only products whose customerPrice is still null (e.g. items
+//                   claimed from the catalogue before claims computed it); every
+//                   other product is left untouched.
 import dotenv from "dotenv";
 import connectDB from "../app/dbConfig/dbConfig.js";
 import Product from "../app/models/product.js";
@@ -18,11 +21,12 @@ dotenv.config();
 async function backfill() {
   await connectDB();
 
-  const totalProducts = await Product.countDocuments({});
+  const filter = process.argv.includes("--missing-only") ? { customerPrice: null } : {};
+  const totalProducts = await Product.countDocuments(filter);
   console.log(`[backfill-customer-price] starting — ${totalProducts} total products`);
 
   const updated = await recalcProductsMatching(
-    {},
+    filter,
     {
       onBatch: (count) => console.log(`[backfill-customer-price] progress: ${count}/${totalProducts}`),
     },

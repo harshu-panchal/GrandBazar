@@ -5,6 +5,7 @@ import {
   getCatalogProducts,
   getCatalogProductById,
   updateCatalogProduct,
+  bulkUpdateCatalogCommission,
   deleteCatalogProduct,
   claimCatalogProduct,
   bulkClaimCatalogProducts
@@ -149,6 +150,14 @@ router.post(
   verifyToken,
   allowRoles("admin"),
   createCatalogProductsBulk
+);
+
+// Must be registered before "/:id" so "bulk-commission" isn't read as an id.
+router.put(
+  "/bulk-commission",
+  verifyToken,
+  allowRoles("admin"),
+  bulkUpdateCatalogCommission
 );
 
 router.put(

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from '@core/api/axios'; // Direct import for uploading images to media upload
 import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
+import { BulkRatesModal, EditableCell, parsePercent } from "../components/RateControls";
 
 const WEIGHT_UNITS = ["kg", "gm", "pack", "lit", "ml", "box"];
 
@@ -76,6 +77,8 @@ const CatalogManagement = () => {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -139,8 +142,75 @@ const CatalogManagement = () => {
     }
   };
 
+  // --- Inline commission edit + bulk commission (catalogue items only carry commission) ---
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleSelectAll = () =>
+    setSelectedIds((prev) =>
+      catalogItems.length > 0 && catalogItems.every((i) => prev.includes(i._id || i.id))
+        ? []
+        : catalogItems.map((i) => i._id || i.id),
+    );
+
+  // Blank turns the item's own commission off so it falls back to the category rate.
+  const saveCatalogCommission = async (item, raw) => {
+    const id = item._id || item.id;
+    const blank = String(raw ?? "").trim() === "";
+    const percent = blank ? 0 : parsePercent(raw);
+    if (percent === null) {
+      toast.error("Commission must be between 0 and 100");
+      return false;
+    }
+    try {
+      await adminApi.bulkUpdateCatalogCommission({
+        ids: [id],
+        applyCommission: !blank,
+        adminCommission: percent,
+      });
+      setCatalogItems((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === id
+            ? {
+                ...c,
+                applyCommission: !blank,
+                adminCommission: percent,
+                adminCommissionValue: percent,
+                adminCommissionType: "percentage",
+              }
+            : c,
+        ),
+      );
+      toast.success("Commission updated");
+      return true;
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to update commission");
+      return false;
+    }
+  };
+
+  const handleBulkRatesSubmit = async (values) => {
+    if (!values.commission) return false;
+    try {
+      await adminApi.bulkUpdateCatalogCommission({
+        ids: [...selectedIds],
+        applyCommission: values.commission.apply,
+        adminCommission: values.commission.percent,
+      });
+      toast.success(
+        `Updated ${selectedIds.length} catalog item${selectedIds.length === 1 ? "" : "s"}`,
+      );
+      fetchCatalog(page);
+      return true;
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to update commission");
+      return false;
+    }
+  };
+
   const fetchCatalog = async (requestedPage = 1) => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const params = { page: requestedPage, limit: pageSize };
       if (searchTerm) params.search = searchTerm;
@@ -494,6 +564,15 @@ const CatalogManagement = () => {
       {/* Filter and Search Section */}
       <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
         <div className="flex flex-col lg:flex-row gap-3 items-center">
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => setIsBulkModalOpen(true)}
+              className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all whitespace-nowrap shrink-0"
+            >
+              <HiOutlineSparkles className="h-4 w-4" />
+              Edit Rates ({selectedIds.length})
+            </button>
+          )}
           <div className="relative flex-1 group w-full">
             <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-black transition-all" />
             <input
@@ -532,6 +611,15 @@ const CatalogManagement = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="pl-4 pr-0 py-4 w-10 text-left">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300"
+                    aria-label="Select all catalog items on this page"
+                    checked={catalogItems.length > 0 && catalogItems.every((i) => selectedIds.includes(i._id || i.id))}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-[40%]">Product Details</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Brand</th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Commission</th>
@@ -544,7 +632,7 @@ const CatalogManagement = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-20 text-center">
+                  <td colSpan="8" className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <HiOutlineArrowPath className="h-8 w-8 text-black animate-spin" />
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Catalog...</p>
@@ -553,13 +641,22 @@ const CatalogManagement = () => {
                 </tr>
               ) : catalogItems.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
+                  <td colSpan="8" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
                     No catalog items found. Create one to get started.
                   </td>
                 </tr>
               ) : (
                 catalogItems.map((item) => (
                   <tr key={item._id || item.id} className="hover:bg-gray-50/50 transition-colors group border-b border-gray-100 last:border-b-0">
+                    <td className="pl-4 pr-0 py-4">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${item.name}`}
+                        checked={selectedIds.includes(item._id || item.id)}
+                        onChange={() => toggleSelected(item._id || item.id)}
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
@@ -582,15 +679,32 @@ const CatalogManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {item.applyCommission === true ||
-                      (item.applyCommission !== false &&
-                        Number(item.adminCommission || item.adminCommissionValue || 0) > 0) ? (
-                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                          {item.adminCommissionValue ?? item.adminCommission ?? 0}%
-                        </span>
-                      ) : (
-                        <span className="text-xs font-medium text-slate-400">Category</span>
-                      )}
+                      {(() => {
+                        const applied =
+                          item.applyCommission === true ||
+                          (item.applyCommission !== false &&
+                            Number(item.adminCommission || item.adminCommissionValue || 0) > 0);
+                        const value = item.adminCommissionValue ?? item.adminCommission ?? 0;
+                        return (
+                          <EditableCell
+                            initialValue={applied ? value : ""}
+                            suffix="%"
+                            max="100"
+                            onSave={(v) => saveCatalogCommission(item, v)}
+                            display={
+                              applied ? (
+                                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                                  {value}%
+                                </span>
+                              ) : (
+                                <span className="text-xs font-medium text-slate-400" title="Uses the category commission. Click to set one for this item.">
+                                  Category
+                                </span>
+                              )
+                            }
+                          />
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs font-medium text-slate-900 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full">
@@ -644,6 +758,17 @@ const CatalogManagement = () => {
           />
         </div>
       </Card>
+
+      <BulkRatesModal
+        open={isBulkModalOpen}
+        count={selectedIds.length}
+        noun="catalog item"
+        showHandling={false}
+        packing={false}
+        gst={false}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSubmit={handleBulkRatesSubmit}
+      />
 
       {/* Main Creation/Edit Modal */}
       <AnimatePresence>

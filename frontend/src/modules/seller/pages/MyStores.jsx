@@ -221,6 +221,10 @@ const MyStores = () => {
       lng: location.lng,
       radius: location.radius,
       address: location.address,
+      locality: location.locality || prev.locality,
+      city: location.city || prev.city,
+      state: location.state || prev.state,
+      pincode: location.pincode || prev.pincode,
     }));
   };
 

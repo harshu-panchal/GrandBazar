@@ -147,6 +147,10 @@ const SellerProfile = () => {
         lng: data.location?.coordinates[0] || null,
         radius: data.serviceRadius || 5,
         address: data.address || "",
+        locality: data.locality || "",
+        city: data.city || "",
+        state: data.state || "",
+        pincode: data.pincode || "",
         bannerImage: data.bannerImage || "",
         description: data.description || "",
       });
@@ -164,6 +168,12 @@ const SellerProfile = () => {
       lng: location.lng,
       radius: location.radius,
       address: location.address,
+      // The shop's city drives city-level commission, so it must be saved
+      // together with the pin, not left behind as the (free-text) address.
+      locality: location.locality || prev.locality,
+      city: location.city || prev.city,
+      state: location.state || prev.state,
+      pincode: location.pincode || prev.pincode,
     }));
   };
 

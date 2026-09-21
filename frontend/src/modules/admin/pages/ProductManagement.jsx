@@ -30,6 +30,14 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '@core/context/SettingsContext';
 import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
+import {
+    BulkRatesModal,
+    EditableCell,
+    GST_SLABS,
+    StatusToggle,
+    parseAmount,
+    parsePercent,
+} from '../components/RateControls';
 
 const ProductManagement = () => {
     const { settings } = useSettings();
@@ -58,6 +66,9 @@ const ProductManagement = () => {
         rejected: 0,
     });
     const [moderatingActionId, setModeratingActionId] = useState('');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [statusUpdatingIds, setStatusUpdatingIds] = useState([]);
 
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -196,6 +207,7 @@ const ProductManagement = () => {
 
     const fetchProducts = async (requestedPage = 1) => {
         setIsLoading(true);
+        setSelectedIds([]);
         try {
             const params = { page: requestedPage, limit: pageSize };
             if (searchTerm) params.search = searchTerm;
@@ -590,11 +602,123 @@ const ProductManagement = () => {
         active: productsList.filter(p => p.status === 'active').length
     }), [productsList, total]);
 
-    const StatusBadge = ({ status, stock }) => {
-        if (stock === 0) return <Badge variant="error" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>;
-        if (stock <= 10) return <Badge variant="warning" className="text-[10px] px-1.5 py-0">Low Stock</Badge>;
-        if (status === 'active') return <Badge variant="success" className="text-[10px] px-1.5 py-0">Active</Badge>;
-        return <Badge variant="gray" className="text-[10px] px-1.5 py-0">Draft</Badge>;
+    // --- Inline rate edits, status toggle and bulk edit (all via one admin endpoint) ---
+    const patchProduct = (id, patch) =>
+        setProducts((prev) => (Array.isArray(prev) ? prev.map((p) => (p._id === id ? { ...p, ...patch } : p)) : prev));
+
+    const toggleSelected = (id) =>
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+    const toggleSelectAll = () =>
+        setSelectedIds((prev) =>
+            productsList.length > 0 && productsList.every((p) => prev.includes(p._id))
+                ? []
+                : productsList.map((p) => p._id),
+        );
+
+    // Sends a partial update for one product. Returns true on success.
+    const updateProductRates = async (id, payload, fallbackError = 'Failed to update') => {
+        try {
+            await adminApi.bulkUpdateProducts({ ids: [id], ...payload });
+            return true;
+        } catch (error) {
+            toast.error(error?.response?.data?.message || fallbackError);
+            return false;
+        }
+    };
+
+    const toggleProductStatus = async (p) => {
+        if (statusUpdatingIds.includes(p._id)) return;
+        const previous = p.status;
+        const next = previous === 'active' ? 'inactive' : 'active';
+        setStatusUpdatingIds((prev) => [...prev, p._id]);
+        patchProduct(p._id, { status: next });
+        const ok = await updateProductRates(p._id, { status: next }, 'Failed to update status');
+        if (ok) toast.success(`${p.name} is now ${next}`);
+        else patchProduct(p._id, { status: previous });
+        setStatusUpdatingIds((prev) => prev.filter((x) => x !== p._id));
+    };
+
+    // Blank clears the product-level override so the product inherits again.
+    const saveProductCommission = async (p, raw) => {
+        const isFixed = p.applyCommission === true && p.adminCommissionType === 'fixed';
+        const blank = String(raw ?? '').trim() === '';
+        let value = 0;
+        if (!blank) {
+            const parsed = isFixed ? parseAmount(raw) : parsePercent(raw);
+            if (parsed === null) {
+                toast.error(isFixed ? 'Commission must be 0 or more' : 'Commission must be between 0 and 100');
+                return false;
+            }
+            value = parsed;
+        }
+        const type = isFixed ? 'fixed' : 'percentage';
+        const ok = await updateProductRates(p._id, {
+            applyCommission: !blank,
+            adminCommission: value,
+            adminCommissionType: type,
+        });
+        if (!ok) return false;
+        toast.success('Updated');
+        if (blank) {
+            // The effective commission now falls back to an inherited level; let the server resolve it.
+            fetchProducts(page);
+        } else {
+            patchProduct(p._id, {
+                applyCommission: true,
+                adminCommission: value,
+                adminCommissionValue: value,
+                adminCommissionType: type,
+                effectiveCommission: { level: 'product', type, value },
+            });
+        }
+        return true;
+    };
+
+    const saveProductGst = async (p, raw) => {
+        const slab = raw === '' ? null : Number(raw);
+        const ok = await updateProductRates(p._id, { gstSlabOverride: slab });
+        if (ok) {
+            patchProduct(p._id, { gstSlabOverride: slab });
+            toast.success('Updated');
+        }
+        return ok;
+    };
+
+    const saveProductPackaging = async (p, raw) => {
+        const blank = String(raw ?? '').trim() === '';
+        const amount = blank ? null : parseAmount(raw);
+        if (!blank && amount === null) {
+            toast.error('Amount must be 0 or more');
+            return false;
+        }
+        const ok = await updateProductRates(p._id, { packagingCharge: amount });
+        if (ok) {
+            patchProduct(p._id, { packagingCharge: amount });
+            toast.success('Updated');
+        }
+        return ok;
+    };
+
+    const handleBulkRatesSubmit = async (values) => {
+        const payload = { ids: [...selectedIds] };
+        if (values.status !== undefined) payload.status = values.status;
+        if (values.commission) {
+            payload.applyCommission = values.commission.apply;
+            payload.adminCommission = values.commission.percent;
+            payload.adminCommissionType = 'percentage';
+        }
+        if (values.packingFees !== undefined) payload.packagingCharge = values.packingFees;
+        if (values.gstSlab !== undefined) payload.gstSlabOverride = values.gstSlab;
+        try {
+            await adminApi.bulkUpdateProducts(payload);
+            toast.success(`Updated ${payload.ids.length} product${payload.ids.length === 1 ? '' : 's'}`);
+            fetchProducts(page);
+            return true;
+        } catch (error) {
+            toast.error(error?.response?.data?.message || 'Failed to update products');
+            return false;
+        }
     };
 
     const ApprovalBadge = ({ approvalStatus }) => {
@@ -681,6 +805,15 @@ const ProductManagement = () => {
             {/* Toolbox */}
             <Card className="border-none shadow-sm ring-1 ring-slate-100 p-3 bg-white/60 backdrop-blur-xl">
                 <div className="flex flex-col lg:flex-row gap-3 items-center">
+                    {selectedIds.length > 0 && (
+                        <button
+                            onClick={() => setIsBulkModalOpen(true)}
+                            className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all whitespace-nowrap shrink-0"
+                        >
+                            <HiOutlineTag className="h-4 w-4" />
+                            Edit Rates ({selectedIds.length})
+                        </button>
+                    )}
                     <div className="relative flex-1 group w-full">
                         <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-all" />
                         <input
@@ -748,25 +881,39 @@ const ProductManagement = () => {
             {/* Product Table */}
             <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden rounded-xl">
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1180px] table-fixed text-left border-collapse">
+                    <table className="w-full min-w-[1420px] table-fixed text-left border-collapse">
                         <colgroup>
-                            <col className="w-[22%]" />
-                            <col className="w-[12%]" />
+                            <col className="w-[3%]" />
+                            <col className="w-[17%]" />
+                            <col className="w-[9%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[9%]" />
+                            <col className="w-[9%]" />
                             <col className="w-[10%]" />
-                            <col className="w-[11%]" />
-                            <col className="w-[13%]" />
-                            <col className="w-[12%]" />
+                            <col className="w-[7%]" />
+                            <col className="w-[8%]" />
                             <col className="w-[10%]" />
-                            <col className="w-[14%]" />
+                            <col className="w-[10%]" />
                         </colgroup>
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
+                                <th className="pl-4 pr-0 py-3 text-left">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-slate-300 text-primary focus:ring-primary"
+                                        aria-label="Select all products on this page"
+                                        checked={productsList.length > 0 && productsList.every((p) => selectedIds.includes(p._id))}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Product</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Seller</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Variant</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Category</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Subcategory</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Commission</th>
+                                <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">GST</th>
+                                <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Pack</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Status</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Actions</th>
                             </tr>
@@ -774,7 +921,7 @@ const ProductManagement = () => {
                         <tbody className="divide-y divide-slate-50">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="8" className="px-6 py-20 text-center">
+                                    <td colSpan="11" className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center gap-3">
                                             <HiOutlineArrowPath className="h-8 w-8 text-primary animate-spin" />
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Products...</p>
@@ -783,7 +930,7 @@ const ProductManagement = () => {
                                 </tr>
                             ) : productsList.length === 0 ? (
                                 <tr>
-                                    <td colSpan="8" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
+                                    <td colSpan="11" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
                                 </tr>
                             ) : productsList.map((p, idx) => {
                                 const isGrouped = sortBy === 'seller-asc';
@@ -794,7 +941,7 @@ const ProductManagement = () => {
                                 <React.Fragment key={p._id}>
                                     {showSellerHeader && (
                                         <tr className="bg-slate-100/80">
-                                            <td colSpan="8" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                                            <td colSpan="11" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
                                                 {p.sellerId?.shopName || 'Admin'}
                                                 <span className="ml-2 font-medium normal-case text-slate-400">
                                                     {productsList.filter((item) => (item.sellerId?._id || item.sellerId) === currentSellerId).length} product(s) on this page
@@ -808,6 +955,17 @@ const ProductManagement = () => {
                                         String(p.approvalStatus || '').toLowerCase() === 'pending' && "bg-amber-50/40"
                                     )}
                                 >
+                                    {/* Select Column */}
+                                    <td className="pl-4 pr-0 py-5 align-middle">
+                                        <input
+                                            type="checkbox"
+                                            className="rounded border-slate-300 text-primary focus:ring-primary"
+                                            aria-label={`Select ${p.name}`}
+                                            checked={selectedIds.includes(p._id)}
+                                            onChange={() => toggleSelected(p._id)}
+                                        />
+                                    </td>
+
                                     {/* Product Column */}
                                     <td className="px-6 py-5 align-middle">
                                         <div className="flex items-center gap-3 min-w-0">
@@ -881,29 +1039,88 @@ const ProductManagement = () => {
                                         actually apply (product override, else inherited from subcategory /
                                         shop / city / category / header), not just this product's own toggle. */}
                                     <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
-                                        {p.effectiveCommission?.value > 0 ? (
-                                            <span
-                                                className="inline-flex flex-col items-center gap-0.5"
-                                                title={`Applied at ${p.effectiveCommission.level || 'product'} level`}
-                                            >
-                                                <span className="text-[12px] font-bold text-emerald-700">
-                                                    {p.effectiveCommission.type === 'fixed'
-                                                        ? `₹${p.effectiveCommission.value}`
-                                                        : `${p.effectiveCommission.value}%`}
-                                                </span>
-                                                <span className="text-[9px] font-medium uppercase tracking-widest text-slate-400">
-                                                    {p.effectiveCommission.level || 'product'}
-                                                </span>
-                                            </span>
-                                        ) : (
-                                            <span className="text-[12px] font-medium text-slate-400">None</span>
-                                        )}
+                                        <EditableCell
+                                            centered
+                                            initialValue={
+                                                p.applyCommission === true
+                                                    ? (p.adminCommissionValue ?? p.adminCommission ?? 0)
+                                                    : ''
+                                            }
+                                            prefix={p.applyCommission === true && p.adminCommissionType === 'fixed' ? '₹' : undefined}
+                                            suffix={p.applyCommission === true && p.adminCommissionType === 'fixed' ? undefined : '%'}
+                                            max={p.applyCommission === true && p.adminCommissionType === 'fixed' ? undefined : '100'}
+                                            onSave={(v) => saveProductCommission(p, v)}
+                                            display={
+                                                p.effectiveCommission?.value > 0 ? (
+                                                    <span
+                                                        className="inline-flex flex-col items-center gap-0.5"
+                                                        title={`Applied at ${p.effectiveCommission.level || 'product'} level. Click to set a product-level override (leave blank to inherit).`}
+                                                    >
+                                                        <span className="text-[12px] font-bold text-emerald-700">
+                                                            {p.effectiveCommission.type === 'fixed'
+                                                                ? `₹${p.effectiveCommission.value}`
+                                                                : `${p.effectiveCommission.value}%`}
+                                                        </span>
+                                                        <span className="text-[9px] font-medium uppercase tracking-widest text-slate-400">
+                                                            {p.effectiveCommission.level || 'product'}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[12px] font-medium text-slate-400">None</span>
+                                                )
+                                            }
+                                        />
+                                    </td>
+
+                                    {/* GST Column — product-level override; blank inherits the category slab */}
+                                    <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
+                                        <EditableCell
+                                            centered
+                                            initialValue={p.gstSlabOverride ?? ''}
+                                            options={['', ...GST_SLABS]}
+                                            optionLabel={(o) => (o === '' ? 'Inherit' : `${o}%`)}
+                                            onSave={(v) => saveProductGst(p, v)}
+                                            display={
+                                                p.gstSlabOverride != null ? (
+                                                    <span className="text-[12px] font-bold text-slate-700">{p.gstSlabOverride}%</span>
+                                                ) : (
+                                                    <span className="text-[12px] font-medium text-slate-400">Inherit</span>
+                                                )
+                                            }
+                                        />
+                                    </td>
+
+                                    {/* Packaging Column — product-level override; blank inherits the category fee */}
+                                    <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
+                                        <EditableCell
+                                            centered
+                                            initialValue={p.packagingCharge ?? ''}
+                                            prefix="₹"
+                                            onSave={(v) => saveProductPackaging(p, v)}
+                                            display={
+                                                p.packagingCharge != null ? (
+                                                    <span className="text-[12px] font-bold text-slate-700">₹{p.packagingCharge}</span>
+                                                ) : (
+                                                    <span className="text-[12px] font-medium text-slate-400">Inherit</span>
+                                                )
+                                            }
+                                        />
                                     </td>
 
                                     {/* Status Column */}
                                     <td className="px-4 py-5 text-center align-middle whitespace-nowrap">
                                         <div className="flex flex-col items-center gap-1">
-                                            <StatusBadge status={p.status} stock={p.stock} />
+                                            <StatusToggle
+                                                status={p.status}
+                                                name={p.name}
+                                                disabled={statusUpdatingIds.includes(p._id)}
+                                                onToggle={() => toggleProductStatus(p)}
+                                            />
+                                            {p.stock === 0 ? (
+                                                <Badge variant="error" className="text-[10px] px-1.5 py-0">Out of Stock</Badge>
+                                            ) : p.stock <= 10 ? (
+                                                <Badge variant="warning" className="text-[10px] px-1.5 py-0">Low Stock</Badge>
+                                            ) : null}
                                             {isApprovalRequired && <ApprovalBadge approvalStatus={p.approvalStatus} />}
                                         </div>
                                     </td>
@@ -967,6 +1184,19 @@ const ProductManagement = () => {
                     />
                 </div>
             </Card>
+
+            <BulkRatesModal
+                open={isBulkModalOpen}
+                count={selectedIds.length}
+                noun="product"
+                showStatus
+                showHandling={false}
+                packing="override"
+                packingLabel="Packaging Charge (₹)"
+                gst="override"
+                onClose={() => setIsBulkModalOpen(false)}
+                onSubmit={handleBulkRatesSubmit}
+            />
 
             {/* Super Detailed Modal */}
             <AnimatePresence>

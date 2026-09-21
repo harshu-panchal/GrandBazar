@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import Card from "@shared/components/ui/Card";
-import Badge from "@shared/components/ui/Badge";
 import {
   Plus,
   Search,
@@ -11,14 +10,22 @@ import {
   Upload,
   Image,
   Sparkles,
+  Percent,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { handleCategoryImageError } from "@core/utils/imageUtils";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "../../services/adminApi";
 import { toast } from "sonner";
 import IconSelector from "@shared/components/IconSelector";
 import Pagination from "@shared/components/ui/Pagination";
+import {
+  BulkRatesModal,
+  EditableCell,
+  GST_SLABS,
+  StatusToggle,
+  isCommissionApplied,
+  useCategoryRateActions,
+} from "../../components/RateControls";
 import { getIconSvg } from "@shared/constants/categoryIcons";
 
 // MUI icon library (shared with customer app & icon selector)
@@ -67,6 +74,10 @@ const HeaderCategories = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
+
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const { saveInlineCharge, toggleStatus, statusUpdatingIds, bulkUpdate } =
+    useCategoryRateActions(setCategories);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -327,6 +338,14 @@ const HeaderCategories = () => {
         <div className="p-4 border-b border-gray-100 flex gap-4 items-center">
           {selectedItems.length > 0 && (
             <button
+              onClick={() => setIsBulkModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors text-sm font-medium whitespace-nowrap">
+              <Percent className="w-4 h-4" />
+              Edit Rates ({selectedItems.length})
+            </button>
+          )}
+          {selectedItems.length > 0 && (
+            <button
               onClick={handleBulkDelete}
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors text-sm font-medium">
               <Trash2 className="w-4 h-4" />
@@ -449,29 +468,49 @@ const HeaderCategories = () => {
                     </td>
                     <td className="py-3 px-4 text-gray-500">{cat.slug}</td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
-                      {cat.applyCommission === true ||
-                      (cat.applyCommission !== false && Number(cat.adminCommission || 0) > 0)
-                        ? `${cat.adminCommission ?? 0}%`
-                        : "—"}
+                      <EditableCell
+                        display={isCommissionApplied(cat) ? `${cat.adminCommission ?? 0}%` : "—"}
+                        initialValue={isCommissionApplied(cat) ? (cat.adminCommission ?? 0) : ""}
+                        suffix="%"
+                        max="100"
+                        onSave={(v) => saveInlineCharge(cat, "commission", v)}
+                      />
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
-                      ₹{cat.handlingFees ?? 0}
+                      <EditableCell
+                        display={`₹${cat.handlingFees ?? 0}`}
+                        initialValue={cat.handlingFees ?? 0}
+                        prefix="₹"
+                        onSave={(v) => saveInlineCharge(cat, "handlingFees", v)}
+                      />
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
-                      ₹{cat.packingFees ?? 0}
+                      <EditableCell
+                        display={`₹${cat.packingFees ?? 0}`}
+                        initialValue={cat.packingFees ?? 0}
+                        prefix="₹"
+                        onSave={(v) => saveInlineCharge(cat, "packingFees", v)}
+                      />
                     </td>
                     <td className="py-3 px-4 text-gray-500 font-medium">
-                      {cat.gstSlab ?? 0}%
+                      <EditableCell
+                        display={`${cat.gstSlab ?? 0}%`}
+                        initialValue={cat.gstSlab ?? 0}
+                        options={GST_SLABS}
+                        suffix="%"
+                        onSave={(v) => saveInlineCharge(cat, "gstSlab", v)}
+                      />
                     </td>
                     <td className="py-3 px-4">
-                      <Badge
-                        variant={
-                          cat.status === "active" ? "success" : "warning"
-                        }>
-                        {cat.status}
-                      </Badge>
+                      <StatusToggle
+                        status={cat.status}
+                        name={cat.name}
+                        disabled={statusUpdatingIds.includes(cat._id || cat.id)}
+                        onToggle={() => toggleStatus(cat)}
+                      />
                     </td>
-                    <td className="py-3 px-4 text-right space-x-2">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => openEditModal(cat)}
                         className="p-1 text-gray-500 hover:text-brand-600 transition-colors">
@@ -485,6 +524,7 @@ const HeaderCategories = () => {
                         className="p-1 text-gray-500 hover:text-red-600 transition-colors">
                         <Trash2 className="w-5 h-5" />
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -874,6 +914,21 @@ const HeaderCategories = () => {
           </div>
         )}
       </AnimatePresence>
+
+      <BulkRatesModal
+        open={isBulkModalOpen}
+        count={selectedItems.length}
+        showStatus
+        onClose={() => setIsBulkModalOpen(false)}
+        onSubmit={async (values) => {
+          const ok = await bulkUpdate([...selectedItems], values);
+          if (ok) {
+            setSelectedItems([]);
+            fetchCategories(page);
+          }
+          return ok;
+        }}
+      />
 
       {/* Icon Selector Modal */}
       <AnimatePresence>

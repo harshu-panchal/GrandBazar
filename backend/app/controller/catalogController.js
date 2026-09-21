@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import CatalogProduct from "../models/catalogProduct.js";
 import Product from "../models/product.js";
 import { handleResponse } from "../utils/helper.js";
@@ -7,6 +8,7 @@ import { uploadToCloudinary } from "../services/mediaService.js";
 import { resolveCategoryName } from "../services/entityNameCache.js";
 import { invalidate, buildKey } from "../services/cacheService.js";
 import { enqueueProductIndex } from "../services/searchSyncService.js";
+import { computeCustomerPriceFieldsForWrite } from "../services/finance/customerPriceService.js";
 
 // Helper to auto-generate SKU prefix
 function makeProductSku(name, index = 1) {
@@ -36,6 +38,106 @@ function normalizeCatalogCommissionFields(data = {}) {
     adminCommissionValue: apply ? value : 0,
     adminCommissionFixedRule: fixedRule,
   };
+}
+
+// --- Claiming a catalogue item with variants -------------------------------
+// The admin's catalogue variants are only suggestions: a seller may price some
+// of them, skip the rest, or add variants of their own. A variant without a
+// price is simply not created.
+
+function parseClaimVariants(raw) {
+  let list = [];
+  if (typeof raw === "string") {
+    try {
+      list = JSON.parse(raw);
+    } catch (e) {}
+  } else if (Array.isArray(raw)) {
+    list = raw;
+  }
+  return Array.isArray(list) ? list.filter((v) => v && String(v.name || "").trim()) : [];
+}
+
+const claimVariantEffectivePrice = (v) => {
+  const mrp = Number(v.price) || 0;
+  const sale = Number(v.salePrice) || 0;
+  return sale > 0 && sale < mrp ? sale : mrp;
+};
+
+// Keeps the priced variants, validates them, and derives the product-level
+// price / sale price / stock (cheapest variant, total stock) unless the caller
+// already supplied them. Returns { error } or the resolved values.
+function resolveClaimPricing({ variants, price, salePrice, stock }) {
+  const kept = variants.filter((v) => Number(v.price) > 0);
+
+  for (const v of kept) {
+    if (v.stock === undefined || v.stock === null || v.stock === "" || !(Number(v.stock) >= 0)) {
+      return { error: `Valid stock is required for variant "${String(v.name).trim()}"` };
+    }
+  }
+  const names = kept.map((v) => String(v.name).trim().toLowerCase());
+  if (new Set(names).size !== names.length) {
+    return { error: "Variant names must be different from each other" };
+  }
+
+  let resolvedPrice = price;
+  let resolvedSalePrice = salePrice;
+  let resolvedStock = stock;
+  if (kept.length > 0) {
+    const cheapest = kept.reduce((best, v) =>
+      claimVariantEffectivePrice(v) < claimVariantEffectivePrice(best) ? v : best,
+    );
+    if (!resolvedPrice || Number(resolvedPrice) <= 0) {
+      resolvedPrice = Number(cheapest.price);
+      resolvedSalePrice = Number(cheapest.salePrice) || 0;
+    }
+    if (resolvedStock === undefined || resolvedStock === null || resolvedStock === "") {
+      resolvedStock = kept.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    }
+  } else if (variants.length > 0 && !(Number(resolvedPrice) > 0)) {
+    return { error: "Set a price for at least one variant" };
+  }
+
+  return { variants: kept, price: resolvedPrice, salePrice: resolvedSalePrice, stock: resolvedStock };
+}
+
+// Gives every variant a unique SKU (the seller's own if provided and free).
+async function buildClaimVariantsWithSku(chosenName, variants) {
+  const withSku = [];
+  for (let idx = 0; idx < variants.length; idx++) {
+    const v = variants[idx];
+    const baseVarSku = v.sku && String(v.sku).trim() ? String(v.sku).trim() : makeProductSku(chosenName, idx + 2);
+    let varSku = baseVarSku;
+    let varSkuExists = await Product.findOne({ sku: varSku });
+    let varSkuCounter = 1;
+    while (varSkuExists || withSku.some((item) => item.sku === varSku)) {
+      varSku = `${baseVarSku}-${varSkuCounter}`;
+      varSkuExists = await Product.findOne({ sku: varSku });
+      varSkuCounter++;
+    }
+    withSku.push({
+      name: String(v.name).trim(),
+      price: Number(v.price),
+      salePrice: Number(v.salePrice) || 0,
+      stock: Number(v.stock),
+      sku: varSku,
+    });
+  }
+  return withSku;
+}
+
+// Stores the customer-facing (commission-inclusive) price on a product. The
+// customer app reads customerPrice / customerSalePrice (per product and per
+// variant); while they are null it falls back to the seller's raw price, so a
+// freshly claimed item would show WITHOUT commission until someone re-saved it.
+// Non-blocking, same as createProduct / updateProduct.
+async function applyCustomerPricing(product, overrides = {}) {
+  try {
+    const plain = typeof product.toObject === "function" ? product.toObject() : product;
+    const fields = await computeCustomerPriceFieldsForWrite({ ...plain, ...overrides });
+    await Product.updateOne({ _id: product._id }, { $set: fields });
+  } catch (err) {
+    console.error("Catalog: customerPrice computation failed (non-blocking):", err.message);
+  }
 }
 
 /* ===============================
@@ -474,6 +576,10 @@ export const updateCatalogProduct = async (req, res) => {
 
       // Enqueue search indexing for all sync-updated products
       for (const prod of affectedProducts) {
+        if (commissionFieldsChanged) {
+          // affectedProducts was read before the update, so apply the new commission on top.
+          await applyCustomerPricing(prod, fieldsToSync);
+        }
         await enqueueProductIndex(prod._id.toString());
         await invalidate(`cache:catalog:product:${prod._id.toString()}`);
       }
@@ -486,6 +592,98 @@ export const updateCatalogProduct = async (req, res) => {
     return handleResponse(res, 200, "Catalog product updated successfully", updated);
   } catch (error) {
     console.error("Update Catalog Product Error:", error);
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* ===================================
+   ADMIN: BULK SET COMMISSION
+   Sets (or turns off) the percentage commission on many catalogue items at
+   once, and propagates it to already-claimed seller products exactly like the
+   single-item update does.
+   =================================== */
+export const bulkUpdateCatalogCommission = async (req, res) => {
+  try {
+    const { ids, applyCommission, adminCommission } = req.body || {};
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return handleResponse(res, 400, "Select at least one catalog item");
+    }
+    if (ids.length > 100) {
+      return handleResponse(res, 400, "Too many items in one request (max 100)");
+    }
+    const uniqueIds = [...new Set(ids.map((id) => String(id)))];
+    if (uniqueIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return handleResponse(res, 400, "Invalid catalog item ID in selection");
+    }
+    if (applyCommission === undefined) {
+      return handleResponse(res, 400, "Nothing to update");
+    }
+
+    const apply = applyCommission === true || applyCommission === "true";
+    let percent = 0;
+    if (apply) {
+      percent = Number(adminCommission);
+      if (
+        adminCommission === undefined ||
+        adminCommission === null ||
+        adminCommission === "" ||
+        !Number.isFinite(percent) ||
+        percent < 0 ||
+        percent > 100
+      ) {
+        return handleResponse(res, 400, "Commission must be a number between 0 and 100");
+      }
+    }
+
+    const commissionFields = {
+      applyCommission: apply,
+      adminCommission: percent,
+      adminCommissionType: "percentage",
+      adminCommissionValue: percent,
+    };
+
+    const result = await CatalogProduct.updateMany(
+      { _id: { $in: uniqueIds } },
+      { $set: commissionFields },
+    );
+    const claimed = await Product.updateMany(
+      { catalogProductId: { $in: uniqueIds } },
+      { $set: commissionFields },
+    );
+
+    try {
+      await invalidate(buildKey("catalog", "productList", "*"));
+    } catch (e) {}
+
+    // Claimed seller products carry a stored customerPrice that depends on the
+    // commission; refresh those (and their search index) off the request path,
+    // since one catalogue item can be claimed by many sellers.
+    (async () => {
+      const affected = await Product.find({ catalogProductId: { $in: uniqueIds } }).lean();
+      for (let i = 0; i < affected.length; i += 10) {
+        await Promise.all(
+          affected.slice(i, i + 10).map(async (product) => {
+            try {
+              const priceFields = await computeCustomerPriceFieldsForWrite({ ...product, ...commissionFields });
+              await Product.updateOne({ _id: product._id }, { $set: priceFields });
+              await enqueueProductIndex(String(product._id));
+              await invalidate(`cache:catalog:product:${product._id}`);
+            } catch (err) {
+              console.error("Catalog bulk commission: product refresh failed", product._id, err.message);
+            }
+          }),
+        );
+      }
+    })().catch((err) => console.error("Catalog bulk commission background refresh failed:", err.message));
+
+    return handleResponse(res, 200, "Catalog commission updated", {
+      matched: result.matchedCount ?? result.n ?? 0,
+      modified: result.modifiedCount ?? result.nModified ?? 0,
+      sellerProductsUpdated: claimed.modifiedCount ?? claimed.nModified ?? 0,
+    });
+  } catch (error) {
+    console.error("Bulk Catalog Commission Error:", error);
     return handleResponse(res, 500, error.message);
   }
 };
@@ -520,9 +718,9 @@ export const claimCatalogProduct = async (req, res) => {
   try {
     const {
       catalogProductId,
-      price,
-      salePrice,
-      stock,
+      price: bodyPrice,
+      salePrice: bodySalePrice,
+      stock: bodyStock,
       sku,
       variants,
       name,
@@ -536,6 +734,20 @@ export const claimCatalogProduct = async (req, res) => {
     if (!catalogProductId) {
       return handleResponse(res, 400, "catalogProductId is required");
     }
+
+    const parsedVariants = parseClaimVariants(variants);
+    const resolved = resolveClaimPricing({
+      variants: parsedVariants,
+      price: bodyPrice,
+      salePrice: bodySalePrice,
+      stock: bodyStock,
+    });
+    if (resolved.error) {
+      return handleResponse(res, 400, resolved.error);
+    }
+    const { price, salePrice, stock } = resolved;
+    const claimVariants = resolved.variants;
+
     if (!price || Number(price) < 0) {
       return handleResponse(res, 400, "Valid price is required");
     }
@@ -558,16 +770,6 @@ export const claimCatalogProduct = async (req, res) => {
     // Choose name (custom or canonical catalog product name)
     const chosenName = name && String(name).trim() ? String(name).trim() : catalogProduct.name;
 
-    // Parse variants if they are sent as JSON string
-    let parsedVariants = [];
-    if (typeof variants === "string") {
-      try {
-        parsedVariants = JSON.parse(variants);
-      } catch (e) {}
-    } else if (Array.isArray(variants)) {
-      parsedVariants = variants;
-    }
-
     // Parse addons if they are sent as JSON string or array
     let parsedAddons = [];
     if (typeof addons === "string") {
@@ -587,7 +789,7 @@ export const claimCatalogProduct = async (req, res) => {
     }
 
     // Validate manual/custom variant SKU uniqueness if provided
-    for (const v of parsedVariants) {
+    for (const v of claimVariants) {
       if (v.sku && String(v.sku).trim()) {
         const customVarSkuExists = await Product.findOne({ sku: String(v.sku).trim() });
         if (customVarSkuExists) {
@@ -617,24 +819,7 @@ export const claimCatalogProduct = async (req, res) => {
       skuCounter++;
     }
 
-    // Map and generate unique variant SKUs
-    const variantsWithSku = [];
-    for (let idx = 0; idx < parsedVariants.length; idx++) {
-      const v = parsedVariants[idx];
-      const baseVarSku = v.sku && String(v.sku).trim() ? String(v.sku).trim() : makeProductSku(chosenName, idx + 2);
-      let varSku = baseVarSku;
-      let varSkuExists = await Product.findOne({ sku: varSku });
-      let varSkuCounter = 1;
-      while (varSkuExists || variantsWithSku.some(item => item.sku === varSku)) {
-        varSku = `${baseVarSku}-${varSkuCounter}`;
-        varSkuExists = await Product.findOne({ sku: varSku });
-        varSkuCounter++;
-      }
-      variantsWithSku.push({
-        ...v,
-        sku: varSku
-      });
-    }
+    const variantsWithSku = await buildClaimVariantsWithSku(chosenName, claimVariants);
 
     // Create the Product instance owned by the seller
     const newProduct = await Product.create({
@@ -672,6 +857,7 @@ export const claimCatalogProduct = async (req, res) => {
     });
 
     if (newProduct && newProduct._id) {
+      await applyCustomerPricing(newProduct);
       await enqueueProductIndex(newProduct._id.toString());
       await invalidate(`cache:catalog:product:${newProduct._id.toString()}`);
     }
@@ -707,8 +893,8 @@ export const bulkClaimCatalogProducts = async (req, res) => {
     const errors = [];
 
     for (const p of products) {
-      const { catalogProductId, price = 0, salePrice = 0, stock = 0, name, mainImage } = p;
-      
+      const { catalogProductId, price: itemPrice, salePrice: itemSalePrice, stock: itemStock, name, mainImage } = p;
+
       if (!catalogProductId) {
         errors.push({ name: name || "Unknown", error: "catalogProductId is required" });
         continue;
@@ -727,7 +913,22 @@ export const bulkClaimCatalogProducts = async (req, res) => {
       }
 
       const chosenName = name && String(name).trim() ? String(name).trim() : catalogProduct.name;
-      
+
+      // Same variant rules as a single claim: unpriced variants are skipped,
+      // and the product-level price/stock come from the priced ones.
+      const resolved = resolveClaimPricing({
+        variants: parseClaimVariants(p.variants),
+        price: itemPrice,
+        salePrice: itemSalePrice,
+        stock: itemStock,
+      });
+      if (resolved.error) {
+        errors.push({ name: chosenName, error: resolved.error });
+        continue;
+      }
+      const { price, salePrice, stock } = resolved;
+      const variantsWithSku = await buildClaimVariantsWithSku(chosenName, resolved.variants);
+
       let distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}`;
       let slugExists = await Product.findOne({ slug: distinctSlug });
       let slugCounter = 1;
@@ -754,9 +955,9 @@ export const bulkClaimCatalogProducts = async (req, res) => {
         slug: distinctSlug,
         sku: finalSku,
         description: catalogProduct.description,
-        price: Number(price),
+        price: Number(price) || 0,
         salePrice: Number(salePrice) || 0,
-        stock: Number(stock),
+        stock: Number(stock) || 0,
         brand: catalogProduct.brand || "",
         weight: catalogProduct.weight || "",
         tags: catalogProduct.tags || [],
@@ -776,10 +977,11 @@ export const bulkClaimCatalogProducts = async (req, res) => {
         approvalStatus: "approved",
         importSource: "catalog_claim",
         isPublished: true,
-        variants: []
+        variants: variantsWithSku
       });
 
       if (newProduct && newProduct._id) {
+        await applyCustomerPricing(newProduct);
         await enqueueProductIndex(newProduct._id.toString());
         claimedCount.push(newProduct._id);
       }

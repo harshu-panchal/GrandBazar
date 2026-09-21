@@ -101,6 +101,8 @@ import {
     getStoreCommission,
     getCityCommission,
     listCityCommissions,
+    listCityCommissionOptions,
+    deleteCityCommission,
     upsertCityCommissionController,
     updateStoreCommission,
 } from "../controller/admin/commissionHierarchyController.js";
@@ -316,7 +318,10 @@ router.put("/sellers/:id/commission", verifyToken, allowRoles("admin"), updateAd
 router.get("/stores/:id/commission", verifyToken, allowRoles("admin"), getStoreCommission);
 router.put("/stores/:id/commission", verifyToken, allowRoles("admin"), updateStoreCommission);
 router.get("/commissions/cities", verifyToken, allowRoles("admin"), listCityCommissions);
+// Static path must be registered before the ":cityKey" routes.
+router.get("/commissions/cities/options", verifyToken, allowRoles("admin"), listCityCommissionOptions);
 router.get("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), getCityCommission);
+router.delete("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), deleteCityCommission);
 router.put("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityCommissionController);
 router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), listModelSwitchRequests);
 router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), approveModelSwitchRequest);

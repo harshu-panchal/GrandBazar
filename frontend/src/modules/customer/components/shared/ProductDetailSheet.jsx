@@ -79,7 +79,18 @@ const ProductDetailSheet = () => {
     // Update variant when product changes
     useEffect(() => {
         if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
-            setSelectedVariant(selectedProduct.variants[0]);
+            // Start on the variant whose price the listing card advertised, so the
+            // price doesn't jump when the sheet opens. Prefer one that's in stock.
+            const all = selectedProduct.variants;
+            const inStock = all.filter((v) => Number(v?.stock) > 0);
+            const pool = inStock.length > 0 ? inStock : all;
+            const shown = Number(selectedProduct.price);
+            const effective = (v) => {
+                const mrp = Number(v?.customerPrice ?? v?.price) || 0;
+                const sale = Number(v?.customerSalePrice ?? v?.salePrice) || 0;
+                return sale > 0 && sale < mrp ? sale : mrp;
+            };
+            setSelectedVariant(pool.find((v) => effective(v) === shown) || pool[0]);
         } else {
             setSelectedVariant(null);
         }
@@ -180,6 +191,38 @@ const ProductDetailSheet = () => {
     const isOutOfStock = hasVariants
         ? !(Number(selectedVariant?.stock) > 0)
         : !(Number(selectedProduct?.stock) > 0);
+
+    // Customer-facing (commission-inclusive) price of what's currently selected:
+    // the chosen variant when the product has variants, else the product itself.
+    // Falls back to the raw variant price only if customerPrice hasn't been
+    // backfilled yet.
+    const priceInfo = (() => {
+        if (!selectedProduct) return { final: 0, original: 0, hasDiscount: false, save: 0, percent: 0 };
+        let final;
+        let original;
+        if (selectedVariant) {
+            const mrp = Number(selectedVariant.customerPrice ?? selectedVariant.price) || 0;
+            const sale = Number(selectedVariant.customerSalePrice ?? selectedVariant.salePrice) || 0;
+            const discounted = sale > 0 && sale < mrp;
+            final = discounted ? sale : (mrp || Number(selectedProduct.price) || 0);
+            original = discounted ? mrp : final;
+        } else {
+            final = Number(selectedProduct.price) || 0;
+            original = Number(selectedProduct.originalPrice) || final;
+        }
+        const hasDiscount = original > final;
+        return {
+            final,
+            original,
+            hasDiscount,
+            save: original - final,
+            percent: hasDiscount ? Math.round(((original - final) / original) * 100) : 0,
+        };
+    })();
+
+    const isVariantSelected = (v) =>
+        Boolean(selectedVariant) &&
+        (selectedVariant.sku ? selectedVariant.sku === v.sku : selectedVariant.name === v.name);
 
     useEffect(() => {
         if (isOpen) {
@@ -395,14 +438,15 @@ const ProductDetailSheet = () => {
                                         </motion.button>
 
                                         {/* Discount Badge (center) */}
-                                        {(selectedProduct.originalPrice > selectedProduct.price) && (
+                                        {priceInfo.hasDiscount && (
                                             <motion.div
+                                                key={`discount-${priceInfo.percent}`}
                                                 initial={{ scale: 0, rotate: -10 }}
                                                 animate={{ scale: 1, rotate: 0 }}
                                                 transition={{ type: 'spring', delay: 0.2 }}
                                                 className="bg-gradient-to-r from-primary to-[var(--brand-400)] text-white text-[10px] font-[800] px-3 py-1.5 rounded-xl uppercase tracking-wider shadow-md shadow-brand-200/40"
                                             >
-                                                {Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% OFF
+                                                {priceInfo.percent}% OFF
                                             </motion.div>
                                         )}
 
@@ -505,14 +549,14 @@ const ProductDetailSheet = () => {
                                                 <Clock size={12} strokeWidth={2.5} className="text-primary" />
                                                 {selectedProduct.deliveryTime || '8-15 MINS'}
                                             </motion.div>
-                                            {selectedProduct.originalPrice > selectedProduct.price && (
+                                            {priceInfo.hasDiscount && (
                                                 <motion.div
                                                     initial={{ opacity: 0, x: -10 }}
                                                     animate={{ opacity: 1, x: 0 }}
                                                     transition={{ delay: 0.15 }}
                                                     className="text-[10px] font-[700] text-primary bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-200/50 uppercase tracking-wider"
                                                 >
-                                                    💰 Save ₹{selectedProduct.originalPrice - selectedProduct.price}
+                                                    💰 Save ₹{priceInfo.save}
                                                 </motion.div>
                                             )}
                                             <motion.div
@@ -536,8 +580,8 @@ const ProductDetailSheet = () => {
                                             <h1 className="text-[19px] lg:text-[22px] font-black text-[#111827] leading-[1.2] tracking-tight mb-1">
                                                 {selectedProduct.name}
                                             </h1>
-                                            {selectedProduct.weight && (
-                                                <span className="text-[13px] text-gray-400 font-bold uppercase tracking-wider">{selectedProduct.weight}</span>
+                                            {(selectedVariant?.name || selectedProduct.weight) && (
+                                                <span className="text-[13px] text-gray-400 font-bold uppercase tracking-wider">{selectedVariant?.name || selectedProduct.weight}</span>
                                             )}
                                         </motion.div>
 
@@ -557,15 +601,15 @@ const ProductDetailSheet = () => {
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-baseline gap-2">
                                                         <span className="text-[28px] lg:text-[32px] font-[800] text-primary tracking-tight leading-none">
-                                                            ₹{selectedProduct.price}
+                                                            ₹{priceInfo.final}
                                                         </span>
-                                                        {selectedProduct.originalPrice > selectedProduct.price && (
-                                                            <span className="text-[14px] text-gray-400 line-through font-[600]">₹{selectedProduct.originalPrice}</span>
+                                                        {priceInfo.hasDiscount && (
+                                                            <span className="text-[14px] text-gray-400 line-through font-[600]">₹{priceInfo.original}</span>
                                                         )}
                                                     </div>
-                                                    {selectedProduct.originalPrice > selectedProduct.price && (
+                                                    {priceInfo.hasDiscount && (
                                                         <span className="inline-flex w-fit items-center text-[10px] font-[800] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md uppercase tracking-wide">
-                                                            {Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% off
+                                                            {priceInfo.percent}% off
                                                         </span>
                                                     )}
                                                 </div>
@@ -648,7 +692,7 @@ const ProductDetailSheet = () => {
                                                             onClick={() => setSelectedVariant(v)}
                                                             className={cn(
                                                                 'px-4 py-2 font-[600] rounded-lg text-[13px] transition-all border-2',
-                                                                selectedVariant?.sku === v.sku
+                                                                isVariantSelected(v)
                                                                     ? 'bg-brand-50 border-primary text-primary shadow-md shadow-brand-100/50'
                                                                     : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:shadow-sm'
                                                             )}
@@ -665,31 +709,6 @@ const ProductDetailSheet = () => {
                                             <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
                                             <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-white border border-gray-200 rounded-full" />
                                         </div>
-
-                                        {/* Variants Selection (Desktop) */}
-                                        {selectedProduct.variants && selectedProduct.variants.length > 0 && (
-                                            <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50 mt-4">
-                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Select Variant</h4>
-                                                <div className="flex gap-2.5 flex-wrap">
-                                                    {selectedProduct.variants.map((v, idx) => (
-                                                        <motion.button
-                                                            key={idx}
-                                                            whileHover={{ scale: 1.02 }}
-                                                            whileTap={{ scale: 0.98 }}
-                                                            onClick={() => setSelectedVariant(v)}
-                                                            className={cn(
-                                                                'px-4 py-2 font-black rounded-xl text-xs transition-all border-2',
-                                                                selectedVariant?.sku === v.sku
-                                                                    ? 'bg-white border-primary text-primary shadow-sm shadow-brand-100'
-                                                                    : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'
-                                                            )}
-                                                        >
-                                                            {v.name}
-                                                        </motion.button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
 
                                         {/* Product Information Accordion (Desktop) */}
                                         <div className="mt-8 border-t border-slate-100">
@@ -990,13 +1009,13 @@ const ProductDetailSheet = () => {
                                                     onClick={() => setSelectedVariant(v)}
                                                     className={cn(
                                                         "flex-shrink-0 px-5 py-2.5 font-bold rounded-xl text-sm transition-all relative border-2",
-                                                        selectedVariant?.sku === v.sku
+                                                        isVariantSelected(v)
                                                             ? "bg-[#ecfeff] border-primary text-primary shadow-sm shadow-brand-100"
                                                             : "bg-slate-50 border-slate-100 text-slate-500"
                                                     )}
                                                 >
                                                     {v.name}
-                                                    {selectedVariant?.sku === v.sku && (
+                                                    {isVariantSelected(v) && (
                                                         <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-bl-lg" />
                                                     )}
                                                 </motion.button>
@@ -1149,43 +1168,19 @@ const ProductDetailSheet = () => {
                             <div className="flex flex-col gap-3">
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="flex flex-col min-w-[80px]">
-                                        {(() => {
-                                            // Commission-inclusive customer-facing price/original for the
-                                            // selected variant — falls back to raw variant price/salePrice
-                                            // only if customerPrice hasn't been backfilled yet.
-                                            const variantOriginal = selectedVariant
-                                                ? (selectedVariant.customerPrice ?? selectedVariant.price)
-                                                : null;
-                                            const variantSale = selectedVariant
-                                                ? (selectedVariant.customerSalePrice ?? selectedVariant.salePrice)
-                                                : null;
-                                            const hasDiscount = selectedVariant
-                                                ? Boolean(variantSale && variantSale < variantOriginal)
-                                                : selectedProduct.originalPrice > selectedProduct.price;
-                                            const finalPrice = selectedVariant
-                                                ? (variantSale || variantOriginal || selectedProduct.price)
-                                                : selectedProduct.price;
-                                            const strikeThrough = selectedVariant ? variantOriginal : selectedProduct.originalPrice;
-                                            return (
-                                                <>
-                                                    {hasDiscount && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-medium text-gray-400 line-through decoration-gray-400/50">
-                                                                ₹{strikeThrough}
-                                                            </span>
-                                                            <span className="bg-red-50 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded leading-none">
-                                                                {selectedVariant
-                                                                    ? Math.round(((variantOriginal - variantSale) / variantOriginal) * 100)
-                                                                    : Math.round(((selectedProduct.originalPrice - selectedProduct.price) / selectedProduct.originalPrice) * 100)}% OFF
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <div className="text-2xl font-black text-[#1A1A1A] leading-none mt-1">
-                                                        ₹{finalPrice}
-                                                    </div>
-                                                </>
-                                            );
-                                        })()}
+                                        {priceInfo.hasDiscount && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium text-gray-400 line-through decoration-gray-400/50">
+                                                    ₹{priceInfo.original}
+                                                </span>
+                                                <span className="bg-red-50 text-red-500 text-[10px] font-black px-1.5 py-0.5 rounded leading-none">
+                                                    {priceInfo.percent}% OFF
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className="text-2xl font-black text-[#1A1A1A] leading-none mt-1">
+                                            ₹{priceInfo.final}
+                                        </div>
                                     </div>
 
                                     {quantity > 0 ? (

@@ -6,6 +6,7 @@ import { uploadToCloudinary } from "../services/mediaService.js";
 import mongoose from "mongoose";
 import { invalidateCategoryName } from "../services/entityNameCache.js";
 import { enqueueRecalcByCategory } from "../queues/pricingQueueProcessors.js";
+import { ALL_GST_SLABS } from "../constants/finance.js";
 
 function normalizeUrl(value) {
   if (!value || typeof value !== "string") return "";
@@ -316,6 +317,113 @@ export const updateCategory = async (req, res) => {
     if (error.code === 11000) return handleResponse(res, 400, "Slug already exists");
     if (error?.name === "ValidationError" || error?.name === "CastError") return handleResponse(res, 400, error.message);
     return handleResponse(res, 500, `Category operation failed: ${error.message}`);
+  }
+};
+
+/* ===============================
+   BULK UPDATE CHARGES
+   Sets status, commission %, handling fee, packing fee and/or GST slab on one
+   or many categories in a single call. Only the fields present in the body are
+   changed. Used by the inline table edit (1 id) and the bulk-select action.
+ ================================ */
+export const bulkUpdateCategoryCharges = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { ids } = body;
+    const has = (key) => body[key] !== undefined && body[key] !== null && body[key] !== "";
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return handleResponse(res, 400, "Select at least one category");
+    }
+    if (ids.length > 200) {
+      return handleResponse(res, 400, "Too many categories in one request (max 200)");
+    }
+    const uniqueIds = [...new Set(ids.map((id) => String(id)))];
+    if (uniqueIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return handleResponse(res, 400, "Invalid category ID in selection");
+    }
+
+    // updateMany bypasses the model's legacy-field sync hooks, so every
+    // paired field (legacy + canonical value + type) is written explicitly.
+    const set = {};
+
+    if (body.status !== undefined) {
+      if (!["active", "inactive"].includes(body.status)) {
+        return handleResponse(res, 400, "Status must be active or inactive");
+      }
+      set.status = body.status;
+    }
+
+    if (body.applyCommission !== undefined) {
+      const apply = body.applyCommission === true || body.applyCommission === "true";
+      let percent = 0;
+      if (apply) {
+        percent = Number(body.adminCommission);
+        if (!has("adminCommission") || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+          return handleResponse(res, 400, "Commission must be a number between 0 and 100");
+        }
+      }
+      Object.assign(set, {
+        applyCommission: apply,
+        adminCommissionType: "percentage",
+        adminCommission: percent,
+        adminCommissionValue: percent,
+      });
+    }
+
+    for (const [field, valueField, typeField, label] of [
+      ["handlingFees", "handlingFeeValue", "handlingFeeType", "Handling fee"],
+      ["packingFees", "packingFeeValue", "packingFeeType", "Packing fee"],
+    ]) {
+      if (body[field] === undefined) continue;
+      const amount = has(field) ? Number(body[field]) : 0;
+      if (!Number.isFinite(amount) || amount < 0) {
+        return handleResponse(res, 400, `${label} must be a non-negative number`);
+      }
+      Object.assign(set, { [field]: amount, [valueField]: amount, [typeField]: "fixed" });
+    }
+
+    if (has("gstSlab")) {
+      const slab = Number(body.gstSlab);
+      if (!ALL_GST_SLABS.includes(slab)) {
+        return handleResponse(res, 400, `GST slab must be one of: ${ALL_GST_SLABS.join(", ")}`);
+      }
+      set.gstSlab = slab;
+    }
+
+    if (Object.keys(set).length === 0) {
+      return handleResponse(res, 400, "Nothing to update");
+    }
+
+    const result = await Category.updateMany({ _id: { $in: uniqueIds } }, { $set: set });
+
+    invalidate("cache:catalog:categories:*").catch((err) => {
+      console.warn("[Category] Cache invalidation failed:", err.message);
+    });
+    uniqueIds.forEach((id) => {
+      invalidateCategoryName(id).catch((err) => {
+        console.warn("[Category] Name cache invalidation failed:", err.message);
+      });
+    });
+
+    // Only commission feeds the cached customer price. Recompute one category
+    // at a time, off the request path.
+    if (Object.prototype.hasOwnProperty.call(set, "adminCommission")) {
+      (async () => {
+        for (const id of uniqueIds) {
+          await enqueueRecalcByCategory(id);
+        }
+      })().catch((err) => {
+        console.warn("[Category] Bulk commission recalc failed:", err.message);
+      });
+    }
+
+    return handleResponse(res, 200, "Category charges updated", {
+      matched: result.matchedCount ?? result.n ?? 0,
+      modified: result.modifiedCount ?? result.nModified ?? 0,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, `Bulk category update failed: ${error.message}`);
   }
 };
 

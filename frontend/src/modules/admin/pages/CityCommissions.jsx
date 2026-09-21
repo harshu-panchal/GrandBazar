@@ -6,34 +6,46 @@ import { adminApi } from "../services/adminApi";
 const defaultForm = {
   cityKey: "",
   cityName: "",
-  applyCommission: false,
+  applyCommission: true,
   adminCommissionType: "percentage",
   adminCommissionValue: 0,
   adminCommissionFixedRule: "per_qty",
 };
 
-function normalizeCityKey(value = "") {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-");
-}
+const shopsLabel = (count) => `${count} shop${count === 1 ? "" : "s"}`;
+
+const formFromRate = (rate) => ({
+  cityKey: rate.cityKey || "",
+  cityName: rate.cityName || "",
+  applyCommission: rate.applyCommission === true,
+  adminCommissionType: rate.adminCommissionType || "percentage",
+  adminCommissionValue: Number(rate.adminCommissionValue || 0),
+  adminCommissionFixedRule: rate.adminCommissionFixedRule || "per_qty",
+});
+
+const fieldClass = "w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none";
 
 const CityCommissions = () => {
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [query, setQuery] = useState("");
-  const [cityRows, setCityRows] = useState([]);
+  const [cityRows, setCityRows] = useState([]); // configured rates
+  const [cityOptions, setCityOptions] = useState([]); // cities shops actually have
+  const [shopsWithoutCity, setShopsWithoutCity] = useState(0);
   const [form, setForm] = useState(defaultForm);
 
-  const loadRows = async (q = "") => {
+  const load = async () => {
     try {
       setIsLoading(true);
-      const response = await adminApi.getCityCommissions(
-        q ? { q: String(q).trim() } : {},
-      );
-      setCityRows(response?.data?.results || response?.data?.result || []);
+      const [ratesRes, optionsRes] = await Promise.all([
+        adminApi.getCityCommissions({}),
+        adminApi.getCityCommissionOptions(),
+      ]);
+      setCityRows(ratesRes?.data?.results || ratesRes?.data?.result || []);
+      const options = optionsRes?.data?.result || {};
+      setCityOptions(Array.isArray(options.cities) ? options.cities : []);
+      setShopsWithoutCity(Number(options.shopsWithoutCity || 0));
     } catch (error) {
       showToast(error?.response?.data?.message || "Failed to load city commissions", "error");
     } finally {
@@ -42,29 +54,85 @@ const CityCommissions = () => {
   };
 
   useEffect(() => {
-    loadRows("");
+    load();
   }, []);
 
-  const onSave = async () => {
-    const cityKey = normalizeCityKey(form.cityKey);
+  const ratesByKey = useMemo(
+    () => new Map(cityRows.map((row) => [row.cityKey, row])),
+    [cityRows],
+  );
+  const shopCountByKey = useMemo(
+    () => new Map(cityOptions.map((city) => [city.cityKey, city.shopCount])),
+    [cityOptions],
+  );
+
+  // Dropdown = every city that has shops, plus any configured rate whose key no
+  // shop matches (so it can still be opened, corrected or deleted).
+  const dropdownOptions = useMemo(() => {
+    const known = new Set(cityOptions.map((city) => city.cityKey));
+    const orphans = cityRows
+      .filter((row) => !known.has(row.cityKey))
+      .map((row) => ({
+        cityKey: row.cityKey,
+        cityName: row.cityName || row.cityKey,
+        shopCount: 0,
+        hasRate: true,
+      }));
+    return [...cityOptions, ...orphans];
+  }, [cityOptions, cityRows]);
+
+  const onSelectCity = (cityKey) => {
     if (!cityKey) {
-      showToast("City key is required", "error");
+      setForm(defaultForm);
+      return;
+    }
+    const existing = ratesByKey.get(cityKey);
+    if (existing) {
+      setForm(formFromRate(existing));
+      return;
+    }
+    const option = dropdownOptions.find((city) => city.cityKey === cityKey);
+    setForm({ ...defaultForm, cityKey, cityName: option?.cityName || cityKey });
+  };
+
+  const onSave = async () => {
+    if (!form.cityKey) {
+      showToast("Select a city first", "error");
+      return;
+    }
+    const value = Number(form.adminCommissionValue || 0);
+    if (form.adminCommissionType === "percentage" && (value < 0 || value > 100)) {
+      showToast("Percentage must be between 0 and 100", "error");
       return;
     }
     try {
       setIsSaving(true);
-      await adminApi.upsertCityCommission(cityKey, {
+      await adminApi.upsertCityCommission(form.cityKey, {
         ...form,
-        cityKey,
-        cityName: String(form.cityName || "").trim(),
+        adminCommissionValue: value,
       });
       showToast("City commission saved", "success");
-      await loadRows(query);
-      setForm((prev) => ({ ...prev, cityKey }));
+      await load();
     } catch (error) {
       showToast(error?.response?.data?.message || "Failed to save city commission", "error");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const onDelete = async (row) => {
+    const shops = shopCountByKey.get(row.cityKey) || 0;
+    const message = shops
+      ? `Delete the commission for ${row.cityName || row.cityKey}? ${shopsLabel(shops)} there will go back to shop, category and header rates.`
+      : `Delete the commission for ${row.cityName || row.cityKey}?`;
+    if (!window.confirm(message)) return;
+    try {
+      await adminApi.deleteCityCommission(row.cityKey);
+      showToast("City commission deleted", "success");
+      if (form.cityKey === row.cityKey) setForm(defaultForm);
+      await load();
+    } catch (error) {
+      showToast(error?.response?.data?.message || "Failed to delete city commission", "error");
     }
   };
 
@@ -78,33 +146,58 @@ const CityCommissions = () => {
     });
   }, [cityRows, query]);
 
+  const selectedShops = form.cityKey ? shopCountByKey.get(form.cityKey) || 0 : 0;
+  const selectedIsOrphan = Boolean(form.cityKey) && selectedShops === 0;
+
   return (
     <div className="space-y-6 pb-10">
       <div>
         <h1 className="admin-h1">City Commissions</h1>
         <p className="admin-description mt-1">
-          Search and manage city-level commission overrides.
+          Set a commission for every shop in a city. It overrides category and header rates, but a
+          shop-wise or subcategory rate still wins over it.
         </p>
       </div>
 
       <Card className="p-5 ring-1 ring-slate-100 border-none">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            value={form.cityKey}
-            onChange={(e) => setForm((f) => ({ ...f, cityKey: e.target.value }))}
-            placeholder="City key (e.g. indore)"
-            className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"
-          />
-          <input
-            value={form.cityName}
-            onChange={(e) => setForm((f) => ({ ...f, cityName: e.target.value }))}
-            placeholder="City name"
-            className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"
-          />
+          <div className="md:col-span-2">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">
+              City
+            </label>
+            <select
+              value={form.cityKey}
+              onChange={(e) => onSelectCity(e.target.value)}
+              disabled={isLoading}
+              className={fieldClass}
+            >
+              <option value="">{isLoading ? "Loading cities..." : "Select a city"}</option>
+              {dropdownOptions.map((city) => (
+                <option key={city.cityKey} value={city.cityKey}>
+                  {city.cityName} — {shopsLabel(city.shopCount)}
+                  {city.hasRate ? " · rate set" : ""}
+                </option>
+              ))}
+            </select>
+            {selectedIsOrphan && (
+              <p className="mt-1.5 text-xs font-semibold text-amber-600">
+                No shop currently has this city, so this rate is not applied to anyone. Delete it,
+                or fix the shops' city.
+              </p>
+            )}
+            {shopsWithoutCity > 0 && (
+              <p className="mt-1.5 text-xs font-medium text-slate-500">
+                {shopsLabel(shopsWithoutCity)} {shopsWithoutCity === 1 ? "has" : "have"} no city set,
+                so no city rate can reach {shopsWithoutCity === 1 ? "it" : "them"}.
+              </p>
+            )}
+          </div>
+
           <select
             value={form.adminCommissionType}
             onChange={(e) => setForm((f) => ({ ...f, adminCommissionType: e.target.value }))}
-            className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"
+            disabled={!form.cityKey}
+            className={fieldClass}
           >
             <option value="percentage">Percentage</option>
             <option value="fixed">Fixed</option>
@@ -112,15 +205,15 @@ const CityCommissions = () => {
           <input
             type="number"
             min="0"
+            max={form.adminCommissionType === "percentage" ? 100 : undefined}
+            step="any"
             value={form.adminCommissionValue}
             onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                adminCommissionValue: Number(e.target.value || 0),
-              }))
+              setForm((f) => ({ ...f, adminCommissionValue: e.target.value }))
             }
+            disabled={!form.cityKey}
             placeholder="Commission value"
-            className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"
+            className={fieldClass}
           />
           {form.adminCommissionType === "fixed" && (
             <select
@@ -128,7 +221,8 @@ const CityCommissions = () => {
               onChange={(e) =>
                 setForm((f) => ({ ...f, adminCommissionFixedRule: e.target.value }))
               }
-              className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"
+              disabled={!form.cityKey}
+              className={fieldClass}
             >
               <option value="per_qty">Per qty</option>
               <option value="per_item">Per item</option>
@@ -138,6 +232,7 @@ const CityCommissions = () => {
             <input
               type="checkbox"
               checked={form.applyCommission}
+              disabled={!form.cityKey}
               onChange={(e) => setForm((f) => ({ ...f, applyCommission: e.target.checked }))}
             />
             Apply commission for this city
@@ -147,7 +242,7 @@ const CityCommissions = () => {
           <button
             type="button"
             onClick={onSave}
-            disabled={isSaving}
+            disabled={isSaving || !form.cityKey}
             className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-60"
           >
             {isSaving ? "Saving..." : "Save City Commission"}
@@ -184,51 +279,64 @@ const CityCommissions = () => {
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">City</th>
-                  <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">City Key</th>
+                  <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Shops</th>
                   <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Commission</th>
                   <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
-                  <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Action</th>
+                  <th className="py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.cityKey} className="border-b border-slate-50">
-                    <td className="py-3 text-sm font-semibold text-slate-800">
-                      {row.cityName || "—"}
-                    </td>
-                    <td className="py-3 text-sm font-semibold text-slate-700">
-                      {row.cityKey}
-                    </td>
-                    <td className="py-3 text-sm font-semibold text-slate-700">
-                      {row.adminCommissionType === "percentage"
-                        ? `${row.adminCommissionValue || 0}%`
-                        : `₹${row.adminCommissionValue || 0} (${row.adminCommissionFixedRule || "per_qty"})`}
-                    </td>
-                    <td className="py-3 text-sm font-semibold">
-                      <span className={row.applyCommission ? "text-green-600" : "text-slate-500"}>
-                        {row.applyCommission ? "Applied" : "Not applied"}
-                      </span>
-                    </td>
-                    <td className="py-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm({
-                            cityKey: row.cityKey || "",
-                            cityName: row.cityName || "",
-                            applyCommission: row.applyCommission === true,
-                            adminCommissionType: row.adminCommissionType || "percentage",
-                            adminCommissionValue: Number(row.adminCommissionValue || 0),
-                            adminCommissionFixedRule: row.adminCommissionFixedRule || "per_qty",
-                          })
-                        }
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ring-1 ring-slate-200 hover:bg-slate-50"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredRows.map((row) => {
+                  const shops = shopCountByKey.get(row.cityKey) || 0;
+                  return (
+                    <tr key={row.cityKey} className="border-b border-slate-50">
+                      <td className="py-3 text-sm font-semibold text-slate-800">
+                        {row.cityName || "—"}
+                        <span className="block text-[10px] font-medium text-slate-400">{row.cityKey}</span>
+                      </td>
+                      <td className="py-3 text-sm font-semibold">
+                        {shops > 0 ? (
+                          <span className="text-slate-700">{shopsLabel(shops)}</span>
+                        ) : (
+                          <span
+                            className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700"
+                            title="No shop has this city, so this rate isn't applied to anyone."
+                          >
+                            No shops match
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 text-sm font-semibold text-slate-700">
+                        {row.adminCommissionType === "percentage"
+                          ? `${row.adminCommissionValue || 0}%`
+                          : `₹${row.adminCommissionValue || 0} (${row.adminCommissionFixedRule || "per_qty"})`}
+                      </td>
+                      <td className="py-3 text-sm font-semibold">
+                        <span className={row.applyCommission ? "text-green-600" : "text-slate-500"}>
+                          {row.applyCommission ? "Applied" : "Not applied"}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setForm(formFromRate(row))}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ring-1 ring-slate-200 hover:bg-slate-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDelete(row)}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-rose-600 ring-1 ring-rose-100 hover:bg-rose-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

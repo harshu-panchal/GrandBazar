@@ -8,6 +8,7 @@ import {
     getProductById,
     getModerationProducts,
     approveProduct,
+    bulkUpdateProductsAdmin,
     rejectProduct,
     publishSellerProduct,
     bulkPublishSellerProducts,
@@ -62,6 +63,7 @@ router.post("/adjust-variant-stock", ...sellerChain, checkSubSellerPermission("i
 router.get("/moderation", verifyToken, allowRoles("admin"), getModerationProducts);
 router.get("/:id/addon-mappings", verifyToken, allowRoles("admin"), getProductAddonMappingsController);
 router.get("/:id/suggested-addons", verifyToken, allowRoles("admin", "seller"), getSuggestedAddonsController);
+router.patch("/admin/bulk-update", verifyToken, allowRoles("admin"), bulkUpdateProductsAdmin);
 router.patch("/moderation/:id/approve", verifyToken, allowRoles("admin"), approveProduct);
 router.patch("/moderation/:id/reject", verifyToken, allowRoles("admin"), rejectProduct);
 router.get("/:id/similar", optionalVerifyToken, getSimilarProductsController);

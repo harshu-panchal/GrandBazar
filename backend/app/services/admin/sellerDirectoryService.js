@@ -302,7 +302,7 @@ export async function getActiveSellersData({
     Store.find(query)
       .populate(
         "ownerId",
-        "name email phone applicationStatus isVerified isActive rejectionReason",
+        "name email phone applicationStatus isVerified isActive rejectionReason businessModel",
       )
       .lean(),
     Store.countDocuments(baseQuery),
@@ -447,6 +447,12 @@ export async function getActiveSellersData({
       avgRating: Number(store.avgRating || 0),
       reviewCount: Number(store.reviewCount || 0),
       favoriteCount: Number(store.favoriteCount || 0),
+      // Shop-level commission override (only charged for commission-model owners).
+      businessModel: owner.businessModel || "commission",
+      applyCommission: store.applyCommission === true,
+      adminCommissionType: store.adminCommissionType || "percentage",
+      adminCommissionValue: Number(store.adminCommissionValue ?? store.adminCommission ?? 0),
+      adminCommissionFixedRule: store.adminCommissionFixedRule || "per_qty",
       location: getSellerDisplayLocation(store),
       city: store.address || "Location not set",
       latitude: Array.isArray(store.location?.coordinates)

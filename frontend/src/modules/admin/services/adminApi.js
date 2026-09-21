@@ -29,6 +29,8 @@ export const adminApi = {
     getStoreCommission: (id) => axiosInstance.get(`/admin/stores/${id}/commission`),
     updateStoreCommission: (id, data) => axiosInstance.put(`/admin/stores/${id}/commission`, data),
     getCityCommissions: (params) => axiosInstance.get('/admin/commissions/cities', { params }),
+    getCityCommissionOptions: () => axiosInstance.get('/admin/commissions/cities/options'),
+    deleteCityCommission: (cityKey) => axiosInstance.delete(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`),
     getCityCommission: (cityKey) => axiosInstance.get(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`),
     upsertCityCommission: (cityKey, data) =>
         axiosInstance.put(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`, data),
@@ -88,6 +90,7 @@ export const adminApi = {
     getSellers: (params) => axiosInstance.get('/admin/sellers', { params }),
     createCategory: (formData) => axiosInstance.post('/admin/categories', formData),
     updateCategory: (id, formData) => axiosInstance.put(`/admin/categories/${id}`, formData),
+    bulkUpdateCategoryCharges: (payload) => axiosInstance.put('/admin/categories/bulk-charges', payload),
     deleteCategory: (id) => axiosInstance.delete(`/admin/categories/${id}`),
     getParentUnits: () => axiosInstance.get('/admin/categories?flat=true'),
 
@@ -98,6 +101,7 @@ export const adminApi = {
     rejectProductModeration: (id, data = {}) => axiosInstance.patch(`/products/moderation/${id}/reject`, data),
     createProduct: (formData) => axiosInstance.post('/products', formData),
     updateProduct: (id, formData) => axiosInstance.put(`/products/${id}`, formData),
+    bulkUpdateProducts: (payload) => axiosInstance.patch('/products/admin/bulk-update', payload),
     getProductById: (id) => axiosInstance.get(`/products/${id}`),
     deleteProduct: (id) => axiosInstance.delete(`/products/${id}`),
     getProductAddonMappings: (id) => axiosInstance.get(`/products/${id}/addon-mappings`),
@@ -109,6 +113,7 @@ export const adminApi = {
     createCatalogProduct: (formData) => axiosInstance.post('/catalog', formData),
     createCatalogProductsBulk: (data) => axiosInstance.post('/catalog/bulk', data),
     updateCatalogProduct: (id, formData) => axiosInstance.put(`/catalog/${id}`, formData),
+    bulkUpdateCatalogCommission: (payload) => axiosInstance.put('/catalog/bulk-commission', payload),
     deleteCatalogProduct: (id) => axiosInstance.delete(`/catalog/${id}`),
 
     getCatalogBundles: (params) => axiosInstance.get('/catalog/bundles', { params }),

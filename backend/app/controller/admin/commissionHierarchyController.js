@@ -103,6 +103,77 @@ export async function listCityCommissions(req, res) {
   }
 }
 
+/**
+ * Cities that shops actually have, with how many shops each covers, plus
+ * whether a commission rate is already configured for it. Feeds the city
+ * dropdown on the admin City Commissions page so a rate can only be created
+ * for a key that real shops will match (shop.city is matched by cityKey).
+ */
+export async function listCityCommissionOptions(req, res) {
+  try {
+    const [grouped, shopsWithoutCity, rates] = await Promise.all([
+      Store.aggregate([
+        { $match: { city: { $type: "string", $ne: "" } } },
+        { $group: { _id: "$city", count: { $sum: 1 } } },
+      ]),
+      Store.countDocuments({
+        $or: [{ city: null }, { city: "" }, { city: { $exists: false } }],
+      }),
+      CityCommission.find({}).select("cityKey").lean(),
+    ]);
+
+    // "Indore", "indore" and " Indore " all normalise to one key: merge them and
+    // label the city with its most common spelling.
+    const byKey = new Map();
+    for (const row of grouped) {
+      const raw = String(row._id || "").trim();
+      const cityKey = normalizeCityKey(raw);
+      if (!cityKey) continue;
+      const entry = byKey.get(cityKey) || { cityKey, shopCount: 0, spellings: new Map() };
+      entry.shopCount += row.count;
+      entry.spellings.set(raw, (entry.spellings.get(raw) || 0) + row.count);
+      byKey.set(cityKey, entry);
+    }
+
+    const configured = new Set(rates.map((rate) => rate.cityKey));
+    const cities = [...byKey.values()]
+      .map((entry) => ({
+        cityKey: entry.cityKey,
+        cityName: [...entry.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0],
+        shopCount: entry.shopCount,
+        hasRate: configured.has(entry.cityKey),
+      }))
+      .sort((a, b) => a.cityName.localeCompare(b.cityName));
+
+    return handleResponse(res, 200, "City options fetched", { cities, shopsWithoutCity });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+}
+
+export async function deleteCityCommission(req, res) {
+  try {
+    const cityKey = normalizeCityKey(req.params.cityKey || "");
+    if (!cityKey) return handleResponse(res, 400, "cityKey is required");
+    const before = await CityCommission.findOne({ cityKey }).lean();
+    if (!before) return handleResponse(res, 404, "City commission not found");
+    await CityCommission.deleteOne({ cityKey });
+    void recordAuditLog({
+      actorId: req.user?.id || null,
+      action: "CITY_COMMISSION_DELETED",
+      targetType: "CityCommission",
+      targetId: before._id,
+      before,
+      after: null,
+    });
+    // Shops in this city fall back to shop / category / header rates.
+    enqueueRecalcByCity(cityKey);
+    return handleResponse(res, 200, "City commission deleted", { cityKey });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+}
+
 export async function getCityCommission(req, res) {
   try {
     const cityKey = normalizeCityKey(req.params.cityKey || "");

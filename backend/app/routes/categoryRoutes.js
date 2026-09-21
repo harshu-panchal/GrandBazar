@@ -3,6 +3,7 @@ import {
     getCategories,
     createCategory,
     updateCategory,
+    bulkUpdateCategoryCharges,
     deleteCategory
 } from "../controller/categoryController.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
@@ -23,6 +24,14 @@ router.post(
     allowRoles("admin"),
     upload.single("image"),
     createCategory
+);
+
+// Must be registered before "/:id" so "bulk-charges" isn't read as an id.
+router.put(
+    "/bulk-charges",
+    verifyToken,
+    allowRoles("admin"),
+    bulkUpdateCategoryCharges
 );
 
 router.put(

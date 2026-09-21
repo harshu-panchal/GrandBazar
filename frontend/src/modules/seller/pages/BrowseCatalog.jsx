@@ -22,6 +22,25 @@ import {
 } from "react-icons/hi2";
 import { motion, AnimatePresence } from "framer-motion";
 
+// A product with variants still needs top-level price/salePrice/stock (listing
+// cards, sorting and the commission preview read them). Derive them from the
+// variants: the cheapest variant's price, and the total stock across variants.
+const deriveFromVariants = (variants = []) => {
+  const effective = (v) => {
+    const mrp = Number(v.price) || 0;
+    const sale = Number(v.salePrice) || 0;
+    return sale > 0 && sale < mrp ? sale : mrp;
+  };
+  const priced = variants.filter((v) => Number(v.price) > 0);
+  if (priced.length === 0) return { price: 0, salePrice: 0, stock: 0 };
+  const cheapest = priced.reduce((best, v) => (effective(v) < effective(best) ? v : best));
+  return {
+    price: Number(cheapest.price),
+    salePrice: Number(cheapest.salePrice) || 0,
+    stock: priced.reduce((sum, v) => sum + (Number(v.stock) || 0), 0),
+  };
+};
+
 const BrowseCatalog = () => {
   const navigate = useNavigate();
   const [catalogItems, setCatalogItems] = useState([]);
@@ -118,7 +137,10 @@ const BrowseCatalog = () => {
 
   useEffect(() => {
     const categoryId = selectedProduct?.categoryId?._id || selectedProduct?.categoryId;
-    const price = Number(claimData.price);
+    const price =
+      claimData.variants.length > 0
+        ? deriveFromVariants(claimData.variants).price
+        : Number(claimData.price);
     if (!isClaimModalOpen || !categoryId || !Number.isFinite(price) || price <= 0) {
       setCommissionInfo(null);
       return undefined;
@@ -136,7 +158,10 @@ const BrowseCatalog = () => {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [isClaimModalOpen, selectedProduct, claimData.price]);
+  }, [isClaimModalOpen, selectedProduct, claimData.price, claimData.variants]);
+
+  const catalogVariantsOf = (item) =>
+    (Array.isArray(item?.variants) ? item.variants : []).filter((v) => String(v?.name || "").trim());
 
   const openBulkReview = () => {
     if (selectedItems.length === 0) return;
@@ -147,7 +172,17 @@ const BrowseCatalog = () => {
         name: item.name,
         mainImage: item.mainImage,
         price: "",
+        salePrice: "",
         stock: "10",
+        // Variants the admin defined on the catalogue item: price the ones you
+        // sell, leave the rest blank (they won't be added).
+        variants: catalogVariantsOf(item).map((v, idx) => ({
+          id: `${item._id || item.id}-${idx}`,
+          name: String(v.name).trim(),
+          price: "",
+          salePrice: "",
+          stock: "10",
+        })),
       }));
     setBulkReviewItems(items);
     setIsBulkReviewOpen(true);
@@ -161,29 +196,115 @@ const BrowseCatalog = () => {
     );
   };
 
+  const updateBulkVariant = (catalogProductId, variantId, field, value) => {
+    setBulkReviewItems(prev =>
+      prev.map(item =>
+        item.catalogProductId === catalogProductId
+          ? { ...item, variants: item.variants.map(v => (v.id === variantId ? { ...v, [field]: value } : v)) }
+          : item,
+      ),
+    );
+  };
+
+  const addBulkVariant = (catalogProductId) => {
+    setBulkReviewItems(prev =>
+      prev.map(item =>
+        item.catalogProductId === catalogProductId
+          ? { ...item, variants: [...item.variants, { id: `${catalogProductId}-${Date.now()}`, name: "", price: "", salePrice: "", stock: "10" }] }
+          : item,
+      ),
+    );
+  };
+
+  const removeBulkVariant = (catalogProductId, variantId) => {
+    setBulkReviewItems(prev =>
+      prev.map(item =>
+        item.catalogProductId === catalogProductId
+          ? { ...item, variants: item.variants.filter(v => v.id !== variantId) }
+          : item,
+      ),
+    );
+  };
+
+  // Variants left without a price are not added; only priced rows are sent.
+  const pricedBulkVariants = (item) => item.variants.filter(v => Number(v.price) > 0);
+
   const handleBulkClaim = async () => {
     if (bulkReviewItems.length === 0) return;
-    const invalidItem = bulkReviewItems.find(
-      item => !item.price || Number(item.price) <= 0 || item.stock === "" || Number(item.stock) < 0,
-    );
-    if (invalidItem) {
-      toast.error(`Please set a valid price and stock for "${invalidItem.name}"`);
-      return;
+
+    for (const item of bulkReviewItems) {
+      if (item.variants.length > 0) {
+        const priced = pricedBulkVariants(item);
+        if (priced.length === 0) {
+          toast.error(`Set a price for at least one variant of "${item.name}", or remove its variants to use a single price.`);
+          return;
+        }
+        if (priced.some(v => !v.name.trim())) {
+          toast.error(`Give every priced variant of "${item.name}" a name.`);
+          return;
+        }
+        if (priced.some(v => v.stock === "" || Number(v.stock) < 0)) {
+          toast.error(`Please set a valid stock for the variants of "${item.name}".`);
+          return;
+        }
+        const names = priced.map(v => v.name.trim().toLowerCase());
+        if (new Set(names).size !== names.length) {
+          toast.error(`Variant names of "${item.name}" must be different from each other.`);
+          return;
+        }
+        const badSale = priced.find(v => Number(v.salePrice) > 0 && Number(v.salePrice) >= Number(v.price));
+        if (badSale) {
+          toast.error(`The discount price of "${badSale.name.trim()}" (${item.name}) must be lower than its price.`);
+          return;
+        }
+      } else if (!item.price || Number(item.price) <= 0 || item.stock === "" || Number(item.stock) < 0) {
+        toast.error(`Please set a valid price and stock for "${item.name}"`);
+        return;
+      } else if (Number(item.salePrice) > 0 && Number(item.salePrice) >= Number(item.price)) {
+        toast.error(`The discount price of "${item.name}" must be lower than its price.`);
+        return;
+      }
     }
+
     setIsBulkSubmitting(true);
     try {
       const payload = {
-        products: bulkReviewItems.map(item => ({
-          catalogProductId: item.catalogProductId,
-          price: Number(item.price),
-          stock: Number(item.stock),
-          name: item.name,
-          mainImage: item.mainImage,
-        })),
+        products: bulkReviewItems.map(item => {
+          if (item.variants.length > 0) {
+            const priced = pricedBulkVariants(item).map(v => ({
+              name: v.name.trim(),
+              price: Number(v.price),
+              salePrice: Number(v.salePrice) || 0,
+              stock: Number(v.stock),
+            }));
+            const base = deriveFromVariants(priced);
+            return {
+              catalogProductId: item.catalogProductId,
+              price: base.price,
+              salePrice: base.salePrice,
+              stock: base.stock,
+              name: item.name,
+              mainImage: item.mainImage,
+              variants: priced,
+            };
+          }
+          return {
+            catalogProductId: item.catalogProductId,
+            price: Number(item.price),
+            salePrice: Number(item.salePrice) || 0,
+            stock: Number(item.stock),
+            name: item.name,
+            mainImage: item.mainImage,
+          };
+        }),
       };
 
       const res = await sellerApi.bulkClaimCatalogProducts(payload);
       if (res.data.success) {
+        const failed = res.data.result?.errors || [];
+        if (failed.length > 0) {
+          toast.error(`${failed.map(f => `${f.name}: ${f.error}`).join("; ")}`);
+        }
         toast.success(res.data.message || "Bulk clone successful!");
         setSelectedItems([]);
         setBulkReviewItems([]);
@@ -227,7 +348,17 @@ const BrowseCatalog = () => {
       salePrice: "",
       stock: "10",
       sku: "",
-      variants: [],
+      // Start from the variants the admin defined on this catalogue item; the
+      // seller only fills in price / stock for each (and may drop or add rows).
+      variants: catalogVariantsOf(product).map((v, idx) => ({
+        id: `${Date.now()}-${idx}`,
+        name: String(v.name).trim(),
+        weight: String(v.weight || "").trim(),
+        price: "",
+        salePrice: "",
+        stock: "10",
+        sku: "",
+      })),
       imagesList: initialImages,
       isSignatureProduct: false,
       addons: []
@@ -356,19 +487,48 @@ const BrowseCatalog = () => {
       toast.error("Please enter a valid product title.");
       return;
     }
-    if (!claimData.price || Number(claimData.price) <= 0) {
-      toast.error("Please enter a valid selling price.");
-      return;
-    }
-    if (claimData.stock === "" || Number(claimData.stock) < 0) {
-      toast.error("Please enter a valid stock level.");
-      return;
+    const hasVariants = claimData.variants.length > 0;
+    if (!hasVariants) {
+      if (!claimData.price || Number(claimData.price) <= 0) {
+        toast.error("Please enter a valid selling price.");
+        return;
+      }
+      if (claimData.stock === "" || Number(claimData.stock) < 0) {
+        toast.error("Please enter a valid stock level.");
+        return;
+      }
     }
 
-    // Verify variants if any
-    for (const v of claimData.variants) {
-      if (!v.name.trim() || !v.price || Number(v.price) <= 0 || !v.stock) {
-        toast.error("Please complete all fields for added variants.");
+    // Variants left without a price are simply not added (the admin's suggested
+    // variants are optional), so only priced rows are validated and sent.
+    const pricedVariants = claimData.variants.filter((v) => Number(v.price) > 0);
+    const badSaleVariant = pricedVariants.find((v) => Number(v.salePrice) > 0 && Number(v.salePrice) >= Number(v.price));
+    if (badSaleVariant) {
+      toast.error(`The discount price of "${badSaleVariant.name.trim() || "a variant"}" must be lower than its price.`);
+      return;
+    }
+    if (!hasVariants && Number(claimData.salePrice) > 0 && Number(claimData.salePrice) >= Number(claimData.price)) {
+      toast.error("The discount price must be lower than the selling price.");
+      return;
+    }
+    if (hasVariants) {
+      if (pricedVariants.length === 0) {
+        toast.error("Set a price for at least one variant, or remove all variants to sell with a single price.");
+        return;
+      }
+      for (const v of pricedVariants) {
+        if (!v.name.trim()) {
+          toast.error("Please give every priced variant a name.");
+          return;
+        }
+        if (v.stock === "" || Number(v.stock) < 0) {
+          toast.error(`Please set the stock for the "${v.name.trim()}" variant.`);
+          return;
+        }
+      }
+      const variantNames = pricedVariants.map((v) => v.name.trim().toLowerCase());
+      if (new Set(variantNames).size !== variantNames.length) {
+        toast.error("Variant names must be different from each other.");
         return;
       }
     }
@@ -386,16 +546,24 @@ const BrowseCatalog = () => {
         return;
       }
 
+      const base = hasVariants
+        ? deriveFromVariants(pricedVariants)
+        : {
+            price: Number(claimData.price),
+            salePrice: Number(claimData.salePrice) || 0,
+            stock: Number(claimData.stock),
+          };
+
       const payload = {
         catalogProductId: selectedProduct._id || selectedProduct.id,
         name: claimData.name.trim(),
-        price: Number(claimData.price),
-        salePrice: Number(claimData.salePrice) || 0,
-        stock: Number(claimData.stock),
+        price: base.price,
+        salePrice: base.salePrice,
+        stock: base.stock,
         sku: claimData.sku.trim(),
         mainImage: selectedMainImage,
         galleryImages: selectedGallery,
-        variants: claimData.variants.map(v => ({
+        variants: pricedVariants.map(v => ({
           name: v.name.trim(),
           price: Number(v.price),
           salePrice: Number(v.salePrice) || 0,
@@ -786,6 +954,7 @@ const BrowseCatalog = () => {
                 </div>
 
                 {/* Seller Config */}
+                {claimData.variants.length === 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Selling Price (₹) *</label>
@@ -823,8 +992,10 @@ const BrowseCatalog = () => {
                     </div>
                   </div>
                 </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {claimData.variants.length === 0 && (
                   <div className="flex flex-col space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stock Available *</label>
                     <input
@@ -837,6 +1008,7 @@ const BrowseCatalog = () => {
                       min="0"
                     />
                   </div>
+                  )}
 
                   <div className="flex flex-col space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Seller SKU (Optional)</label>
@@ -853,7 +1025,7 @@ const BrowseCatalog = () => {
                 {/* Seller Variants Section */}
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Store Variants (Optional)</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Store Variants {claimData.variants.length > 0 ? "" : "(Optional)"}</label>
                     <button
                       type="button"
                       onClick={addVariantRow}
@@ -863,6 +1035,11 @@ const BrowseCatalog = () => {
                       <span>Add Variant</span>
                     </button>
                   </div>
+                  {claimData.variants.length > 0 && (
+                    <p className="text-[11px] font-medium text-slate-500 -mt-2">
+                      Price the variants you sell — any variant left without a price is not added, and you can add your own with "Add Variant". The price customers see on the listing is the lowest variant price.
+                    </p>
+                  )}
 
                   {claimData.variants.length > 0 && (
                     <div className="space-y-3">
@@ -907,7 +1084,7 @@ const BrowseCatalog = () => {
                           </div>
 
                           <div className="flex flex-col space-y-1">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Price (₹) *</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Price (₹)</span>
                             <input
                               type="number"
                               value={v.price}
@@ -929,7 +1106,7 @@ const BrowseCatalog = () => {
                           </div>
 
                           <div className="flex flex-col space-y-1">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Stock *</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Stock</span>
                             <input
                               type="number"
                               value={v.stock}
@@ -1080,7 +1257,7 @@ const BrowseCatalog = () => {
                     Set price &amp; stock for {bulkReviewItems.length} products
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Review and set your selling price and starting stock before cloning.
+                    Set your selling price and starting stock. For items with variants, price the ones you sell.
                   </p>
                 </div>
                 <button onClick={() => setIsBulkReviewOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
@@ -1090,35 +1267,122 @@ const BrowseCatalog = () => {
 
               <div className="flex-1 overflow-y-auto p-5 space-y-3">
                 {bulkReviewItems.map((item) => (
-                  <div key={item.catalogProductId} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
-                    <img
-                      src={item.mainImage}
-                      alt={item.name}
-                      className="h-12 w-12 rounded-lg object-cover bg-slate-50 flex-shrink-0"
-                    />
-                    <p className="flex-1 text-sm font-semibold text-slate-800 truncate">{item.name}</p>
-                    <div className="w-28">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Price</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.price}
-                        onChange={(e) => updateBulkReviewItem(item.catalogProductId, "price", e.target.value)}
-                        placeholder="Price"
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                  <div key={item.catalogProductId} className="border border-slate-100 rounded-xl p-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={item.mainImage}
+                        alt={item.name}
+                        className="h-12 w-12 rounded-lg object-cover bg-slate-50 flex-shrink-0"
                       />
+                      <p className="flex-1 text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                      {item.variants.length === 0 && (
+                        <>
+                          <div className="w-28">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Price</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.price}
+                              onChange={(e) => updateBulkReviewItem(item.catalogProductId, "price", e.target.value)}
+                              placeholder="Price"
+                              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                            />
+                          </div>
+                          <div className="w-28">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Discount</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.salePrice}
+                              onChange={(e) => updateBulkReviewItem(item.catalogProductId, "salePrice", e.target.value)}
+                              placeholder="Optional"
+                              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                            />
+                          </div>
+                          <div className="w-24">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Stock</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.stock}
+                              onChange={(e) => updateBulkReviewItem(item.catalogProductId, "stock", e.target.value)}
+                              placeholder="Stock"
+                              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div className="w-24">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Stock</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.stock}
-                        onChange={(e) => updateBulkReviewItem(item.catalogProductId, "stock", e.target.value)}
-                        placeholder="Stock"
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
-                      />
-                    </div>
+
+                    {item.variants.length > 0 && (
+                      <div className="space-y-2 pl-2 border-l-2 border-slate-100">
+                        <p className="text-[10px] font-medium text-slate-500">
+                          Price the variants you sell. Variants left without a price are not added.
+                        </p>
+                        {item.variants.map((v) => (
+                          <div key={v.id} className="flex items-end gap-2">
+                            <div className="flex-1 min-w-0">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Variant</label>
+                              <input
+                                type="text"
+                                value={v.name}
+                                onChange={(e) => updateBulkVariant(item.catalogProductId, v.id, "name", e.target.value)}
+                                placeholder="e.g. 1kg"
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div className="w-24">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Price</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={v.price}
+                                onChange={(e) => updateBulkVariant(item.catalogProductId, v.id, "price", e.target.value)}
+                                placeholder="₹"
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div className="w-24">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Discount</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.salePrice}
+                                onChange={(e) => updateBulkVariant(item.catalogProductId, v.id, "salePrice", e.target.value)}
+                                placeholder="₹ (opt.)"
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div className="w-20">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Stock</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.stock}
+                                onChange={(e) => updateBulkVariant(item.catalogProductId, v.id, "stock", e.target.value)}
+                                placeholder="Qty"
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeBulkVariant(item.catalogProductId, v.id)}
+                              aria-label={`Remove ${v.name || "variant"}`}
+                              className="p-1.5 mb-0.5 text-slate-400 hover:text-red-600 rounded-lg">
+                              <HiOutlineXMark className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => addBulkVariant(item.catalogProductId)}
+                      className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800">
+                      <HiOutlinePlus className="h-3.5 w-3.5" />
+                      <span>Add Variant</span>
+                    </button>
                   </div>
                 ))}
               </div>

@@ -352,6 +352,24 @@ const ProductManagement = () => {
     return <Badge variant="success" className="text-[10px] px-2 py-0.5">Approved</Badge>;
   };
 
+  // Price shown on the mobile product card, same rule the customer card uses:
+  // sale price when it undercuts the MRP, with the MRP struck through. For
+  // multi-variant products the cheapest variant is shown.
+  const getCardPrice = (product) => {
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    const sources = variants.length > 0 ? variants : [product];
+    let best = null;
+    for (const s of sources) {
+      const mrp = Number(s.price || 0);
+      const sale = Number(s.salePrice || 0);
+      const effective = sale > 0 && sale < mrp ? sale : mrp;
+      if (best === null || effective < best.price) {
+        best = { price: effective, original: effective < mrp ? mrp : null };
+      }
+    }
+    return { ...(best || { price: 0, original: null }), hasVariants: variants.length > 1 };
+  };
+
   const formatHiddenUntil = (product) => {
     const pausedUntil = product.availability?.pausedUntil;
     if (pausedUntil && new Date(pausedUntil) > new Date()) {
@@ -858,9 +876,180 @@ const ProductManagement = () => {
       </Card>
 
 
-      {/* Product Table */}
+      {/* Mobile: 2-up product cards, laid out like the customer app */}
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        {filteredProducts.map((p) => {
+          const id = p._id || p.id;
+          const approval = String(p.approvalStatus || "").toLowerCase();
+          const { price, original, hasVariants } = getCardPrice(p);
+          const isActive = p.status === "active";
+          const discount = original ? Math.round(((original - price) / original) * 100) : 0;
+          const statusBadge =
+            approval === "pending"
+              ? { text: "Pending", cls: "bg-amber-100 text-amber-700" }
+              : approval === "rejected"
+                ? { text: "Rejected", cls: "bg-rose-100 text-rose-700" }
+                : p.isPublished === false
+                  ? { text: "Needs pricing", cls: "bg-amber-100 text-amber-700" }
+                  : null;
 
-      <div className="sm:bg-white sm:shadow-xl sm:ring-1 sm:ring-slate-100 sm:rounded-xl overflow-hidden">
+          return (
+            <div
+              key={id}
+              className="relative flex flex-col rounded-xl bg-white border-[1.5px] border-brand-50 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)]">
+              {/* Image */}
+              <div className="relative">
+                {statusBadge ? (
+                  <span
+                    title={approval === "rejected" && p.approvalNote ? p.approvalNote : undefined}
+                    className={cn(
+                      "absolute top-2 left-2 z-10 rounded-md px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider shadow-sm",
+                      statusBadge.cls,
+                    )}>
+                    {statusBadge.text}
+                  </span>
+                ) : discount > 0 ? (
+                  <span className="absolute top-2 left-2 z-10 rounded-md bg-primary px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-primary-foreground shadow-sm">
+                    {discount}% OFF
+                  </span>
+                ) : null}
+                <div className="absolute top-2 right-2 z-10 flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(p)}
+                    aria-label={`Edit ${p.name}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-lg backdrop-blur-sm active:scale-90">
+                    <HiOutlinePencilSquare className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteClick(p)}
+                    aria-label={`Delete ${p.name}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-rose-500 shadow-lg backdrop-blur-sm active:scale-90">
+                    <HiOutlineTrash className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="aspect-[4/3] w-full overflow-hidden rounded-t-[10px] bg-white">
+                  <img
+                    src={
+                      p.mainImage ||
+                      p.image ||
+                      "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400"
+                    }
+                    alt={p.name}
+                    loading="lazy"
+                    className={cn("h-full w-full object-cover", !isActive && "opacity-50 grayscale")}
+                  />
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="flex flex-1 flex-col gap-0.5 p-2 pt-1">
+                <div className="mb-0.5 flex items-center gap-1">
+                  <div className="flex h-2 w-2 items-center justify-center rounded-full border-2 border-primary">
+                    <div className="h-0.5 w-0.5 rounded-full bg-primary" />
+                  </div>
+                  {p.variants?.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingVariants(p);
+                        setIsVariantsViewModalOpen(true);
+                      }}
+                      className="rounded bg-brand-50 px-1.5 text-[8px] font-bold tracking-wide text-brand-600">
+                      {p.variants.length} variant{p.variants.length > 1 ? "s" : ""}
+                    </button>
+                  ) : (
+                    <span className="rounded bg-brand-50 px-1.5 text-[8px] font-bold tracking-wide text-brand-600">
+                      {p.weight || "1 unit"}
+                    </span>
+                  )}
+                  <span className="ml-auto rounded bg-slate-100 px-1.5 text-[8px] font-bold text-slate-500">
+                    #{p.displayOrder ?? 0}
+                  </span>
+                </div>
+
+                <h4 className="truncate text-[10.5px] font-[600] leading-tight text-[#1A1A1A]" title={p.name}>
+                  {p.name}
+                </h4>
+                <p className="truncate text-[9px] font-medium text-slate-500">{displaySku(p)}</p>
+                <p className="truncate text-[9px] text-slate-400">
+                  {[p.headerId?.name, p.categoryId?.name, p.subcategoryId?.name].filter(Boolean).join(" › ") || "N/A"}
+                </p>
+                {p.isCurrentlyAvailable === false && (
+                  <p className="truncate text-[8px] font-semibold text-amber-600">{formatHiddenUntil(p)}</p>
+                )}
+
+                <div className="mt-1 flex items-end justify-between gap-1">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-[1000] text-[#1A1A1A]">
+                      {hasVariants ? "From " : ""}₹{price}
+                    </span>
+                    {original ? (
+                      <span className="text-[8px] font-medium leading-none text-gray-400 line-through">₹{original}</span>
+                    ) : null}
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isActive}
+                    aria-label={`${isActive ? "Turn off" : "Turn on"} ${p.name}`}
+                    disabled={p.isPublished === false}
+                    onClick={() => handleToggleStatus(p)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                      isActive ? "bg-brand-600" : "bg-slate-300",
+                    )}>
+                    <span
+                      className={cn(
+                        "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                        isActive ? "translate-x-5" : "translate-x-1",
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="relative mt-1 border-t border-slate-50 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPauseMenuOpenFor(pauseMenuOpenFor === id ? null : id)}
+                    className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-brand-600">
+                    <HiOutlineClock className="h-3 w-3" />
+                    Pause
+                    <HiOutlineChevronDown className="h-3 w-3" />
+                  </button>
+                  {pauseMenuOpenFor === id && (
+                    <div className="absolute bottom-full left-0 z-20 mb-1 w-32 rounded-lg border border-slate-100 bg-white py-1 shadow-lg">
+                      {[1, 2, 4].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => handlePauseProduct(p, h)}
+                          className="block w-full px-3 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50">
+                          Pause {h}h
+                        </button>
+                      ))}
+                      {p.availability?.pausedUntil && (
+                        <button
+                          type="button"
+                          onClick={() => handleUnpauseProduct(p)}
+                          className="block w-full px-3 py-1.5 text-left text-xs font-medium text-brand-600 hover:bg-brand-50">
+                          Resume now
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Product Table (tablet / desktop) */}
+
+      <div className="hidden md:block md:bg-white md:shadow-xl md:ring-1 md:ring-slate-100 md:rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse mobile-table-card">
             <thead>

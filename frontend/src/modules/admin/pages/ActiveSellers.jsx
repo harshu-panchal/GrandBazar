@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
+import { EditableCell, parseAmount, parsePercent } from "../components/RateControls";
 import MapPicker from "@/shared/components/MapPicker";
 import { getAvatarImageUrl, handleAvatarImageError, handleDocumentImageError } from "@core/utils/imageUtils";
 
@@ -128,6 +129,50 @@ const ActiveSellers = () => {
   const requestSeq = useRef(0);
 
   const [sellers, setSellers] = useState([]);
+
+  // Sets (or clears, when blank) this shop's own commission straight from the
+  // table. Clearing keeps the stored rate but stops applying it, so category
+  // rates take over again. Returns true on success.
+  const saveShopCommission = async (seller, raw) => {
+    const isFixed = seller.applyCommission && seller.adminCommissionType === "fixed";
+    const blank = String(raw ?? "").trim() === "";
+    let value = Number(seller.adminCommissionValue) || 0;
+    if (!blank) {
+      const parsed = isFixed ? parseAmount(raw) : parsePercent(raw);
+      if (parsed === null) {
+        toast.error(isFixed ? "Commission must be 0 or more" : "Commission must be between 0 and 100");
+        return false;
+      }
+      value = parsed;
+    }
+    const payload = {
+      applyCommission: !blank,
+      adminCommissionType: isFixed ? "fixed" : "percentage",
+      adminCommissionValue: value,
+      adminCommissionFixedRule: seller.adminCommissionFixedRule || "per_qty",
+    };
+    try {
+      await adminApi.updateStoreCommission(seller._id || seller.id, payload);
+      setSellers((prev) =>
+        prev.map((row) =>
+          (row._id || row.id) === (seller._id || seller.id)
+            ? {
+                ...row,
+                applyCommission: payload.applyCommission,
+                adminCommissionType: payload.adminCommissionType,
+                adminCommissionValue: payload.adminCommissionValue,
+                adminCommissionFixedRule: payload.adminCommissionFixedRule,
+              }
+            : row,
+        ),
+      );
+      toast.success(blank ? "Shop commission cleared — category rates apply" : "Shop commission updated");
+      return true;
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update shop commission");
+      return false;
+    }
+  };
   const [stats, setStats] = useState(emptyStats);
   const [categories, setCategories] = useState([]);
   const [dbCategories, setDbCategories] = useState([]);
@@ -553,20 +598,29 @@ const ActiveSellers = () => {
 
       <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden rounded-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[1120px] table-fixed text-left border-collapse">
+            <colgroup>
+              <col className="w-[26%]" />
+              <col className="w-[15%]" />
+              <col className="w-[22%]" />
+              <col className="w-[11%]" />
+              <col className="w-[14%]" />
+              <col className="w-[190px]" />
+            </colgroup>
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="ds-table-header-cell px-6">Store Entity</th>
-                <th className="ds-table-header-cell px-6">Performance</th>
-                <th className="ds-table-header-cell px-6">Business Intel</th>
-                <th className="ds-table-header-cell px-6">Status</th>
-                <th className="ds-table-header-cell px-6 text-right">Actions</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap">Store Entity</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap">Performance</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap">Business Intel</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap text-center">Commission</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap">Status</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-24 text-center">
+                  <td colSpan="6" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <HiOutlineArrowPath className="h-8 w-8 text-slate-300 animate-spin" />
                       <p className="text-slate-500 font-bold text-sm">
@@ -577,7 +631,7 @@ const ActiveSellers = () => {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-24 text-center">
+                  <td colSpan="6" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-16 w-16 rounded-full bg-rose-50 flex items-center justify-center">
                         <HiOutlineXMark className="h-8 w-8 text-rose-400" />
@@ -595,9 +649,9 @@ const ActiveSellers = () => {
               ) : sellers.length > 0 ? (
                 sellers.map((seller) => (
                   <tr key={seller.id} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-2xl overflow-hidden bg-slate-100 ring-2 ring-slate-100 flex items-center justify-center">
+                    <td className="px-6 py-5 align-middle">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="h-12 w-12 shrink-0 rounded-2xl overflow-hidden bg-slate-100 ring-2 ring-slate-100 flex items-center justify-center">
                           <img
                             src={getAvatarImageUrl(seller.avatar)}
                             alt={seller.shopName}
@@ -605,8 +659,8 @@ const ActiveSellers = () => {
                             onError={handleAvatarImageError}
                           />
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-900">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate" title={seller.shopName}>
                             {seller.shopName}
                           </p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -629,7 +683,7 @@ const ActiveSellers = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-5 align-middle">
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-bold text-slate-900">
@@ -653,7 +707,7 @@ const ActiveSellers = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-5 align-middle">
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2 text-slate-700">
                           <HiOutlineDocumentText className="h-3.5 w-3.5 text-slate-400" />
@@ -661,9 +715,9 @@ const ActiveSellers = () => {
                             {(seller.productCount || 0).toLocaleString("en-IN")} products
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <HiOutlineMapPin className="h-3.5 w-3.5 text-slate-400" />
-                          <span className="text-[10px] font-bold truncate max-w-[260px]">
+                        <div className="flex items-center gap-2 text-slate-700 min-w-0">
+                          <HiOutlineMapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="text-[10px] font-bold truncate" title={seller.location || "Location not set"}>
                             {seller.location || "Location not set"}
                           </span>
                         </div>
@@ -676,50 +730,96 @@ const ActiveSellers = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
+                    <td className="px-6 py-5 align-middle">
+                      <div className="flex justify-center">
+                      {seller.businessModel === "subscription" ? (
+                        <span
+                          className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600"
+                          title="This seller is on a subscription plan, so no commission is charged.">
+                          Subscription
+                        </span>
+                      ) : (
+                        <EditableCell
+                          centered
+                          initialValue={seller.applyCommission ? seller.adminCommissionValue : ""}
+                          prefix={seller.applyCommission && seller.adminCommissionType === "fixed" ? "₹" : undefined}
+                          suffix={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "%"}
+                          max={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "100"}
+                          onSave={(v) => saveShopCommission(seller, v)}
+                          display={
+                            seller.applyCommission ? (
+                              <span
+                                className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100"
+                                title={
+                                  seller.adminCommissionType === "fixed"
+                                    ? `Fixed ${String(seller.adminCommissionFixedRule || "per_qty").replace("_", " ")}`
+                                    : "Shop-wise custom rate"
+                                }>
+                                {seller.adminCommissionType === "fixed"
+                                  ? `₹${seller.adminCommissionValue}`
+                                  : `${seller.adminCommissionValue}%`}
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                                title="No shop-wise rate: category rates apply. Click to set one for this shop.">
+                                Category rate
+                              </span>
+                            )
+                          }
+                        />
+                      )}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-5 align-middle">
+                      <div className="flex flex-col items-start gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                         <Badge
                           variant="success"
-                          className="w-fit text-[8px] font-black uppercase tracking-widest"
+                          className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
                         >
                           Store Active
                         </Badge>
                         {seller.ownerAccountApproved ? (
                           <Badge
                             variant="success"
-                            className="w-fit text-[8px] font-black uppercase tracking-widest"
+                            className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
                           >
                             Owner Approved
                           </Badge>
                         ) : (
                           <Badge
                             variant="error"
-                            className="w-fit text-[8px] font-black uppercase tracking-widest"
+                            className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
                           >
                             Owner {seller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
                           </Badge>
                         )}
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          Last order: {seller.lastOrderLabel || "No orders yet"}
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">
+                          Last order: <span className="font-semibold text-slate-500">{seller.lastOrderLabel || "No orders yet"}</span>
                         </span>
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-5 align-middle text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setSelectedSeller(seller)}
-                          className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
+                          title="View profile"
+                          className="px-3.5 py-2 bg-slate-900 text-white rounded-lg text-[11px] font-bold whitespace-nowrap hover:bg-slate-800 transition-all shadow-sm flex items-center gap-1.5"
                         >
                           <HiOutlineEye className="h-3.5 w-3.5" />
-                          VIEW PROFILE
+                          View
                         </button>
                         <button
                           onClick={() => navigate(`/admin/sellers/active/${seller.id}`)}
-                          className="px-4 py-2.5 bg-white text-slate-700 ring-1 ring-slate-200 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition-all flex items-center gap-2"
+                          title="Edit shop"
+                          className="px-3.5 py-2 bg-white text-slate-700 ring-1 ring-slate-200 rounded-lg text-[11px] font-bold whitespace-nowrap hover:bg-slate-50 transition-all flex items-center gap-1.5"
                         >
                           <HiOutlinePencilSquare className="h-3.5 w-3.5" />
-                          EDIT SHOP
+                          Edit
                         </button>
                       </div>
                     </td>
@@ -727,7 +827,7 @@ const ActiveSellers = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="px-6 py-24 text-center">
+                  <td colSpan="6" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center">
                         <HiOutlineBuildingOffice2 className="h-8 w-8 text-slate-200" />

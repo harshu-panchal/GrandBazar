@@ -1,4 +1,6 @@
 import Seller from "../models/seller.js";
+import { normalizeCityKey } from "../services/cityCommissionService.js";
+import { enqueueRecalcBySeller } from "../queues/pricingQueueProcessors.js";
 import Store from "../models/store.js";
 import Transaction from "../models/transaction.js";
 import Wallet from "../models/wallet.js";
@@ -427,6 +429,7 @@ export const updateSellerProfile = async (req, res) => {
     if (address !== undefined) store.address = address;
     if (locality !== undefined) store.locality = locality;
     if (pincode !== undefined) store.pincode = pincode;
+    const cityKeyBefore = normalizeCityKey(store.city || "");
     if (city !== undefined) store.city = city;
     if (state !== undefined) store.state = state;
 
@@ -455,6 +458,12 @@ export const updateSellerProfile = async (req, res) => {
     invalidateSellerName(storeId).catch((err) => {
       console.warn("[Store] Name cache invalidation failed:", err.message);
     });
+
+    // A city change can switch which city commission applies to this shop's
+    // products, so refresh their stored customer prices.
+    if (normalizeCityKey(updatedStore.city || "") !== cityKeyBefore) {
+      enqueueRecalcBySeller(String(updatedStore._id));
+    }
 
     return handleResponse(
       res,

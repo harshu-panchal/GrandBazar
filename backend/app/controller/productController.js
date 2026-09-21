@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Product from "../models/product.js";
 import Category from "../models/category.js";
 import Store from "../models/store.js";
@@ -1439,6 +1440,163 @@ export const updateProduct = async (req, res) => {
 };
 
 /* ===============================
+   ADMIN BULK UPDATE (status / commission / GST override / packaging)
+   Changes only the fields present in the body, on one or many products. The
+   regular PUT /products/:id is not usable for this: for admins it always
+   rewrites every commission field (and re-approves the product), so a
+   partial body would silently wipe commissions.
+================================ */
+const BULK_GST_SLABS = [0, 5, 12, 18, 28];
+
+export const bulkUpdateProductsAdmin = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { ids } = body;
+    const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return handleResponse(res, 400, "Select at least one product");
+    }
+    if (ids.length > 100) {
+      return handleResponse(res, 400, "Too many products in one request (max 100)");
+    }
+    const uniqueIds = [...new Set(ids.map((id) => String(id)))];
+    if (uniqueIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return handleResponse(res, 400, "Invalid product ID in selection");
+    }
+
+    const set = {};
+
+    if (has("status")) {
+      if (!["active", "inactive"].includes(body.status)) {
+        return handleResponse(res, 400, "Status must be active or inactive");
+      }
+      set.status = body.status;
+    }
+
+    if (has("applyCommission")) {
+      const apply = body.applyCommission === true || body.applyCommission === "true";
+      const type = body.adminCommissionType === "fixed" ? "fixed" : "percentage";
+      let value = 0;
+      if (apply) {
+        value = Number(body.adminCommission);
+        const max = type === "percentage" ? 100 : Infinity;
+        if (
+          body.adminCommission === undefined ||
+          body.adminCommission === null ||
+          body.adminCommission === "" ||
+          !Number.isFinite(value) ||
+          value < 0 ||
+          value > max
+        ) {
+          return handleResponse(
+            res,
+            400,
+            type === "percentage"
+              ? "Commission must be a number between 0 and 100"
+              : "Commission must be 0 or more",
+          );
+        }
+      }
+      Object.assign(set, {
+        applyCommission: apply,
+        adminCommission: value,
+        adminCommissionValue: value,
+        adminCommissionType: type,
+      });
+    }
+
+    // null / "" clears the override so the product inherits again.
+    if (has("gstSlabOverride")) {
+      if (body.gstSlabOverride === null || body.gstSlabOverride === "") {
+        set.gstSlabOverride = null;
+      } else {
+        const slab = Number(body.gstSlabOverride);
+        if (!BULK_GST_SLABS.includes(slab)) {
+          return handleResponse(res, 400, `GST slab must be one of: ${BULK_GST_SLABS.join(", ")}`);
+        }
+        set.gstSlabOverride = slab;
+      }
+    }
+
+    if (has("packagingCharge")) {
+      if (body.packagingCharge === null || body.packagingCharge === "") {
+        set.packagingCharge = null;
+      } else {
+        const amount = Number(body.packagingCharge);
+        if (!Number.isFinite(amount) || amount < 0) {
+          return handleResponse(res, 400, "Packaging charge must be 0 or more");
+        }
+        set.packagingCharge = amount;
+      }
+    }
+
+    if (Object.keys(set).length === 0) {
+      return handleResponse(res, 400, "Nothing to update");
+    }
+
+    const products = await Product.find({ _id: { $in: uniqueIds } }).lean();
+    if (products.length === 0) {
+      return handleResponse(res, 404, "No matching products found");
+    }
+
+    // Commission feeds the stored customerPrice, so recompute it per product
+    // exactly like updateProduct does. Chunked to keep DB load bounded.
+    const touchesPrice = PRICE_AFFECTING_FIELDS.some((key) =>
+      Object.prototype.hasOwnProperty.call(set, key),
+    );
+    let modified = 0;
+    for (let i = 0; i < products.length; i += 10) {
+      const chunk = products.slice(i, i + 10);
+      const results = await Promise.all(
+        chunk.map(async (product) => {
+          const update = { ...set };
+          if (touchesPrice) {
+            try {
+              Object.assign(
+                update,
+                await computeCustomerPriceFieldsForWrite({ ...product, ...set }),
+              );
+            } catch (priceError) {
+              console.error("Failed to recompute customerPrice on bulk update (non-blocking):", priceError);
+            }
+          }
+          const res1 = await Product.updateOne({ _id: product._id }, { $set: update });
+          return res1.modifiedCount ?? res1.nModified ?? 0;
+        }),
+      );
+      modified += results.reduce((sum, n) => sum + n, 0);
+    }
+
+    await Promise.all(
+      products.map(async (product) => {
+        const id = String(product._id);
+        try {
+          await enqueueProductIndex(id);
+          await invalidate(`cache:catalog:product:${id}`);
+        } catch (syncError) {
+          console.error("Bulk product update sync error:", syncError);
+        }
+      }),
+    );
+    try {
+      await invalidate(buildKey("catalog", "productList", "*"));
+      await invalidate("cache:offersections:public:*");
+    } catch (cacheErr) {
+      console.error("Cache invalidation error (bulkUpdateProductsAdmin):", cacheErr);
+    }
+
+    return handleResponse(res, 200, "Products updated", {
+      matched: products.length,
+      modified,
+    });
+  } catch (error) {
+    console.error("Bulk Update Products Error:", error);
+    return handleResponse(res, 500, `Bulk product update failed: ${error.message}`);
+  }
+};
+
+/* ===============================
    DELETE PRODUCT
 ================================ */
 export const deleteProduct = async (req, res) => {
@@ -1670,7 +1828,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge gstSlabOverride createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
