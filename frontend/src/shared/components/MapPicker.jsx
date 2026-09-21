@@ -69,7 +69,7 @@ const MapPicker = ({
   onConfirm,
   initialLocation = null,
   initialRadius = 5,
-  maxRadius = 20,
+  maxRadius = 50,
   preferCurrentLocationOnOpen = false,
 }) => {
   const [center, setCenter] = useState(initialLocation || defaultCenter);

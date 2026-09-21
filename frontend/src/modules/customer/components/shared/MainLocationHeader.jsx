@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Lottie from "lottie-react";
@@ -24,14 +24,6 @@ import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
 import StoreIcon from "@mui/icons-material/Store";
 
-/** Full-width bottom stroke + tab curve; l/r are 0–100% of column where the inner bump sits. */
-function buildActiveTabPath(l, r) {
-  const y = 20;
-  const mapX = (x) => l + ((x - 1.5) / (98.5 - 1.5)) * (r - l);
-  // Softer shoulders + flatter crown for a cleaner active tab curve.
-  return `M 0 ${y} L ${l} ${y} L ${l} 12 C ${mapX(2.6)} 7 ${mapX(8.2)} 1.55 ${mapX(15)} 1.55 L ${mapX(85)} 1.55 C ${mapX(91.8)} 1.55 ${mapX(97.4)} 7 ${mapX(98.5)} 12 V ${y} L 100 ${y}`;
-}
-
 function CategoryNavColumn({
   cat,
   isActive,
@@ -41,47 +33,16 @@ function CategoryNavColumn({
   headerIconColor,
 }) {
   const iconColor = headerIconColor || "#111111";
-  const colRef = useRef(null);
-  const labelRef = useRef(null);
-  const [lr, setLr] = useState({ l: 22, r: 78 });
-
-  const measure = () => {
-    if (!isActive || !colRef.current || !labelRef.current) return;
-    const col = colRef.current.getBoundingClientRect();
-    const lab = labelRef.current.getBoundingClientRect();
-    if (col.width < 4) return;
-    const pad = 5;
-    const l = Math.max(0, ((lab.left - col.left - pad) / col.width) * 100);
-    const r = Math.min(100, ((lab.right - col.left + pad) / col.width) * 100);
-    if (r - l > 6) setLr({ l, r });
-  };
-
-  useLayoutEffect(() => {
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (colRef.current) ro.observe(colRef.current);
-    window.addEventListener("resize", measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [isActive, cat.name]);
-
-  const pathD = isActive ? buildActiveTabPath(lr.l, lr.r) : "";
 
   return (
     <motion.div
-      ref={colRef}
       layout
       whileTap={{ scale: 0.96 }}
       transition={{
         layout: { type: "spring", stiffness: 520, damping: 38, mass: 0.55 },
       }}
       onClick={() => onCategorySelect && onCategorySelect(cat)}
-      style={{
-        borderBottomColor: isActive ? "transparent" : categoryAccent,
-      }}
-      className="relative z-[2] flex min-w-[48px] shrink-0 cursor-pointer flex-col items-center gap-0.5 border-b-2 px-2 pb-0.5 pt-0.5 snap-start md:min-w-[58px]">
+      className="relative z-[2] flex min-w-[48px] shrink-0 cursor-pointer flex-col items-center gap-0.5 px-2 pb-1.5 pt-0.5 snap-start md:min-w-[58px]">
       <div className="relative z-10 flex h-9 w-9 items-center justify-center md:h-11 md:w-11">
         {typeof cat.icon === "function" ||
         (typeof cat.icon === "object" && cat.icon.$$typeof) ? (
@@ -105,7 +66,6 @@ function CategoryNavColumn({
       </div>
       <div className="relative mt-px w-full">
         <span
-          ref={labelRef}
           className={cn(
             "relative z-10 mx-auto block max-w-[72px] truncate px-1 pb-0.5 text-center text-[8px] uppercase tracking-tight md:max-w-[88px] md:text-[10px]",
             isActive ? "font-black" : "font-semibold",
@@ -118,25 +78,16 @@ function CategoryNavColumn({
         </span>
       </div>
       {isActive && (
-        <motion.svg
-          layoutId="active-category-curve"
+        // Short pill under the active category; slides between tabs.
+        <motion.span
+          layoutId="active-category-underline"
           aria-hidden
-          className="pointer-events-none absolute bottom-0 left-0 right-0 z-[6] h-[22px] w-full overflow-visible"
-          viewBox="0 0 100 20"
-          preserveAspectRatio="none"
-          shapeRendering="geometricPrecision"
+          className="pointer-events-none absolute bottom-0 left-1/2 h-[3px] w-10 -translate-x-1/2 rounded-full md:w-14"
+          style={{ backgroundColor: categoryAccent }}
           transition={{
             layout: { type: "spring", stiffness: 560, damping: 40, mass: 0.5 },
-          }}>
-          <path
-            d={pathD}
-            fill="none"
-            stroke={categoryAccent}
-            strokeWidth="2"
-            strokeLinecap="butt"
-            strokeLinejoin="round"
-          />
-        </motion.svg>
+          }}
+        />
       )}
     </motion.div>
   );
@@ -165,6 +116,9 @@ const MainLocationHeader = ({
   const { settings } = useSettings();
   const appName = settings?.appName || "App";
   const logoUrl = String(settings?.faviconUrl || settings?.logoUrl || "").trim();
+  // The favicon is just the mascot mark, so show the brand name beside it. A
+  // full logo lockup (the fallback) already contains the wordmark.
+  const showBrandName = Boolean(String(settings?.faviconUrl || "").trim());
   const navigate = useNavigate();
 
   const locationLabel = isFetchingLocation
@@ -359,12 +313,22 @@ const MainLocationHeader = ({
                   {logoUrl ? (
                     // The logo asset is a full lockup (mascot + wordmark) — showing
                     // the app name text beside it duplicated the brand name.
-                    <img
-                      src={logoUrl}
-                      alt={`${appName} Logo`}
-                      loading="lazy"
-                      className="h-10 w-auto object-contain"
-                    />
+                    <>
+                      <img
+                        src={logoUrl}
+                        alt={`${appName} Logo`}
+                        loading="lazy"
+                        className="h-10 w-auto object-contain"
+                      />
+                      {showBrandName && (
+                        <span
+                          className="text-xl font-black leading-none tracking-tight"
+                          style={{ color: headerFontColor }}
+                        >
+                          {appName}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <span className="text-xl font-black tracking-tight text-slate-900">
                       {appName}
@@ -481,7 +445,17 @@ const MainLocationHeader = ({
                 {logoUrl ? (
                   // The logo asset is a full lockup (mascot + wordmark) — the
                   // pill chrome + duplicated app name text below clashed with it.
-                  <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-12 w-auto object-contain" />
+                  <div className="flex items-center gap-2.5 pr-20">
+                    <img src={logoUrl} alt={`${appName} Logo`} loading="lazy" className="h-12 w-auto shrink-0 object-contain" />
+                    {showBrandName && (
+                      <span
+                        className="truncate text-xl font-black leading-none tracking-tight"
+                        style={{ color: headerFontColor }}
+                      >
+                        {appName}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <span
                     className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/18 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm"
