@@ -235,7 +235,8 @@ const SellerDetail = () => {
                 const lat = Array.isArray(coords) && coords.length === 2 ? coords[1] : detail.lat || null;
                 const lng = Array.isArray(coords) && coords.length === 2 ? coords[0] : detail.lng || null;
 
-                setShopSetupForm({
+                setShopSetupForm((prev) => ({
+                    ...prev,
                     shopName: detail.shopName || '',
                     category: detail.category || '',
                     description: detail.description || '',
@@ -265,7 +266,7 @@ const SellerDetail = () => {
                             ? detail.schedulingSettings.deliveryWindows
                             : [],
                     },
-                });
+                }));
                 setSeller((prev) => ({
                     ...prev,
                     id: detail.id || id,
@@ -292,6 +293,9 @@ const SellerDetail = () => {
             if (bmRes?.data?.result) {
                 const data = bmRes.data.result;
                 setBusinessModelData(data);
+                if (data?.businessModel === 'commission' || data?.businessModel === 'subscription') {
+                    setShopSetupForm((prev) => ({ ...prev, businessModel: data.businessModel }));
+                }
                 if (data?.commissionConfig) {
                     setCommissionForm({
                         scope: data.commissionConfig.scope || 'category',
@@ -305,12 +309,16 @@ const SellerDetail = () => {
                 const storeCommissionRes = await adminApi.getStoreCommission(id);
                 const payload = storeCommissionRes?.data?.result;
                 if (payload) {
-                    setShopCommissionForm({
+                    const shopCommission = {
                         applyCommission: payload.applyCommission === true,
                         adminCommissionType: payload.adminCommissionType || 'percentage',
                         adminCommissionValue: Number(payload.adminCommissionValue || 0),
                         adminCommissionFixedRule: payload.adminCommissionFixedRule || 'per_qty',
-                    });
+                    };
+                    setShopCommissionForm(shopCommission);
+                    // The setup form saves this too, so it must start from the shop's real
+                    // rate — not the hard-coded 10% default, which would silently overwrite it.
+                    setShopSetupForm((prev) => ({ ...prev, ...shopCommission }));
                 }
             } catch {
                 // optional; seller detail should still load.
@@ -547,9 +555,10 @@ const SellerDetail = () => {
             // businessModel/commission/subscriptionPlanId aren't part of the
             // store-setup allowlist (that endpoint only touches shop profile
             // fields) — they have their own dedicated endpoints.
-            await adminApi.updateSellerBusinessModel(id, {
-                businessModel: shopSetupForm.businessModel,
-            });
+            const chosenModel = shopSetupForm.businessModel;
+            if (chosenModel === 'commission' || chosenModel === 'subscription') {
+                await adminApi.updateSellerBusinessModel(id, { businessModel: chosenModel });
+            }
             if (shopSetupForm.businessModel === 'commission') {
                 await adminApi.updateStoreCommission(id, {
                     applyCommission: shopSetupForm.applyCommission,
@@ -557,7 +566,13 @@ const SellerDetail = () => {
                     adminCommissionValue: shopSetupForm.adminCommissionValue,
                     adminCommissionFixedRule: shopSetupForm.adminCommissionFixedRule,
                 });
-            } else if (shopSetupForm.businessModel === 'subscription' && shopSetupForm.subscriptionPlanId) {
+            } else if (
+                shopSetupForm.businessModel === 'subscription' &&
+                shopSetupForm.subscriptionPlanId &&
+                // Only when switching TO a subscription: re-saving an existing subscriber
+                // must not hand out another complimentary plan every time.
+                businessModelData?.businessModel !== 'subscription'
+            ) {
                 await adminApi.assignComplimentarySubscription({
                     sellerId: id,
                     planId: shopSetupForm.subscriptionPlanId,

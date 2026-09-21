@@ -1,27 +1,16 @@
 import Seller from "../../models/seller.js";
-import Store from "../../models/store.js";
 import handleResponse from "../../utils/helper.js";
 import {
   BUSINESS_MODEL,
   COMMISSION_SCOPE,
   formatBusinessModelPayload,
+  resolveOwnerIdFromSellerOrStoreId,
 } from "../../services/sellerBusinessModelService.js";
 import { getActiveSubscriptionForSeller } from "../../services/subscriptionService.js";
 
 async function resolveOwnerFromParam(id) {
-  const normalizedId = String(id || "").trim();
-  if (!normalizedId) return null;
-
-  const seller = await Seller.findById(normalizedId)
-    .select("_id accountType")
-    .lean();
-  if (seller?.accountType === "owner" || !seller?.accountType) {
-    return Seller.findById(normalizedId);
-  }
-
-  const store = await Store.findById(normalizedId).select("ownerId").lean();
-  if (!store?.ownerId) return null;
-  return Seller.findById(store.ownerId);
+  const ownerId = await resolveOwnerIdFromSellerOrStoreId(id);
+  return ownerId ? Seller.findById(ownerId) : null;
 }
 
 function normalizeCommissionConfig(input = {}) {

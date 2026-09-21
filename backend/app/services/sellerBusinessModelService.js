@@ -8,6 +8,26 @@ import {
 } from "../constants/finance.js";
 import { calculateCategoryCommission } from "./finance/pricingService.js";
 
+/**
+ * Admin screens address a shop by its STORE id (e.g. /admin/sellers/active/:id),
+ * while the business model, commission config and subscription live on the
+ * owner's SELLER account. Since multi-store accounts, those ids differ. This
+ * accepts either and returns the owner's Seller id, or null when nothing matches.
+ */
+export async function resolveOwnerIdFromSellerOrStoreId(id) {
+  const raw = String(id || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(raw)) return null;
+
+  const seller = await Seller.findById(raw).select("_id accountType").lean();
+  if (seller && (seller.accountType === "owner" || !seller.accountType)) {
+    return seller._id;
+  }
+
+  // Not an owner account (or not a Seller at all): treat it as a store id.
+  const store = await Store.findById(raw).select("ownerId").lean();
+  return store?.ownerId || null;
+}
+
 export const BUSINESS_MODEL = {
   COMMISSION: "commission",
   SUBSCRIPTION: "subscription",

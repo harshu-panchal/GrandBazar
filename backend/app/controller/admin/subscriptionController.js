@@ -4,6 +4,7 @@ import SellerSubscriptionPayment from "../../models/sellerSubscriptionPayment.js
 import SellerSubscription from "../../models/sellerSubscription.js";
 import Seller from "../../models/seller.js";
 import handleResponse from "../../utils/helper.js";
+import { resolveOwnerIdFromSellerOrStoreId } from "../../services/sellerBusinessModelService.js";
 import {
   approvePaymentRequest,
   rejectPaymentRequest,
@@ -231,8 +232,11 @@ export async function assignComplimentarySubscriptionAdmin(req, res) {
       note,
     } = req.body || {};
 
+    // The shop page passes the store id; the subscription belongs to the owner.
+    const ownerId = (await resolveOwnerIdFromSellerOrStoreId(sellerId)) || sellerId;
+
     const result = await assignComplimentarySubscription({
-      sellerId,
+      sellerId: ownerId,
       planId,
       durationDays,
       shopCount,
