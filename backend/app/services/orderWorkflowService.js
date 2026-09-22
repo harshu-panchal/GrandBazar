@@ -1137,9 +1137,56 @@ export async function processSellerTimeoutJob({ orderId }) {
   if (!order || order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING) return;
 
   if (order.sellerPendingExpiresAt && order.sellerPendingExpiresAt > now) {
+    return; // Not expired yet — scheduler fired early
+  }
+
+  // --- Bug #276 two-phase timeout ---
+  // Phase 1: First timeout fires → warn seller, extend deadline by 10 minutes.
+  //          Customer sees "Waiting for seller" — NOT "Order Not Found".
+  // Phase 2: Second timeout fires (after grace) → cancel with user-friendly message.
+
+  const GRACE_MS = parseInt(process.env.SELLER_GRACE_MS || "600000", 10); // 10 min default
+
+  if (!order.sellerTimeoutWarningSent) {
+    // Phase 1 — extend and notify
+    const graceExpiry = new Date(now.getTime() + GRACE_MS);
+    const warned = await Order.findOneAndUpdate(
+      {
+        orderId,
+        workflowVersion: { $gte: 2 },
+        workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+        sellerTimeoutWarningSent: { $ne: true },
+      },
+      {
+        $set: {
+          sellerPendingExpiresAt: graceExpiry,
+          sellerTimeoutWarningSent: true,
+        },
+      },
+      { new: true },
+    );
+    if (!warned) return; // another instance already handled this
+
+    // Re-schedule a new timeout job for the grace period
+    try {
+      await scheduleSellerTimeoutJob(orderId, GRACE_MS);
+    } catch (e) {
+      console.warn("[processSellerTimeoutJob] re-schedule grace failed", orderId, e.message);
+    }
+
+    // Notify seller with urgency
+    emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+      orderId: warned.orderId,
+      customerId: warned.customer,
+      userId: warned.customer,
+      sellerId: warned.seller,
+      customerMessage: "Your seller is reviewing the order. Please wait a moment.",
+      sellerMessage: `⚠️ Order #${warned.orderId} needs your attention — accept within 10 minutes or it will be auto-cancelled.`,
+    });
     return;
   }
 
+  // Phase 2 — grace period also expired, cancel for real
   const updated = await Order.findOneAndUpdate(
     {
       orderId,
@@ -1151,7 +1198,7 @@ export async function processSellerTimeoutJob({ orderId }) {
         workflowStatus: WORKFLOW_STATUS.CANCELLED,
         status: "cancelled",
         cancelledBy: "system",
-        cancelReason: "Seller timeout (60s)",
+        cancelReason: "Seller did not accept the order in time.",
       },
     },
     { new: true },
@@ -1167,8 +1214,8 @@ export async function processSellerTimeoutJob({ orderId }) {
     customerId: updated.customer,
     userId: updated.customer,
     sellerId: updated.seller,
-    customerMessage: "Your order was cancelled because seller did not accept in time.",
-    sellerMessage: `Order #${updated.orderId} was cancelled due to timeout.`,
+    customerMessage: "We're sorry — your order was cancelled because the seller did not respond in time. A full refund will be processed shortly.",
+    sellerMessage: `Order #${updated.orderId} was auto-cancelled after the acceptance window expired.`,
   });
 }
 

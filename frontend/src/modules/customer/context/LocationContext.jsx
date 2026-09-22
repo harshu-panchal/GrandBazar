@@ -265,17 +265,36 @@ export const LocationProvider = ({ children }) => {
       }
 
       // Standard Browser Geolocation
+      const tryLowAccuracy = () => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => handleLocationSuccess(pos.coords.latitude, pos.coords.longitude),
+          handleLocationError,
+          {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 60000,
+          },
+        );
+      };
+
       navigator.geolocation.getCurrentPosition(
         (position) =>
           handleLocationSuccess(
             position.coords.latitude,
             position.coords.longitude,
           ),
-        handleLocationError,
+        (err) => {
+          // If high-accuracy times out (code 3) or position unavailable (code 2), retry once with network/cell location
+          if (err && (err.code === 3 || err.code === 2)) {
+            tryLowAccuracy();
+          } else {
+            handleLocationError(err);
+          }
+        },
         {
           enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 0,
+          timeout: 10000,
+          maximumAge: 10000,
         },
       );
     });
@@ -355,8 +374,29 @@ export const LocationProvider = ({ children }) => {
     } finally {
       setHasHydratedLocation(true);
     }
-    // Live fetch happens only when user taps location pill or "Use current location"
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Bug #246: If device location/GPS permission is already granted, auto-resolve location
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator?.geolocation) return;
+
+    if (navigator?.permissions?.query) {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((permissionStatus) => {
+          if (permissionStatus.state === "granted") {
+            fetchAndCacheLocation();
+          }
+          permissionStatus.onchange = () => {
+            if (permissionStatus.state === "granted") {
+              fetchAndCacheLocation();
+            }
+          };
+        })
+        .catch(() => {
+          // Permissions API query not supported for geolocation on some engines
+        });
+    }
   }, []);
 
   const needsLocationSetup =

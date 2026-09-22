@@ -523,12 +523,18 @@ export async function placeOrderAtomic({
     const fulfillmentType = inferFulfillmentType(normalizedPayload);
     const isInstant = fulfillmentType === FULFILLMENT_TYPE.INSTANT && isInstantFulfillment(normalizedPayload);
 
+function httpError(message, statusCode = 400) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
     // 1. Fetch user and validate wallet + redemption rules
     const user = await User.findById(customerId).session(session);
     if (walletAmount > 0) {
-      if (!user) throw new Error("User not found");
+      if (!user) throw httpError("Customer account not found", 404);
       if (user.walletBalance < walletAmount) {
-        throw new Error("Insufficient wallet balance");
+        throw httpError("Your wallet balance is insufficient for this order", 400);
       }
       const rules = DEFAULT_WALLET_REDEMPTION;
       const estimatedCart = Math.max(
@@ -536,23 +542,25 @@ export async function placeOrderAtomic({
         Number(normalizedPayload.grandTotal || normalizedPayload.cartTotal || 0),
       );
       if (rules.minOrderAmount > 0 && estimatedCart < rules.minOrderAmount) {
-        throw new Error(
+        throw httpError(
           `Minimum order of ₹${rules.minOrderAmount} required to use reward wallet`,
+          400,
         );
       }
       if (
         rules.allowWithCoupon === false &&
         (normalizedPayload.couponId || normalizedPayload.couponCode)
       ) {
-        throw new Error("Reward wallet cannot be combined with coupons");
+        throw httpError("Reward wallet cannot be combined with coupons", 400);
       }
       if (rules.maxWalletPercent != null && estimatedCart > 0) {
         const maxByPercent = Math.round(
           (estimatedCart * Number(rules.maxWalletPercent)) / 100,
         );
         if (walletAmount > maxByPercent) {
-          throw new Error(
+          throw httpError(
             `You can use up to ${rules.maxWalletPercent}% of order amount from reward wallet`,
+            400,
           );
         }
       }
@@ -560,8 +568,9 @@ export async function placeOrderAtomic({
         rules.maxWalletAmount != null &&
         walletAmount > Number(rules.maxWalletAmount)
       ) {
-        throw new Error(
+        throw httpError(
           `Maximum reward wallet use is ₹${rules.maxWalletAmount} per order`,
+          400,
         );
       }
     }

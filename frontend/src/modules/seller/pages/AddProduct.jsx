@@ -628,6 +628,13 @@ const AddProduct = () => {
                           newVariants[index].stock = e.target.value;
                           setFormData({ ...formData, variants: newVariants });
                         }}
+                        onFocus={(e) => {
+                          if (e.target.value === "0") {
+                            const newVariants = [...formData.variants];
+                            newVariants[index].stock = "";
+                            setFormData({ ...formData, variants: newVariants });
+                          }
+                        }}
                         placeholder="10"
                         className="w-full px-3 py-2 bg-white ring-1 ring-slate-200 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-primary/10"
                       />

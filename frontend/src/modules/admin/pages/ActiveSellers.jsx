@@ -974,6 +974,17 @@ const ActiveSellers = () => {
                       </div>
                     </div>
 
+                    {(selectedSellerDetails?.description || selectedSeller.description) && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                          About Store
+                        </p>
+                        <div className="p-3.5 bg-white rounded-2xl ring-1 ring-slate-100 text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                          {selectedSellerDetails?.description || selectedSeller.description}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-3">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                         Store Health
@@ -1076,6 +1087,53 @@ const ActiveSellers = () => {
                   {/* Expanded Custom Details Cards */}
                   {selectedSellerDetails && (
                     <div className="mt-6 space-y-6 pt-6 border-t border-slate-100">
+                      {/* Store Hierarchy & Outlets */}
+                      {Array.isArray(selectedSellerDetails.stores) && selectedSellerDetails.stores.length > 0 && (
+                        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-indigo-600" />
+                              Store Hierarchy & Outlets ({selectedSellerDetails.stores.length})
+                            </h4>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Account: {selectedSellerDetails.ownerName || "Seller"}
+                            </span>
+                          </div>
+                          <div className="space-y-2 pt-1">
+                            {selectedSellerDetails.stores.map((st) => (
+                              <div
+                                key={st.id}
+                                className="p-3 bg-white rounded-xl border border-slate-100 flex items-center justify-between text-xs"
+                              >
+                                <div className="space-y-0.5 min-w-0 pr-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-800 truncate">{st.shopName}</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 font-semibold text-slate-600">
+                                      {st.category}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 truncate">{st.address || st.city || "Location not set"}</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                                    st.isActive ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                                  )}>
+                                    {st.isActive ? "Active" : "Inactive"}
+                                  </span>
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                                    st.isVerified ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+                                  )}>
+                                    {st.isVerified ? "Verified" : "Pending"}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Row 1: Monetization Plan & Bank Settlement Details */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Plan & Monetization Model Details */}

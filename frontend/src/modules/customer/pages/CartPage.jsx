@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@shared/components/ui/Toast';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import DeliverySlotPicker from '../components/checkout/DeliverySlotPicker';
-import { PackageCheck } from 'lucide-react';
+import { PackageCheck, AlertTriangle } from 'lucide-react';
 
 const formatDisplayDate = (value) => {
     if (!value) return '';
@@ -53,6 +53,7 @@ const CartPage = () => {
     const preorderItem = cart.find((item) => item.campaignId);
     const isPreorderCart = Boolean(preorderItem);
     const preorderMeta = preorderItem?.advanceBooking || null;
+    const hasUnavailableItems = cart.some((item) => Boolean(item.isUnavailable));
 
     // Dynamically load empty-box Lottie when cart is empty
     useEffect(() => {
@@ -123,8 +124,14 @@ const CartPage = () => {
                                                             {item.name}
                                                         </h3>
                                                         <p className="mt-1 text-sm font-medium text-slate-500">
-                                                            1 kg
+                                                            {item.weight || "1 unit"}
                                                         </p>
+                                                        {item.isUnavailable && (
+                                                            <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 border border-amber-200">
+                                                                <AlertTriangle size={13} className="text-amber-600 flex-shrink-0" />
+                                                                <span>{item.unavailableReason || "Currently unavailable — please remove"}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     <button
@@ -159,7 +166,8 @@ const CartPage = () => {
                                                         </span>
                                                         <button
                                                             onClick={() => updateQuantity(item.id, 1, item.variantSku)}
-                                                            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-white hover:text-slate-900 hover:shadow-md"
+                                                            disabled={Boolean(item.isUnavailable)}
+                                                            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition-all hover:bg-white hover:text-slate-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-30"
                                                         >
                                                             <Plus size={15} strokeWidth={3} />
                                                         </button>
@@ -285,11 +293,26 @@ const CartPage = () => {
                                         )}
                                     </div>
 
-                                    <Link to="/checkout" className="block">
-                                        <Button className="h-14 w-full rounded-full bg-brand-400 text-slate-950 hover:bg-brand-300 text-base font-black flex items-center justify-center gap-2 shadow-[0_18px_35px_rgba(16,185,129,0.3)] transition-all">
-                                            Place Order <ArrowRight size={18} />
-                                        </Button>
-                                    </Link>
+                                    {hasUnavailableItems ? (
+                                        <div className="space-y-2">
+                                            <Button
+                                                type="button"
+                                                onClick={() => showToast("Please remove unavailable items before placing your order", "error")}
+                                                className="h-14 w-full rounded-full bg-slate-800 text-slate-400 hover:bg-slate-800 cursor-not-allowed text-sm font-black flex items-center justify-center gap-2 transition-all border border-amber-400/30"
+                                            >
+                                                Remove Unavailable Items to Order
+                                            </Button>
+                                            <p className="text-center text-[11px] font-semibold text-amber-400">
+                                                One or more items in your cart are currently unavailable
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <Link to="/checkout" className="block">
+                                            <Button className="h-14 w-full rounded-full bg-brand-400 text-slate-950 hover:bg-brand-300 text-base font-black flex items-center justify-center gap-2 shadow-[0_18px_35px_rgba(16,185,129,0.3)] transition-all">
+                                                Place Order <ArrowRight size={18} />
+                                            </Button>
+                                        </Link>
+                                    )}
 
                                     <div className="grid grid-cols-2 gap-3 text-xs font-bold uppercase tracking-[0.16em] text-white/55">
                                         <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">

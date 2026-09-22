@@ -14,23 +14,29 @@ async function getAdminIds() {
 // Create a new ticket (Customer/Seller/Rider)
 export const createTicket = async (req, res) => {
     try {
-        const { subject, description, priority, userType, mediaUrl, mediaType, mimeType } = req.body;
-        const userId = req.user.id; // From verifyToken middleware
+        const { subject, description, priority, userType, mediaUrl, mediaType, mimeType, name, email, phone } = req.body;
+        const userId = req.user?.id || null;
 
         const safeMediaUrl = String(mediaUrl || "").trim();
         const safeMediaType = String(mediaType || "").trim();
         const safeMimeType = String(mimeType || "").trim();
+        const senderName = req.user?.name || name || phone || email || "Customer";
 
         const newTicket = new Ticket({
-            userId,
+            userId: userId || undefined,
+            guestContact: !userId ? {
+                name: String(name || "").trim(),
+                email: String(email || "").trim(),
+                phone: String(phone || "").trim(),
+            } : undefined,
             userType: userType || "Customer",
             subject,
             description,
             priority,
             messages: [
                 {
-                    sender: req.user.name || "User",
-                    senderId: userId,
+                    sender: senderName,
+                    senderId: userId || undefined,
                     senderType: "User",
                     text: description,
                     mediaUrl: safeMediaUrl,
@@ -53,7 +59,7 @@ export const createTicket = async (req, res) => {
                 messageId: savedMessage?._id,
                 messageCreatedAt: savedMessage?.createdAt,
                 userId,
-                userName: req.user.name || "User",
+                userName: senderName,
                 adminIds,
                 messageText: description || (safeMediaUrl ? "Sent an image" : ""),
                 data: {

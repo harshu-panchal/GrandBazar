@@ -57,7 +57,7 @@ export async function getSellerLocationsData({
   const baseQuery = filters.length ? { $and: filters } : {};
   const stores = await Store.find(baseQuery)
     .select(
-      "_id shopName category address location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason ownerId",
+      "_id shopName category address description location serviceRadius isActive isVerified applicationStatus reviewedAt createdAt rejectionReason ownerId",
     )
     .populate("ownerId", "name email phone")
     .lean();
@@ -175,6 +175,8 @@ export async function getSellerLocationsData({
       ordersLast24h,
       densityScore,
       lastOrderAt: orderStats.lastOrderAt || null,
+      description: seller.description || "",
+      address: seller.address || seller.locationLabel || "",
       approvedAt: seller.reviewedAt || null,
       createdAt: seller.createdAt || null,
     };
@@ -603,6 +605,12 @@ export async function getActiveSellerByIdData(id) {
   ]);
 
   const owner = store.ownerId || {};
+  const ownerId = owner._id || store.ownerId;
+  const allSellerStores = ownerId
+    ? await Store.find({ ownerId })
+        .select("_id shopName category address city isActive isVerified applicationStatus serviceRadius")
+        .lean()
+    : [store];
   const orderStats = orderRows[0] || {};
   const productStats = productRows[0] || {};
   const totalOrders = Number(orderStats.totalOrders || 0);
@@ -625,6 +633,8 @@ export async function getActiveSellerByIdData(id) {
       year: "numeric",
     }),
     location: getSellerDisplayLocation(store),
+    address: store.address || "",
+    description: store.description || "",
     totalOrders,
     deliveredOrders,
     totalRevenue,
@@ -671,6 +681,17 @@ export async function getActiveSellerByIdData(id) {
     image: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
       store.shopName || owner.name || "seller",
     )}`,
+    stores: allSellerStores.map((s) => ({
+      id: String(s._id),
+      shopName: s.shopName || "Unnamed Store",
+      category: s.category || "General",
+      address: s.address || "",
+      city: s.city || "",
+      isActive: Boolean(s.isActive),
+      isVerified: Boolean(s.isVerified),
+      applicationStatus: s.applicationStatus || "pending",
+      serviceRadius: s.serviceRadius || 5,
+    })),
     ...buildOwnerAccountFields(owner),
   };
 }

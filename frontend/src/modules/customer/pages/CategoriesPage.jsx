@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import MainLocationHeader from '../components/shared/MainLocationHeader';
+import { useLocation as useCustomerLocation } from '../context/LocationContext';
 import { customerApi } from '../services/customerApi';
 import { applyCloudinaryTransform, getCategoryImageUrl, handleCategoryImageError } from '@/core/utils/imageUtils';
 
@@ -10,6 +11,7 @@ const COLORS = [
 ];
 
 const CategoriesPage = () => {
+    const { currentLocation } = useCustomerLocation();
     const [groups, setGroups] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [columnsPerRow, setColumnsPerRow] = useState(() => {
@@ -23,7 +25,12 @@ const CategoriesPage = () => {
     const fetchCategories = async () => {
         setIsLoading(true);
         try {
-            const res = await customerApi.getCategories({ tree: true });
+            const params = { tree: true };
+            if (Number.isFinite(currentLocation?.latitude) && Number.isFinite(currentLocation?.longitude)) {
+                params.lat = currentLocation.latitude;
+                params.lng = currentLocation.longitude;
+            }
+            const res = await customerApi.getCategories(params);
             if (res.data.success) {
                 const tree = res.data.results || res.data.result || [];
                 const formattedGroups = tree
@@ -53,7 +60,7 @@ const CategoriesPage = () => {
 
     useEffect(() => {
         fetchCategories();
-    }, []);
+    }, [currentLocation?.latitude, currentLocation?.longitude]);
 
     useEffect(() => {
         const updateColumnsPerRow = () => {

@@ -277,6 +277,10 @@ const productSchema = new mongoose.Schema(
             type: Boolean,
             default: true, // derived; maintained by productAvailabilityJob, never set directly
         },
+        isHidden: {
+            type: Boolean,
+            default: false,
+        },
     },
     { timestamps: true }
 );

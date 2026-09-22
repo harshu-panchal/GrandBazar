@@ -360,7 +360,7 @@ const CustomerAuth = () => {
     };
 
     return (
-        <div className="min-h-screen w-full relative flex items-center justify-center font-['Outfit',_sans-serif] overflow-hidden">
+        <div className="min-h-screen w-full relative flex items-center justify-center font-['Outfit',_sans-serif] overflow-y-auto py-8 sm:py-12">
 
             {/* Completely independent floating back button */}
             <button
@@ -378,9 +378,9 @@ const CustomerAuth = () => {
                 account to unlock the normal in-app support centre. */}
             <button
                 onClick={() => navigate('/support')}
-                className="absolute top-1.5 right-3 md:top-3 md:right-4 z-[100] h-10 md:h-12 px-4 bg-white/10 backdrop-blur-md rounded-xl flex items-center gap-2 text-white text-xs font-black uppercase tracking-widest border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
+                className="absolute top-1.5 right-3 md:top-3 md:right-4 z-[100] h-10 md:h-12 px-3 sm:px-4 bg-white/95 hover:bg-white text-slate-800 shadow-md backdrop-blur-md rounded-xl flex items-center gap-2 text-xs font-bold border border-slate-200/90 hover:scale-105 active:scale-95 transition-all"
             >
-                <LifeBuoy size={18} /> <span className="hidden sm:inline">Need Help?</span>
+                <LifeBuoy size={18} className="text-emerald-600" /> <span>Need Help?</span>
             </button>
 
             {/* Dynamic Atmospheric Background */}
@@ -430,10 +430,10 @@ const CustomerAuth = () => {
             </div>
 
             {/* Premium Centered Card Container */}
-            <div className="w-[92%] max-w-[400px] h-[85vh] max-h-[780px] bg-white relative z-10 overflow-hidden rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] border border-white/40 flex flex-col transition-colors duration-1000">
+            <div className="w-[92%] max-w-[400px] min-h-[85vh] max-h-[780px] md:h-auto md:max-h-[92vh] bg-white relative z-10 rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] border border-white/40 flex flex-col transition-colors duration-1000 my-6">
 
                 {/* Scrollable Content Container */}
-                <div className="h-full overflow-y-auto no-scrollbar pb-20">
+                <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
 
                     {/* Header: Immersive Category Visuals */}
                     <motion.div

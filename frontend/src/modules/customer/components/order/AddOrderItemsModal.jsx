@@ -81,6 +81,8 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
           });
         }
       } else {
+        const original = product.customerPrice ?? product.price;
+        const sale = product.customerSalePrice ?? product.salePrice;
         out.push({
           key: product._id,
           productId: product._id,
@@ -88,7 +90,7 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
           name: product.name,
           variantLabel: "",
           image: product.mainImage,
-          price: product.salePrice || product.price || 0,
+          price: sale || original || product.salePrice || product.price || 0,
           stock: Number(product.stock || 0),
         });
       }
@@ -135,7 +137,7 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
       <div className="flex h-[85vh] w-full flex-col rounded-t-2xl bg-white sm:h-[80vh] sm:max-w-lg sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 className="text-sm font-bold text-slate-900">Add items to this order</h2>
@@ -204,7 +206,7 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
           )}
         </div>
 
-        <div className="border-t border-slate-100 p-4">
+        <div className="border-t border-slate-100 p-4 pb-8 sm:pb-4 shrink-0 bg-white">
           <button
             type="button"
             disabled={submitting || selectedEntries.length === 0}

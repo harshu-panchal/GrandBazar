@@ -201,7 +201,9 @@ async function renderInvoicePdfBuffer(payload) {
         doc.fillColor("#0f172a").fontSize(8).font("Helvetica");
 
         const qty = item.quantity || 1;
-        const rate = item.unitPrice || 0;
+        // Use the commission-inclusive per-unit price so Rate x Qty reconciles with
+        // Total below; item.unitPrice is the seller's raw price and excludes commission.
+        const rate = (item.itemSubtotal || 0) / qty;
         const total = item.lineTotal || (item.itemSubtotal || 0) + (item.lineTax || 0);
 
         const cells = isInterState

@@ -310,6 +310,8 @@ export const getSellerProfile = async (req, res) => {
       name: account?.name || store.shopName,
       phone: account?.phone || "",
       email: account?.email || "",
+      bannerImage: (Array.isArray(store.banners) && store.banners[0]) || store.bannerImage || "",
+      logoUrl: store.logoUrl || "",
       isAccountApproved: isOwnerAccountApproved(account),
       accountApplicationStatus: getOwnerAccountApplicationStatus(account),
       ...(account ? formatBusinessModelPayload(account) : {}),
@@ -367,6 +369,7 @@ export const updateSellerProfile = async (req, res) => {
       lng,
       radius,
       banners,
+      bannerImage,
       storeVideo,
       logoUrl,
       description,
@@ -422,7 +425,9 @@ export const updateSellerProfile = async (req, res) => {
     }
 
     if (shopName) store.shopName = shopName;
-    if (banners !== undefined) store.banners = banners;
+    if (banners !== undefined || bannerImage !== undefined) {
+      store.banners = Array.isArray(banners) ? banners : (banners ? [banners] : (bannerImage ? [bannerImage] : []));
+    }
     if (storeVideo !== undefined) store.storeVideo = storeVideo;
     if (logoUrl !== undefined) store.logoUrl = logoUrl;
     if (description !== undefined) store.description = description;

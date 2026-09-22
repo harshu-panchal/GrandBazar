@@ -5,6 +5,8 @@ import Setting from "../models/setting.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { applyOrderPriceAdjustment } from "./orderPriceAdjustmentService.js";
 import { emitOrderStatusUpdate } from "./orderSocketEmitter.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { validateScheduleSelection } from "./orderSchedulingService.js";
 import { FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
 
@@ -159,6 +161,13 @@ export async function createReplacementRequest({
     meta: { itemIndex, requestId, alternativesCount: normalizedAlternatives.length },
   });
   emitOrderStatusUpdate(orderId, { replacementRequested: true, requestId }, order.customer);
+  emitNotificationEvent(NOTIFICATION_EVENTS.REPLACEMENT_REQUESTED, {
+    orderId,
+    customerId: order.customer,
+    userId: order.customer,
+    requestId,
+    itemName: order.items[itemIndex]?.name || "",
+  });
   return order;
 }
 

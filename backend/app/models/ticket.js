@@ -5,7 +5,12 @@ const ticketSchema = new mongoose.Schema(
         userId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
-            required: true,
+            required: false,
+        },
+        guestContact: {
+            name: { type: String, trim: true },
+            email: { type: String, trim: true },
+            phone: { type: String, trim: true },
         },
         userType: {
             type: String,

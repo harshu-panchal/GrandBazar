@@ -13,7 +13,7 @@ const toObjectIds = (ids = []) =>
     .filter((id) => mongoose.Types.ObjectId.isValid(id))
     .map((id) => new mongoose.Types.ObjectId(id));
 
-export const listCoupons = async (req, res) => {
+const buildAndRunCouponQuery = async (req, res, { excludeExhausted = false } = {}) => {
   try {
     const { status, search, sellerIds } = req.query;
     const query = {};
@@ -61,15 +61,42 @@ export const listCoupons = async (req, res) => {
       ];
     }
 
+    if (excludeExhausted) {
+      // A coupon whose usedCount has reached its usageLimit can no longer be
+      // redeemed (see couponUsageService.consumeCouponUsageAtomic) — don't
+      // show it to customers at all. usageLimit of 0/null means unlimited.
+      query.$expr = {
+        $or: [
+          { $lte: [{ $ifNull: ["$usageLimit", 0] }, 0] },
+          { $lt: [{ $ifNull: ["$usedCount", 0] }, "$usageLimit"] },
+        ],
+      };
+    }
+
     const coupons = await Coupon.find(query)
       .populate("sellerId", "shopName")
       .sort({ createdAt: -1 })
       .lean();
-    return handleResponse(res, 200, "Coupons fetched successfully", coupons);
+
+    // isActive is the admin's manual on/off toggle and is left untouched by usage —
+    // isExhausted tells the admin UI a coupon has hit its usage cap even though it's
+    // still marked Active, without permanently disabling it (an admin may raise the
+    // limit later and expect it to keep working).
+    const couponsWithStatus = coupons.map((coupon) => ({
+      ...coupon,
+      isExhausted: Boolean(coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit),
+    }));
+
+    return handleResponse(res, 200, "Coupons fetched successfully", couponsWithStatus);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
 };
+
+export const listCoupons = (req, res) => buildAndRunCouponQuery(req, res);
+
+export const listAvailableCoupons = (req, res) =>
+  buildAndRunCouponQuery(req, res, { excludeExhausted: true });
 
 export const createCoupon = async (req, res) => {
   try {

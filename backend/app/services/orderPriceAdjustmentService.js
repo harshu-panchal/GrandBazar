@@ -1073,7 +1073,7 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
   }
   await updated.save();
 
-  emitOrderStatusUpdate(orderId, { itemsAdded: true, deltaAmount: delta }, updated.customer);
+  emitOrderStatusUpdate(orderId, { itemsAdded: true, deltaAmount: delta }, updated.customer, updated.seller);
   emitNotificationEvent(NOTIFICATION_EVENTS.ITEMS_ADDED_TO_ORDER, {
     orderId,
     customerId: updated.customer,

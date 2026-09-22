@@ -1,6 +1,54 @@
-import React from "react";
-import { Clipboard, Tag, Heart, Wallet } from "lucide-react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { Clipboard, Tag, Heart, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+/** Consistent currency display: always 2 decimal places, no floating point drift */
+const fmt = (amount) => {
+  const n = Number(amount || 0);
+  if (!Number.isFinite(n)) return "0.00";
+  return n.toFixed(2);
+};
+
+/** Bug #237: GST collapsible row — shows total GST, expands to show CGST + SGST */
+function GstRow({ cgst, sgst }) {
+  const [open, setOpen] = useState(false);
+  const total = fmt(Number(cgst || 0) + Number(sgst || 0));
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="w-full flex justify-between items-center px-2 py-0.5 focus:outline-none"
+      >
+        <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider flex items-center gap-1">
+          GST
+          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </span>
+        <span className="font-black text-slate-800">\u20b9{total}</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="flex justify-between items-center px-4 py-0.5 text-[12px] text-slate-400">
+              <span>CGST</span>
+              <span>\u20b9{fmt(cgst)}</span>
+            </div>
+            <div className="flex justify-between items-center px-4 py-0.5 text-[12px] text-slate-400">
+              <span>SGST</span>
+              <span>\u20b9{fmt(sgst)}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /**
  * CheckoutPricingBreakdown
@@ -62,14 +110,14 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
               Item Total
             </span>
             <span className="font-black text-slate-800">
-              ₹{pricingPreview?.productSubtotal ?? cartTotal}
+              ₹{fmt(pricingPreview?.productSubtotal ?? cartTotal)}
             </span>
           </div>
           <div className="flex justify-between items-center px-2">
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
               Delivery Fee
             </span>
-            <span className="font-black text-slate-800">₹{deliveryFee}</span>
+            <span className="font-black text-slate-800">₹{fmt(deliveryFee)}</span>
           </div>
           {pricingPreview &&
             typeof pricingPreview.distanceKmActual === "number" &&
@@ -92,14 +140,14 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
               Handling Fee
             </span>
-            <span className="font-black text-slate-800">₹{handlingFee}</span>
+            <span className="font-black text-slate-800">₹{fmt(handlingFee)}</span>
           </div>
           {Number(packingFee) > 0 && (
             <div className="flex justify-between items-center px-2">
               <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
                 Packing Charge
               </span>
-              <span className="font-black text-slate-800">₹{packingFee}</span>
+              <span className="font-black text-slate-800">₹{fmt(packingFee)}</span>
             </div>
           )}
           {Number(pricingPreview?.packagingChargeAmount || 0) > 0 && (
@@ -108,7 +156,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 Packaging Charge
               </span>
               <span className="font-black text-slate-800">
-                ₹{pricingPreview.packagingChargeAmount}
+                ₹{fmt(pricingPreview.packagingChargeAmount)}
               </span>
             </div>
           )}
@@ -125,7 +173,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 </span>
               </div>
               <span className="font-black text-sky-700">
-                ₹{pricingPreview.customerSurchargeAmount}
+                ₹{fmt(pricingPreview.customerSurchargeAmount)}
               </span>
             </div>
           )}
@@ -134,7 +182,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
               <span className="text-indigo-700 font-black text-xs uppercase tracking-wider">
                 Odd-Hour Delivery Charge
               </span>
-              <span className="font-black text-indigo-700">₹{oddHourSurchargeAmount}</span>
+              <span className="font-black text-indigo-700">₹{fmt(oddHourSurchargeAmount)}</span>
             </div>
           )}
           {weatherSurchargeAmount > 0 && (
@@ -142,37 +190,21 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
               <span className="text-amber-700 font-black text-xs uppercase tracking-wider">
                 Weather Surcharge
               </span>
-              <span className="font-black text-amber-700">₹{weatherSurchargeAmount}</span>
+              <span className="font-black text-amber-700">₹{fmt(weatherSurchargeAmount)}</span>
             </div>
           )}
+          {/* Bug #237: GST shown in one collapsible row */}
           {isInterState ? (
             <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                IGST
-              </span>
-              <span className="font-black text-slate-800">₹{igstAmount}</span>
+              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">IGST</span>
+              <span className="font-black text-slate-800">₹{fmt(igstAmount)}</span>
             </div>
           ) : cgstAmount > 0 || sgstAmount > 0 ? (
-            <>
-              <div className="flex justify-between items-center px-2">
-                <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                  CGST
-                </span>
-                <span className="font-black text-slate-800">₹{cgstAmount}</span>
-              </div>
-              <div className="flex justify-between items-center px-2">
-                <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                  SGST
-                </span>
-                <span className="font-black text-slate-800">₹{sgstAmount}</span>
-              </div>
-            </>
+            <GstRow cgst={cgstAmount} sgst={sgstAmount} />
           ) : (
             <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                Tax
-              </span>
-              <span className="font-black text-slate-800">₹{taxAmount}</span>
+              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">Tax</span>
+              <span className="font-black text-slate-800">₹{fmt(taxAmount)}</span>
             </div>
           )}
 
@@ -185,7 +217,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 <Tag size={14} />
                 Coupon Reserved
               </span>
-              <span className="font-black text-primary">-₹{discountAmount}</span>
+              <span className="font-black text-primary">-₹{fmt(discountAmount)}</span>
             </motion.div>
           )}
 
@@ -195,7 +227,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 <Heart size={14} className="fill-pink-500" />
                 Partner Support
               </span>
-              <span className="font-black text-pink-600">₹{tipAmount}</span>
+              <span className="font-black text-pink-600">₹{fmt(tipAmount)}</span>
             </div>
           )}
 
@@ -208,7 +240,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 <Wallet size={14} />
                 Wallet Applied
               </span>
-              <span className="font-black text-primary">-₹{walletAmountToUse}</span>
+              <span className="font-black text-primary">-₹{fmt(walletAmountToUse)}</span>
             </motion.div>
           )}
 
@@ -223,7 +255,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 </span>
               </div>
               <span className="font-[1000] text-primary text-3xl tracking-tighter italic">
-                {isPreviewLoading ? "Calculating..." : `₹${Math.ceil(finalAmountToPay)}`}
+                {isPreviewLoading ? "Calculating..." : `₹${fmt(finalAmountToPay)}`}
               </span>
             </div>
           </div>

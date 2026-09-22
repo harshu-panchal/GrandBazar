@@ -285,7 +285,6 @@ const ProductDetailSheet = () => {
                     text: shareText,
                     url: shareUrl,
                 });
-                showToast("Product shared successfully", "success");
             } catch (error) {
                 if (error.name !== "AbortError") {
                     console.error("Error sharing product:", error);
@@ -308,16 +307,26 @@ const ProductDetailSheet = () => {
             });
     };
 
-    const handleAddToCart = () => {
+    const handleAddToCart = async () => {
+        if (
+            selectedProduct?.isCurrentlyAvailable === false ||
+            selectedProduct?.status === "inactive" ||
+            Boolean(selectedProduct?.isHidden)
+        ) {
+            showToast("This product is currently unavailable", "error");
+            return;
+        }
         if (isOutOfStock) {
             showToast("This product is out of stock", "error");
             return;
         }
-        addToCart({
+        const res = await addToCart({
             ...selectedProduct,
             variantSku: String(selectedVariant?.sku || selectedVariant?.name || "").trim(),
         });
-        showToast(`${selectedProduct.name} added to cart`, 'success');
+        if (res?.ok !== false) {
+            showToast(`${selectedProduct.name} added to cart`, 'success');
+        }
     };
 
     const handleIncrement = () =>
@@ -577,6 +586,12 @@ const ProductDetailSheet = () => {
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: 0.15 }}
                                         >
+                                            {selectedProduct.brand && (
+                                                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold mb-1.5 border border-slate-200">
+                                                    <span>Brand:</span>
+                                                    <span className="text-slate-900 font-extrabold">{selectedProduct.brand}</span>
+                                                </div>
+                                            )}
                                             <h1 className="text-[19px] lg:text-[22px] font-black text-[#111827] leading-[1.2] tracking-tight mb-1">
                                                 {selectedProduct.name}
                                             </h1>
@@ -734,6 +749,8 @@ const ProductDetailSheet = () => {
                                             >
                                                 <div className="grid grid-cols-2 gap-3 mt-1">
                                                     {[
+                                                        { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh', emoji: '🏷️' },
+                                                        { label: 'Weight / Unit', value: selectedProduct?.weight || '1 unit', emoji: '⚖️' },
                                                         { label: 'Shelf Life', value: '3 Days', emoji: '📅' },
                                                         { label: 'Country of Origin', value: 'India', emoji: '🇮🇳' },
                                                         { label: 'FSSAI License', value: '1001234567890', emoji: '🛡️' },
@@ -1048,6 +1065,8 @@ const ProductDetailSheet = () => {
                                     >
                                         <div className="grid grid-cols-2 gap-3 mt-1">
                                             {[
+                                                { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh' },
+                                                { label: 'Weight / Unit', value: selectedProduct?.weight || '1 unit' },
                                                 { label: 'Shelf Life', value: '3 Days' },
                                                 { label: 'Country of Origin', value: 'India' },
                                                 { label: 'FSSAI License', value: '1001234567890' },

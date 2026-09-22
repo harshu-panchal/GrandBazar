@@ -50,11 +50,17 @@ function Popover({ isOpen, onClose, anchorRef, children, widthClass = 'w-56' }) 
     );
 }
 
+const PRICE_RANGE_OPTIONS = [
+    { label: 'All Prices', min: null, max: null },
+    { label: 'Under ₹100', min: 0, max: 100 },
+    { label: '₹100 to ₹300', min: 100, max: 300 },
+    { label: '₹300 to ₹500', min: 300, max: 500 },
+    { label: 'Above ₹500', min: 500, max: null },
+];
+
 /**
  * Compact sort / filter / distance controls for a product listing page.
- * Sort and distance-radius are applied by the caller (distance is computed
- * client-side from each product's seller distance, since it isn't a DB
- * sortable/filterable field).
+ * Sort, brand, price range, and distance-radius are applied by caller.
  */
 const CategoryFilterBar = ({
     sortBy,
@@ -63,6 +69,11 @@ const CategoryFilterBar = ({
     onDistanceChange,
     inStockOnly,
     onInStockChange,
+    priceRange,
+    onPriceRangeChange,
+    brands = [],
+    selectedBrand = '',
+    onBrandChange,
 }) => {
     const [openMenu, setOpenMenu] = useState(null); // 'sort' | 'distance' | 'filters' | null
     const sortBtnRef = useRef(null);
@@ -73,10 +84,16 @@ const CategoryFilterBar = ({
 
     const activeSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || 'Sort';
     const activeDistanceLabel = DISTANCE_OPTIONS.find((o) => o.value === maxDistanceKm)?.label || 'Distance';
-    const filtersActive = inStockOnly;
+    
+    const activeFiltersCount =
+        (inStockOnly ? 1 : 0) +
+        (selectedBrand ? 1 : 0) +
+        (priceRange && (priceRange.min != null || priceRange.max != null) ? 1 : 0);
+
+    const filtersActive = activeFiltersCount > 0;
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 bg-white">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 bg-white overflow-x-auto scrollbar-none">
             <div className="relative shrink-0">
                 <button
                     ref={sortBtnRef}
@@ -150,18 +167,87 @@ const CategoryFilterBar = ({
                     )}
                 >
                     <SlidersHorizontal size={13} />
-                    Filters
+                    Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
                 </button>
-                <Popover isOpen={openMenu === 'filters'} onClose={() => setOpenMenu(null)} anchorRef={filtersBtnRef} widthClass="w-64">
-                    <label className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                        In stock only
-                        <input
-                            type="checkbox"
-                            checked={inStockOnly}
-                            onChange={(e) => onInStockChange(e.target.checked)}
-                            className="h-4 w-4 accent-primary"
-                        />
-                    </label>
+                <Popover isOpen={openMenu === 'filters'} onClose={() => setOpenMenu(null)} anchorRef={filtersBtnRef} widthClass="w-72">
+                    <div className="p-3 divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                        {/* In stock toggle */}
+                        <label className="flex w-full cursor-pointer items-center justify-between py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg px-1">
+                            In stock only
+                            <input
+                                type="checkbox"
+                                checked={inStockOnly}
+                                onChange={(e) => onInStockChange?.(e.target.checked)}
+                                className="h-4 w-4 accent-primary"
+                            />
+                        </label>
+
+                        {/* Price range filter */}
+                        {onPriceRangeChange && (
+                            <div className="py-2.5 space-y-1.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Price Range</p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    {PRICE_RANGE_OPTIONS.map((opt) => {
+                                        const isSelected =
+                                            priceRange?.min === opt.min && priceRange?.max === opt.max;
+                                        return (
+                                            <button
+                                                key={opt.label}
+                                                type="button"
+                                                onClick={() => {
+                                                    onPriceRangeChange({ min: opt.min, max: opt.max });
+                                                }}
+                                                className={cn(
+                                                    'px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-colors truncate',
+                                                    isSelected
+                                                        ? 'bg-brand-500 text-white font-bold'
+                                                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100',
+                                                )}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Brand filter */}
+                        {onBrandChange && Array.isArray(brands) && brands.length > 0 && (
+                            <div className="pt-2.5 space-y-1.5">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Brand</p>
+                                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto px-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => onBrandChange('')}
+                                        className={cn(
+                                            'px-2 py-1 rounded-md text-[11px] font-medium transition-colors',
+                                            !selectedBrand
+                                                ? 'bg-slate-900 text-white font-bold'
+                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                                        )}
+                                    >
+                                        All Brands
+                                    </button>
+                                    {brands.map((b) => (
+                                        <button
+                                            key={b}
+                                            type="button"
+                                            onClick={() => onBrandChange(b === selectedBrand ? '' : b)}
+                                            className={cn(
+                                                'px-2 py-1 rounded-md text-[11px] font-medium transition-colors',
+                                                selectedBrand === b
+                                                    ? 'bg-primary text-white font-bold'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                                            )}
+                                        >
+                                            {b}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </Popover>
             </div>
         </div>

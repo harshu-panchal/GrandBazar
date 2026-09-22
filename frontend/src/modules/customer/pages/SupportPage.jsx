@@ -38,6 +38,8 @@ const SupportPage = () => {
     const [isTicketModalOpen, setIsTicketModalOpen] = useState(Boolean(prefillCategory));
     const [ticketLoading, setTicketLoading] = useState(false);
     const [ticketData, setTicketData] = useState({
+        name: '',
+        contact: '',
         subject: prefillCategory
             ? `${ISSUE_CATEGORY_LABELS[prefillCategory] || prefillCategory}${prefillOrderId ? ` — Order #${prefillOrderId}` : ''}`
             : '',
@@ -87,12 +89,15 @@ const SupportPage = () => {
             setTicketLoading(true);
             const res = await customerApi.createTicket({
                 ...ticketData,
-                userType: 'Customer'
+                userType: 'Customer',
+                name: ticketData.name || undefined,
+                phone: ticketData.contact && !ticketData.contact.includes('@') ? ticketData.contact : undefined,
+                email: ticketData.contact && ticketData.contact.includes('@') ? ticketData.contact : undefined,
             });
             if (res.data.success) {
-                showToast("Ticket raised successfully", "success");
+                showToast("Ticket raised successfully! Our support team will contact you.", "success");
                 setIsTicketModalOpen(false);
-                setTicketData({ subject: '', description: '', priority: 'medium' });
+                setTicketData({ name: '', contact: '', subject: '', description: '', priority: 'medium' });
             }
         } catch (error) {
             showToast(error.response?.data?.message || "Failed to create ticket", "error");
@@ -119,15 +124,24 @@ const SupportPage = () => {
                     <ContactCard
                         icon={MessageCircle}
                         label="Chat Us"
-                        sub="Instant Support"
+                        sub={isAuthenticated ? "In-app Chat" : (supportPhone ? "WhatsApp Chat" : "Instant Support")}
                         to={isAuthenticated ? "/chat" : undefined}
-                        onClick={isAuthenticated ? undefined : () => requireLogin('start a chat')}
+                        onClick={isAuthenticated ? undefined : () => {
+                            if (supportPhone) {
+                                const cleanPhone = supportPhone.replace(/\D/g, '');
+                                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent("Hello Support, I need help with my account/order.")}`, '_blank');
+                            } else if (supportEmail) {
+                                window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent("Support Request")}`;
+                            } else {
+                                setIsTicketModalOpen(true);
+                            }
+                        }}
                     />
                     <ContactCard
                         icon={PlusCircle}
                         label="Raise Ticket"
-                        sub="Formal Request"
-                        onClick={() => isAuthenticated ? setIsTicketModalOpen(true) : requireLogin('raise a ticket')}
+                        sub={isAuthenticated ? "Formal Request" : "Quick Ticket"}
+                        onClick={() => setIsTicketModalOpen(true)}
                     />
                     <ContactCard
                         icon={Phone}
@@ -209,7 +223,34 @@ const SupportPage = () => {
                                     </button>
                                 </div>
 
-                                <form onSubmit={handleTicketSubmit} className="space-y-6">
+                                <form onSubmit={handleTicketSubmit} className="space-y-5">
+                                    {!isAuthenticated && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Your Name</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={ticketData.name}
+                                                    onChange={(e) => setTicketData({ ...ticketData, name: e.target.value })}
+                                                    placeholder="Enter your name"
+                                                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold outline-none ring-1 ring-transparent focus:ring-primary/20 transition-all"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Phone or Email</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={ticketData.contact}
+                                                    onChange={(e) => setTicketData({ ...ticketData, contact: e.target.value })}
+                                                    placeholder="e.g. 9876543210 or you@email.com"
+                                                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold outline-none ring-1 ring-transparent focus:ring-primary/20 transition-all"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Subject</label>
                                         <input

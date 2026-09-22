@@ -115,6 +115,18 @@ const estimateMinutesFromDistance = (meters) => {
   return (meters * 60) / (DEFAULT_CITY_SPEED_KMPH * 1000);
 };
 
+// Order line items are persisted with the seller's raw price; the commission-inclusive
+// amount the customer was actually charged lives on paymentBreakdown.lineItems (same
+// index order as order.items, since both are built from the same checkout item list).
+// Falls back to the raw price*quantity if the breakdown isn't available.
+const getItemLineTotal = (order, item, idx) => {
+  const breakdownLine = order?.paymentBreakdown?.lineItems?.[idx];
+  if (breakdownLine && Number.isFinite(Number(breakdownLine.itemSubtotal))) {
+    return Number(breakdownLine.itemSubtotal);
+  }
+  return Number(item.price || 0) * Number(item.quantity || 0);
+};
+
 const getTrackingRoutePhase = (order) => {
   if (!order) return "pickup";
 
@@ -1181,10 +1193,13 @@ const OrderDetailPage = () => {
                 className="flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-colors">
                 <div className="h-14 w-14 bg-slate-50 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100">
                   <img
-                    src={applyCloudinaryTransform(item.image)}
+                    src={item.image ? applyCloudinaryTransform(item.image) : "/assets/placeholder.png"}
                     alt={item.name}
                     loading="lazy"
                     className="h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = "/assets/placeholder.png";
+                    }}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1197,7 +1212,7 @@ const OrderDetailPage = () => {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="font-bold text-slate-900">
-                    ₹{item.price * item.quantity}
+                    ₹{getItemLineTotal(order, item, idx)}
                   </p>
                 </div>
               </div>
@@ -1303,7 +1318,7 @@ const OrderDetailPage = () => {
                 Total Amount
               </span>
               <span className="text-xl font-black text-brand-600">
-                ₹{order.pricing.total}
+                ₹{Number(order.paymentBreakdown?.grandTotal ?? order.pricing?.total ?? 0).toFixed(2).replace(/\.00$/, "")}
               </span>
             </div>
           </div>
@@ -1607,13 +1622,9 @@ const OrderDetailPage = () => {
             )}
           </motion.div>
         )}
-      </div>
 
-      <div className="px-4 pb-4">
         <OrderLifecycleActions order={order} onRefresh={refreshOrder} returnWindowMinutes={returnWindowMinutes} />
-      </div>
 
-      <div className="px-4 pb-4">
         <RateOrderItems order={order} />
       </div>
 
@@ -1663,7 +1674,7 @@ const OrderDetailPage = () => {
                         {item.name}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Qty: {item.quantity} • ₹{item.price * item.quantity}
+                        Qty: {item.quantity} • ₹{getItemLineTotal(order, item, idx)}
                       </p>
                     </div>
                   </label>

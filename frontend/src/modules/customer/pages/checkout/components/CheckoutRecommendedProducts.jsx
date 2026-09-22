@@ -14,7 +14,21 @@ const CheckoutRecommendedProducts = React.memo(function CheckoutRecommendedProdu
   products,
   isAddon = false,
 }) {
-  if (!products || products.length === 0) return null;
+  const availableProducts = React.useMemo(() => {
+    if (!Array.isArray(products)) return [];
+    return products.filter((product) => {
+      if (!product) return false;
+      const stock = Number(product.stock ?? 0);
+      const isOutOfStock =
+        stock <= 0 &&
+        (!product.variants ||
+          product.variants.length === 0 ||
+          !product.variants.some((v) => Number(v.stock || 0) > 0));
+      return !isOutOfStock && product.isActive !== false && product.status !== "inactive";
+    });
+  }, [products]);
+
+  if (!availableProducts || availableProducts.length === 0) return null;
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -27,8 +41,8 @@ const CheckoutRecommendedProducts = React.memo(function CheckoutRecommendedProdu
         )}
       </h3>
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar -mx-4 px-4 snap-x">
-        {products.map((product) => (
-          <div key={product.id} className="flex-shrink-0 w-[126px] sm:w-[136px] md:w-[160px] snap-start">
+        {availableProducts.map((product) => (
+          <div key={product.id || product._id} className="flex-shrink-0 w-[126px] sm:w-[136px] md:w-[160px] snap-start">
             <ProductCard product={product} compact={true} />
           </div>
         ))}

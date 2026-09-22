@@ -115,6 +115,11 @@ const ProductCard = React.memo(
     // Check across ALL variants, not just the one auto-picked as "default" —
     // a product shouldn't show as fully out of stock when only the displayed
     // variant happens to be at 0 while others still have stock.
+    const isUnavailable =
+      product?.isCurrentlyAvailable === false ||
+      product?.status === "inactive" ||
+      Boolean(product?.isHidden);
+
     const isOutOfStock = hasVariants
       ? !product.variants.some((v) => Number(v?.stock || 0) > 0)
       : !(Number(product?.stock) > 0);
@@ -123,6 +128,10 @@ const ProductCard = React.memo(
       (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (isUnavailable) {
+          showToast("This product is currently unavailable", "error");
+          return;
+        }
         if (isOutOfStock) {
           showToast("This product is out of stock", "error");
           return;
@@ -163,6 +172,7 @@ const ProductCard = React.memo(
         advanceBooking,
         showToast,
         isOutOfStock,
+        isUnavailable,
       ],
     );
 
@@ -446,14 +456,14 @@ const ProductCard = React.memo(
                       ? handleProductClick
                       : handleAddToCart
                   }
-                  disabled={bookingLocked || isOutOfStock}
+                  disabled={bookingLocked || isOutOfStock || isUnavailable}
                   className={cn(
                     "bg-white border-[1.5px] border-primary text-primary rounded-lg font-black shadow-sm hover:bg-primary/5 mb-0 transition-all uppercase tracking-wide leading-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400",
                     compact
                       ? "px-2.5 py-1 text-[10px]"
                       : "px-3.5 py-1.5 text-[11px] sm:px-7 sm:py-2 sm:text-[13px] md:text-sm md:px-8 md:py-2.5",
                   )}>
-                  {isOutOfStock ? "OUT OF STOCK" : bookingLocked ? "SOON" : "ADD"}
+                  {isUnavailable ? "UNAVAILABLE" : isOutOfStock ? "OUT OF STOCK" : bookingLocked ? "SOON" : "ADD"}
                 </button>
               )}
             </div>

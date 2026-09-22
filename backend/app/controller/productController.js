@@ -493,6 +493,7 @@ export const getProducts = async (req, res) => {
       finalQuery.isPublished = { $ne: false };
       finalQuery.stock = { $gt: 0 }; // Hide out-of-stock products from customer app
       finalQuery.isCurrentlyAvailable = { $ne: false }; // Hide seller-scheduled/paused products
+      finalQuery.isHidden = { $ne: true };
       finalQuery = { $and: [finalQuery, getApprovedOrLegacyFilter()] };
     } else {
       if (status && status !== "all") {
@@ -1265,6 +1266,23 @@ export const updateProduct = async (req, res) => {
       delete productData.availability;
     }
 
+    // Bug #259/#260: Bidirectional sync between status, availability and hidden flags
+    if (productData.isHidden === true) {
+      productData.isCurrentlyAvailable = false;
+      productData.status = "inactive";
+    } else if (productData.isHidden === false) {
+      productData.isCurrentlyAvailable = true;
+      if (productData.status !== "inactive") {
+        productData.status = "active";
+      }
+    } else if (productData.status === "inactive" || productData.isCurrentlyAvailable === false) {
+      productData.isHidden = true;
+      productData.isCurrentlyAvailable = false;
+    } else if (productData.status === "active" || productData.isCurrentlyAvailable === true) {
+      productData.isHidden = false;
+      productData.isCurrentlyAvailable = true;
+    }
+
     // Admin bypasses sellerId check
     const query = role === "admin" ? { _id: id } : { _id: id, sellerId };
     const product = await Product.findOne(query);
@@ -1683,6 +1701,7 @@ export const getProductById = async (req, res) => {
         product.status !== "active" ||
         product.isPublished === false ||
         product.isCurrentlyAvailable === false ||
+        product.isHidden === true ||
         approvalState !== PRODUCT_APPROVAL_STATUS.APPROVED
       ) {
         return handleResponse(res, 404, "Product not found");

@@ -5,6 +5,9 @@ import { getApprovedOrLegacyFilter } from "../services/productModerationService.
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
+  isPublished: { $ne: false },
+  isCurrentlyAvailable: { $ne: false },
+  isHidden: { $ne: true },
   ...getApprovedOrLegacyFilter(),
 };
 

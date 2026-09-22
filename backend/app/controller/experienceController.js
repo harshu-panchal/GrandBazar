@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { uploadToCloudinary } from "../services/mediaService.js";
 import { getApprovedOrLegacyFilter } from "../services/productModerationService.js";
+import { getNearbySellerIdsForCustomer } from "../services/customerVisibilityService.js";
 
 /* ===============================
    Helpers
@@ -423,7 +424,7 @@ export const reorderExperienceSections = async (req, res) => {
 ================================ */
 export const getPublicExperienceSections = async (req, res) => {
   try {
-    const { pageType, headerId } = req.query;
+    const { pageType, headerId, lat, lng, latitude, longitude } = req.query;
 
     if (!pageType) {
       return handleResponse(res, 400, "pageType is required");
@@ -447,7 +448,7 @@ export const getPublicExperienceSections = async (req, res) => {
       async () =>
         ExperienceSection.find(query)
           .sort({ order: 1, createdAt: 1, _id: 1 })
-          .populate("config.superAds.items.sellerId", "shopName slug")
+          .populate("config.superAds.items.sellerId", "shopName slug location serviceRadius")
           .populate({
             path: "config.superAds.items.productId",
             select: "name slug mainImage stock status isCurrentlyAvailable approvalStatus",
@@ -463,7 +464,63 @@ export const getPublicExperienceSections = async (req, res) => {
       getTTL("homepage"),
     );
 
-    return handleResponse(res, 200, "Experience sections fetched", sections);
+    const customerLat = Number(lat ?? latitude);
+    const customerLng = Number(lng ?? longitude);
+    const hasCoords = Number.isFinite(customerLat) && Number.isFinite(customerLng);
+
+    if (hasCoords && Array.isArray(sections)) {
+      const nearbySellerIds = new Set(
+        await getNearbySellerIdsForCustomer(customerLat, customerLng, { includeClosed: true }),
+      );
+
+      const filteredSections = sections
+        .map((sec) => {
+          if (sec.displayType === "super_ads" && Array.isArray(sec.config?.superAds?.items)) {
+            const validItems = sec.config.superAds.items.filter((item) => {
+              const sId = String(item?.sellerId?._id || item?.sellerId || "");
+              return sId && nearbySellerIds.has(sId);
+            });
+            if (validItems.length === 0) return null;
+            return {
+              ...sec,
+              config: {
+                ...sec.config,
+                superAds: {
+                  ...sec.config.superAds,
+                  items: validItems,
+                },
+              },
+            };
+          }
+          if (sec.displayType === "seller_highlights" && Array.isArray(sec.config?.sellerHighlights?.sellerIds)) {
+            const validSellers = sec.config.sellerHighlights.sellerIds.filter((s) => {
+              const sId = String(s?._id || s || "");
+              return sId && nearbySellerIds.has(sId);
+            });
+            if (validSellers.length === 0) return null;
+            return {
+              ...sec,
+              config: {
+                ...sec.config,
+                sellerHighlights: {
+                  ...sec.config.sellerHighlights,
+                  sellerIds: validSellers,
+                },
+              },
+            };
+          }
+          return sec;
+        })
+        .filter(Boolean);
+
+      return handleResponse(res, 200, "Experience sections fetched", filteredSections);
+    }
+
+    // Bug #291: If customer coordinates are not provided, exclude location-dependent sections (super_ads and seller_highlights)
+    const locationAgnosticSections = Array.isArray(sections)
+      ? sections.filter((sec) => sec.displayType !== "super_ads" && sec.displayType !== "seller_highlights")
+      : [];
+    return handleResponse(res, 200, "Experience sections fetched", locationAgnosticSections);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
@@ -642,6 +699,22 @@ export const upsertHeroConfig = async (req, res) => {
 export const getRecommendedStoresForUser = async (req, res) => {
   try {
     const customerId = req.user?.id;
+    const { lat, lng, latitude, longitude } = req.query;
+    const customerLat = Number(lat ?? latitude);
+    const customerLng = Number(lng ?? longitude);
+    const hasCoords = Number.isFinite(customerLat) && Number.isFinite(customerLng);
+
+    if (!hasCoords) {
+      // Bug #290: Without customer coordinates, never show stores from different/arbitrary locations
+      return handleResponse(res, 200, "Recommended stores fetched successfully", []);
+    }
+
+    const nearbySellerIds = await getNearbySellerIdsForCustomer(customerLat, customerLng, { includeClosed: true });
+    if (!nearbySellerIds || nearbySellerIds.length === 0) {
+      return handleResponse(res, 200, "Recommended stores fetched successfully", []);
+    }
+    const nearbySellerIdSet = new Set(nearbySellerIds.map(String));
+
     let recommendedStores = [];
     const storeSelect = "shopName slug category description banners storeVideo address locality city state location serviceRadius isActive isOpen isVerified avgRating reviewCount favoriteCount logoUrl";
 
@@ -653,7 +726,10 @@ export const getRecommendedStoresForUser = async (req, res) => {
         .limit(20)
         .lean();
 
-      const orderedStoreIds = [...new Set(userOrders.map((o) => o.seller).filter(Boolean))];
+      let orderedStoreIds = [...new Set(userOrders.map((o) => o.seller).filter(Boolean))];
+      if (nearbySellerIdSet) {
+        orderedStoreIds = orderedStoreIds.filter((id) => nearbySellerIdSet.has(String(id)));
+      }
 
       if (orderedStoreIds.length > 0) {
         recommendedStores = await Store.find({
@@ -668,20 +744,13 @@ export const getRecommendedStoresForUser = async (req, res) => {
       }
     }
 
-    // Top-rated fallback if few or no order history stores. This shared,
-    // parameter-free pool is the same for every customer/guest, so it's
-    // cached — this is the path every guest home-page load hits (no order
-    // history), and it previously re-ran an unindexed avgRating/reviewCount
-    // sort on every request. Fetch a fixed, generous pool size (independent
-    // of any single request's exclude list) so cache hits stay correct
-    // regardless of how many stores that particular request needs to skip.
     if (recommendedStores.length < 8) {
-      const TOP_RATED_POOL_SIZE = 40;
       const excludeSet = new Set(recommendedStores.map((s) => String(s._id)));
-      const topRatedPool = await getOrSet(
-        buildKey("stores", "topRatedFallback", ""),
-        () =>
-          Store.find({
+      if (nearbySellerIdSet) {
+        const remainingNearbyIds = Array.from(nearbySellerIdSet).filter((id) => !excludeSet.has(id));
+        if (remainingNearbyIds.length > 0) {
+          const topNearby = await Store.find({
+            _id: { $in: remainingNearbyIds },
             isActive: true,
             isVerified: true,
             applicationStatus: "approved",
@@ -689,16 +758,35 @@ export const getRecommendedStoresForUser = async (req, res) => {
           })
             .select(storeSelect)
             .sort({ avgRating: -1, reviewCount: -1 })
-            .limit(TOP_RATED_POOL_SIZE)
-            .lean(),
-        getTTL("homepage"),
-      );
+            .limit(10 - recommendedStores.length)
+            .lean();
 
-      const topRated = topRatedPool
-        .filter((s) => !excludeSet.has(String(s._id)))
-        .slice(0, 10 - recommendedStores.length);
+          recommendedStores = [...recommendedStores, ...topNearby];
+        }
+      } else {
+        const TOP_RATED_POOL_SIZE = 40;
+        const topRatedPool = await getOrSet(
+          buildKey("stores", "topRatedFallback", ""),
+          () =>
+            Store.find({
+              isActive: true,
+              isVerified: true,
+              applicationStatus: "approved",
+              excludeFromAlternatives: { $ne: true },
+            })
+              .select(storeSelect)
+              .sort({ avgRating: -1, reviewCount: -1 })
+              .limit(TOP_RATED_POOL_SIZE)
+              .lean(),
+          getTTL("homepage"),
+        );
 
-      recommendedStores = [...recommendedStores, ...topRated];
+        const topRated = topRatedPool
+          .filter((s) => !excludeSet.has(String(s._id)))
+          .slice(0, 10 - recommendedStores.length);
+
+        recommendedStores = [...recommendedStores, ...topRated];
+      }
     }
 
     return handleResponse(res, 200, "Recommended stores fetched successfully", recommendedStores);

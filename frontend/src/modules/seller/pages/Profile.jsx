@@ -18,6 +18,7 @@ import {
   ArrowRightLeft,
   Loader2,
   CreditCard,
+  Camera,
 } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
@@ -51,6 +52,7 @@ const SellerProfile = () => {
     radius: 5,
     address: "",
     bannerImage: "",
+    logoUrl: "",
     description: "",
   });
 
@@ -151,7 +153,8 @@ const SellerProfile = () => {
         city: data.city || "",
         state: data.state || "",
         pincode: data.pincode || "",
-        bannerImage: data.bannerImage || "",
+        bannerImage: data.bannerImage || (Array.isArray(data.banners) && data.banners[0]) || data.banner || "",
+        logoUrl: data.logoUrl || data.logo || data.profilePhoto || data.avatar || "",
         description: data.description || "",
       });
     } catch (error) {
@@ -214,6 +217,8 @@ const SellerProfile = () => {
         lat: formData.lat,
         lng: formData.lng,
         radius: formData.radius,
+        banners: formData.bannerImage ? [formData.bannerImage] : [],
+        logoUrl: formData.logoUrl || "",
       };
       await sellerApi.updateProfile(payload);
       toast.success("Profile updated successfully");
@@ -251,9 +256,9 @@ const SellerProfile = () => {
       <div className="relative mb-24 px-4">
         {/* Banner Background */}
         <div className="bg-linear-to-r from-slate-900 via-slate-950 to-black h-64 rounded-lg shadow-2xl relative overflow-hidden group">
-          {formData.bannerImage && (
+          {(formData.bannerImage || (Array.isArray(profile?.banners) && profile.banners[0])) && (
             <img 
-              src={formData.bannerImage} 
+              src={formData.bannerImage || profile?.banners?.[0]} 
               alt="Shop Banner" 
               className="absolute inset-0 w-full h-full object-cover opacity-80"
             />
@@ -293,11 +298,44 @@ const SellerProfile = () => {
         {/* Profile Info Row */}
         <div className="absolute bottom-8 left-4 right-4 md:left-8 md:right-8 lg:left-12 lg:right-12 grid grid-cols-1 md:grid-cols-[176px_minmax(0,1fr)_auto] items-center md:items-end gap-6 md:gap-8">
           {/* Avatar Container */}
-          <div className="h-44 w-44 rounded-full bg-white p-2 shadow-[0_30px_70px_rgba(0,0,0,0.15)] flex-shrink-0 mx-auto md:mx-0">
-            <div className="h-full w-full rounded-full bg-slate-50 flex items-center justify-center border-4 border-slate-50">
-              <span className="text-7xl font-black text-slate-900">
-                {profile?.name?.charAt(0)}
-              </span>
+          <div className="relative h-44 w-44 rounded-full bg-white p-2 shadow-[0_30px_70px_rgba(0,0,0,0.15)] flex-shrink-0 mx-auto md:mx-0 group/avatar">
+            <div className="h-full w-full rounded-full bg-slate-50 flex items-center justify-center border-4 border-slate-50 overflow-hidden relative">
+              {(formData.logoUrl || profile?.logoUrl || profile?.logo) ? (
+                <img
+                  src={formData.logoUrl || profile?.logoUrl || profile?.logo}
+                  alt={profile?.name || "Store Logo"}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span className="text-7xl font-black text-slate-900">
+                  {profile?.name?.charAt(0) || "S"}
+                </span>
+              )}
+              {isEditing && (
+                <label className="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer rounded-full z-10">
+                  <Camera size={26} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider mt-1">Change Logo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) {
+                          toast.error("Logo must be less than 2MB");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setFormData(prev => ({ ...prev, logoUrl: reader.result }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </label>
+              )}
             </div>
           </div>
 

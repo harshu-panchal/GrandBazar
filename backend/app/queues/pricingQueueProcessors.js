@@ -126,9 +126,38 @@ export async function recalcProductsMatching(filter, { onBatch = null } = {}) {
 
 async function processRecalcByCategory({ categoryId }) {
   if (!categoryId) return;
+
+  // Bug #295: Resolve all descendant category IDs (Header -> Category -> Subcategory)
+  const childCategories = await Category.find({
+    $or: [{ parentId: categoryId }, { _id: categoryId }],
+  }).select("_id").lean();
+
+  const allCategoryIds = new Set(childCategories.map((c) => String(c._id)));
+  const grandChildren = await Category.find({
+    parentId: { $in: Array.from(allCategoryIds) },
+  }).select("_id").lean();
+  grandChildren.forEach((c) => allCategoryIds.add(String(c._id)));
+
+  const idList = Array.from(allCategoryIds);
   const count = await recalcProductsMatching({
-    $or: [{ headerId: categoryId }, { categoryId }, { subcategoryId: categoryId }],
+    $or: [
+      { headerId: { $in: idList } },
+      { categoryId: { $in: idList } },
+      { subcategoryId: { $in: idList } },
+    ],
   });
+
+  try {
+    const { invalidate, buildKey } = await import("../services/cacheService.js");
+    await invalidate("cache:catalog:product:*");
+    await invalidate(buildKey("catalog", "productList", "*"));
+    await invalidate("cache:catalog:categories:*");
+    await invalidate("cache:offersections:public:*");
+    await invalidate("cache:experience:public:*");
+  } catch (cacheErr) {
+    logger.warn("[pricingQueue] Cache invalidation after category recalc failed", { error: cacheErr.message });
+  }
+
   logger.info("[pricingQueue] customerPrice recalculated for category", { categoryId, count });
 }
 

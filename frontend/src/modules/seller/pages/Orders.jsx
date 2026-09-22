@@ -56,6 +56,12 @@ function orderStatusControlShowsOwnBadge(order) {
     return !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
 }
 
+function formatShortOrderId(orderId) {
+    if (!orderId) return '';
+    const s = String(orderId);
+    return s.length > 8 ? s.slice(-8).toUpperCase() : s;
+}
+
 function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
     const { showToast } = useToast();
     const method = resolveFulfillmentMethod(order);
@@ -101,22 +107,35 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
     if (readOnly || requiresDisplayOnly) {
         const isScheduled = isScheduledHoldOrder(order) || order.status === 'scheduled';
         const isPacked = normalizedStatus === 'packed' || Boolean(order.sellerPackedAt);
-        const displayLabel = isPacked ? 'Packed' : (order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold')));
+        const isAwaitingApproval =
+            normalizedStatus === 'awaiting_extra_payment' ||
+            order.priceAdjustment?.status === 'pending' ||
+            String(order.statusLabel || '').toLowerCase().includes('awaiting customer') ||
+            String(normalizedStatus).includes('awaiting');
+
+        const displayLabel = isAwaitingApproval
+            ? 'Awaiting Approval'
+            : isPacked
+                ? 'Packed'
+                : (order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold')));
+
         return (
             <div className={cn(compact ? 'text-right' : '', 'max-w-[140px]')}>
                 <span
                     className={cn(
                         'inline-flex items-center rounded-full font-black uppercase tracking-widest whitespace-normal text-right',
                         compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
-                        isScheduled
-                            ? 'bg-blue-100 text-blue-700'
-                            : isPacked
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : platformLocked
-                                    ? 'bg-brand-100 text-brand-700'
-                                    : requiresDisplayOnly
-                                        ? 'bg-violet-100 text-violet-700'
-                                        : 'bg-amber-100 text-amber-700',
+                        isAwaitingApproval
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : isScheduled
+                                ? 'bg-blue-100 text-blue-700'
+                                : isPacked
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : platformLocked
+                                        ? 'bg-brand-100 text-brand-700'
+                                        : requiresDisplayOnly
+                                            ? 'bg-violet-100 text-violet-700'
+                                            : 'bg-amber-100 text-amber-700',
                     )}
                 >
                     {displayLabel}
@@ -157,7 +176,9 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                 )}
                 {requiresDisplayOnly && !isScheduled && !platformLocked && (
                     <p className="text-[10px] font-semibold text-slate-500 mt-1">
-                        Customer-approved partial update
+                        {isAwaitingApproval
+                            ? 'Waiting for customer response'
+                            : 'Customer-approved partial update'}
                     </p>
                 )}
             </div>
@@ -434,14 +455,14 @@ const Orders = () => {
             if (payload?.reassigned || payload?.payload?.reassigned) {
                 showToast(
                     orderId
-                        ? `Order #${orderId} was reassigned to your store`
+                        ? `Order #${formatShortOrderId(orderId)} was reassigned to your store`
                         : "An order was reassigned to your store",
-                    "success",
+                    "info",
                 );
             } else {
                 showToast(
-                    orderId ? `New order #${orderId} received` : "New order received",
-                    "success",
+                    orderId ? `New order #${formatShortOrderId(orderId)} received` : "New order received",
+                    "info",
                 );
             }
             fetchOrders(page, false);
@@ -1476,7 +1497,7 @@ const Orders = () => {
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1" onClick={() => handleViewDetails(order)}>
-                                                    <p className="text-xs font-black text-slate-900 truncate">#{order.id}</p>
+                                                    <p className="text-xs font-black text-slate-900 truncate" title={`#${order.id}`}>#{formatShortOrderId(order.id)}</p>
                                                     <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
                                                         <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
                                                         {order.date} • {order.time}
@@ -1506,11 +1527,6 @@ const Orders = () => {
                                                     <p className="text-sm font-black text-slate-900 mt-2">₹{order.total.toLocaleString()}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2 shrink-0 max-w-[140px]">
-                                                    {!orderStatusControlShowsOwnBadge(order) && (
-                                                        <Badge variant={getStatusColor(order.status)} className="text-[10px] font-black uppercase px-2 py-0 text-right whitespace-normal">
-                                                            {order.statusLabel || order.status}
-                                                        </Badge>
-                                                    )}
                                                     {order.storeReassignment && (
                                                         <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase px-2 py-0">
                                                             Reassigned
@@ -1617,8 +1633,8 @@ const Orders = () => {
                                                     </td>
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
                                                         <div>
-                                                            <span className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors cursor-pointer" onClick={() => handleViewDetails(order)}>
-                                                                #{order.id}
+                                                            <span className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors cursor-pointer" onClick={() => handleViewDetails(order)} title={`#${order.id}`}>
+                                                                #{formatShortOrderId(order.id)}
                                                             </span>
                                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mt-1">
                                                                 <HiOutlineCalendarDays className="h-3 w-3" />
@@ -2135,7 +2151,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isReplacementModalOpen && selectedOrder && (
-                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2249,7 +2265,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isSplitModalOpen && selectedOrder && (
-                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2426,7 +2442,7 @@ const Orders = () => {
                                                             Reassigned
                                                         </Badge>
                                                     )}
-                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">#{selectedOrder.id}</span>
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest" title={`#${selectedOrder.id}`}>#{formatShortOrderId(selectedOrder.id)}</span>
                                                 </div>
                                                 {selectedOrder.storeReassignment && (
                                                     <p className="text-[11px] font-bold text-violet-700 mt-1.5">
@@ -2604,6 +2620,53 @@ const Orders = () => {
                                                 </div>
                                             </div>
                                         )}
+                                        {selectedOrder.priceAdjustment?.status === 'pending' && (
+                                            <div className="mb-4 p-3.5 rounded-2xl bg-amber-50 ring-1 ring-amber-200/80 border-l-4 border-l-amber-500 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded-md">
+                                                        Awaiting Customer Approval
+                                                    </span>
+                                                    <span className="text-xs font-bold text-amber-900">
+                                                        ₹{selectedOrder.priceAdjustment.deltaAmount} {selectedOrder.priceAdjustment.direction === 'decrease' ? 'Refund' : 'Extra'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-700 font-medium">
+                                                    {selectedOrder.priceAdjustment.direction === 'decrease'
+                                                        ? 'You proposed reducing this order total. Waiting for the customer to accept the refund and update.'
+                                                        : 'You adjusted this order total. Waiting for the customer to approve/pay the difference.'}
+                                                </p>
+                                                {selectedOrder.priceAdjustment.reason && (
+                                                    <p className="text-[11px] text-slate-500 font-medium italic">
+                                                        Reason: {selectedOrder.priceAdjustment.reason}
+                                                    </p>
+                                                )}
+                                                <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-800 bg-amber-100/50 p-2 rounded-xl">
+                                                    <HiOutlineClock className="h-4 w-4 shrink-0 text-amber-600" />
+                                                    <span>Order processing is paused until customer responds.</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(() => {
+                                            const hasCustomerAdded = selectedOrder.modificationTimeline?.some(m => m.type === 'items_added') ||
+                                                String(selectedOrder.priceAdjustment?.reason || '').includes('Customer added');
+                                            if (!hasCustomerAdded) return null;
+                                            return (
+                                                <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                                                            <p className="text-xs font-bold text-indigo-950">Customer Added Items Post-Order</p>
+                                                        </div>
+                                                        <span className="text-xs font-black text-indigo-700">
+                                                            +₹{Number(selectedOrder.priceAdjustment?.deltaAmount || 0).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[11px] text-indigo-800 mt-1">
+                                                        New products were added by the customer after this order was placed. Please review the updated items list below before packing.
+                                                    </p>
+                                                </div>
+                                            );
+                                        })()}
                                         {!['delivered', 'cancelled', 'returned'].includes((selectedOrder.status || '').toLowerCase())
                                             && selectedOrder.reschedule?.status !== 'requested' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 flex items-center justify-between gap-3">
@@ -2876,10 +2939,12 @@ const Orders = () => {
                                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end shrink-0">
                                         <div className="flex gap-2 items-center">
                                             <button onClick={() => setIsDetailsModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all">CLOSE</button>
-                                            <OrderStatusControl
-                                                order={selectedOrder}
-                                                onStatusUpdate={handleStatusUpdate}
-                                            />
+                                            {canSellerManuallyUpdateStatus(selectedOrder) && (
+                                                <OrderStatusControl
+                                                    order={selectedOrder}
+                                                    onStatusUpdate={handleStatusUpdate}
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 </motion.div>

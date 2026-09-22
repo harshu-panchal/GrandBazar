@@ -41,8 +41,19 @@ export async function publishProductPricing({
   product.stock = parsedStock;
   product.status = "active";
   product.isPublished = true;
+  product.isCurrentlyAvailable = true;
+  product.isHidden = false;
   if (!product.approvalStatus || product.approvalStatus === "pending") {
     product.approvalStatus = "approved";
+  }
+
+  // Bug #250: Calculate commission-inclusive customerPrice & customerSalePrice
+  try {
+    const { computeCustomerPriceFieldsForWrite } = await import("./finance/customerPriceService.js");
+    const customerPriceFields = await computeCustomerPriceFieldsForWrite(product.toObject());
+    Object.assign(product, customerPriceFields);
+  } catch (err) {
+    console.error("Failed to compute customer price in publishProductPricing:", err);
   }
 
   await product.save();
@@ -122,7 +133,20 @@ export async function toggleProductStatus({ productId, storeId }) {
     throw new Error("Complete pricing for this product before toggling availability");
   }
 
-  product.status = product.status === "active" ? "inactive" : "active";
+  const goingActive = product.status !== "active";
+  product.status = goingActive ? "active" : "inactive";
+
+  // Bug #259/#260 — bidirectional sync between availability and hidden state
+  if (goingActive) {
+    // Turning availability ON → remove hidden flag so product appears in listings
+    product.isHidden = false;
+    product.isCurrentlyAvailable = true;
+  } else {
+    // Turning availability OFF → also hide the product from customer listings
+    product.isHidden = true;
+    product.isCurrentlyAvailable = false;
+  }
+
   await product.save();
   await invalidateProductCaches(product);
 
@@ -143,6 +167,7 @@ export async function pauseProduct({ productId, storeId, hours }) {
   product.availability = product.availability || {};
   product.availability.pausedUntil = new Date(Date.now() + parsedHours * 60 * 60 * 1000);
   product.isCurrentlyAvailable = false;
+  product.isHidden = true;
   await product.save();
   await invalidateProductCaches(product);
 
@@ -170,6 +195,7 @@ export async function unpauseProduct({ productId, storeId }) {
         )
       : false;
   product.isCurrentlyAvailable = !withinDailyWindow;
+  product.isHidden = withinDailyWindow;
   await product.save();
   await invalidateProductCaches(product);
 

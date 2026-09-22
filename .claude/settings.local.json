@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\harsh\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--AppZeto-GrandBazar\\\\57c56b12-13e3-44f8-8241-99424f74e6da\\\\scratchpad\")",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(grep -n \"createVendorAccount\\\\|updateSellerStoreSetup\\\\|resendSellerCredentials\\\\|sellerApplicationsController\\\\|adminSellerController\\\\|require\\(\\\\\"..\\\\/controller\\\\/admin\" backend/app/routes/adminAuth.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 5 \"https://fonts.gstatic.com/s/ibmplexsans/v19/zYX9KVElMYYaJe8bpLHnCwDKtdfKPXbxpQ.woff2\")",
+      "Bash(node --check scripts/zztest_admin_settlement_gaps.mjs)",
+      "Bash(REDIS_DISABLED=true timeout 60 node scripts/zztest_admin_settlement_gaps.mjs)",
+      "Bash(echo \"EXIT_CODE=$?\")"
+    ]
+  }
+}

@@ -14,10 +14,19 @@ export default function DeliverySlotPicker({
   fulfillmentType,
   onChange,
   campaignId = null,
+  initialTimeSlot = null,
 }) {
-  const [deliveryDate, setDeliveryDate] = useState(() => formatLocalDate(new Date()));
+  const [initDate, initLabel] = useMemo(() => {
+    if (initialTimeSlot && typeof initialTimeSlot === "string" && initialTimeSlot.includes("|")) {
+      const parts = initialTimeSlot.split("|");
+      return [parts[0], parts[1]];
+    }
+    return [formatLocalDate(new Date()), ""];
+  }, [initialTimeSlot]);
+
+  const [deliveryDate, setDeliveryDate] = useState(initDate);
   const [windows, setWindows] = useState([]);
-  const [windowLabel, setWindowLabel] = useState("");
+  const [windowLabel, setWindowLabel] = useState(initLabel);
   const [loading, setLoading] = useState(false);
   const [schedulingEnabled, setSchedulingEnabled] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");

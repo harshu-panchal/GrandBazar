@@ -11,12 +11,13 @@ import {
 } from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
-  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight isCurrentlyAvailable isPublished isHidden";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
   isPublished: { $ne: false },
   isCurrentlyAvailable: { $ne: false },
+  isHidden: { $ne: true },
   ...getApprovedOrLegacyFilter(),
 };
 
@@ -111,7 +112,6 @@ export const getCart = async (req, res) => {
       .populate({
         path: "items.productId",
         select: CART_POPULATE_FIELDS,
-        match: CUSTOMER_VISIBLE_PRODUCT_MATCH,
       })
       .lean();
 
@@ -120,7 +120,29 @@ export const getCart = async (req, res) => {
       return handleResponse(res, 200, "Cart fetched successfully", newCart);
     }
 
-    return handleResponse(res, 200, "Cart fetched successfully", sanitizeCartItems(cart));
+    if (Array.isArray(cart.items)) {
+      cart.items = cart.items.filter((item) => Boolean(item?.productId));
+      for (const item of cart.items) {
+        const p = item.productId;
+        const isUnavailable =
+          !p ||
+          p.status !== "active" ||
+          p.isCurrentlyAvailable === false ||
+          p.isPublished === false ||
+          Boolean(p.isHidden);
+        item.isUnavailable = isUnavailable;
+        if (isUnavailable) {
+          item.unavailableReason =
+            p?.isCurrentlyAvailable === false
+              ? "Currently unavailable from store"
+              : p?.status !== "active" || p?.isHidden
+              ? "This item is no longer available"
+              : "Unavailable";
+        }
+      }
+    }
+
+    return handleResponse(res, 200, "Cart fetched successfully", cart);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

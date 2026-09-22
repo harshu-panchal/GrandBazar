@@ -6,12 +6,12 @@ import {
     replyToTicket,
     updateTicketStatus
 } from "../controller/ticketController.js";
-import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
+import { verifyToken, allowRoles, optionalVerifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Mixed/Shared routes (Need login)
-router.post("/create", verifyToken, createTicket);
+// Mixed/Shared routes (Need login or allow guest support ticket)
+router.post("/create", optionalVerifyToken, createTicket);
 router.get("/my-tickets", verifyToken, getMyTickets);
 router.post("/reply/:id", verifyToken, replyToTicket);
 

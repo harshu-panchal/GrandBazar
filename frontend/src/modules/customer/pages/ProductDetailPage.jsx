@@ -159,13 +159,15 @@ const ProductDetailPage = () => {
         }
     };
 
-    const handleAddToCart = (addon) => {
-        addToCart({
+    const handleAddToCart = async (addon) => {
+        const res = await addToCart({
             ...addon,
             id: addon._id,
             price: addon.effectivePrice ?? addon.salePrice ?? addon.price,
         });
-        showToast(`${addon.name} added to cart`, 'success');
+        if (res?.ok !== false) {
+            showToast(`${addon.name} added to cart`, 'success');
+        }
     };
 
     const handleToggleWishlist = () => {
@@ -193,7 +195,6 @@ const ProductDetailPage = () => {
                     text: shareText,
                     url: shareUrl,
                 });
-                showToast("Product shared successfully", "success");
             } catch (error) {
                 if (error.name !== "AbortError") {
                     console.error("Error sharing product:", error);
@@ -317,10 +318,15 @@ const ProductDetailPage = () => {
 
                 <div className="lg:w-[55%] xl:w-[60%] space-y-6 md:space-y-8">
                     <div>
-                        <div className="flex items-center gap-3 mb-4">
+                        <div className="flex items-center gap-3 mb-4 flex-wrap">
                             <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-primary/20">
                                 {product.categoryId?.name || 'Essential'}
                             </span>
+                            {product.brand && (
+                                <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-slate-200">
+                                    Brand: {product.brand}
+                                </span>
+                            )}
                             <div className="flex items-center gap-1 text-orange-500 font-bold bg-orange-50 px-3 py-0.5 rounded-full text-xs">
                                 <Star size={12} fill="currentColor" /> 4.8 ({reviews.length > 0 ? reviews.length : '120+'})
                             </div>
@@ -376,10 +382,12 @@ const ProductDetailPage = () => {
                             </div>
                         ) : (
                             <Button
-                                onClick={() => {
+                                onClick={async () => {
                                     if (isOutOfStock) return;
-                                    addToCart(product);
-                                    showToast(`${product.name} added to cart`, 'success');
+                                    const res = await addToCart(product);
+                                    if (res?.ok !== false) {
+                                        showToast(`${product.name} added to cart`, 'success');
+                                    }
                                 }}
                                 disabled={isOutOfStock}
                                 className="h-16 w-full sm:w-64 bg-primary hover:bg-[var(--brand-400)] text-white text-lg font-black rounded-2xl shadow-xl transition-all hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"

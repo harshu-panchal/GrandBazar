@@ -750,9 +750,11 @@ const CheckoutPage = () => {
     }
   };
 
-  const handleAddToCart = (product) => {
-    addToCart(product);
-    showToast(`${product.name} added to cart!`, "success");
+  const handleAddToCart = async (product) => {
+    const res = await addToCart(product);
+    if (res?.ok !== false) {
+      showToast(`${product.name} added to cart!`, "success");
+    }
   };
 
   const getCartItem = (productId) => cart.find((item) => item.id === productId);
@@ -1021,6 +1023,10 @@ const CheckoutPage = () => {
         campaignId: schedulePayload?.campaignId,
         preOrderCampaignId: schedulePayload?.preOrderCampaignId,
         walletAmount: walletAmountToUse,
+        // Needed server-side so wallet min-order/max-wallet-percent rules evaluate
+        // against the real order value instead of defaulting to 0.
+        grandTotal: pricingPreview?.grandTotal || 0,
+        cartTotal: pricingPreview?.productSubtotal || cartTotal || 0,
         items: cart.map((item) => ({
           product: item.id || item._id,
           name: item.name,

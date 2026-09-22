@@ -1,4 +1,5 @@
 import Category from "../models/category.js";
+import Product from "../models/product.js";
 import handleResponse from "../utils/helper.js";
 import getPagination from "../utils/pagination.js";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
@@ -7,6 +8,7 @@ import mongoose from "mongoose";
 import { invalidateCategoryName } from "../services/entityNameCache.js";
 import { enqueueRecalcByCategory } from "../queues/pricingQueueProcessors.js";
 import { ALL_GST_SLABS } from "../constants/finance.js";
+import { getNearbySellerIdsForCustomer } from "../services/customerVisibilityService.js";
 
 function normalizeUrl(value) {
   if (!value || typeof value !== "string") return "";
@@ -57,7 +59,7 @@ export const getCategories = async (req, res) => {
 
     if (tree === "true") {
       const cacheKey = categoryCacheKey({ tree: true, type: "header" });
-      const categories = await getOrSet(
+      let categories = await getOrSet(
         cacheKey,
         async () => {
           const selectFields = "name slug image iconId type parentId headerColor headerFontColor headerIconColor";
@@ -76,6 +78,45 @@ export const getCategories = async (req, res) => {
         },
         getTTL("categories"),
       );
+
+      // Clone so cached structure is not mutated across requests
+      categories = JSON.parse(JSON.stringify(categories));
+
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        try {
+          const nearbySellerIds = await getNearbySellerIdsForCustomer(lat, lng, { includeClosed: true });
+          if (nearbySellerIds && nearbySellerIds.length > 0) {
+            const activeCategoryIds = await Product.distinct("categoryId", {
+              sellerId: { $in: nearbySellerIds },
+              status: "active",
+              isCurrentlyAvailable: { $ne: false },
+              isPublished: { $ne: false },
+            });
+            const activeSet = new Set(activeCategoryIds.map(String));
+
+            categories.forEach((header) => {
+              if (Array.isArray(header.children)) {
+                header.children.sort((a, b) => {
+                  const aActive = activeSet.has(String(a._id)) ? 1 : 0;
+                  const bActive = activeSet.has(String(b._id)) ? 1 : 0;
+                  return bActive - aActive;
+                });
+              }
+            });
+
+            categories.sort((a, b) => {
+              const aCount = (a.children || []).filter((c) => activeSet.has(String(c._id))).length;
+              const bCount = (b.children || []).filter((c) => activeSet.has(String(c._id))).length;
+              return bCount - aCount;
+            });
+          }
+        } catch {
+          // Graceful fallback on location ranking
+        }
+      }
+
       return handleResponse(res, 200, "Category tree fetched", categories);
     }
 
@@ -302,6 +343,8 @@ export const updateCategory = async (req, res) => {
     invalidate("cache:catalog:categories:*").catch(err => {
       console.warn("[Category] Cache invalidation failed:", err.message);
     });
+    invalidate("cache:catalog:product:*").catch(() => {});
+    invalidate(buildKey("catalog", "productList", "*")).catch(() => {});
     invalidateCategoryName(id).catch(err => {
       console.warn("[Category] Name cache invalidation failed:", err.message);
     });
@@ -400,6 +443,8 @@ export const bulkUpdateCategoryCharges = async (req, res) => {
     invalidate("cache:catalog:categories:*").catch((err) => {
       console.warn("[Category] Cache invalidation failed:", err.message);
     });
+    invalidate("cache:catalog:product:*").catch(() => {});
+    invalidate(buildKey("catalog", "productList", "*")).catch(() => {});
     uniqueIds.forEach((id) => {
       invalidateCategoryName(id).catch((err) => {
         console.warn("[Category] Name cache invalidation failed:", err.message);

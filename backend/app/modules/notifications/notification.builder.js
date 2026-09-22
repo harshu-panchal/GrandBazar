@@ -536,9 +536,22 @@ function eventDefinition(eventType) {
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Review Order Price Change",
+        title: (payload) =>
+          payload.direction === "decrease" ? "Order Total Reduced 🎉" : "Review Order Price Change",
         body: (payload) =>
-          `The seller ${payload.direction === "decrease" ? "reduced" : "increased"} order #${payload.orderId || ""} by ₹${payload.amount || 0}. Please review and approve before it continues.`,
+          payload.direction === "decrease"
+            ? `Great news! The seller reduced order #${payload.orderId || ""} by ₹${payload.amount || 0}. Tap to review and accept your savings.`
+            : `The seller proposed an adjustment of ₹${payload.amount || 0} for order #${payload.orderId || ""}. Please review and approve before it continues.`,
+      };
+    case NOTIFICATION_EVENTS.REPLACEMENT_REQUESTED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Replacement Suggested for Your Order 🔄",
+        body: (payload) =>
+          payload.itemName
+            ? `The seller suggested a replacement for "${payload.itemName}" in order #${payload.orderId || ""}. Tap to review and choose.`
+            : `The seller suggested an alternative item for order #${payload.orderId || ""}. Tap to review and confirm.`,
       };
     case NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_REJECTED:
       return {

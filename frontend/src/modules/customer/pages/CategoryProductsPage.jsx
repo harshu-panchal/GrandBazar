@@ -39,6 +39,8 @@ const CategoryProductsPage = () => {
     const [sortBy, setSortBy] = useState('newest');
     const [maxDistanceKm, setMaxDistanceKm] = useState(null);
     const [inStockOnly, setInStockOnly] = useState(false);
+    const [priceRange, setPriceRange] = useState({ min: null, max: null });
+    const [selectedBrand, setSelectedBrand] = useState('');
     const canonicalPath = category ? buildCategoryPath(category) : `/category/${catId || ""}`;
     const canonicalUrl = `${window.location.origin}${canonicalPath}`;
 
@@ -179,8 +181,12 @@ const CategoryProductsPage = () => {
 
     const safeProducts = Array.isArray(products) ? products : [];
 
+    const availableBrands = React.useMemo(() => {
+        return Array.from(new Set(safeProducts.map((p) => p.brand).filter(Boolean))).sort();
+    }, [safeProducts]);
+
     // Subcategory + price/newest sort happen server-side (see the products
-    // fetch effect above). Distance sort/filter and in-stock are applied here
+    // fetch effect above). Distance sort/filter, price range, brand and in-stock are applied here
     // since distance is computed per-seller after the DB query, not a stored field.
     const filteredProducts = React.useMemo(() => {
         let result = safeProducts;
@@ -190,12 +196,27 @@ const CategoryProductsPage = () => {
         if (Number.isFinite(maxDistanceKm)) {
             result = result.filter((p) => !Number.isFinite(p.distanceKm) || p.distanceKm <= maxDistanceKm);
         }
-        if (sortBy === 'distance') {
+        if (priceRange.min != null) {
+            result = result.filter((p) => (Number(p.price) || 0) >= priceRange.min);
+        }
+        if (priceRange.max != null) {
+            result = result.filter((p) => (Number(p.price) || 0) <= priceRange.max);
+        }
+        if (selectedBrand) {
+            result = result.filter((p) => String(p.brand || "").toLowerCase() === selectedBrand.toLowerCase());
+        }
+        if (sortBy === 'price-asc') {
+            result = [...result].sort((a, b) => (Number(a.price) || 0) - (Number(a.price) || 0));
+        } else if (sortBy === 'price-desc') {
+            result = [...result].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+        } else if (sortBy === 'distance') {
             result = [...result].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+        } else if (sortBy === 'newest') {
+            result = [...result].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
         }
         return result;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [safeProducts, inStockOnly, maxDistanceKm, sortBy]);
+    }, [safeProducts, inStockOnly, maxDistanceKm, sortBy, priceRange, selectedBrand]);
 
     const productsById = React.useMemo(() => {
         const map = {};
@@ -206,7 +227,7 @@ const CategoryProductsPage = () => {
     }, [safeProducts]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-white max-w-md mx-auto relative font-sans">
+        <div className="flex flex-col min-h-screen bg-white max-w-md mx-auto relative font-sans overflow-x-hidden">
             {/* Header */}
             <header className={cn(
                 "sticky top-0 z-50 bg-white border-b border-gray-50 px-4 py-4 flex items-center justify-between",
@@ -235,6 +256,11 @@ const CategoryProductsPage = () => {
                         onDistanceChange={setMaxDistanceKm}
                         inStockOnly={inStockOnly}
                         onInStockChange={setInStockOnly}
+                        priceRange={priceRange}
+                        onPriceRangeChange={setPriceRange}
+                        brands={availableBrands}
+                        selectedBrand={selectedBrand}
+                        onBrandChange={setSelectedBrand}
                     />
                 </div>
             )}
@@ -250,10 +276,11 @@ const CategoryProductsPage = () => {
                             )}
                         </div>
                         <h3 className="text-3xl font-[1000] text-slate-800 tracking-tighter mb-4 uppercase">
-                            Service <span className="text-primary">Unavailable</span>
+                            {/* Bug #292: friendly "not in your area" message instead of "Service Unavailable" */}
+                            Not Available <span className="text-primary">In Your Area</span>
                         </h3>
                         <p className="text-slate-500 font-bold text-sm max-w-[280px] mb-8 leading-relaxed">
-                            {settings?.appName || 'Our service'} is not available in your area yet. We're expanding fast!
+                            {category?.name || 'This category'} is not available in your area yet. We're expanding fast!
                         </p>
                         <button
                             onClick={() => setRefreshTick((t) => t + 1)}

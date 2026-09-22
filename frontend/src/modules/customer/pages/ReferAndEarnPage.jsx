@@ -29,8 +29,10 @@ const STEPS = [
 const STATUS_LABELS = {
   pending: { label: "Invited", color: "text-slate-500 bg-slate-100" },
   registered: { label: "Signed Up", color: "text-blue-600 bg-blue-50" },
-  first_order: { label: "First Order", color: "text-amber-600 bg-amber-50" },
-  rewarded: { label: "Rewarded", color: "text-green-600 bg-green-50" },
+  // Bug #283 — first_order is a separate step; reward unlocks only after delivery
+  first_order: { label: "Placed Order", color: "text-amber-600 bg-amber-50" },
+  delivered: { label: "Order Delivered", color: "text-teal-600 bg-teal-50" },
+  rewarded: { label: "Rewarded ✓", color: "text-green-600 bg-green-50" },
   rejected: { label: "Rejected", color: "text-red-600 bg-red-50" },
 };
 
@@ -267,7 +269,14 @@ const ReferAndEarnPage = () => {
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate">{r.refereeId?.name || "Friend"}</p>
+                      {/* Bug #284 — fall back to masked phone number if name is missing */}
+                      <p className="font-semibold text-sm truncate">
+                        {r.refereeId?.name
+                          ? r.refereeId.name
+                          : r.refereeId?.phone
+                            ? String(r.refereeId.phone).replace(/^(\d{2})(\d+)(\d{2})$/, (_, a, mid, b) => `${a}${'\u25CF'.repeat(Math.min(mid.length, 6))}${b}`)
+                            : `User #${String(r._id || '').slice(-4)}`}
+                      </p>
                       <p className="text-[10px] text-slate-400 capitalize">{r.channel || "code"} invite</p>
                     </div>
                   </div>

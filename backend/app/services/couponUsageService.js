@@ -44,10 +44,28 @@ export async function consumeCouponUsageAtomic({
     },
     { $inc: { usedCount: 1 } },
     { returnDocument: "after", session },
-  ).select("perUserLimit usageLimit usedCount");
+  ).select("perUserLimit usageLimit usedCount isActive");
 
   if (!coupon) {
-    throw httpError("This coupon has reached its usage limit");
+    // Bug #279 — user-friendly message when coupon is exhausted due to race condition
+    throw httpError("This coupon is no longer available. Please try another coupon.");
+  }
+
+  // Bug #278 — auto-deactivate coupon when usage limit is reached
+  if (
+    coupon.usageLimit > 0 &&
+    coupon.usedCount >= coupon.usageLimit &&
+    coupon.isActive
+  ) {
+    const deactivateOpts = session ? { session } : {};
+    await Coupon.updateOne(
+      { _id: couponId },
+      { $set: { isActive: false } },
+      deactivateOpts,
+    ).catch((err) => {
+      // Non-fatal — log and continue; the coupon is already exhausted by the $expr guard above
+      console.warn("[consumeCouponUsageAtomic] auto-deactivate failed:", err.message);
+    });
   }
 
   const perUserLimit = Number(coupon.perUserLimit) > 0 ? Number(coupon.perUserLimit) : 1;
@@ -77,7 +95,13 @@ export async function consumeCouponUsageAtomic({
     );
   } catch (error) {
     if (error?.code === 11000) {
-      throw httpError("You have already used this coupon");
+      // Bug #279 — concurrent duplicate redemption; give back the use we just incremented
+      await Coupon.updateOne(
+        { _id: couponId, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } },
+        session ? { session } : {},
+      ).catch(() => {});
+      throw httpError("This coupon is no longer available. Please try another coupon.");
     }
     throw error;
   }

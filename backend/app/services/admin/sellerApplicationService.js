@@ -467,6 +467,12 @@ export async function updateStoreSetupByAdmin(sellerOrStoreId, storePayload = {}
   if (!store) {
     store = await Store.findOne({ ownerId: sellerOrStoreId });
   }
+  if (!store) {
+    const sellerAcc = await Seller.findById(sellerOrStoreId);
+    if (sellerAcc) {
+      store = await Store.findOne({ ownerId: sellerAcc._id });
+    }
+  }
 
   if (!store) {
     throw new Error("Store profile not found for this seller");

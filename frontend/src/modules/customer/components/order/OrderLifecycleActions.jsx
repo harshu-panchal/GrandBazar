@@ -205,6 +205,41 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
           {priceAdjustment.reason && (
             <p className="text-xs text-slate-500">Reason: {priceAdjustment.reason}</p>
           )}
+          {Array.isArray(priceAdjustment.proposedPartialCancelIndexes) && priceAdjustment.proposedPartialCancelIndexes.length > 0 && (
+            <div className="mt-2 space-y-1 rounded-lg bg-rose-50 p-2.5 border border-rose-200 text-xs">
+              <p className="font-bold text-rose-800 uppercase tracking-wide text-[10px]">Removed Items (Unavailable):</p>
+              {priceAdjustment.proposedPartialCancelIndexes.map((idx) => {
+                const item = order.items?.[idx];
+                if (!item) return null;
+                return (
+                  <div key={idx} className="flex justify-between text-rose-900">
+                    <span className="font-medium">{item.name}</span>
+                    <span className="font-bold">Qty: {item.quantity}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {Array.isArray(priceAdjustment.proposedItems) && priceAdjustment.proposedItems.length > 0 && (
+            <div className="mt-2 space-y-1.5 rounded-lg bg-white p-2.5 border border-amber-200 text-xs">
+              <p className="font-bold text-slate-700 uppercase tracking-wide text-[10px]">Updated Order Items:</p>
+              {priceAdjustment.proposedItems.map((pi, idx) => {
+                const orig = order.items?.find((item) => String(item.product?._id || item.product) === String(pi.product?._id || pi.product)) || order.items?.[idx];
+                const qtyChanged = orig && orig.quantity !== pi.quantity;
+                return (
+                  <div key={idx} className="flex items-center justify-between py-0.5 border-b border-slate-100 last:border-0">
+                    <div>
+                      <p className="font-semibold text-slate-800">{pi.name}</p>
+                      {qtyChanged && (
+                        <p className="text-[10px] text-amber-700">Quantity: {orig.quantity} → {pi.quantity}</p>
+                      )}
+                    </div>
+                    <span className="font-bold text-slate-700">Qty: {pi.quantity} · ₹{(pi.price * pi.quantity).toFixed(0)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="flex gap-2 pt-1">
             {adjustmentNeedsPayment ? (
               <button
@@ -318,7 +353,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
           {pendingReplacementRequests.map((request) => (
             <div key={request.requestId} className="rounded-lg border border-amber-200 bg-white p-3">
               <p className="text-xs font-semibold text-slate-700">
-                Seller requested replacement for item #{Number(request.itemIndex) + 1}
+                Seller requested replacement for <span className="font-bold text-slate-900">{request.originalItem?.name || order?.items?.[request.itemIndex]?.name || `item #${Number(request.itemIndex) + 1}`}</span>
               </p>
               <p className="mt-0.5 text-xs text-slate-500">{request.reason || "No reason provided"}</p>
               <div className="mt-2 space-y-2">

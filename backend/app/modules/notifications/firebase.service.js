@@ -69,7 +69,13 @@ export async function sendFCM(tokens = [], payload = {}) {
   const resolvedLink = isWebLink(link) ? link : "";
   const title = payload.title || "";
   const body = payload.body || payload.message || "";
-  const tag = data.orderId || data.eventType || "quick-commerce";
+  // Bug #289 — Use orderId+eventType as the collapse tag so multiple FCM pushes
+  // for the same event (e.g. from multiple device tokens) collapse into a single
+  // notification on Android and Chrome instead of stacking duplicates.
+  const eventTypeStr = data.eventType || payload?.data?.eventType || "";
+  const orderIdStr = data.orderId || payload?.data?.orderId || "";
+  const tag = [orderIdStr, eventTypeStr].filter(Boolean).join(":") || "quick-commerce";
+  const collapseKey = tag;
   const image = resolveImageUrl(payload, data);
   const chunks = chunkArray(tokens, MAX_FCM_MULTICAST_TOKENS);
 
@@ -82,6 +88,7 @@ export async function sendFCM(tokens = [], payload = {}) {
   for (const chunk of chunks) {
     const result = await messaging.sendEachForMulticast({
       tokens: chunk,
+      collapseKey,
       notification: {
         title,
         body,

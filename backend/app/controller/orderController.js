@@ -235,7 +235,17 @@ export const placeOrder = async (req, res) => {
     );
   } catch (error) {
     console.error("Place Order Error:", error);
-    return handleResponse(res, error.statusCode || 500, error.message);
+    // Only ever forward error.message when it was deliberately thrown as a
+    // user-facing validation error (these always set statusCode explicitly,
+    // see httpError()-style helpers). An error with no statusCode is an
+    // unexpected internal failure (DB/cast/type error) whose raw message
+    // must never reach a customer-facing toast.
+    const isKnownUserFacingError = Number.isInteger(error.statusCode) && error.statusCode < 500;
+    return handleResponse(
+      res,
+      error.statusCode || 500,
+      isKnownUserFacingError ? error.message : "Something went wrong while placing your order. Please try again.",
+    );
   }
 };
 /* ===============================
@@ -426,6 +436,59 @@ export const getOrderInvoice = async (req, res) => {
   }
 };
 
+// Sellers should only ever see an admin-commission figure for a line when that
+// commission was actually configured at their own shop level — never the raw
+// admin/category/city-level commission breakdown that determines the customer's
+// price. Strips those fields from a lean order object before it reaches a seller.
+const ADMIN_COMMISSION_LINE_FIELDS = [
+  "adminProductCommission",
+  "appliedCommissionCategoryId",
+  "appliedCommissionCategoryLevel",
+  "appliedCommissionCategoryName",
+  "appliedCommissionType",
+  "appliedCommissionValue",
+  "appliedCommissionFixedRule",
+  "commissionFallbackTrail",
+  "bulkCommissionRateApplied",
+];
+
+const sanitizeCommissionFieldsForSeller = (order) => {
+  if (order.paymentBreakdown) {
+    delete order.paymentBreakdown.adminProductCommissionTotal;
+    delete order.paymentBreakdown.platformLogisticsMargin;
+    delete order.paymentBreakdown.platformTotalEarning;
+
+    if (Array.isArray(order.paymentBreakdown.lineItems)) {
+      order.paymentBreakdown.lineItems = order.paymentBreakdown.lineItems.map((line) => {
+        const sanitizedLine = { ...line };
+        const appliedAtShopLevel = sanitizedLine.appliedCommissionSourceLevel === "shop";
+        if (!appliedAtShopLevel) {
+          for (const field of ADMIN_COMMISSION_LINE_FIELDS) {
+            delete sanitizedLine[field];
+          }
+        }
+        delete sanitizedLine.appliedCommissionSourceLevel;
+        delete sanitizedLine.appliedCommissionSourceId;
+        delete sanitizedLine.appliedCommissionSource;
+        return sanitizedLine;
+      });
+    }
+
+    if (order.paymentBreakdown.snapshots) {
+      delete order.paymentBreakdown.snapshots.categoryCommissionSettings;
+    }
+  }
+
+  if (order.pricingSnapshot) {
+    delete order.pricingSnapshot.categoryCommissionSettings;
+    delete order.pricingSnapshot.cityCommission;
+    delete order.pricingSnapshot.appliedCommissionSources;
+    delete order.pricingSnapshot.rolloutVerification;
+  }
+
+  return order;
+};
+
 export const getOrderDetails = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -572,6 +635,10 @@ export const getOrderDetails = async (req, res) => {
       );
     }
     // -----------------------------
+
+    if (isOwnerSeller) {
+      order = sanitizeCommissionFieldsForSeller(order);
+    }
 
     return handleResponse(res, 200, "Order details fetched", attachDisplayStatus(order));
   } catch (error) {
@@ -2300,12 +2367,17 @@ export const getSellerOrders = async (req, res) => {
     });
 
 
+    const sanitizedOrders =
+      role === "admin"
+        ? orders
+        : orders.map((o) => sanitizeCommissionFieldsForSeller(o));
+
     return handleResponse(
       res,
       200,
       role === "admin" ? "All orders fetched" : "Seller orders fetched",
       {
-        items: orders,
+        items: sanitizedOrders,
         page,
         limit,
         total,

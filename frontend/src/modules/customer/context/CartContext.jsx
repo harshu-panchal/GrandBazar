@@ -83,6 +83,8 @@ export const CartProvider = ({ children }) => {
         price,
         salePrice,
         image: product?.mainImage, // Handle mapping for frontend
+        isUnavailable: Boolean(item.isUnavailable) || product?.isCurrentlyAvailable === false || product?.status === "inactive" || Boolean(product?.isHidden),
+        unavailableReason: item.unavailableReason || (product?.isCurrentlyAvailable === false ? "Currently unavailable from store" : (product?.status === "inactive" || product?.isHidden ? "This item is no longer available" : "")),
         // Pre-order campaign association — resolved and persisted server-side
         // (backend/app/controller/cartController.js). Drives Cart/Checkout's
         // Scheduling Page mode; see CartPage.jsx.
@@ -184,6 +186,15 @@ export const CartProvider = ({ children }) => {
           : "Advance booking has not started for this product yet.",
       );
       return;
+    }
+
+    if (
+      product?.isCurrentlyAvailable === false ||
+      product?.status === "inactive" ||
+      Boolean(product?.isHidden)
+    ) {
+      toast.error("This product is currently unavailable");
+      return { ok: false };
     }
 
     const variantSku = String(product?.variantSku || product?.variantName || "").trim();
@@ -391,13 +402,13 @@ export const CartProvider = ({ children }) => {
     setSchedulePayload(null);
   };
 
-  const cartTotal = cart.reduce((total, item) => {
+  const cartTotal = Math.round((cart.reduce((total, item) => {
     const unit =
       Number(item.salePrice || 0) > 0 && Number(item.salePrice) < Number(item.price || 0)
         ? Number(item.salePrice)
         : Number(item.price || 0);
     return total + unit * Number(item.quantity || 0);
-  }, 0);
+  }, 0)) * 100) / 100;
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   const cartValue = useMemo(() => ({

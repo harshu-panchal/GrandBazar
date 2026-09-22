@@ -222,7 +222,15 @@ function validatePaymentEligibility(target, userId) {
 function getPayableAmountPaise(target) {
   const amountRupees = target.orders.reduce(
     (sum, order) =>
-      sum + Number(order?.paymentBreakdown?.grandTotal ?? order?.pricing?.total ?? 0),
+      sum +
+      Number(
+        order?.paymentBreakdown?.grandTotal ??
+          order?.pricing?.total ??
+          order?.pricing?.finalAmount ??
+          order?.total ??
+          order?.amount ??
+          0,
+      ),
     0,
   );
   if (!Number.isFinite(amountRupees) || amountRupees <= 0) {

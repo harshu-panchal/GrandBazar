@@ -316,9 +316,13 @@ const Home = () => {
       const [catRes, prodRes, expRes, sectionsRes, recommendedStoresRes] = await Promise.all([
         customerApi.getCategories(),
         hasValidLocation ? customerApi.getProducts(productParams) : Promise.resolve({ data: { success: true, result: { items: [] } } }),
-        customerApi.getExperienceSections({ pageType: "home" }).catch(() => null),
+        hasValidLocation
+          ? customerApi.getExperienceSections({ pageType: "home", lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => null)
+          : customerApi.getExperienceSections({ pageType: "home" }).catch(() => null),
         hasValidLocation ? customerApi.getOfferSections({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} })) : Promise.resolve({ data: { results: [] } }),
-        customerApi.getRecommendedStores().catch(() => ({ data: {} })),
+        hasValidLocation
+          ? customerApi.getRecommendedStores({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} }))
+          : customerApi.getRecommendedStores().catch(() => ({ data: {} })),
       ]);
       const nextHomeData = {
         categories: [ALL_CATEGORY],
@@ -400,7 +404,12 @@ const Home = () => {
       const cacheKey = activeCategory._id;
       if (headerSectionsCache.current[cacheKey]) { setHeaderSections(headerSectionsCache.current[cacheKey]); return; }
       try {
-        const res = await customerApi.getExperienceSections({ pageType: "header", headerId: activeCategory._id });
+        const expParams = { pageType: "header", headerId: activeCategory._id };
+        if (hasValidLocation) {
+          expParams.lat = currentLocation.latitude;
+          expParams.lng = currentLocation.longitude;
+        }
+        const res = await customerApi.getExperienceSections(expParams);
         if (res.data.success) { const sections = Array.isArray(res.data.result || res.data.results) ? (res.data.result || res.data.results) : []; headerSectionsCache.current[cacheKey] = sections; setHeaderSections(sections); await hydrateSelectedSectionProducts(sections); }
         else setHeaderSections([]);
       } catch (e) { setHeaderSections([]); }
