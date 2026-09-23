@@ -360,7 +360,7 @@ const CustomerAuth = () => {
     };
 
     return (
-        <div className="min-h-screen w-full relative flex items-center justify-center font-['Outfit',_sans-serif] overflow-y-auto py-8 sm:py-12">
+        <div className="min-h-screen w-full relative flex flex-col items-center justify-start sm:justify-center font-['Outfit',_sans-serif] overflow-y-auto overflow-x-hidden pt-16 pb-12 px-4">
 
             {/* Completely independent floating back button */}
             <button
@@ -368,7 +368,7 @@ const CustomerAuth = () => {
                     clearAuthSessionStorage();
                     navigate('/');
                 }}
-                className="absolute top-1.5 left-3 md:top-3 md:left-4 z-[100] w-10 h-10 md:w-12 md:h-12 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
+                className="fixed sm:absolute top-3 left-3 sm:top-4 sm:left-4 z-[100] w-10 h-10 md:w-12 md:h-12 bg-white/20 sm:bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
             >
                 <ChevronLeft size={24} />
             </button>
@@ -378,7 +378,7 @@ const CustomerAuth = () => {
                 account to unlock the normal in-app support centre. */}
             <button
                 onClick={() => navigate('/support')}
-                className="absolute top-1.5 right-3 md:top-3 md:right-4 z-[100] h-10 md:h-12 px-3 sm:px-4 bg-white/95 hover:bg-white text-slate-800 shadow-md backdrop-blur-md rounded-xl flex items-center gap-2 text-xs font-bold border border-slate-200/90 hover:scale-105 active:scale-95 transition-all"
+                className="fixed sm:absolute top-3 right-3 sm:top-4 sm:right-4 z-[100] h-10 md:h-12 px-3 sm:px-4 bg-white/95 hover:bg-white text-slate-800 shadow-md backdrop-blur-md rounded-xl flex items-center gap-2 text-xs font-bold border border-slate-200/90 hover:scale-105 active:scale-95 transition-all"
             >
                 <LifeBuoy size={18} className="text-emerald-600" /> <span>Need Help?</span>
             </button>
@@ -430,17 +430,14 @@ const CustomerAuth = () => {
             </div>
 
             {/* Premium Centered Card Container */}
-            <div className="w-[92%] max-w-[400px] min-h-[85vh] max-h-[780px] md:h-auto md:max-h-[92vh] bg-white relative z-10 rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] border border-white/40 flex flex-col transition-colors duration-1000 my-6">
+            <div className="w-full max-w-[420px] bg-white relative z-10 rounded-[36px] shadow-[0_30px_90px_-15px_rgba(0,0,0,0.18)] border border-white/60 flex flex-col overflow-hidden my-auto shrink-0 transition-colors duration-1000">
 
-                {/* Scrollable Content Container */}
-                <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
-
-                    {/* Header: Immersive Category Visuals */}
-                    <motion.div
-                        animate={{ backgroundColor: activeCategory.theme }}
-                        transition={{ duration: 1 }}
-                        className="relative h-[35%] w-full overflow-hidden"
-                    >
+                {/* Header: Immersive Category Visuals */}
+                <motion.div
+                    animate={{ backgroundColor: activeCategory.theme }}
+                    transition={{ duration: 1 }}
+                    className="relative h-44 sm:h-48 w-full overflow-hidden shrink-0"
+                >
                         <AnimatePresence mode="wait">
                             <motion.div
                                 key={carouselIndex}
@@ -844,8 +841,6 @@ const CustomerAuth = () => {
                             )}
                         </AnimatePresence>
                     </div>
-
-                </div>
             </div>
 
             {/* Desktop Message */}
