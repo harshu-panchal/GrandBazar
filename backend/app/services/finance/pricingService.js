@@ -329,8 +329,10 @@ export function resolveCategoryHierarchyPacking({
 /**
  * Resolve the GST slab (%) for a line item: product-level override wins,
  * otherwise the most specific category in the hierarchy (subcategory ->
- * category -> header) supplies the rate. Unlike commission/handling there is
- * no "off" state — 0% (exempt) is itself a valid real rate.
+ * category -> header) with a configured GST slab (> 0) supplies the rate.
+ * If a child category has 0/unset, it falls back to the parent category /
+ * header category. If no entity in the hierarchy specifies a GST rate,
+ * it defaults to 0% (exempt).
  */
 export function resolveGstSlabForLineItem({
   productGstSlabOverride = null,
@@ -351,7 +353,10 @@ export function resolveGstSlabForLineItem({
   ];
   for (const entry of chain) {
     if (entry.category && entry.category.gstSlab !== undefined && entry.category.gstSlab !== null) {
-      return { gstSlab: Number(entry.category.gstSlab) || 0, source: entry.level };
+      const slab = Number(entry.category.gstSlab);
+      if (Number.isFinite(slab) && slab > 0) {
+        return { gstSlab: slab, source: entry.level };
+      }
     }
   }
   return { gstSlab: 0, source: "default" };

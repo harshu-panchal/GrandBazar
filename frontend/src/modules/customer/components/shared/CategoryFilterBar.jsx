@@ -18,7 +18,7 @@ const DISTANCE_OPTIONS = [
 ];
 
 /** Small popover anchored under a trigger button; closes on outside click. */
-function Popover({ isOpen, onClose, anchorRef, children, widthClass = 'w-56' }) {
+function Popover({ isOpen, onClose, anchorRef, children, widthClass = 'w-56', align = 'left' }) {
     const popRef = useRef(null);
 
     useEffect(() => {
@@ -41,7 +41,8 @@ function Popover({ isOpen, onClose, anchorRef, children, widthClass = 'w-56' }) 
         <div
             ref={popRef}
             className={cn(
-                'absolute z-50 top-full left-0 mt-2 rounded-2xl border border-slate-100 bg-white shadow-xl overflow-hidden',
+                'absolute z-[100] top-full mt-2 rounded-2xl border border-slate-100 bg-white shadow-2xl overflow-hidden',
+                align === 'right' ? 'right-0 left-auto' : 'left-0',
                 widthClass,
             )}
         >
@@ -93,7 +94,7 @@ const CategoryFilterBar = ({
     const filtersActive = activeFiltersCount > 0;
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 bg-white overflow-x-auto scrollbar-none">
+        <div className="relative z-[60] flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-white overflow-visible">
             <div className="relative shrink-0">
                 <button
                     ref={sortBtnRef}
@@ -169,7 +170,7 @@ const CategoryFilterBar = ({
                     <SlidersHorizontal size={13} />
                     Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
                 </button>
-                <Popover isOpen={openMenu === 'filters'} onClose={() => setOpenMenu(null)} anchorRef={filtersBtnRef} widthClass="w-72">
+                <Popover isOpen={openMenu === 'filters'} onClose={() => setOpenMenu(null)} anchorRef={filtersBtnRef} widthClass="w-72" align="right">
                     <div className="p-3 divide-y divide-slate-100 max-h-80 overflow-y-auto">
                         {/* In stock toggle */}
                         <label className="flex w-full cursor-pointer items-center justify-between py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg px-1">

@@ -944,14 +944,21 @@ const CheckoutPage = () => {
       queryParams.lng = currentLocation.longitude;
     }
 
+    const formatRecommended = (p) => ({
+      ...p,
+      id: p._id || p.id,
+      image: p.mainImage || p.image,
+      price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price,
+      originalPrice: p.customerPrice ?? p.price,
+    });
+
     if (addonIdsStr) {
       // Fetch specific add-ons
       customerApi
         .getProducts({ productIds: addonIdsStr, ...queryParams })
         .then((res) => {
           if (res.data?.success) {
-            const items = (res.data.result?.items || [])
-              .map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image }));
+            const items = (res.data.result?.items || []).map(formatRecommended);
             setRecommendedProducts(items.slice(0, 8));
             setIsAddonRecommendation(true);
           }
@@ -967,7 +974,7 @@ const CheckoutPage = () => {
         .then((res) => {
           if (res.data?.success) {
             const items = (res.data.result?.items || [])
-              .map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image }))
+              .map(formatRecommended)
               .filter((p) => !cartIds.has(p.id));
             setRecommendedProducts(items.slice(0, 8));
             setIsAddonRecommendation(false);

@@ -192,6 +192,38 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         </div>
       )}
 
+      {order.itemAdditionRequest?.status === "requested" && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              Item Addition Pending Store Approval
+            </span>
+            <span className="text-xs font-bold text-amber-900">
+              +₹{Number(order.itemAdditionRequest.deltaAmount || 0).toFixed(2)}
+            </span>
+          </div>
+          <p className="text-xs text-slate-700">
+            You requested to add {order.itemAdditionRequest.requestedItems?.length || 1} item(s) to this order. The store is reviewing your request.
+          </p>
+          <div className="space-y-1 bg-white/80 p-2 rounded-lg border border-amber-200/60 text-xs">
+            {order.itemAdditionRequest.requestedItems?.map((item, idx) => (
+              <div key={idx} className="flex justify-between text-slate-800 font-medium">
+                <span className="truncate">{item.name} {item.variantLabel ? `(${item.variantLabel})` : ""}</span>
+                <span className="font-bold shrink-0">Qty {item.quantity} × ₹{item.price}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {order.itemAdditionRequest?.status === "rejected" && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs text-rose-800">
+          <p className="font-bold">Item Addition Request Declined</p>
+          <p className="mt-0.5 text-slate-600">The store was unable to accommodate the added items. Any wallet deduction has been refunded.</p>
+        </div>
+      )}
+
       {(adjustmentNeedsPayment || adjustmentNeedsApproval) && (
         <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
           <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">

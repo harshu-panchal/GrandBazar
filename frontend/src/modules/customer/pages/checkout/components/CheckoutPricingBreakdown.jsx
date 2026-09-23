@@ -9,39 +9,138 @@ const fmt = (amount) => {
   return n.toFixed(2);
 };
 
-/** Bug #237: GST collapsible row — shows total GST, expands to show CGST + SGST */
-function GstRow({ cgst, sgst }) {
+/** Collapsible row for ancillary fees, surcharges and taxes to keep the bill compact */
+function TaxesAndChargesDropdown({
+  handlingFee,
+  packingFee,
+  packagingChargeAmount,
+  customerSurchargeAmount,
+  customerSurchargeReason,
+  oddHourSurchargeAmount,
+  weatherSurchargeAmount,
+  taxAmount,
+  cgstAmount,
+  sgstAmount,
+  igstAmount,
+  isInterState,
+}) {
   const [open, setOpen] = useState(false);
-  const total = fmt(Number(cgst || 0) + Number(sgst || 0));
+
+  const totalTaxes = isInterState
+    ? Number(igstAmount || 0)
+    : Number(cgstAmount || 0) + Number(sgstAmount || 0) > 0
+    ? Number(cgstAmount || 0) + Number(sgstAmount || 0)
+    : Number(taxAmount || 0);
+
+  const handling = Number(handlingFee || 0);
+  const packing = Number(packingFee || 0);
+  const packaging = Number(packagingChargeAmount || 0);
+  const extra = Number(customerSurchargeAmount || 0);
+  const oddHour = Number(oddHourSurchargeAmount || 0);
+  const weather = Number(weatherSurchargeAmount || 0);
+
+  const grandTotal =
+    handling + packing + packaging + extra + oddHour + weather + totalTaxes;
+
+  if (grandTotal <= 0) return null;
+
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="w-full flex justify-between items-center px-2 py-0.5 focus:outline-none"
+        className="w-full flex justify-between items-center px-2 py-1 rounded-xl hover:bg-slate-50 transition-colors focus:outline-none cursor-pointer group select-none"
       >
-        <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider flex items-center gap-1">
-          GST
-          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider flex items-center gap-1.5 group-hover:text-slate-700 transition-colors">
+          Taxes & Other Charges
+          {open ? (
+            <ChevronUp size={14} className="text-slate-400 group-hover:text-slate-600 transition-transform" />
+          ) : (
+            <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600 transition-transform" />
+          )}
         </span>
-        <span className="font-black text-slate-800">\u20b9{total}</span>
+        <span className="font-black text-slate-800">₹{fmt(grandTotal)}</span>
       </button>
+
       <AnimatePresence>
         {open && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="flex justify-between items-center px-4 py-0.5 text-[12px] text-slate-400">
-              <span>CGST</span>
-              <span>\u20b9{fmt(cgst)}</span>
-            </div>
-            <div className="flex justify-between items-center px-4 py-0.5 text-[12px] text-slate-400">
-              <span>SGST</span>
-              <span>\u20b9{fmt(sgst)}</span>
+            <div className="bg-slate-50/90 rounded-2xl p-3.5 mt-2 space-y-2 border border-slate-100 text-xs shadow-inner">
+              {handling > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="font-medium">Handling Fee</span>
+                  <span className="font-bold text-slate-800">₹{fmt(handling)}</span>
+                </div>
+              )}
+              {packing > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="font-medium">Packing Charge</span>
+                  <span className="font-bold text-slate-800">₹{fmt(packing)}</span>
+                </div>
+              )}
+              {packaging > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="font-medium">Packaging Charge</span>
+                  <span className="font-bold text-slate-800">₹{fmt(packaging)}</span>
+                </div>
+              )}
+              {extra > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <div className="flex flex-col">
+                    <span className="font-medium">Extra Charge</span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {customerSurchargeReason || "Platform fee"}
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-800">₹{fmt(extra)}</span>
+                </div>
+              )}
+              {weather > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="font-medium">Weather Surcharge</span>
+                  <span className="font-bold text-slate-800">₹{fmt(weather)}</span>
+                </div>
+              )}
+              {oddHour > 0 && (
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="font-medium">Odd-Hour Delivery Charge</span>
+                  <span className="font-bold text-slate-800">₹{fmt(oddHour)}</span>
+                </div>
+              )}
+              {isInterState ? (
+                <div className="flex justify-between items-center text-slate-600 pt-1 border-t border-slate-200/60">
+                  <span className="font-semibold">IGST</span>
+                  <span className="font-bold text-slate-800">₹{fmt(igstAmount)}</span>
+                </div>
+              ) : cgstAmount > 0 || sgstAmount > 0 ? (
+                <div className="space-y-1 pt-1.5 border-t border-slate-200/60">
+                  <div className="flex justify-between items-center text-slate-600">
+                    <span className="font-semibold">GST</span>
+                    <span className="font-bold text-slate-800">
+                      ₹{fmt(Number(cgstAmount) + Number(sgstAmount))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pl-2 text-[11px] text-slate-400">
+                    <span>CGST</span>
+                    <span>₹{fmt(cgstAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pl-2 text-[11px] text-slate-400">
+                    <span>SGST</span>
+                    <span>₹{fmt(sgstAmount)}</span>
+                  </div>
+                </div>
+              ) : totalTaxes > 0 ? (
+                <div className="flex justify-between items-center text-slate-600 pt-1 border-t border-slate-200/60">
+                  <span className="font-semibold">Tax</span>
+                  <span className="font-bold text-slate-800">₹{fmt(totalTaxes)}</span>
+                </div>
+              ) : null}
             </div>
           </motion.div>
         )}
@@ -136,77 +235,23 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 </span>
               </div>
             )}
-          <div className="flex justify-between items-center px-2">
-            <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-              Handling Fee
-            </span>
-            <span className="font-black text-slate-800">₹{fmt(handlingFee)}</span>
-          </div>
-          {Number(packingFee) > 0 && (
-            <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                Packing Charge
-              </span>
-              <span className="font-black text-slate-800">₹{fmt(packingFee)}</span>
-            </div>
-          )}
-          {Number(pricingPreview?.packagingChargeAmount || 0) > 0 && (
-            <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">
-                Packaging Charge
-              </span>
-              <span className="font-black text-slate-800">
-                ₹{fmt(pricingPreview.packagingChargeAmount)}
-              </span>
-            </div>
-          )}
-          {Number(pricingPreview?.customerSurchargeAmount || 0) > 0 && (
-            <div className="flex justify-between items-start px-3 py-2 bg-sky-50 rounded-xl border border-sky-100">
-              <div className="flex flex-col pr-3">
-                <span className="text-sky-700 font-black text-xs uppercase tracking-wider">
-                  Extra Charge
-                </span>
-                <span className="text-[11px] font-semibold text-sky-600/80 mt-0.5">
-                  {pricingPreview?.customerSurchargeReason ||
-                    pricingPreview?.snapshots?.customerSurcharge?.reason ||
-                    "Additional charge"}
-                </span>
-              </div>
-              <span className="font-black text-sky-700">
-                ₹{fmt(pricingPreview.customerSurchargeAmount)}
-              </span>
-            </div>
-          )}
-          {oddHourSurchargeAmount > 0 && (
-            <div className="flex justify-between items-start px-3 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
-              <span className="text-indigo-700 font-black text-xs uppercase tracking-wider">
-                Odd-Hour Delivery Charge
-              </span>
-              <span className="font-black text-indigo-700">₹{fmt(oddHourSurchargeAmount)}</span>
-            </div>
-          )}
-          {weatherSurchargeAmount > 0 && (
-            <div className="flex justify-between items-start px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
-              <span className="text-amber-700 font-black text-xs uppercase tracking-wider">
-                Weather Surcharge
-              </span>
-              <span className="font-black text-amber-700">₹{fmt(weatherSurchargeAmount)}</span>
-            </div>
-          )}
-          {/* Bug #237: GST shown in one collapsible row */}
-          {isInterState ? (
-            <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">IGST</span>
-              <span className="font-black text-slate-800">₹{fmt(igstAmount)}</span>
-            </div>
-          ) : cgstAmount > 0 || sgstAmount > 0 ? (
-            <GstRow cgst={cgstAmount} sgst={sgstAmount} />
-          ) : (
-            <div className="flex justify-between items-center px-2">
-              <span className="text-slate-500 font-bold text-[13px] uppercase tracking-wider">Tax</span>
-              <span className="font-black text-slate-800">₹{fmt(taxAmount)}</span>
-            </div>
-          )}
+          <TaxesAndChargesDropdown
+            handlingFee={handlingFee}
+            packingFee={packingFee}
+            packagingChargeAmount={pricingPreview?.packagingChargeAmount}
+            customerSurchargeAmount={pricingPreview?.customerSurchargeAmount}
+            customerSurchargeReason={
+              pricingPreview?.customerSurchargeReason ||
+              pricingPreview?.snapshots?.customerSurcharge?.reason
+            }
+            oddHourSurchargeAmount={oddHourSurchargeAmount}
+            weatherSurchargeAmount={weatherSurchargeAmount}
+            taxAmount={taxAmount}
+            cgstAmount={cgstAmount}
+            sgstAmount={sgstAmount}
+            igstAmount={igstAmount}
+            isInterState={isInterState}
+          />
 
           {selectedCoupon && (
             <motion.div

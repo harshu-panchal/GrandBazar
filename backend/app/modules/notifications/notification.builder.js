@@ -581,11 +581,14 @@ function eventDefinition(eventType) {
           {
             role: NOTIFICATION_ROLES.SELLER,
             recipientIds: (payload) => normalizeIdList(payload.sellerId),
-            title: () => "Order Updated",
+            title: (payload) =>
+              payload.isApprovalRequest
+                ? "Customer Item Addition Request"
+                : "Order Updated",
             body: (payload) =>
               payload.orderId
-                ? `The customer added new items to order #${payload.orderId}. Please review before packing.`
-                : "A customer added new items to an order awaiting packing.",
+                ? `Customer requested to add items to order #${payload.orderId}. Please approve or decline.`
+                : "A customer requested to add items to an order awaiting approval.",
           },
         ],
       };

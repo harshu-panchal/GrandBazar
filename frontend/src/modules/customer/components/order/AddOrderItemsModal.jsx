@@ -3,7 +3,11 @@ import { X, Minus, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customerApi } from "../../services/customerApi";
 import { useLocation as useAppLocation } from "../../context/LocationContext";
-import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import {
+  getProductImageUrl,
+  handleProductImageError,
+  applyCloudinaryTransform,
+} from "@/core/utils/imageUtils";
 
 const RUPEE = "₹";
 
@@ -62,6 +66,17 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
     const out = [];
     for (const product of products) {
       const variants = Array.isArray(product.variants) ? product.variants : [];
+      const resolveProductImage = (variant) => {
+        return (
+          variant?.image ||
+          (Array.isArray(variant?.images) ? variant.images[0] : null) ||
+          product?.mainImage ||
+          product?.image ||
+          (Array.isArray(product?.images) ? product.images[0] : null) ||
+          ""
+        );
+      };
+
       if (variants.length > 0) {
         for (const variant of variants) {
           const stock = Number(variant?.stock || 0);
@@ -75,7 +90,7 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
             variantSku,
             name: product.name,
             variantLabel: variant.name || variantSku,
-            image: product.mainImage,
+            image: resolveProductImage(variant),
             price: sale || original || product.salePrice || product.price || 0,
             stock,
           });
@@ -89,7 +104,7 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
           variantSku: "",
           name: product.name,
           variantLabel: "",
-          image: product.mainImage,
+          image: resolveProductImage(null),
           price: sale || original || product.salePrice || product.price || 0,
           stock: Number(product.stock || 0),
         });
@@ -125,19 +140,20 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
         const [productId, variantSku = ""] = key.split("::");
         return { product: productId, variantSku, quantity };
       });
-      const res = await customerApi.addOrderItems(order.orderId, { items });
-      toast.success("Items added to your order");
+      const targetOrderId = order?.orderId || order?._id || order?.id;
+      const res = await customerApi.addOrderItems(targetOrderId, { items });
+      toast.success("Request sent to store for approval!");
       onAdded?.(res.data?.result);
       onClose?.();
     } catch (e) {
-      toast.error(e?.response?.data?.message || "Could not add items to this order");
+      toast.error(e?.response?.data?.message || "Could not submit item addition request");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+    <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
       <div className="flex h-[85vh] w-full flex-col rounded-t-2xl bg-white sm:h-[80vh] sm:max-w-lg sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 className="text-sm font-bold text-slate-900">Add items to this order</h2>
@@ -166,9 +182,10 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
                     className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5"
                   >
                     <img
-                      src={applyCloudinaryTransform(row.image, { width: 80 })}
+                      src={getProductImageUrl(applyCloudinaryTransform(row.image, "f_auto,q_auto,w_100,c_fill"))}
                       alt={row.name}
-                      className="h-12 w-12 flex-shrink-0 rounded-lg object-cover bg-slate-50"
+                      onError={handleProductImageError}
+                      className="h-12 w-12 flex-shrink-0 rounded-lg object-cover bg-slate-50 border border-slate-100"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
@@ -211,16 +228,16 @@ export default function AddOrderItemsModal({ order, onClose, onAdded }) {
             type="button"
             disabled={submitting || selectedEntries.length === 0}
             onClick={handleSubmit}
-            className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-50 cursor-pointer"
           >
             {submitting
-              ? "Adding..."
+              ? "Submitting request..."
               : selectedCount > 0
-              ? `Add ${selectedCount} item${selectedCount > 1 ? "s" : ""} to order`
-              : "Add to order"}
+              ? `Request to add ${selectedCount} item${selectedCount > 1 ? "s" : ""}`
+              : "Request to add items"}
           </button>
           <p className="mt-2 text-center text-[11px] text-slate-400">
-            Paid first from your wallet — any remaining amount is collected at delivery.
+            Request will be sent to the store for approval before being added to your order.
           </p>
         </div>
       </div>

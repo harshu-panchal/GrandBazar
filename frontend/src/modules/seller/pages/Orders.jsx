@@ -39,6 +39,7 @@ import { Loader2 } from 'lucide-react';
 import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocket";
+import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 
 const ORDER_EDITABLE_STATUSES = new Set([
     'pending',
@@ -120,39 +121,47 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                 : (order.statusLabel || (isScheduled ? 'Scheduled' : (normalizedStatus || 'On hold')));
 
         return (
-            <div className={cn(compact ? 'text-right' : '', 'max-w-[140px]')}>
+            <div className={cn('flex flex-col', compact ? 'items-end text-right' : 'items-start text-left')}>
                 <span
                     className={cn(
-                        'inline-flex items-center rounded-full font-black uppercase tracking-widest whitespace-normal text-right',
-                        compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1.5 text-[10px]',
+                        'inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap shadow-xs border transition-all',
+                        compact ? 'px-2.5 py-1 text-[9px]' : 'px-3 py-1 text-[10px]',
                         isAwaitingApproval
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            ? 'bg-amber-50 text-amber-900 border-amber-300 ring-1 ring-amber-200/60'
                             : isScheduled
-                                ? 'bg-blue-100 text-blue-700'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
                                 : isPacked
-                                    ? 'bg-emerald-100 text-emerald-800'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : platformLocked
-                                        ? 'bg-brand-100 text-brand-700'
+                                        ? 'bg-brand-50 text-brand-700 border-brand-200'
                                         : requiresDisplayOnly
-                                            ? 'bg-violet-100 text-violet-700'
-                                            : 'bg-amber-100 text-amber-700',
+                                            ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                            : 'bg-amber-50 text-amber-700 border-amber-200',
                     )}
                 >
+                    {isAwaitingApproval && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    )}
+                    {isPacked && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    )}
                     {displayLabel}
                 </span>
                 {isScheduled && (
-                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                    <p className="text-[10px] font-medium text-slate-500 mt-0.5 leading-tight">
                         Awaiting delivery slot
                     </p>
                 )}
                 {platformLocked && (
-                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                    <p className="text-[10px] font-medium text-slate-500 mt-0.5 leading-tight whitespace-nowrap">
                         Updated by delivery partner
                     </p>
                 )}
                 {platformLocked && ['delivery_search', 'delivery_assigned'].includes(String(order.workflowStatus || '').toLowerCase()) && (
                     isPacked ? (
-                        <p className="text-[10px] font-bold text-emerald-600 mt-1">Packed ✓</p>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 mt-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Packed ✓
+                        </span>
                     ) : (
                         <button
                             type="button"
@@ -168,14 +177,14 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                                     showToast(err?.response?.data?.message || 'Failed to mark as packed', 'error');
                                 }
                             }}
-                            className="mt-1.5 px-2.5 py-1 rounded-lg bg-brand-600 text-white text-[9px] font-black uppercase tracking-wide hover:bg-brand-700 transition-colors"
+                            className="mt-1 px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[9px] font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
                         >
                             Mark as Packed
                         </button>
                     )
                 )}
                 {requiresDisplayOnly && !isScheduled && !platformLocked && (
-                    <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                    <p className="text-[10px] font-medium text-slate-500 mt-0.5 leading-tight">
                         {isAwaitingApproval
                             ? 'Waiting for customer response'
                             : 'Customer-approved partial update'}
@@ -401,6 +410,7 @@ const Orders = () => {
                 fulfillmentMethod: resolveFulfillmentMethod(order),
                 schedule: order.schedule || null,
                 reschedule: order.reschedule || null,
+                itemAdditionRequest: order.itemAdditionRequest || null,
                 priceAdjustment: order.priceAdjustment || null,
                 replacementRequests: order.replacementRequests || [],
                 splitDeliveries: order.splitDeliveries || [],
@@ -472,7 +482,7 @@ const Orders = () => {
     }, [page]);
 
     // Live updates for status changes made by someone else (rider pickup/
-    // out-for-delivery/delivered, admin rider assignment) — previously the
+    // out-for-delivery/delivered, admin rider assignment, customer added items) — previously the
     // seller's list only refreshed on their own actions or a brand-new order,
     // so these went stale until a manual reload. Debounced so a burst of
     // events across many orders coalesces into one refetch, mirroring the
@@ -482,14 +492,33 @@ const Orders = () => {
         let debounceTimer = null;
         const unsubscribe = onOrderStatusUpdate(getToken, () => {
             clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => fetchOrders(page, false), 800);
+            debounceTimer = setTimeout(() => {
+                fetchOrders(page, false);
+                if (selectedOrder) {
+                    const targetId = selectedOrder.id || selectedOrder._id;
+                    if (targetId) {
+                        sellerApi.getOrderDetails(targetId).then((res) => {
+                            if (res.data?.success && res.data.result) {
+                                const full = res.data.result;
+                                setSelectedOrder((prev) => (prev ? {
+                                    ...prev,
+                                    itemAdditionRequest: full.itemAdditionRequest || null,
+                                    priceAdjustment: full.priceAdjustment || null,
+                                    reschedule: full.reschedule || null,
+                                    workflowStatus: full.workflowStatus || prev.workflowStatus,
+                                } : null));
+                            }
+                        }).catch(() => {});
+                    }
+                }
+            }, 600);
         });
         return () => {
             clearTimeout(debounceTimer);
             unsubscribe();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page]);
+    }, [page, selectedOrder?.id, selectedOrder?._id]);
 
     // Lock page scroll while any order modal is open; keep scrolling inside the modal.
     useEffect(() => {
@@ -691,6 +720,10 @@ const Orders = () => {
                     fulfillmentMethod: resolveFulfillmentMethod(full),
                     schedule: full.schedule || prev?.schedule,
                     reschedule: full.reschedule || prev?.reschedule,
+                    itemAdditionRequest: full.itemAdditionRequest || prev?.itemAdditionRequest || null,
+                    priceAdjustment: full.priceAdjustment || prev?.priceAdjustment || null,
+                    replacementRequests: full.replacementRequests || prev?.replacementRequests || [],
+                    splitDeliveries: full.splitDeliveries || prev?.splitDeliveries || [],
                     storeReassignment:
                         getOrderStoreReassignment(full) || prev?.storeReassignment || null,
                     items: Array.isArray(prev?.items)
@@ -798,6 +831,41 @@ const Orders = () => {
             fetchOrders();
         } catch (error) {
             showToast(error?.response?.data?.message || "Failed to reject reschedule", "error");
+        }
+    };
+
+    const [resolvingItemAddition, setResolvingItemAddition] = useState(false);
+
+    const handleApproveItemAddition = async (order) => {
+        setResolvingItemAddition(true);
+        try {
+            await sellerApi.approveItemAddition(order._id || order.id || order.orderId);
+            showToast("Item addition approved — order items updated", "success");
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to approve item addition", "error");
+        } finally {
+            setResolvingItemAddition(false);
+        }
+    };
+
+    const handleRejectItemAddition = async (order) => {
+        const reason = window.prompt(
+            "Reason for declining the added items request? (shared with customer)",
+            "Item out of stock / store unable to accommodate",
+        );
+        if (reason === null) return;
+        setResolvingItemAddition(true);
+        try {
+            await sellerApi.rejectItemAddition(order._id || order.id || order.orderId, { note: reason });
+            showToast("Item addition request declined", "success");
+            setIsDetailsModalOpen(false);
+            fetchOrders();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to decline item addition", "error");
+        } finally {
+            setResolvingItemAddition(false);
         }
     };
 
@@ -1532,6 +1600,11 @@ const Orders = () => {
                                                             Reassigned
                                                         </Badge>
                                                     )}
+                                                    {order.itemAdditionRequest?.status === 'requested' && (
+                                                        <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[8px] font-black uppercase px-2 py-0 animate-pulse">
+                                                            +Items Added
+                                                        </Badge>
+                                                    )}
                                                     <OrderStatusControl
                                                         order={order}
                                                         onStatusUpdate={handleStatusUpdate}
@@ -1684,6 +1757,11 @@ const Orders = () => {
                                                             {order.storeReassignment && (
                                                                 <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[8px] font-black uppercase px-2 py-0">
                                                                     Reassigned
+                                                                </Badge>
+                                                            )}
+                                                            {order.itemAdditionRequest?.status === 'requested' && (
+                                                                <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[8px] font-black uppercase px-2 py-0 animate-pulse">
+                                                                    +Items Added
                                                                 </Badge>
                                                             )}
                                                         </div>
@@ -2646,27 +2724,104 @@ const Orders = () => {
                                                 </div>
                                             </div>
                                         )}
-                                        {(() => {
-                                            const hasCustomerAdded = selectedOrder.modificationTimeline?.some(m => m.type === 'items_added') ||
-                                                String(selectedOrder.priceAdjustment?.reason || '').includes('Customer added');
-                                            if (!hasCustomerAdded) return null;
-                                            return (
-                                                <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
-                                                            <p className="text-xs font-bold text-indigo-950">Customer Added Items Post-Order</p>
-                                                        </div>
-                                                        <span className="text-xs font-black text-indigo-700">
-                                                            +₹{Number(selectedOrder.priceAdjustment?.deltaAmount || 0).toFixed(2)}
-                                                        </span>
+                                        {/* Pending Item Addition Request from Customer */}
+                                        {selectedOrder.itemAdditionRequest?.status === 'requested' && (
+                                            <div className="mb-4 p-4 rounded-2xl bg-amber-50 ring-1 ring-amber-300 border-l-4 border-l-amber-500 shadow-sm space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-ping" />
+                                                        <p className="text-xs font-black uppercase tracking-wider text-amber-900">
+                                                            Customer Item Addition Request
+                                                        </p>
                                                     </div>
-                                                    <p className="text-[11px] text-indigo-800 mt-1">
-                                                        New products were added by the customer after this order was placed. Please review the updated items list below before packing.
-                                                    </p>
+                                                    <span className="text-xs font-black text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
+                                                        +₹{Number(selectedOrder.itemAdditionRequest.deltaAmount || 0).toFixed(2)}
+                                                    </span>
                                                 </div>
-                                            );
-                                        })()}
+
+                                                <p className="text-xs font-medium text-slate-700">
+                                                    The customer requested to add the following item{selectedOrder.itemAdditionRequest.requestedItems?.length > 1 ? 's' : ''} to this order. Please approve or reject below:
+                                                </p>
+
+                                                {/* Requested Items List */}
+                                                <div className="space-y-2 max-h-48 overflow-y-auto bg-white/90 p-2.5 rounded-xl border border-amber-200/80 divide-y divide-slate-100">
+                                                    {selectedOrder.itemAdditionRequest.requestedItems?.map((item, idx) => (
+                                                        <div key={idx} className="flex items-center justify-between gap-3 text-xs pt-2 first:pt-0">
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <img
+                                                                    src={getProductImageUrl(item.image)}
+                                                                    alt={item.name}
+                                                                    onError={handleProductImageError}
+                                                                    className="h-10 w-10 rounded-lg object-cover bg-slate-100 border border-slate-200 shrink-0"
+                                                                />
+                                                                <div className="min-w-0">
+                                                                    <p className="font-bold text-slate-900 truncate">{item.name}</p>
+                                                                    {item.variantLabel && (
+                                                                        <p className="text-[10px] text-slate-500 truncate">{item.variantLabel}</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right shrink-0">
+                                                                <p className="font-black text-slate-800">Qty {item.quantity} × ₹{Number(item.price).toFixed(0)}</p>
+                                                                <p className="text-[10px] font-bold text-amber-700">₹{(item.quantity * item.price).toFixed(2)}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-semibold text-slate-600 bg-amber-100/50 p-2.5 rounded-xl border border-amber-200/50">
+                                                    <span>
+                                                        New Order Total: <strong className="text-slate-900 font-black">₹{Number(selectedOrder.itemAdditionRequest.newGrandTotal || 0).toFixed(2)}</strong>
+                                                    </span>
+                                                    {selectedOrder.itemAdditionRequest.walletUsed > 0 && (
+                                                        <span className="text-emerald-700 font-bold">₹{selectedOrder.itemAdditionRequest.walletUsed.toFixed(2)} paid via wallet</span>
+                                                    )}
+                                                    {selectedOrder.itemAdditionRequest.cashDueAtDelivery > 0 && (
+                                                        <span className="text-amber-800 font-bold">₹{selectedOrder.itemAdditionRequest.cashDueAtDelivery.toFixed(2)} due on delivery</span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={resolvingItemAddition}
+                                                        onClick={() => handleApproveItemAddition(selectedOrder)}
+                                                        className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                                                    >
+                                                        {resolvingItemAddition ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '✓ Approve & Add to Order'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={resolvingItemAddition}
+                                                        onClick={() => handleRejectItemAddition(selectedOrder)}
+                                                        className="py-2 px-4 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedOrder.itemAdditionRequest?.status === 'approved' && (
+                                            <div className="mb-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                                                    <p className="text-xs font-bold text-emerald-950">Customer Added Items (Approved)</p>
+                                                </div>
+                                                <span className="text-xs font-black text-emerald-700">
+                                                    +₹{Number(selectedOrder.itemAdditionRequest.deltaAmount || selectedOrder.priceAdjustment?.deltaAmount || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {selectedOrder.itemAdditionRequest?.status === 'rejected' && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 text-slate-600">
+                                                <p className="text-xs font-medium">Customer item addition request was declined.</p>
+                                                {selectedOrder.itemAdditionRequest.reviewNote && (
+                                                    <span className="text-[11px] text-slate-500 italic">"{selectedOrder.itemAdditionRequest.reviewNote}"</span>
+                                                )}
+                                            </div>
+                                        )}
                                         {!['delivered', 'cancelled', 'returned'].includes((selectedOrder.status || '').toLowerCase())
                                             && selectedOrder.reschedule?.status !== 'requested' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 flex items-center justify-between gap-3">

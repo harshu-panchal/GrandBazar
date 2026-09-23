@@ -24,16 +24,28 @@ const ProductCard = React.memo(
 
     const imageRef = React.useRef(null);
 
+    const displayPrice =
+      product?.customerSalePrice ??
+      product?.customerPrice ??
+      product?.salePrice ??
+      product?.price ??
+      0;
+    const displayOriginalPrice =
+      product?.customerPrice ??
+      product?.originalPrice ??
+      product?.price ??
+      0;
+
     const defaultVariant = React.useMemo(() => {
       const variants = Array.isArray(product?.variants) ? product.variants : [];
       if (variants.length === 0) return null;
 
-      const displayed = Number(product?.price || 0);
-      const displayedOriginal = Number(product?.originalPrice || 0);
+      const displayed = Number(displayPrice);
+      const displayedOriginal = Number(displayOriginalPrice);
 
       const matchesDisplayedPrice = (variant) => {
-        const mrp = Number(variant?.price || 0);
-        const sale = Number(variant?.salePrice || 0);
+        const mrp = Number(variant?.customerPrice ?? variant?.price ?? 0);
+        const sale = Number(variant?.customerSalePrice ?? variant?.salePrice ?? 0);
         const effective = sale > 0 && sale < mrp ? sale : mrp;
 
         if (Number.isFinite(displayedOriginal) && displayedOriginal > displayed) {
@@ -52,7 +64,7 @@ const ProductCard = React.memo(
         key,
         name: String(picked?.name || "").trim(),
       };
-    }, [product]);
+    }, [product, displayPrice, displayOriginalPrice]);
 
     const productId = product.id || product._id;
     const variantKey = String(defaultVariant?.key || "").trim();
@@ -410,15 +422,15 @@ const ProductCard = React.memo(
                   "font-[1000] text-[#1A1A1A]",
                   compact ? "text-[11px]" : "text-[13px] sm:text-sm",
                 )}>
-                ₹{product.price}
+                ₹{displayPrice}
               </span>
-              {product.originalPrice > product.price && (
+              {Number(displayOriginalPrice) > Number(displayPrice) && (
                 <span
                   className={cn(
                     "font-medium text-gray-400 line-through leading-none",
                     compact ? "text-[8px]" : "text-[9px] sm:text-[10px]",
                   )}>
-                  ₹{product.originalPrice}
+                  ₹{displayOriginalPrice}
                 </span>
               )}
             </div>

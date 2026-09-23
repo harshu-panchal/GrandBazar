@@ -81,6 +81,8 @@ import {
   approveOrderAdjustmentController,
   rejectOrderAdjustmentController,
   addOrderItems,
+  approveItemAdditionController,
+  rejectItemAdditionController,
   requestProductReplacement,
   reviewProductReplacement,
   splitOrderDelivery,
@@ -490,6 +492,16 @@ router.post(
   verifyToken,
   allowRoles("customer", "user"),
   addOrderItems,
+);
+router.post(
+  "/:orderId/item-addition/approve",
+  ...sellerAdjustWriteChain,
+  approveItemAdditionController,
+);
+router.post(
+  "/:orderId/item-addition/reject",
+  ...sellerAdjustWriteChain,
+  rejectItemAdditionController,
 );
 router.post(
   "/:orderId/replacements",

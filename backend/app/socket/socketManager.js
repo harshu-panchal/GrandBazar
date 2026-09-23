@@ -42,14 +42,28 @@ export const initSocket = (io) => {
       socket.join(`delivery:${dId}`);
     }
     if (role === "seller") {
-      socket.join(`seller:${userId}`);
+      const sid = String(userId);
+      socket.join(`seller:${sid}`);
       const activeStoreId = socket.user?.activeStoreId;
       const accountId = socket.user?.accountId;
-      if (activeStoreId && String(activeStoreId) !== String(userId)) {
-        socket.join(`seller:${activeStoreId}`);
+      if (activeStoreId && String(activeStoreId) !== sid) {
+        socket.join(`seller:${String(activeStoreId)}`);
       }
-      if (accountId && String(accountId) !== String(userId)) {
-        socket.join(`seller:${accountId}`);
+      if (accountId && String(accountId) !== sid) {
+        socket.join(`seller:${String(accountId)}`);
+      }
+
+      // Automatically join all store rooms owned by this account
+      const ownerId = accountId || sid;
+      if (ownerId && mongoose.Types.ObjectId.isValid(ownerId)) {
+        const Store = mongoose.models.Store || mongoose.model("Store");
+        Store.find({ ownerId }).select("_id").lean().then((stores) => {
+          if (Array.isArray(stores)) {
+            stores.forEach((st) => {
+              socket.join(`seller:${st._id.toString()}`);
+            });
+          }
+        }).catch(() => {});
       }
     }
     if (role === "customer" || role === "user") {

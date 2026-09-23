@@ -227,10 +227,10 @@ const CategoryProductsPage = () => {
     }, [safeProducts]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-white max-w-md mx-auto relative font-sans overflow-x-hidden">
+        <div className="flex flex-col min-h-screen bg-white max-w-md mx-auto relative font-sans">
             {/* Header */}
             <header className={cn(
-                "sticky top-0 z-50 bg-white border-b border-gray-50 px-4 py-4 flex items-center justify-between",
+                "sticky top-0 z-[70] bg-white border-b border-gray-50 px-4 py-4 flex items-center justify-between",
                 isProductDetailOpen && "hidden md:flex"
             )}>
                 <div className="flex items-center gap-3">
@@ -248,7 +248,7 @@ const CategoryProductsPage = () => {
             </header>
 
             {!(safeProducts.length === 0 && !isLoading) && (
-                <div className="sticky top-[60px] z-40">
+                <div className="sticky top-[60px] z-[60] bg-white">
                     <CategoryFilterBar
                         sortBy={sortBy}
                         onSortChange={setSortBy}
@@ -265,7 +265,7 @@ const CategoryProductsPage = () => {
                 </div>
             )}
 
-            <div className="flex flex-1 relative items-start">
+            <div className="flex flex-1 relative items-start z-10">
                 {(safeProducts.length === 0 && !isLoading) ? (
                     <div className="w-full flex-1 py-20 px-8 flex flex-col items-center justify-center text-center">
                         <div className="w-64 h-64 mb-6">

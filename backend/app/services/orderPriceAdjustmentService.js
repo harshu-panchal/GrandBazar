@@ -798,11 +798,9 @@ export async function partialCancelOrderItems({
 }
 
 /**
- * Customer-initiated: add items to an order that hasn't been packed yet.
- * Merges the requested items into the order's existing line items, recomputes
- * pricing for the combined list, and settles the price increase wallet-first
- * — any amount the wallet can't cover is billed as cash at delivery (same as
- * COD), even on an ONLINE order, rather than blocking on a new payment.
+ * Customer-initiated: request to add items to an order that hasn't been packed yet.
+ * Stages the requested items into order.itemAdditionRequest for seller approval.
+ * Settles wallet payment on hold (if available) with automatic refund on rejection.
  */
 export async function addItemsToOrder({ customerId, orderId, items = [], reason = "" }) {
   orderId = await requireCanonicalOrderId(orderId);
@@ -812,9 +810,15 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
     err.statusCode = 404;
     throw err;
   }
-  if (String(order.customer) !== String(customerId)) {
+  if (String(order.customer?._id || order.customer) !== String(customerId)) {
     const err = new Error("Access denied. This is not your order.");
     err.statusCode = 403;
+    throw err;
+  }
+
+  if (order.itemAdditionRequest?.status === "requested") {
+    const err = new Error("An item addition request is already pending seller approval for this order");
+    err.statusCode = 409;
     throw err;
   }
 
@@ -845,9 +849,10 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
   }
 
   const products = await Product.find({ _id: { $in: requested.map((i) => i.product) } })
-    .select("_id sellerId name")
+    .select("_id sellerId name mainImage image images variants price salePrice customerPrice customerSalePrice")
     .lean();
   const productMap = new Map(products.map((p) => [String(p._id), p]));
+
   for (const item of requested) {
     const product = productMap.get(String(item.product));
     if (!product) {
@@ -862,8 +867,7 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
     }
   }
 
-  // Merge requested items into the order's existing lines — bump quantity for
-  // a product+variant already on the order rather than creating a duplicate line.
+  // Merge requested items into the order's existing lines for the proposed preview
   const mergedItems = order.items.map((item) => ({
     product: item.product,
     variantSku: item.variantSlot || "",
@@ -905,8 +909,35 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
     throw err;
   }
 
-  // Reserve stock for only the newly requested quantities (existing lines
-  // were already reserved/committed when the order was first placed).
+  // Build list of rich requested items with metadata for display in seller panel
+  const requestedItemsDetailed = requested.map((item) => {
+    const p = productMap.get(String(item.product));
+    const variant = Array.isArray(p?.variants)
+      ? p.variants.find((v) => String(v.sku || v.name || "").trim() === item.variantSku)
+      : null;
+    const itemPrice = variant
+      ? Number(variant.customerSalePrice || variant.salePrice || variant.customerPrice || variant.price || 0)
+      : Number(p?.customerSalePrice || p?.salePrice || p?.customerPrice || p?.price || 0);
+    const itemImage =
+      variant?.image ||
+      (Array.isArray(variant?.images) ? variant.images[0] : null) ||
+      p?.mainImage ||
+      p?.image ||
+      (Array.isArray(p?.images) ? p.images[0] : null) ||
+      "";
+
+    return {
+      product: item.product,
+      name: p?.name || "Product",
+      variantSku: item.variantSku,
+      variantLabel: variant?.name || item.variantSku || "",
+      quantity: item.quantity,
+      price: itemPrice,
+      image: itemImage,
+    };
+  });
+
+  // Reserve stock for the newly requested quantities
   const lowStockAlerts = await reserveStockForItems({
     items: requested.map((item) => ({
       productId: item.product,
@@ -919,9 +950,7 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
     paymentMode: order.paymentMode,
   });
 
-  // Wallet-first settlement: use whatever the customer's wallet can cover,
-  // and bill the remainder as cash at delivery — regardless of whether the
-  // order was originally COD or ONLINE.
+  // Wallet deduction on hold (if customer has balance)
   const customer = await User.findById(customerId).select("walletBalance");
   const walletBalance = Number(customer?.walletBalance || 0);
   const walletUse = roundCurrency(Math.min(delta, Math.max(walletBalance, 0)));
@@ -936,98 +965,51 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
       type: "Order Payment",
       amount: -walletUse,
       status: "Settled",
-      reference: `ADDITEMS-${orderId}-${Date.now()}`,
+      reference: `ADDITEMS-REQ-${orderId}-${Date.now()}`,
       paymentMethod: "WALLET",
-      meta: { orderId, reason: "Items added to order" },
+      meta: { orderId, reason: "Item addition request hold" },
     });
-
-    // If this order's online payment was already captured, the admin wallet
-    // is holding the original grandTotal in escrow (handleOnlineOrderFinance)
-    // but has nothing for this new wallet-funded delta — without this, the
-    // customer's real money debited above is never reflected in admin's
-    // wallet, even though settleDeliveredOrder will later recognize the
-    // larger, merged-order platformTotalEarning as earned on top of it.
-    if (order.paymentMode === "ONLINE" && order.financeFlags?.onlinePaymentCaptured) {
-      await creditWallet({
-        ownerType: OWNER_TYPE.ADMIN,
-        ownerId: null,
-        amount: walletUse,
-        bucket: "available",
-      });
-      await createLedgerEntry({
-        orderId: order._id,
-        actorType: OWNER_TYPE.ADMIN,
-        actorId: null,
-        type: LEDGER_TRANSACTION_TYPE.ORDER_ONLINE_PAYMENT_CAPTURED,
-        amount: walletUse,
-        description: "Wallet-funded delta captured for items added to order",
-        reference: `ADDITEMS-${orderId}-${Date.now()}`,
-      });
-    }
   }
 
-  // ONLINE: the original amount was already captured via gateway, so only a
-  // genuinely-uncovered remainder from THIS delta needs collecting at the
-  // door. COD: nothing has been captured electronically at all — ANY wallet
-  // usage here (even if it fully covers this delta, remainder === 0) must
-  // still be netted out of what's collected as cash for the whole order at
-  // delivery, or the customer gets re-billed in cash for money they already
-  // paid via wallet. Previously this flag (and the codPendingAmount
-  // adjustment below) was gated on `order.paymentMode === "ONLINE"`
-  // regardless of remainder, so COD orders were never corrected at all.
-  const isCodOrder = order.paymentMode !== "ONLINE";
-  const hasExtraCashDue = isCodOrder ? walletUse > 0 : remainder > 0;
-  // Captured before freezeFinancialSnapshot below overwrites paymentBreakdown
-  // wholesale — the pricing engine has no notion of wallet usage, so without
-  // preserving this, any wallet amount already recorded on the order
-  // (original checkout or a prior add-items event) would simply vanish.
-  const previousWalletAmount = Number(order.paymentBreakdown?.walletAmount || 0);
+  const proposedItems = sellerEntry.items.map((item) => ({
+    product: item.productId,
+    name: item.productName,
+    quantity: item.quantity,
+    price: item.price,
+    variantSlot: item.variantSku || undefined,
+    image: item.image || "",
+  }));
 
-  const updateSet = {
-    items: sellerEntry.items.map((item) => ({
-      product: item.productId,
-      name: item.productName,
-      quantity: item.quantity,
-      price: item.price,
-      variantSlot: item.variantSku || undefined,
-      image: item.image || "",
-    })),
-    "priceAdjustment.previousGrandTotal": previousGrandTotal,
-    "priceAdjustment.newGrandTotal": newGrandTotal,
-    "priceAdjustment.deltaAmount": delta,
-    "priceAdjustment.direction": "increase",
-    "priceAdjustment.status": "applied",
-    "priceAdjustment.reason": reason || "Customer added items to order",
-    "financeFlags.hasExtraCashDue": hasExtraCashDue,
+  const itemAdditionRequest = {
+    status: "requested",
+    requestedItems: requestedItemsDetailed,
+    proposedItems,
+    proposedBreakdown: sellerEntry.breakdown,
+    deltaAmount: delta,
+    walletUsed: walletUse,
+    cashDueAtDelivery: remainder,
+    previousGrandTotal,
+    newGrandTotal,
+    requestedAt: new Date(),
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewNote: "",
+    reason: reason || "Customer requested to add items",
   };
 
   const updated = await Order.findOneAndUpdate(
     { _id: order._id, deliveryBoy: null },
     {
-      $set: updateSet,
+      $set: { itemAdditionRequest },
       $push: {
-        "priceAdjustment.history": {
-          direction: "increase",
-          deltaAmount: delta,
-          reason: reason || "Customer added items to order",
-          changedBy: "customer",
-          changedAt: new Date(),
-        },
-        revisedInvoices: buildRevisedInvoiceEntry(order, {
-          source: "items_added",
-          direction: "increase",
-          deltaAmount: delta,
-          note: reason || "Customer added items to order",
-          grandTotal: newGrandTotal,
-        }),
         modificationTimeline: {
           version: Number(order.modificationVersion || 0) + 1,
-          type: "items_added",
+          type: "item_addition_requested",
           actorRole: "customer",
           actorId: String(customerId || ""),
-          note: reason || "",
+          note: reason || "Customer submitted item addition request for seller approval",
           meta: {
-            addedItems: requested,
+            requestedItems: requestedItemsDetailed,
             deltaAmount: delta,
             walletUsed: walletUse,
             cashDueAtDelivery: remainder,
@@ -1043,27 +1025,165 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
   );
 
   if (!updated) {
-    const err = new Error("Unable to add items to this order");
+    const err = new Error("Unable to submit item addition request");
     err.statusCode = 409;
     throw err;
   }
 
-  freezeFinancialSnapshot(updated, sellerEntry.breakdown);
+  emitOrderStatusUpdate(
+    orderId,
+    { itemAdditionRequested: true, deltaAmount: delta, itemAdditionRequest: updated.itemAdditionRequest },
+    updated.customer,
+    updated.seller,
+  );
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.ITEMS_ADDED_TO_ORDER, {
+    orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    sellerId: updated.seller,
+    amount: delta,
+    walletShortfall: remainder,
+    isApprovalRequest: true,
+  });
+
+  if (Array.isArray(lowStockAlerts) && lowStockAlerts.length > 0) {
+    for (const alert of lowStockAlerts) {
+      emitNotificationEvent(NOTIFICATION_EVENTS.LOW_STOCK_ALERT, alert);
+    }
+  }
+
+  return updated;
+}
+
+/**
+ * Seller/Admin approves the customer's item addition request.
+ * Applies proposed items, updates financial snapshot and settles wallet/COD.
+ */
+export async function approveItemAddition({ orderId, sellerId = null, actorRole = "seller", note = "" }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const orderSellerId = String(order.seller?._id || order.seller || "");
+  if (actorRole === "seller" && sellerId && orderSellerId !== String(sellerId)) {
+    const err = new Error("Access denied. You are not authorized to approve requests for this order.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (order.itemAdditionRequest?.status !== "requested") {
+    const err = new Error("No pending item addition request to approve for this order");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const req = order.itemAdditionRequest;
+  const delta = Number(req.deltaAmount || 0);
+  const walletUse = Number(req.walletUsed || 0);
+  const remainder = Number(req.cashDueAtDelivery || 0);
+  const newGrandTotal = Number(req.newGrandTotal || 0);
+  const previousGrandTotal = Number(req.previousGrandTotal || 0);
+
+  // If order was ONLINE payment captured, credit admin wallet for the wallet-funded portion
+  if (walletUse > 0 && order.paymentMode === "ONLINE" && order.financeFlags?.onlinePaymentCaptured) {
+    await creditWallet({
+      ownerType: OWNER_TYPE.ADMIN,
+      ownerId: null,
+      amount: walletUse,
+      bucket: "available",
+    });
+    await createLedgerEntry({
+      orderId: order._id,
+      actorType: OWNER_TYPE.ADMIN,
+      actorId: null,
+      type: LEDGER_TRANSACTION_TYPE.ORDER_ONLINE_PAYMENT_CAPTURED,
+      amount: walletUse,
+      description: "Wallet-funded delta captured for approved item addition",
+      reference: `ADDITEMS-APPROVED-${orderId}-${Date.now()}`,
+    });
+  }
+
+  const isCodOrder = order.paymentMode !== "ONLINE";
+  const hasExtraCashDue = isCodOrder ? walletUse > 0 : remainder > 0;
+  const previousWalletAmount = Number(order.paymentBreakdown?.walletAmount || 0);
+
+  const updateSet = {
+    items: req.proposedItems,
+    "itemAdditionRequest.status": "approved",
+    "itemAdditionRequest.reviewedAt": new Date(),
+    "itemAdditionRequest.reviewedBy": sellerId || null,
+    "itemAdditionRequest.reviewNote": note || "Approved by store",
+    "priceAdjustment.previousGrandTotal": previousGrandTotal,
+    "priceAdjustment.newGrandTotal": newGrandTotal,
+    "priceAdjustment.deltaAmount": delta,
+    "priceAdjustment.direction": "increase",
+    "priceAdjustment.status": "applied",
+    "priceAdjustment.reason": req.reason || "Customer added items (approved by seller)",
+    "financeFlags.hasExtraCashDue": hasExtraCashDue,
+  };
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, "itemAdditionRequest.status": "requested" },
+    {
+      $set: updateSet,
+      $push: {
+        "priceAdjustment.history": {
+          direction: "increase",
+          deltaAmount: delta,
+          reason: req.reason || "Customer added items (approved by seller)",
+          changedBy: actorRole,
+          changedAt: new Date(),
+        },
+        revisedInvoices: buildRevisedInvoiceEntry(order, {
+          source: "items_added",
+          direction: "increase",
+          deltaAmount: delta,
+          note: req.reason || "Customer added items (approved by seller)",
+          grandTotal: newGrandTotal,
+        }),
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: "item_addition_approved",
+          actorRole,
+          actorId: String(sellerId || ""),
+          note: note || "Store approved customer item addition",
+          meta: {
+            addedItems: req.requestedItems,
+            deltaAmount: delta,
+            walletUsed: walletUse,
+            cashDueAtDelivery: remainder,
+            previousGrandTotal,
+            newGrandTotal,
+          },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("This request was already resolved or cannot be approved");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (req.proposedBreakdown) {
+    freezeFinancialSnapshot(updated, req.proposedBreakdown);
+  }
+
   if (hasExtraCashDue) {
     if (!isCodOrder) {
-      // The pricing engine always returns codPendingAmount: 0 (it has no
-      // notion of "already captured online, only the delta is cash-due") —
-      // freezeFinancialSnapshot just copied that 0 in. Layer the actual
-      // uncollected remainder back on top so the delivery side can see it.
       updated.paymentBreakdown.codPendingAmount = roundCurrency(
         (updated.paymentBreakdown.codPendingAmount || 0) + remainder,
       );
     } else {
-      // COD: codPendingAmount must represent the TOTAL cash still owed for
-      // the whole order (not just this delta's remainder) net of cumulative
-      // wallet usage, since handleCodOrderFinance's extra-cash-only branch
-      // (triggered by financeFlags.hasExtraCashDue) uses it as the full
-      // collection amount, not an add-on to a separate normal collection.
       const cumulativeWalletAmount = roundCurrency(previousWalletAmount + walletUse);
       updated.paymentBreakdown.walletAmount = cumulativeWalletAmount;
       updated.paymentBreakdown.codPendingAmount = roundCurrency(
@@ -1073,21 +1193,132 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
   }
   await updated.save();
 
-  emitOrderStatusUpdate(orderId, { itemsAdded: true, deltaAmount: delta }, updated.customer, updated.seller);
-  emitNotificationEvent(NOTIFICATION_EVENTS.ITEMS_ADDED_TO_ORDER, {
+  emitOrderStatusUpdate(
+    orderId,
+    { itemAdditionApproved: true, deltaAmount: delta, itemAdditionRequest: updated.itemAdditionRequest },
+    updated.customer,
+    updated.seller,
+  );
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.PRICE_REVISED, {
+    orderId,
+    customerId: updated.customer,
+    userId: updated.customer,
+    amount: delta,
+  });
+
+  return updated;
+}
+
+/**
+ * Seller/Admin rejects the customer's item addition request.
+ * Releases reserved stock and refunds any held wallet payment back to customer.
+ */
+export async function rejectItemAddition({ orderId, sellerId = null, actorRole = "seller", note = "" }) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const orderSellerId = String(order.seller?._id || order.seller || "");
+  if (actorRole === "seller" && sellerId && orderSellerId !== String(sellerId)) {
+    const err = new Error("Access denied. You are not authorized to reject requests for this order.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (order.itemAdditionRequest?.status !== "requested") {
+    const err = new Error("No pending item addition request to reject for this order");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const req = order.itemAdditionRequest;
+  const walletRefund = Number(req.walletUsed || 0);
+
+  // Release the temporarily reserved stock
+  if (Array.isArray(req.requestedItems) && req.requestedItems.length > 0) {
+    try {
+      const stockItems = req.requestedItems.map((item) => ({
+        productId: item.product,
+        variantSku: item.variantSku,
+        quantity: item.quantity,
+      }));
+      // Release reservation
+      const { releaseReservedStockForOrder } = await import("./stockService.js");
+      await releaseReservedStockForOrder({ ...order.toObject(), items: stockItems }, { reason: "Item addition rejected by seller" });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Refund held wallet amount back to customer
+  if (walletRefund > 0) {
+    await User.findByIdAndUpdate(order.customer, { $inc: { walletBalance: walletRefund } });
+    await Transaction.create({
+      user: order.customer,
+      userModel: "User",
+      order: order._id,
+      type: "Refund",
+      amount: walletRefund,
+      status: "Settled",
+      reference: `REFUND-ADDITEMS-${orderId}-${Date.now()}`,
+      paymentMethod: "WALLET",
+      refundStatus: "completed",
+      meta: { orderId, reason: "Refund for rejected item addition request" },
+    });
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, "itemAdditionRequest.status": "requested" },
+    {
+      $set: {
+        "itemAdditionRequest.status": "rejected",
+        "itemAdditionRequest.reviewedAt": new Date(),
+        "itemAdditionRequest.reviewedBy": sellerId || null,
+        "itemAdditionRequest.reviewNote": note || "Declined by store",
+      },
+      $push: {
+        modificationTimeline: {
+          version: Number(order.modificationVersion || 0) + 1,
+          type: "item_addition_rejected",
+          actorRole,
+          actorId: String(sellerId || ""),
+          note: note || "Store declined customer item addition request",
+          meta: {
+            refundedWallet: walletRefund,
+            rejectedItems: req.requestedItems,
+          },
+          createdAt: new Date(),
+        },
+      },
+      $inc: { modificationVersion: 1 },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    const err = new Error("This request was already resolved or cannot be rejected");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  emitOrderStatusUpdate(
+    orderId,
+    { itemAdditionRejected: true, note, itemAdditionRequest: updated.itemAdditionRequest },
+    updated.customer,
+    updated.seller,
+  );
+
+  emitNotificationEvent(NOTIFICATION_EVENTS.PRICE_ADJUSTMENT_REJECTED, {
     orderId,
     customerId: updated.customer,
     userId: updated.customer,
     sellerId: updated.seller,
-    amount: delta,
-    walletShortfall: remainder,
   });
-
-  if (Array.isArray(lowStockAlerts) && lowStockAlerts.length > 0) {
-    for (const alert of lowStockAlerts) {
-      emitNotificationEvent(NOTIFICATION_EVENTS.LOW_STOCK_ALERT, alert);
-    }
-  }
 
   return updated;
 }

@@ -21,6 +21,8 @@ import {
   rejectOrderAdjustment,
   partialCancelOrderItems,
   addItemsToOrder,
+  approveItemAddition,
+  rejectItemAddition,
 } from "../services/orderPriceAdjustmentService.js";
 import {
   raiseDispute,
@@ -310,7 +312,37 @@ export const addOrderItems = async (req, res) => {
       items,
       reason,
     });
-    return handleResponse(res, 200, "Items added to order", order);
+    return handleResponse(res, 200, "Item addition request submitted for seller approval", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const approveItemAdditionController = async (req, res) => {
+  try {
+    const isSeller = req.user.role === "seller";
+    const order = await approveItemAddition({
+      orderId: req.params.orderId,
+      sellerId: isSeller ? req.user.id : null,
+      actorRole: isSeller ? "seller" : "admin",
+      note: req.body?.note,
+    });
+    return handleResponse(res, 200, "Item addition request approved", order);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const rejectItemAdditionController = async (req, res) => {
+  try {
+    const isSeller = req.user.role === "seller";
+    const order = await rejectItemAddition({
+      orderId: req.params.orderId,
+      sellerId: isSeller ? req.user.id : null,
+      actorRole: isSeller ? "seller" : "admin",
+      note: req.body?.note,
+    });
+    return handleResponse(res, 200, "Item addition request rejected", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

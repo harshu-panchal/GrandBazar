@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
-import { getOrderSocket, onSellerOrderNew, onReturnDropOtp } from '@/core/services/orderSocket';
+import { getOrderSocket, onSellerOrderNew, onReturnDropOtp, onOrderStatusUpdate } from '@/core/services/orderSocket';
+import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 import orderAlertSound from '@/assets/sounds/order_alert.mp3';
 
 const POLL_INTERVAL_MS = 15000;
@@ -372,8 +373,45 @@ const DashboardLayout = ({ children, navItems, title }) => {
         if (role !== 'seller') return undefined;
         const getToken = () => localStorage.getItem('auth_seller');
         getOrderSocket(getToken);
-        const unsubscribeSellerNew = onSellerOrderNew(getToken, () => {
+
+        const handleIncomingOrder = async (incomingOrderOrPayload) => {
+            if (!incomingOrderOrPayload) return;
+            const orderId = incomingOrderOrPayload.orderId || incomingOrderOrPayload._id;
+            if (!orderId) return;
+
+            // If already actively displayed in modal, don't interrupt unless updated
+            if (newOrderAlertRef.current?.orderId === orderId) return;
+
+            let orderObj = incomingOrderOrPayload.order || incomingOrderOrPayload;
+            if (!orderObj?.items || !orderObj?.workflowStatus) {
+                try {
+                    const res = await sellerApi.getOrderDetails(orderId);
+                    const fetched = res?.data?.result || res?.data?.data || res?.data;
+                    if (fetched) orderObj = fetched;
+                } catch (e) {
+                    console.warn("[DashboardLayout] getOrderDetails failed for incoming order:", e);
+                }
+            }
+
+            if (orderObj && isSellerAlertEligible(orderObj)) {
+                setNewOrderAlert(orderObj);
+                newOrderAlertRef.current = orderObj;
+                setShownOrderIds((prev) => new Set(prev).add(orderObj.orderId));
+                shownOrderIdsRef.current = new Set(shownOrderIdsRef.current).add(orderObj.orderId);
+            }
+        };
+
+        const unsubscribeSellerNew = onSellerOrderNew(getToken, (payload) => {
+            console.log("[DashboardLayout] Received order:new socket event:", payload);
+            handleIncomingOrder(payload);
             if (fetchOrdersRef.current) fetchOrdersRef.current();
+        });
+
+        const unsubscribeOrderStatus = onOrderStatusUpdate(getToken, (payload) => {
+            if (payload?.orderId && (payload?.itemAdditionRequested || payload?.workflowStatus === 'SELLER_PENDING')) {
+                handleIncomingOrder(payload);
+                if (fetchOrdersRef.current) fetchOrdersRef.current();
+            }
         });
 
         const unsubscribeDrop = onReturnDropOtp(getToken, (payload) => {
@@ -385,6 +423,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
         return () => {
             unsubscribeSellerNew();
+            unsubscribeOrderStatus();
             unsubscribeDrop();
         };
     }, [role]);
@@ -574,19 +613,20 @@ const DashboardLayout = ({ children, navItems, title }) => {
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100"
+                            className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col"
                         >
-                            <div className="flex flex-col items-center text-center">
-                                <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mb-6 animate-bounce">
-                                    <BellRing className="h-10 w-10 text-primary" />
+                            <div className="flex flex-col items-center text-center overflow-y-auto no-scrollbar">
+                                <div className="h-16 w-16 bg-rose-50 rounded-full flex items-center justify-center mb-3 shadow-inner ring-8 ring-rose-50/50 shrink-0">
+                                    <BellRing className="h-8 w-8 text-rose-500 animate-pulse" />
                                 </div>
 
-                                <h2 className="text-2xl font-black text-slate-900 mb-2">New Order Received!</h2>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">New Order Received!</h2>
+                                
                                 {orderFulfillment && (
-                                    <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4">
+                                    <div className="flex flex-wrap items-center justify-center gap-1.5 mb-2.5">
                                         <span
                                             className={cn(
-                                                'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border',
+                                                'inline-flex items-center px-3 py-0.5 rounded-full text-xs font-bold border',
                                                 orderFulfillment.typeBadgeClassName,
                                             )}
                                         >
@@ -594,7 +634,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                         </span>
                                         <span
                                             className={cn(
-                                                'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border',
+                                                'inline-flex items-center px-3 py-0.5 rounded-full text-xs font-bold border',
                                                 orderFulfillment.methodBadgeClassName,
                                             )}
                                         >
@@ -602,43 +642,83 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                         </span>
                                     </div>
                                 )}
-                                <p className="text-slate-600 font-medium mb-3">
-                                    You have a new order <span className="text-primary font-bold">#{newOrderAlert.orderId}</span>.
+
+                                <p className="text-slate-500 font-medium text-xs mb-3 flex items-center justify-center gap-1">
+                                    <span>You have a new order</span>
+                                    <span className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 max-w-[220px] truncate" title={`#${newOrderAlert.orderId}`}>
+                                        #{newOrderAlert.orderId}
+                                    </span>
                                 </p>
 
-                                <div className="w-full bg-slate-50 rounded-2xl p-4 mb-6 text-sm space-y-1.5">
-                                    <div className="flex items-center justify-between text-slate-500">
-                                        <span>Item total</span>
-                                        <span className="font-semibold text-slate-700">₹{formatInr(newOrderAlert.paymentBreakdown?.productSubtotal ?? 0)}</span>
+                                {/* Ordered Items List */}
+                                {Array.isArray(newOrderAlert.items) && newOrderAlert.items.length > 0 && (
+                                    <div className="w-full mb-3 rounded-2xl bg-slate-50 p-3.5 border border-slate-100 text-left">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                                Items Ordered
+                                            </span>
+                                            <span className="bg-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold text-slate-700">
+                                                {newOrderAlert.items.reduce((sum, it) => sum + (Number(it.quantity) || 1), 0)}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2.5 max-h-40 overflow-y-auto pr-1 divide-y divide-slate-100">
+                                            {newOrderAlert.items.map((item, idx) => {
+                                                const itemName = item.name || item.product?.name || 'Item';
+                                                const itemImg = item.image || item.product?.mainImage || item.product?.image || (Array.isArray(item.product?.images) ? item.product.images[0] : '');
+                                                const variantLabel = item.variantSlot || item.variantName || item.variantLabel || item.variantSku || '';
+                                                const qty = item.quantity || 1;
+                                                return (
+                                                    <div key={idx} className="flex items-center gap-3 pt-2.5 first:pt-0">
+                                                        <img
+                                                            src={getProductImageUrl(itemImg)}
+                                                            alt={itemName}
+                                                            onError={handleProductImageError}
+                                                            className="h-10 w-10 rounded-xl object-cover bg-white border border-slate-200 shrink-0 shadow-xs"
+                                                        />
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-bold text-slate-900 truncate leading-snug">{itemName}</p>
+                                                            {variantLabel && (
+                                                                <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{variantLabel}</p>
+                                                            )}
+                                                        </div>
+                                                        <div className="shrink-0 text-right">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-800 text-xs font-bold shadow-xs">
+                                                                Qty {qty}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center justify-between text-slate-500">
-                                        <span>Platform commission</span>
-                                        <span className="font-semibold text-slate-700">-₹{formatInr(newOrderAlert.paymentBreakdown?.adminProductCommissionTotal ?? 0)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
-                                        <span className="font-bold text-slate-700">You will receive</span>
-                                        <span className="text-slate-900 font-black">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
-                                    </div>
+                                )}
+
+                                {/* Seller Payout (Admin commission hidden) */}
+                                <div className="w-full bg-slate-50 rounded-2xl p-3.5 mb-3.5 border border-slate-100 flex items-center justify-between text-left">
+                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">You will receive</span>
+                                    <span className="text-xl font-black text-slate-900">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
                                 </div>
 
-                                {/* Timer Bar — width from real server deadline */}
-                                <div className="w-full bg-slate-100 h-2 rounded-full mb-8 overflow-hidden">
-                                    <div
-                                        className={cn(
-                                            "h-full transition-[width] duration-1000 ease-linear",
-                                            orderTimerUrgent ? "bg-rose-500" : "bg-primary",
-                                        )}
-                                        style={{
-                                            width: `${acceptWindowTotalRef.current > 0 ? (timeLeft / acceptWindowTotalRef.current) * 100 : 0}%`,
-                                        }}
-                                    />
-                                </div>
+                                {/* Timer & Progress Bar */}
+                                <div className="w-full space-y-2 mb-5">
+                                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                        <div
+                                            className={cn(
+                                                "h-full transition-[width] duration-1000 ease-linear rounded-full",
+                                                orderTimerUrgent ? "bg-rose-500" : "bg-rose-500",
+                                            )}
+                                            style={{
+                                                width: `${acceptWindowTotalRef.current > 0 ? (timeLeft / acceptWindowTotalRef.current) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </div>
 
-                                <div className="flex items-center gap-4 text-sm font-bold mb-8">
-                                    <Clock className={cn("h-4 w-4", orderTimerUrgent ? "text-rose-500 animate-pulse" : "text-slate-600")} />
-                                    <span className={orderTimerUrgent ? "text-rose-500" : "text-slate-600"}>
-                                        Accept within {formatAcceptCountdown(timeLeft)}
-                                    </span>
+                                    <div className="flex items-center justify-center gap-2 text-xs font-bold">
+                                        <Clock className={cn("h-3.5 w-3.5", orderTimerUrgent ? "text-rose-500 animate-pulse" : "text-slate-500")} />
+                                        <span className={orderTimerUrgent ? "text-rose-500 font-bold" : "text-slate-600 font-semibold"}>
+                                            Accept within {formatAcceptCountdown(timeLeft)}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 {showDeclineReasonBox ? (
@@ -649,40 +729,44 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                             onChange={(e) => setDeclineReason(e.target.value)}
                                             placeholder="Reason for declining (at least 10 characters)…"
                                             rows={3}
-                                            className="w-full rounded-2xl border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"
+                                            className="w-full rounded-2xl border border-slate-200 p-3 text-xs outline-none focus:ring-2 focus:ring-rose-200 resize-none bg-slate-50"
                                         />
-                                        <div className="grid grid-cols-2 gap-4 w-full">
+                                        <div className="grid grid-cols-2 gap-3 w-full">
                                             <button
+                                                type="button"
                                                 onClick={() => setShowDeclineReasonBox(false)}
-                                                className="py-3 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
+                                                className="py-3 rounded-2xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors"
                                             >
                                                 Back
                                             </button>
                                             <button
+                                                type="button"
                                                 onClick={() => handleDeclineOrder(newOrderAlert.orderId, declineReason.trim())}
                                                 disabled={declineReason.trim().length < 10}
-                                                className="py-3 rounded-2xl bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors disabled:opacity-50"
+                                                className="py-3 rounded-2xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors disabled:opacity-50"
                                             >
                                                 Confirm Decline
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
-                                <div className="grid grid-cols-2 gap-4 w-full">
+                                <div className="grid grid-cols-2 gap-3 w-full">
                                     <button
+                                        type="button"
                                         onClick={() => setShowDeclineReasonBox(true)}
                                         disabled={acceptInFlight}
-                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
+                                        className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50"
                                     >
-                                        <X className="h-5 w-5" />
+                                        <X className="h-4 w-4" />
                                         Decline
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => handleAcceptOrder(newOrderAlert.orderId)}
                                         disabled={acceptInFlight}
-                                        className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-70 disabled:pointer-events-none"
+                                        className="flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 shadow-xl shadow-rose-600/20 transition-all active:scale-95 disabled:opacity-70 disabled:pointer-events-none"
                                     >
-                                        <Check className="h-5 w-5" />
+                                        <Check className="h-4 w-4 stroke-[2.5]" />
                                         {acceptInFlight ? 'Accepting…' : 'Accept'}
                                     </button>
                                 </div>

@@ -85,10 +85,30 @@ export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
   s.to("admin:orders").emit("order:status:update", body);
 }
 
-export function emitToSeller(sellerId, { event, payload }) {
+export async function emitToSeller(sellerId, { event, payload }) {
   const s = getIo();
-  if (!s || !sellerId) return;
-  s.to(`seller:${sellerId}`).emit(event, payload);
+  const sid = normalizeSellerId(sellerId);
+  if (!s || !sid) return;
+  s.to(`seller:${sid}`).emit(event, payload);
+
+  try {
+    if (mongoose.Types.ObjectId.isValid(sid)) {
+      const Store = mongoose.models.Store || mongoose.model("Store");
+      const store = await Store.findById(sid).select("ownerId").lean();
+      if (store?.ownerId) {
+        s.to(`seller:${store.ownerId.toString()}`).emit(event, payload);
+      } else {
+        const stores = await Store.find({ ownerId: sid }).select("_id").lean();
+        if (Array.isArray(stores)) {
+          for (const st of stores) {
+            s.to(`seller:${st._id.toString()}`).emit(event, payload);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // safe fallback
+  }
 }
 
 export function emitToDelivery(deliveryId, { event, payload }) {
