@@ -352,7 +352,7 @@ const RewardsPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-slate-50 pb-36">
       <div className="bg-gradient-to-br from-primary-600 via-primary-700 to-violet-800 text-white px-4 pt-6 pb-10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <button
@@ -929,11 +929,11 @@ const RewardsPage = () => {
       </div>
 
       {tab === "overview" && !loading && (
-        <div className="fixed bottom-20 left-0 right-0 px-4 z-30">
+        <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-6 left-0 right-0 px-4 z-[450] max-w-md mx-auto pointer-events-none">
           <button
             type="button"
             onClick={() => navigate("/checkout")}
-            className="w-full py-3.5 bg-primary-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
+            className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 active:scale-[0.98] transition-all text-white rounded-2xl font-bold shadow-xl shadow-primary-600/30 flex items-center justify-center gap-2 pointer-events-auto border border-white/10"
           >
             <CheckCircle2 className="w-5 h-5" />
             Use Wallet at Checkout
