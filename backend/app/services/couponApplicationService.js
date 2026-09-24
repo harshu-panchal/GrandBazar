@@ -37,9 +37,10 @@ export async function applySingleCoupon({
 
   const validFrom = coupon.validFrom ? startOfUtcDay(coupon.validFrom) : null;
   const validTill = coupon.validTill ? endOfUtcDay(coupon.validTill) : null;
+  const timezoneForwardBuffer = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   if (
     !coupon.isActive ||
-    (validFrom && validFrom > now) ||
+    (validFrom && validFrom > timezoneForwardBuffer) ||
     (validTill && validTill < now)
   ) {
     const err = new Error("This coupon is not active");

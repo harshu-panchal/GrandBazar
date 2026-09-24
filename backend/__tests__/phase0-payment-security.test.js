@@ -20,6 +20,16 @@ const mockPhonePePay = jest.fn();
 const mockPhonePeGetOrderStatus = jest.fn();
 const mockPhonePeValidateCallback = jest.fn();
 
+const mockAxiosPost = jest.fn();
+const mockAxiosGet = jest.fn();
+
+jest.unstable_mockModule("axios", () => ({
+  default: {
+    post: mockAxiosPost,
+    get: mockAxiosGet,
+  },
+}));
+
 jest.unstable_mockModule("../app/models/order.js", () => ({
   default: {
     findOne: mockOrderFindOne,
@@ -46,6 +56,7 @@ jest.unstable_mockModule("../app/models/paymentWebhookEvent.js", () => ({
 
 jest.unstable_mockModule("../app/services/finance/orderFinanceService.js", () => ({
   handleOnlineOrderFinance: mockHandleOnlineOrderFinance,
+  reconcileCodCash: jest.fn(),
 }));
 
 jest.unstable_mockModule("../app/services/orderWorkflowService.js", () => ({
@@ -54,42 +65,6 @@ jest.unstable_mockModule("../app/services/orderWorkflowService.js", () => ({
 
 jest.unstable_mockModule("../app/services/stockService.js", () => ({
   releaseReservedStockForOrder: mockReleaseReservedStockForOrder,
-}));
-
-jest.unstable_mockModule("@phonepe-pg/pg-sdk-node", () => ({
-  Env: {
-    PRODUCTION: "PRODUCTION",
-    SANDBOX: "SANDBOX",
-  },
-  StandardCheckoutClient: {
-    getInstance: jest.fn(() => ({
-      pay: mockPhonePePay,
-      getOrderStatus: mockPhonePeGetOrderStatus,
-      validateCallback: mockPhonePeValidateCallback,
-    })),
-  },
-  StandardCheckoutPayRequest: {
-    builder: jest.fn(() => {
-      const request = {};
-      return {
-        merchantOrderId(value) {
-          request.merchantOrderId = value;
-          return this;
-        },
-        amount(value) {
-          request.amount = value;
-          return this;
-        },
-        redirectUrl(value) {
-          request.redirectUrl = value;
-          return this;
-        },
-        build() {
-          return request;
-        },
-      };
-    }),
-  },
 }));
 
 const {
@@ -130,13 +105,22 @@ describe("Phase 0 payment hardening", () => {
       paymentBreakdown: { grandTotal: 499 },
     });
     mockPaymentCountDocuments.mockResolvedValue(0);
-    mockPhonePePay.mockResolvedValue({
-      redirectUrl: "https://pay.test/checkout",
+    mockAxiosPost.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          instrumentResponse: {
+            redirectInfo: {
+              url: "https://pay.test/checkout",
+            },
+          },
+        },
+      },
     });
     mockPaymentCreate.mockResolvedValue({
       _id: "payment-1",
       publicOrderId: "ORD-20260325-ABC123",
-      gatewayName: "RAZORPAY",
+      gatewayName: "PHONEPE",
       gatewayOrderId: "order_gateway_1",
       amount: 49900,
       currency: "INR",
@@ -154,11 +138,7 @@ describe("Phase 0 payment hardening", () => {
       correlationId: "corr-1",
     });
 
-    expect(mockPhonePePay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        amount: 49900,
-      }),
-    );
+    expect(mockAxiosPost).toHaveBeenCalled();
     expect(result.payment.amount).toBe(49900);
   });
 
@@ -212,11 +192,12 @@ describe("Phase 0 payment hardening", () => {
     ).toString("base64");
 
     const payload = Buffer.from(JSON.stringify({ response: callbackPayload }));
-    mockPhonePeValidateCallback.mockResolvedValue(true);
+    const crypto = await import("crypto");
+    const authHeader = crypto.createHash("sha256").update(callbackPayload + "phonepe-secret").digest("hex") + "###1";
 
     const result = await processPhonePeWebhook({
       rawBody: payload,
-      authorization: "phonepe-auth",
+      authorization: authHeader,
       eventId: "event-duplicate-1",
       correlationId: "corr-webhook",
     });

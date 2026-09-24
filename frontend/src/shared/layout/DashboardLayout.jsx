@@ -28,6 +28,12 @@ const isApprovedStore = (store) => {
 /** Match server scheduled seller accept window (24h default). */
 const SCHEDULED_ACCEPT_WINDOW_SEC = 24 * 60 * 60;
 
+function formatShortOrderId(orderId) {
+    if (!orderId) return '';
+    const s = String(orderId).replace(/^ORD-/i, '');
+    return s.length > 8 ? `#${s.slice(-6).toUpperCase()}` : `#${s.toUpperCase()}`;
+}
+
 /** Match server `sellerPendingExpiresAt` — never reset to a full 60s when the modal opens late. */
 function secondsLeftUntilSellerExpiry(order) {
     if (!order) return 0;
@@ -643,10 +649,13 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                     </div>
                                 )}
 
-                                <p className="text-slate-500 font-medium text-xs mb-3 flex items-center justify-center gap-1">
+                                <p className="text-slate-500 font-medium text-xs mb-3 flex items-center justify-center gap-1.5">
                                     <span>You have a new order</span>
-                                    <span className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 max-w-[220px] truncate" title={`#${newOrderAlert.orderId}`}>
-                                        #{newOrderAlert.orderId}
+                                    <span 
+                                        className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 text-xs tracking-wider" 
+                                        title={`Full Order ID: #${newOrderAlert.orderId}`}
+                                    >
+                                        {formatShortOrderId(newOrderAlert.orderId)}
                                     </span>
                                 </p>
 

@@ -1,6 +1,6 @@
 import crypto from "crypto";
+import axios from "axios";
 import mongoose from "mongoose";
-import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from '@phonepe-pg/pg-sdk-node';
 
 import Order from "../models/order.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
@@ -24,29 +24,29 @@ import { processCodRemittancePhonePeWebhook, isCodRemittanceMerchantOrderId } fr
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
-let phonePeClient = null;
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 
-function getPhonePeClient() {
-  if (phonePeClient) return phonePeClient;
-
-  const clientId = String(process.env.PHONEPE_CLIENT_ID || "").trim();
+function getPhonePeConfig() {
+  const merchantId = String(process.env.PHONEPE_MERCHANT_ID || process.env.PHONEPE_CLIENT_ID || "").trim();
   const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
   const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
   const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
 
-  if (!clientId || !clientSecret) {
+  if (!merchantId || !clientSecret) {
     throw new Error("PhonePe credentials not configured");
   }
 
-  phonePeClient = StandardCheckoutClient.getInstance(
-    clientId,
+  const baseUrl = isProd
+    ? "https://api.phonepe.com/apis/hermes"
+    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
+
+  return {
+    merchantId,
     clientSecret,
     clientVersion,
-    isProd ? Env.PRODUCTION : Env.SANDBOX
-  );
-
-  return phonePeClient;
+    baseUrl,
+    clientId: String(process.env.PHONEPE_CLIENT_ID || merchantId).trim(),
+  };
 }
 
 function sanitizeGatewayPayload(payload = {}) {
@@ -568,16 +568,47 @@ export async function createPaymentOrderForOrderRef({
     attemptCount,
   );
 
-  const client = getPhonePeClient();
+  const config = getPhonePeConfig();
   const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
 
-  const request = StandardCheckoutPayRequest.builder()
-    .merchantOrderId(merchantOrderId)
-    .amount(amountPaise)
-    .redirectUrl(redirectUrl)
-    .build();
+  const payload = {
+    merchantId: config.merchantId,
+    merchantTransactionId: merchantOrderId,
+    merchantUserId: String(primaryOrder.customer || "CUST-GUEST"),
+    amount: amountPaise,
+    redirectUrl: redirectUrl,
+    redirectMode: "REDIRECT",
+    paymentInstrument: {
+      type: "PAY_PAGE",
+    },
+  };
 
-  const response = await client.pay(request);
+  const payloadString = Buffer.from(JSON.stringify(payload)).toString("base64");
+  const signString = payloadString + "/pg/v1/pay" + config.clientSecret;
+  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
+
+  let redirectUrlResult = null;
+  try {
+    const apiRes = await axios.post(
+      `${config.baseUrl}/pg/v1/pay`,
+      { request: payloadString },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-VERIFY": checksum,
+        },
+      }
+    );
+    redirectUrlResult = apiRes.data?.data?.instrumentResponse?.redirectInfo?.url;
+    if (!redirectUrlResult) {
+      throw new Error(apiRes.data?.message || "No redirect url in PhonePe response");
+    }
+  } catch (err) {
+    const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+    const error = new Error(`PhonePe pay request failed: ${detail}`);
+    error.statusCode = 502;
+    throw error;
+  }
 
   const paymentData = {
     order: primaryOrder._id,
@@ -594,7 +625,7 @@ export async function createPaymentOrderForOrderRef({
     idempotencyKey: idempotencyKey || undefined,
     correlationId,
     rawGatewayResponse: {
-      redirectUrl: response.redirectUrl,
+      redirectUrl: redirectUrlResult,
       merchantOrderId: merchantOrderId,
       amount: amountPaise,
     },
@@ -620,11 +651,11 @@ export async function createPaymentOrderForOrderRef({
       paymentId: payment._id.toString(),
       gatewayOrderId: payment.gatewayOrderId,
       amount: payment.amount,
-      redirectUrl: response.redirectUrl,
+      redirectUrl: redirectUrlResult,
     }),
   );
 
-  return { payment, redirectUrl: response.redirectUrl, duplicate: false };
+  return { payment, redirectUrl: redirectUrlResult, duplicate: false };
 }
 
 export async function verifyPhonePePaymentStatus({
@@ -646,22 +677,43 @@ export async function verifyPhonePePaymentStatus({
       throw err;
   }
 
-  const client = getPhonePeClient();
-  const response = await client.getOrderStatus(merchantOrderId);
-  const nextStatus = mapPhonePeStatusToInternal(response.state);
+  const config = getPhonePeConfig();
+  const endpoint = `/pg/v1/status/${config.merchantId}/${merchantOrderId}`;
+  const signString = endpoint + config.clientSecret;
+  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
+
+  let responseData = null;
+  try {
+    const apiRes = await axios.get(
+      `${config.baseUrl}${endpoint}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-VERIFY": checksum,
+          "X-MERCHANT-ID": config.merchantId,
+        },
+      }
+    );
+    responseData = apiRes.data || {};
+  } catch (err) {
+    responseData = err.response?.data || {};
+  }
+
+  const responseState = responseData?.data?.state || responseData?.code || "PENDING";
+  const nextStatus = mapPhonePeStatusToInternal(responseState);
 
   await transitionPaymentState(payment, {
     nextStatus,
     source: PAYMENT_EVENT_SOURCE.CLIENT_VERIFY,
-    reason: `PhonePe status check: ${response.state}`,
-    gatewayPaymentId: response.transactionId,
-    rawGatewayResponse: response,
+    reason: `PhonePe status check: ${responseState}`,
+    gatewayPaymentId: responseData?.data?.transactionId,
+    rawGatewayResponse: responseData,
   });
 
   await handleOrderSideEffectsFromPaymentStatus(
     payment,
     nextStatus,
-    response.responseCode || response.state,
+    responseData?.code || responseState,
   );
 
   payment.correlationId = correlationId || payment.correlationId;
@@ -689,7 +741,7 @@ export async function processPhonePeWebhook({
   authorization,
   correlationId = null,
 }) {
-  const client = getPhonePeClient();
+  const config = getPhonePeConfig();
   let jsonPayload;
   try {
     jsonPayload = JSON.parse(rawBody.toString('utf8'));
@@ -706,7 +758,14 @@ export async function processPhonePeWebhook({
     throw err;
   }
 
-  const isValid = await client.validateCallback(base64Response, authorization);
+  const expectedHash = crypto.createHash("sha256").update(base64Response + config.clientSecret).digest("hex");
+  const expectedWithVersion = `${expectedHash}###${config.clientVersion}`;
+  const isValid = authorization && (
+    authorization === expectedWithVersion ||
+    authorization === expectedHash ||
+    authorization.startsWith(expectedHash)
+  );
+
   if (!isValid) {
       const err = new Error("Invalid webhook signature");
       err.statusCode = 401;

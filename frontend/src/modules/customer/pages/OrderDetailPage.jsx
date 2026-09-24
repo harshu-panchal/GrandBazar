@@ -896,14 +896,39 @@ const OrderDetailPage = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-white px-4">
+        <Loader2 className="h-10 w-10 animate-spin text-brand-600 mb-3" />
+        <p className="text-sm font-bold text-slate-700">Loading order details...</p>
+      </div>
+    );
+  }
+
   if (!order) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-white">
-        <Package size={64} className="text-slate-300 mb-4" />
-        <h3 className="text-lg font-bold text-slate-800">Order not found</h3>
-        <Link to="/orders" className="text-brand-600 font-bold mt-4 hover:text-brand-700">
-          Back to my orders
-        </Link>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-white px-4 text-center">
+        <div className="h-20 w-20 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-slate-400">
+          <Package size={44} />
+        </div>
+        <h3 className="text-xl font-black text-slate-800 tracking-tight">Order Not Found</h3>
+        <p className="text-sm text-slate-500 mt-2 max-w-sm leading-relaxed">
+          We couldn't retrieve this order. It may have expired, or you might be logged in under a different account.
+        </p>
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={() => refreshOrder()}
+            className="px-5 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold text-xs shadow-xs hover:bg-slate-50 transition-colors"
+          >
+            Retry
+          </button>
+          <Link
+            to="/orders"
+            className="px-5 py-2.5 rounded-2xl bg-brand-600 text-white font-bold text-xs shadow-sm hover:bg-brand-700 transition-colors"
+          >
+            Back to my orders
+          </Link>
+        </div>
       </div>
     );
   }

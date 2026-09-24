@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     User, MapPin, Package, CreditCard, Wallet, ChevronRight,
-    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store, Settings
+    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store, Settings, RotateCcw, Sparkles
 } from 'lucide-react';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
@@ -110,20 +110,36 @@ const ProfilePage = () => {
                                 bg="rgba(16,185,129,0.10)"
                             />
                             <MenuItem
+                                icon={RotateCcw}
+                                label="Refund History"
+                                sub="Track order refunds & return credits"
+                                path="/transactions?tab=refunds"
+                                color="#0284c7"
+                                bg="rgba(2,132,199,0.10)"
+                            />
+                            <MenuItem
                                 icon={CreditCard}
                                 label="Order Transactions"
-                                sub="View all payments & refunds"
+                                sub="View all payments & receipts"
                                 path="/transactions"
                                 color="#f97316"
                                 bg="rgba(249,115,22,0.10)"
                             />
                             <MenuItem
                                 icon={Wallet}
-                                label="Rewards & Wallet"
-                                sub="Cashback, coupons & referrals"
-                                path="/rewards"
+                                label="My Wallet"
+                                sub="Wallet balance & payment history"
+                                path="/wallet"
                                 color="#10b981"
                                 bg="rgba(16,185,129,0.10)"
+                            />
+                            <MenuItem
+                                icon={Sparkles}
+                                label="Rewards Center"
+                                sub="Cashback, coupons & referrals"
+                                path="/rewards"
+                                color="#8b5cf6"
+                                bg="rgba(139,92,246,0.10)"
                             />
                             <MenuItem
                                 icon={Heart}

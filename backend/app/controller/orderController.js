@@ -598,7 +598,35 @@ export const getOrderDetails = async (req, res) => {
       (roleNorm === "customer" || roleNorm === "user") &&
       order.customer &&
       customerIdStr === uid;
-    const isOwnerSeller = role === "seller" && sellerIdStr === uid;
+
+    let isOwnerSeller = false;
+    if (role === "seller") {
+      const candidateIds = [
+        req.user?.activeStoreId,
+        uid,
+        req.user?.accountId,
+        req.user?.id,
+      ]
+        .map((s) => String(s || "").trim())
+        .filter(Boolean);
+
+      if (candidateIds.includes(sellerIdStr)) {
+        isOwnerSeller = true;
+      } else {
+        const ownerId = req.user?.accountId || uid;
+        if (ownerId) {
+          try {
+            const storeExists = await Store.exists({ _id: sellerIdStr, ownerId });
+            if (storeExists) {
+              isOwnerSeller = true;
+            }
+          } catch (err) {
+            console.warn("[getOrderDetails] Store exists check error:", err.message);
+          }
+        }
+      }
+    }
+
     const primaryRiderId = refToIdString(order.deliveryBoy);
     const returnRiderId = refToIdString(order.returnDeliveryBoy);
     const isAssignedDeliveryBoy =
@@ -2359,6 +2387,7 @@ export const getSellerOrders = async (req, res) => {
     const { orders, total, summary } = await fetchSellerOrdersPage({
       role,
       userId,
+      user: req.user,
       statusParam,
       startDate,
       endDate,

@@ -348,7 +348,56 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
       .populate("seller", "shopName address name location serviceRadius");
 
     if (!updatedScheduled) {
-      const err = new Error("Order not available for acceptance or expired");
+      const rawOrder = await Order.findOne({ orderId, seller: sellerId });
+      if (
+        rawOrder &&
+        rawOrder.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING &&
+        rawOrder.sellerPendingExpiresAt &&
+        rawOrder.sellerPendingExpiresAt <= now
+      ) {
+        const cancelled = await Order.findOneAndUpdate(
+          {
+            orderId,
+            workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+          },
+          {
+            $set: {
+              workflowStatus: WORKFLOW_STATUS.CANCELLED,
+              status: "cancelled",
+              orderStatus: "cancelled",
+              cancelledBy: "system",
+              cancelReason: "Seller did not accept the order in time.",
+            },
+          },
+          { new: true },
+        )
+          .populate("customer", "name phone")
+          .populate("seller", "shopName address name location serviceRadius");
+
+        if (cancelled) {
+          await compensateOrderCancellation(cancelled, orderId);
+          emitOrderStatusUpdate(
+            orderId,
+            {
+              workflowStatus: WORKFLOW_STATUS.CANCELLED,
+              status: "cancelled",
+              orderStatus: "cancelled",
+              cancelReason: "Seller did not accept the order in time.",
+            },
+            cancelled.customer?._id || cancelled.customer,
+            cancelled.seller?._id || cancelled.seller,
+          );
+          emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+            orderId: cancelled.orderId,
+            customerId: cancelled.customer?._id || cancelled.customer,
+            userId: cancelled.customer?._id || cancelled.customer,
+            sellerId: cancelled.seller?._id || cancelled.seller,
+            customerMessage: "We're sorry — your order was cancelled because the seller did not respond in time.",
+            sellerMessage: `Order #${cancelled.orderId} was auto-cancelled because the acceptance window expired.`,
+          }).catch(() => {});
+        }
+      }
+      const err = new Error("Order not available for acceptance or expired. Status has been changed to cancelled.");
       err.statusCode = 409;
       throw err;
     }
@@ -444,7 +493,56 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     .populate("seller", "shopName address name location serviceRadius");
 
   if (!updated) {
-    const err = new Error("Order not available for acceptance or expired");
+    const rawOrder = await Order.findOne({ orderId, seller: sellerId });
+    if (
+      rawOrder &&
+      rawOrder.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING &&
+      rawOrder.sellerPendingExpiresAt &&
+      rawOrder.sellerPendingExpiresAt <= now
+    ) {
+      const cancelled = await Order.findOneAndUpdate(
+        {
+          orderId,
+          workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+        },
+        {
+          $set: {
+            workflowStatus: WORKFLOW_STATUS.CANCELLED,
+            status: "cancelled",
+            orderStatus: "cancelled",
+            cancelledBy: "system",
+            cancelReason: "Seller did not accept the order in time.",
+          },
+        },
+        { new: true },
+      )
+        .populate("customer", "name phone")
+        .populate("seller", "shopName address name location serviceRadius");
+
+      if (cancelled) {
+        await compensateOrderCancellation(cancelled, orderId);
+        emitOrderStatusUpdate(
+          orderId,
+          {
+            workflowStatus: WORKFLOW_STATUS.CANCELLED,
+            status: "cancelled",
+            orderStatus: "cancelled",
+            cancelReason: "Seller did not accept the order in time.",
+          },
+          cancelled.customer?._id || cancelled.customer,
+          cancelled.seller?._id || cancelled.seller,
+        );
+        emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
+          orderId: cancelled.orderId,
+          customerId: cancelled.customer?._id || cancelled.customer,
+          userId: cancelled.customer?._id || cancelled.customer,
+          sellerId: cancelled.seller?._id || cancelled.seller,
+          customerMessage: "We're sorry — your order was cancelled because the seller did not respond in time.",
+          sellerMessage: `Order #${cancelled.orderId} was auto-cancelled because the acceptance window expired.`,
+        }).catch(() => {});
+      }
+    }
+    const err = new Error("Order not available for acceptance or expired. Status has been changed to cancelled.");
     err.statusCode = 409;
     throw err;
   }
@@ -1133,8 +1231,11 @@ export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
 
 export async function processSellerTimeoutJob({ orderId }) {
   const now = new Date();
-  const order = await Order.findOne({ orderId, workflowVersion: { $gte: 2 } });
-  if (!order || order.workflowStatus !== WORKFLOW_STATUS.SELLER_PENDING) return;
+  const order = await Order.findOne({
+    orderId,
+    workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+  });
+  if (!order) return;
 
   if (order.sellerPendingExpiresAt && order.sellerPendingExpiresAt > now) {
     return; // Not expired yet — scheduler fired early
@@ -1153,7 +1254,6 @@ export async function processSellerTimeoutJob({ orderId }) {
     const warned = await Order.findOneAndUpdate(
       {
         orderId,
-        workflowVersion: { $gte: 2 },
         workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
         sellerTimeoutWarningSent: { $ne: true },
       },
@@ -1190,13 +1290,13 @@ export async function processSellerTimeoutJob({ orderId }) {
   const updated = await Order.findOneAndUpdate(
     {
       orderId,
-      workflowVersion: { $gte: 2 },
       workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
     },
     {
       $set: {
         workflowStatus: WORKFLOW_STATUS.CANCELLED,
         status: "cancelled",
+        orderStatus: "cancelled",
         cancelledBy: "system",
         cancelReason: "Seller did not accept the order in time.",
       },
@@ -1208,7 +1308,17 @@ export async function processSellerTimeoutJob({ orderId }) {
 
   await compensateOrderCancellation(updated, orderId);
 
-  emitOrderStatusUpdate(orderId, { workflowStatus: WORKFLOW_STATUS.CANCELLED }, updated.customer, updated.seller);
+  emitOrderStatusUpdate(
+    orderId,
+    {
+      workflowStatus: WORKFLOW_STATUS.CANCELLED,
+      status: "cancelled",
+      orderStatus: "cancelled",
+      cancelReason: "Seller did not accept the order in time.",
+    },
+    updated.customer,
+    updated.seller,
+  );
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
     orderId: updated.orderId,
     customerId: updated.customer,

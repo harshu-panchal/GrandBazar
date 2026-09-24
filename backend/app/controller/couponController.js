@@ -20,10 +20,12 @@ const buildAndRunCouponQuery = async (req, res, { excludeExhausted = false } = {
 
     if (status === "active") {
       const now = new Date();
-      // Include coupons whose validTill is the same calendar day (stored as midnight).
+      // Include coupons whose validTill is on or after the start of today (UTC).
       const activeDayStart = startOfUtcDay(now);
+      // Allow coupons whose start date is today in any timezone ahead of UTC (e.g., IST is UTC+5:30)
+      const timezoneForwardBuffer = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       query.isActive = true;
-      query.validFrom = { $lte: now };
+      query.validFrom = { $lte: timezoneForwardBuffer };
       query.validTill = { $gte: activeDayStart };
     } else if (status === "expired") {
       query.$or = [{ isActive: false }, { validTill: { $lt: startOfUtcDay(new Date()) } }];

@@ -198,6 +198,7 @@ const router = createBrowserRouter([
                         { path: 'orders', element: <ProtectedRoute><OrdersPage /></ProtectedRoute> },
                         { path: 'orders/:orderId', element: <ProtectedRoute><OrderDetailPage /></ProtectedRoute> },
                         { path: 'transactions', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },
+                        { path: 'refunds', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },
                         { path: 'addresses', element: <ProtectedRoute><AddressesPage /></ProtectedRoute> },
                         { path: 'settings', element: <ProtectedRoute><SettingsPage /></ProtectedRoute> },
                         { path: 'notifications', element: <ProtectedRoute><NotificationsPage /></ProtectedRoute> },

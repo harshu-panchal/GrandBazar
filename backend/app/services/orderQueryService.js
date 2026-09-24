@@ -114,8 +114,16 @@ export function buildSellerOrdersQuery({
   statusParam,
   startDate,
   endDate,
+  storeIds = [],
 }) {
-  const base = role === "admin" ? {} : { seller: userId };
+  let base = {};
+  if (role !== "admin") {
+    if (Array.isArray(storeIds) && storeIds.length > 0) {
+      base = { seller: storeIds.length === 1 ? storeIds[0] : { $in: storeIds } };
+    } else if (userId) {
+      base = { seller: userId };
+    }
+  }
   const withStatus = {
     ...base,
     ...normalizeSellerStatusFilter(statusParam),
@@ -126,18 +134,44 @@ export function buildSellerOrdersQuery({
 export async function fetchSellerOrdersPage({
   role,
   userId,
+  user,
   statusParam,
   startDate,
   endDate,
   skip,
   limit,
 }) {
+  let storeIds = [];
+  if (role !== "admin") {
+    const candidateIds = [
+      user?.activeStoreId,
+      userId,
+      user?.accountId,
+    ]
+      .map((s) => String(s || "").trim())
+      .filter(Boolean);
+
+    const ownerId = user?.accountId || userId;
+    let foundStores = [];
+    if (ownerId) {
+      try {
+        foundStores = await Store.find({ ownerId }).select("_id").lean();
+      } catch (err) {
+        console.warn("[fetchSellerOrdersPage] Store lookup by ownerId error:", err.message);
+      }
+    }
+    storeIds = [
+      ...new Set([...candidateIds, ...foundStores.map((s) => String(s._id))]),
+    ];
+  }
+
   const query = buildSellerOrdersQuery({
     role,
     userId,
     statusParam,
     startDate,
     endDate,
+    storeIds,
   });
 
   const [ordersRaw, total, summaryRows] = await Promise.all([
@@ -196,6 +230,45 @@ export async function fetchSellerOrdersPage({
       },
     ]),
   ]);
+
+  const now = new Date();
+  for (const o of ordersRaw) {
+    if (
+      (o.status === "pending" || o.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING) &&
+      o.sellerPendingExpiresAt &&
+      new Date(o.sellerPendingExpiresAt) <= now
+    ) {
+      o.status = "cancelled";
+      o.orderStatus = "cancelled";
+      o.workflowStatus = WORKFLOW_STATUS.CANCELLED;
+      o.cancelledBy = "system";
+      o.cancelReason = "Seller did not accept the order in time.";
+      Order.findOneAndUpdate(
+        { _id: o._id, workflowStatus: WORKFLOW_STATUS.SELLER_PENDING },
+        {
+          $set: {
+            workflowStatus: WORKFLOW_STATUS.CANCELLED,
+            status: "cancelled",
+            orderStatus: "cancelled",
+            cancelledBy: "system",
+            cancelReason: "Seller did not accept the order in time.",
+          },
+        },
+        { new: true },
+      )
+        .then(async (cancelled) => {
+          if (cancelled) {
+            try {
+              const { compensateOrderCancellation } = await import("./orderCompensation.js");
+              await compensateOrderCancellation(cancelled, cancelled.orderId);
+            } catch (e) {
+              console.warn("[fetchSellerOrdersPage] auto-cancel compensation failed:", e.message);
+            }
+          }
+        })
+        .catch((e) => console.warn("[fetchSellerOrdersPage] auto-cancel error:", e.message));
+    }
+  }
 
   const orders = attachDisplayStatusToList(await attachDeliveryPartners(ordersRaw));
 

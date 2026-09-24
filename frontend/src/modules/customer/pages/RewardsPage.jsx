@@ -20,6 +20,7 @@ import {
   Hourglass,
   History,
   BadgeCheck,
+  RotateCcw,
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useToast } from "@shared/components/ui/Toast";
@@ -457,7 +458,7 @@ const RewardsPage = () => {
                   <button
                     type="button"
                     onClick={() => goTab("cashback", "available")}
-                    className="bg-white rounded-xl p-4 border border-slate-100 text-left"
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
                   >
                     <Banknote className="w-5 h-5 text-emerald-600 mb-2" />
                     <p className="font-bold text-sm">My Cashback</p>
@@ -467,10 +468,21 @@ const RewardsPage = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => navigate("/transactions?tab=refunds")}
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <RotateCcw className="w-5 h-5 text-sky-600 mb-2" />
+                    <p className="font-bold text-sm">Refund History</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Track order refunds
+                    </p>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setTab("referrals");
                     }}
-                    className="bg-white rounded-xl p-4 border border-slate-100 text-left"
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
                   >
                     <Users className="w-5 h-5 text-violet-600 mb-2" />
                     <p className="font-bold text-sm">My Referrals</p>
@@ -484,7 +496,7 @@ const RewardsPage = () => {
                       setHistoryView("rewards");
                       setTab("history");
                     }}
-                    className="bg-white rounded-xl p-4 border border-slate-100 text-left"
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
                   >
                     <History className="w-5 h-5 text-slate-600 mb-2" />
                     <p className="font-bold text-sm">Reward History</p>
@@ -494,8 +506,19 @@ const RewardsPage = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => navigate("/wallet")}
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <Wallet className="w-5 h-5 text-emerald-600 mb-2" />
+                    <p className="font-bold text-sm">My Wallet</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Payments & debits
+                    </p>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setTab("alerts")}
-                    className="bg-white rounded-xl p-4 border border-slate-100 text-left"
+                    className="bg-white rounded-xl p-4 border border-slate-100 text-left hover:bg-slate-50 transition-colors"
                   >
                     <Bell className="w-5 h-5 text-rose-600 mb-2" />
                     <p className="font-bold text-sm">Notifications</p>
