@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   Store, MapPin, Clock, ArrowRight, Search, 
   Sparkles, Phone, Mail, Compass, Shield, ArrowUpRight, HelpCircle, Map, List, Filter, ChevronDown, Heart, Star
@@ -104,8 +104,15 @@ const StoresPage = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [expandedSellerId, setExpandedSellerId] = useState(null);
   const [noServiceData, setNoServiceData] = useState(null);
+  const [searchParams] = useSearchParams();
   const [filterDistance, setFilterDistance] = useState("all");
-  const [isMapView, setIsMapView] = useState(false);
+  const [isMapView, setIsMapView] = useState(() => searchParams.get("view") === "map");
+
+  useEffect(() => {
+    if (searchParams.get("view") === "map") {
+      setIsMapView(true);
+    }
+  }, [searchParams]);
 
   const { isLoaded } = useJsApiLoader(
     getGoogleMapsJsApiLoaderOptions(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""),

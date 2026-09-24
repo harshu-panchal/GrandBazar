@@ -665,7 +665,15 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   orderId = await requireCanonicalOrderId(orderId);
   const legacy = String(nextLegacyStatus || "").toLowerCase();
 
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  const candidateSellerIds = [sellerId];
+  if (mongoose.Types.ObjectId.isValid(sellerId)) {
+    const stores = await Store.find({
+      $or: [{ _id: sellerId }, { ownerId: sellerId }],
+    }).select("_id").lean();
+    stores.forEach((s) => candidateSellerIds.push(String(s._id)));
+  }
+
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;
@@ -833,13 +841,61 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   if (nextWorkflow === WORKFLOW_STATUS.PICKUP_READY) {
     $set.pickupReadyAt = now;
   }
+  let generatedDeliveryOtp = null;
   if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
     $set.outForDeliveryAt = now;
     if (Array.isArray(additionalData.pickupProofImages) && additionalData.pickupProofImages.length) {
       $set.pickupProofImages = additionalData.pickupProofImages;
     }
+    if (method === FULFILLMENT_METHOD.SELLER_DELIVERY) {
+      generatedDeliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
+      const codeHash = OrderOtp.hashCode(generatedDeliveryOtp);
+      await OrderOtp.deleteMany({ orderId, type: "delivery", consumedAt: null });
+      await OrderOtp.create({
+        orderId,
+        orderMongoId: order._id,
+        type: "delivery",
+        codeHash,
+        code: generatedDeliveryOtp,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        lastGeneratedAt: now,
+      });
+
+      emitToCustomer(order.customer.toString(), {
+        event: "delivery:otp:generated",
+        payload: {
+          orderId,
+          otp: generatedDeliveryOtp,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          deliveryPersonNearby: true,
+        },
+      });
+      emitToCustomer(order.customer.toString(), {
+        event: "order:otp",
+        payload: { orderId, code: generatedDeliveryOtp },
+      });
+    }
   }
   if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
+    if (method === FULFILLMENT_METHOD.SELLER_DELIVERY) {
+      const enteredOtp = String(additionalData.otp || "").trim();
+      if (!enteredOtp) {
+        const err = new Error("Please enter the 4-digit delivery OTP shared by the customer");
+        err.statusCode = 400;
+        throw err;
+      }
+      const otpRecord = await OrderOtp.findOne({ orderId, type: "delivery", consumedAt: null }).sort({
+        lastGeneratedAt: -1,
+        createdAt: -1,
+      });
+      const isMatch = otpRecord && (OrderOtp.hashCode(enteredOtp) === otpRecord.codeHash || enteredOtp === otpRecord.code);
+      if (!isMatch) {
+        const err = new Error("Invalid delivery OTP. Please verify the code with customer.");
+        err.statusCode = 400;
+        throw err;
+      }
+      await OrderOtp.updateOne({ _id: otpRecord._id }, { $set: { consumedAt: new Date() } });
+    }
     $set.deliveredAt = now;
     if (Array.isArray(additionalData.deliveryProofImages) && additionalData.deliveryProofImages.length) {
       $set.deliveryProofImages = additionalData.deliveryProofImages;
@@ -847,7 +903,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   }
 
   const updated = await Order.findOneAndUpdate(
-    { orderId, seller: sellerId, workflowStatus: ws },
+    { orderId, seller: { $in: candidateSellerIds }, workflowStatus: ws },
     { $set },
     { new: true },
   )
@@ -866,13 +922,13 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
 
   emitOrderStatusUpdate(
     orderId,
-    { workflowStatus: nextWorkflow, status: updated.status },
+    { workflowStatus: nextWorkflow, status: updated.status, orderStatus: updated.orderStatus },
     updated.customer?._id || updated.customer,
   );
 
   if (nextWorkflow === WORKFLOW_STATUS.PICKUP_READY || nextWorkflow === WORKFLOW_STATUS.CUSTOMER_PICKUP_READY) {
     emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PACKED, {
-      orderId,
+      orderId: updated.shortOrderId || orderId,
       customerId: updated.customer?._id || updated.customer,
       userId: updated.customer?._id || updated.customer,
       sellerId: updated.seller?._id || updated.seller,
@@ -880,16 +936,17 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   }
   if (nextWorkflow === WORKFLOW_STATUS.OUT_FOR_DELIVERY) {
     emitNotificationEvent(NOTIFICATION_EVENTS.OUT_FOR_DELIVERY, {
-      orderId,
+      orderId: updated.shortOrderId || orderId,
       customerId: updated.customer?._id || updated.customer,
       userId: updated.customer?._id || updated.customer,
       sellerId: updated.seller?._id || updated.seller,
       deliveryId: updated.deliveryBoy,
+      otp: generatedDeliveryOtp,
     });
   }
   if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
     emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
-      orderId,
+      orderId: updated.shortOrderId || orderId,
       customerId: updated.customer?._id || updated.customer,
       userId: updated.customer?._id || updated.customer,
       sellerId: updated.seller?._id || updated.seller,

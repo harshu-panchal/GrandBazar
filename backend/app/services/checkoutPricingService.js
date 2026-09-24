@@ -343,9 +343,19 @@ function applyGlobalCategoryFeesToSellerBreakdowns(
         discountTotal +
         taxTotal,
     );
-    breakdown.platformLogisticsMargin = round2(
-      deliveryFeeCharged + handlingFeeCharged + packingFeeCharged - riderPayoutTotal,
-    );
+    if (entry.fulfillmentMethod === "seller_delivery") {
+      // Seller self-delivers: delivery fee charged to customer belongs to seller
+      breakdown.sellerPayoutTotal = round2(
+        Number(breakdown.sellerPayoutTotal || 0) + deliveryFeeCharged,
+      );
+      breakdown.platformLogisticsMargin = round2(
+        handlingFeeCharged + packingFeeCharged - riderPayoutTotal,
+      );
+    } else {
+      breakdown.platformLogisticsMargin = round2(
+        deliveryFeeCharged + handlingFeeCharged + packingFeeCharged - riderPayoutTotal,
+      );
+    }
     breakdown.platformTotalEarning = round2(
       adminProductCommissionTotal +
         breakdown.platformLogisticsMargin +

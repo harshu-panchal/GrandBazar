@@ -12,6 +12,8 @@ import { getRedisClient } from "../config/redis.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { roundCurrency } from "../utils/money.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
 const LOC_MIN_INTERVAL_MS = () =>
   parseInt(process.env.LOCATION_MIN_INTERVAL_MS || "3000", 10);
@@ -906,6 +908,14 @@ export const generateDeliveryOtp = async (req, res) => {
                 emitToCustomer(customerId, {
                     event: 'delivery:otp:generated',
                     payload: otpPayload
+                });
+
+                emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP, {
+                    orderId: order.orderId,
+                    customerId,
+                    data: {
+                        otp: result.otp
+                    }
                 });
             }
             

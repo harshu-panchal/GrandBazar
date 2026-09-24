@@ -1,5 +1,6 @@
 import Transaction from "../../models/transaction.js";
 import Notification from "../../models/notification.js";
+import Store from "../../models/store.js";
 import { getAdminFinanceSummary } from "../finance/walletService.js";
 import { getLedgerEntries } from "../finance/ledgerService.js";
 
@@ -93,8 +94,22 @@ export async function getSellerWithdrawalsData({ page, limit, skip }) {
   };
 }
 
-export async function getSellerTransactionsData({ page, limit, skip }) {
+export async function getSellerTransactionsData({ page, limit, skip, sellerId, storeId }) {
   const query = { userModel: "Seller" };
+  const targetId = sellerId || storeId;
+  if (targetId) {
+    const stores = await Store.find({
+      $or: [{ _id: targetId }, { ownerId: targetId }],
+    }).select("_id ownerId").lean();
+
+    const ids = new Set([targetId.toString()]);
+    stores.forEach((s) => {
+      if (s._id) ids.add(s._id.toString());
+      if (s.ownerId) ids.add(s.ownerId.toString());
+    });
+    query.user = { $in: Array.from(ids) };
+  }
+
   const transactions = await Transaction.find(query)
     // NOTE: these Transaction docs are labeled userModel:"Seller" but "user" actually
     // holds a Store _id (see orderPlacementService.js) — refPath("Seller") would look

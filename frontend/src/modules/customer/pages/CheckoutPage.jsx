@@ -936,9 +936,13 @@ const CheckoutPage = () => {
     });
 
     const addonIdsStr = Array.from(allAddons).join(",");
-    
+    const primarySellerId = cart[0]?.sellerId || cart[0]?.storeId || cart[0]?.seller?._id || cart[0]?.seller;
+
     // Build common query parameters
-    const queryParams = { limit: 10 };
+    const queryParams = { limit: 12 };
+    if (primarySellerId) {
+      queryParams.sellerId = primarySellerId;
+    }
     if (currentLocation?.latitude && currentLocation?.longitude) {
       queryParams.lat = currentLocation.latitude;
       queryParams.lng = currentLocation.longitude;
@@ -952,13 +956,24 @@ const CheckoutPage = () => {
       originalPrice: p.customerPrice ?? p.price,
     });
 
+    const isAvailable = (p) => {
+      const stock = Number(p.stock ?? p.quantity ?? 1);
+      const isOos = Boolean(p.isOutOfStock || p.outOfStock);
+      const isActive = p.status ? p.status === "active" : true;
+      const matchesSeller = primarySellerId
+        ? String(p.sellerId || p.storeId || p.seller?._id || p.seller || "") === String(primarySellerId)
+        : true;
+      return stock > 0 && !isOos && isActive && matchesSeller && !cartIds.has(p._id || p.id);
+    };
+
     if (addonIdsStr) {
       // Fetch specific add-ons
       customerApi
         .getProducts({ productIds: addonIdsStr, ...queryParams })
         .then((res) => {
           if (res.data?.success) {
-            const items = (res.data.result?.items || []).map(formatRecommended);
+            const rawItems = res.data.result?.items || [];
+            const items = rawItems.filter(isAvailable).map(formatRecommended);
             setRecommendedProducts(items.slice(0, 8));
             setIsAddonRecommendation(true);
           }
@@ -973,9 +988,8 @@ const CheckoutPage = () => {
         .getProducts({ categoryId, ...queryParams })
         .then((res) => {
           if (res.data?.success) {
-            const items = (res.data.result?.items || [])
-              .map(formatRecommended)
-              .filter((p) => !cartIds.has(p.id));
+            const rawItems = res.data.result?.items || [];
+            const items = rawItems.filter(isAvailable).map(formatRecommended);
             setRecommendedProducts(items.slice(0, 8));
             setIsAddonRecommendation(false);
           }

@@ -126,3 +126,60 @@ export async function getUserByIdData(id) {
     })),
   };
 }
+
+export async function updateUserData(id, { name, email, phone }) {
+  const update = {};
+  if (name !== undefined) update.name = String(name).trim();
+  if (email !== undefined) update.email = String(email).trim().toLowerCase();
+  if (phone !== undefined) update.phone = String(phone).trim();
+
+  const updated = await User.findByIdAndUpdate(
+    id,
+    { $set: update },
+    { new: true, runValidators: true }
+  ).lean();
+  return updated;
+}
+
+export async function updateUserStatusData(id, { status, isActive }) {
+  let activeValue = true;
+  if (typeof isActive === "boolean") {
+    activeValue = isActive;
+  } else if (status) {
+    activeValue = status === "active";
+  }
+
+  const updated = await User.findByIdAndUpdate(
+    id,
+    { $set: { isActive: activeValue } },
+    { new: true }
+  ).lean();
+  return updated;
+}
+
+export async function sendCustomerNotificationData(id, { title, message }) {
+  const user = await User.findById(id).select("_id name").lean();
+  if (!user) throw new Error("Customer not found");
+
+  const { default: Notification } = await import("../../modules/notifications/notification.model.js");
+  const { deliverNotificationById } = await import("../../modules/notifications/notification.worker.js");
+  const { default: logger } = await import("../../services/logger.js");
+
+  const notifDoc = await Notification.create({
+    userId: String(id),
+    role: "customer",
+    type: "admin_announcement",
+    title: title || "Message from Support",
+    body: message,
+    data: { source: "admin_custom_message" },
+    status: "pending",
+  });
+
+  try {
+    await deliverNotificationById(notifDoc._id.toString());
+  } catch (err) {
+    logger.warn("Failed immediate push delivery for customer notification", { error: err.message });
+  }
+
+  return notifDoc;
+}

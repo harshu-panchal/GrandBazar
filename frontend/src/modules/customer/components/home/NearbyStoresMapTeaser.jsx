@@ -78,7 +78,7 @@ const NearbyStoresMapTeaser = () => {
 
         <button
           type="button"
-          onClick={() => navigate("/stores")}
+          onClick={() => navigate("/stores?view=map")}
           className="relative w-full h-48 md:h-64 rounded-3xl overflow-hidden border border-slate-100 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] cursor-pointer group text-left"
         >
           {isLoaded ? (

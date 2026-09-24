@@ -190,7 +190,29 @@ export const getNearbySellers = async (req, res) => {
 ================================ */
 export const requestWithdrawal = async (req, res) => {
   try {
-    const storeId = req.user.id;
+    const sellerId = req.user.id;
+    const candidateIds = [
+      sellerId,
+      req.user.activeStoreId,
+      req.user.accountId,
+    ].filter(Boolean);
+
+    const storeDocs = await Store.find({
+      $or: [
+        { _id: { $in: candidateIds.filter((id) => mongoose.Types.ObjectId.isValid(id)) } },
+        { ownerId: { $in: candidateIds.filter((id) => mongoose.Types.ObjectId.isValid(id)) } },
+      ],
+    }).select("_id").lean();
+
+    storeDocs.forEach((s) => {
+      if (s._id) candidateIds.push(String(s._id));
+    });
+
+    const candidateOids = Array.from(new Set(candidateIds))
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const targetStoreId = storeDocs[0]?._id || req.user.activeStoreId || sellerId;
     const { amount } = req.body;
 
     if (!amount || amount <= 0) {
@@ -198,7 +220,7 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     const transactions = await Transaction.find({
-      user: storeId,
+      user: { $in: candidateOids },
       userModel: { $in: ["Seller", "Store"] },
     })
       .select("status amount type")
@@ -216,12 +238,10 @@ export const requestWithdrawal = async (req, res) => {
       )
       .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
-    // Prefer the Wallet ledger — it's built from real settlement events and
-    // reflects the seller's actual payout, unlike summing Transaction.amount
-    // (some "Order Payment" rows were historically created with the customer's
-    // full grand total rather than the seller's payout, which would let a
-    // seller withdraw more than they're actually owed).
-    const wallet = await Wallet.findOne({ ownerType: "SELLER", ownerId: storeId });
+    const wallet = await Wallet.findOne({
+      ownerType: "SELLER",
+      ownerId: { $in: candidateOids },
+    });
     const availableBalance = wallet
       ? Number(wallet.availableBalance || 0) - pendingPayouts
       : settledBalance - pendingPayouts;
@@ -235,7 +255,7 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     const withdrawal = await Transaction.create({
-      user: storeId,
+      user: targetStoreId,
       userModel: "Store",
       type: "Withdrawal",
       amount: -Math.abs(amount),

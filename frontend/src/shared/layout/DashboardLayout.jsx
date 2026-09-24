@@ -703,9 +703,21 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                 )}
 
                                 {/* Seller Payout (Admin commission hidden) */}
-                                <div className="w-full bg-slate-50 rounded-2xl p-3.5 mb-3.5 border border-slate-100 flex items-center justify-between text-left">
-                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">You will receive</span>
-                                    <span className="text-xl font-black text-slate-900">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
+                                <div className="w-full bg-slate-50 rounded-2xl p-3.5 mb-3.5 border border-slate-100 space-y-2 text-left">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">You will receive</span>
+                                        <span className="text-xl font-black text-slate-900">₹{formatInr(getSellerOrderPayout(newOrderAlert))}</span>
+                                    </div>
+                                    {(newOrderAlert?.fulfillmentMethod === 'seller_delivery' || newOrderAlert?.logisticsMode === 'external') && (
+                                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                                            <span className="inline-flex items-center gap-1.5 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                                🚚 Self Delivery (You deliver)
+                                            </span>
+                                            <span className="font-semibold text-slate-600">
+                                                Incl. ₹{formatInr(newOrderAlert.paymentBreakdown?.deliveryFeeCharged ?? newOrderAlert.pricing?.deliveryFee ?? 0)} delivery fee
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Timer & Progress Bar */}

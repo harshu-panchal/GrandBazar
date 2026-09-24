@@ -123,12 +123,17 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   };
 
   const raiseDispute = async () => {
+    if (!disputeReason.trim()) {
+      toast.error("Please enter a description for the dispute");
+      return;
+    }
     try {
       await customerApi.raiseDispute(order.orderId, {
-        reason: disputeReason,
+        reason: disputeReason.trim(),
         reasonCategory: "other",
       });
       toast.success("Dispute raised");
+      setDisputeReason("");
       onRefresh?.();
     } catch (e) {
       toast.error(e.response?.data?.message || "Could not raise dispute");

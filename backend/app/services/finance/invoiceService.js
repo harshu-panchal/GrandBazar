@@ -330,13 +330,17 @@ async function buildInvoiceRecord(order, type) {
   const pricing = order.pricing || {};
 
   const [store, customer, platformSettings] = await Promise.all([
-    Store.findById(order.seller).select("shopName address city state pincode gstNumber").lean(),
+    Store.findById(order.seller)
+      .select("shopName address city state pincode gstNumber ownerId")
+      .populate("ownerId", "name phone email")
+      .lean(),
     Customer.findById(order.customer).select("name email phone").lean(),
     Setting.findOne().select("companyName address taxId logoUrl").lean(),
   ]);
 
   const billedFrom = {
     name: store?.shopName || "Seller Store",
+    sellerName: store?.ownerId?.name || store?.name || "",
     address: store?.address || "",
     city: store?.city || "",
     state: store?.state || "",

@@ -697,7 +697,12 @@ const OrderDetailPage = () => {
   const canRequestReturn = () => {
     if (!order) return false;
     if (order.status === "cancelled") return false;
-    if (order.status !== "delivered") return false;
+    const isOrderDelivered =
+      order.status === "delivered" ||
+      order.status === "disputed" ||
+      Boolean(order.deliveredAt) ||
+      order.workflowStatus === "DELIVERED";
+    if (!isOrderDelivered) return false;
     if (
       returnDetails &&
       returnDetails.returnStatus &&

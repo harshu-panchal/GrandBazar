@@ -14,14 +14,15 @@ const ShopStatusToggle = ({ className = '' }) => {
     const storeCtx = useOptionalStoreContext();
     const [isSaving, setIsSaving] = React.useState(false);
 
-    if (!storeCtx?.isOwner || !storeCtx.activeStore) return null;
+    if (!storeCtx?.activeStore) return null;
 
-    const { activeStore, setStores } = storeCtx;
+    const { activeStore, setStores, isOwner } = storeCtx;
     const approved = isApprovedStore(activeStore);
-    const isOpen = activeStore.isOpen !== false;
+    const isOpen = activeStore.isOpen !== false && activeStore.isActive !== false;
+    const canToggle = Boolean(isOwner && approved && !isSaving);
 
     const handleToggle = async () => {
-        if (!approved || isSaving) return;
+        if (!canToggle) return;
         if (
             isOpen &&
             !window.confirm(
@@ -49,13 +50,15 @@ const ShopStatusToggle = ({ className = '' }) => {
         <button
             type="button"
             onClick={handleToggle}
-            disabled={!approved || isSaving}
+            disabled={!canToggle}
             title={
                 !approved
-                    ? 'Store must be approved before you can toggle it'
-                    : isOpen
-                        ? 'Click to close your shop'
-                        : 'Click to open your shop'
+                    ? 'Store must be approved by admin before you can toggle it'
+                    : !isOwner
+                        ? `Store is currently ${isOpen ? 'Open' : 'Closed'}`
+                        : isOpen
+                            ? 'Click to close your shop'
+                            : 'Click to open your shop'
             }
             className={cn(
                 'flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all shrink-0',
@@ -65,6 +68,7 @@ const ShopStatusToggle = ({ className = '' }) => {
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                         : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100',
                 isSaving && 'opacity-60 cursor-wait',
+                !isOwner && 'cursor-default',
                 className
             )}
         >
@@ -75,7 +79,7 @@ const ShopStatusToggle = ({ className = '' }) => {
                 )}
             />
             <span className="hidden sm:inline">
-                {isSaving ? '...' : approved ? (isOpen ? 'Open' : 'Closed') : 'Pending'}
+                {isSaving ? '...' : approved ? (isOpen ? 'Store Open' : 'Store Closed') : 'Pending'}
             </span>
         </button>
     );

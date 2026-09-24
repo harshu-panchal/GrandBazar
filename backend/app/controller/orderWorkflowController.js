@@ -253,6 +253,13 @@ export const requestReturnPickupOtp = async (req, res) => {
           },
         });
 
+        // ── Push notification to customer (FCM) ──
+        emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_OTP, {
+          orderId,
+          customerId,
+          data: { otp: result.otp },
+        });
+
         // ── Send SMS to customer (BACKGROUND) ──
         setImmediate(async () => {
           try {
@@ -325,7 +332,7 @@ export const verifyReturnPickupOtp = async (req, res) => {
     // ── Credit rider commission on successful pickup (BACKGROUND) ────────────
     setImmediate(async () => {
       try {
-        const commission = order.returnDeliveryCommission || 0;
+        const commission = Number(order.returnDeliveryCommission) || 30;
         const alreadyPaid = order.financeFlags?.returnPickupCommissionPaid;
         if (commission > 0 && order.returnDeliveryBoy && !alreadyPaid) {
           await creditWallet({
@@ -406,6 +413,13 @@ export const requestReturnDropOtp = async (req, res) => {
             expiresAt: result.expiresAt,
             message: `Return drop OTP for order #${orderId}: ${result.otp}. Share with delivery partner to confirm receipt.`,
           },
+        });
+
+        // ── Push notification to seller (FCM) ──
+        emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_DROP_OTP, {
+          orderId,
+          sellerId,
+          data: { otp: result.otp },
         });
 
         // ── Send SMS to seller (BACKGROUND) ──

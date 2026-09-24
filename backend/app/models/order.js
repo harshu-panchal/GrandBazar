@@ -799,6 +799,10 @@ const orderSchema = new mongoose.Schema(
           required: true,
         },
         name: String,
+        image: {
+          type: String,
+          default: "",
+        },
         quantity: {
           type: Number,
           required: true,

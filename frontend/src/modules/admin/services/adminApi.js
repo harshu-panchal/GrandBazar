@@ -10,6 +10,9 @@ export const adminApi = {
     getDashboardOverview: (params) => axiosInstance.get('/admin/dashboard', { params }),
     getUsers: (params) => axiosInstance.get('/admin/users', { params }),
     getUserById: (id) => axiosInstance.get(`/admin/users/${id}`),
+    updateUser: (id, data) => axiosInstance.put(`/admin/users/${id}`, data),
+    updateUserStatus: (id, data) => axiosInstance.patch(`/admin/users/${id}/status`, data),
+    sendCustomerNotification: (id, data) => axiosInstance.post(`/admin/users/${id}/notify`, data),
     getActiveSellers: (params) => axiosInstance.get('/admin/sellers/active', { params }),
     getActiveSellerById: (id) => axiosInstance.get(`/admin/sellers/active/${id}`),
     getSellerLocations: (params) => axiosInstance.get('/admin/sellers/locations', { params }),
@@ -264,4 +267,8 @@ export const adminApi = {
         axiosInstance.delete(`/orders/admin/advance-bookings/${campaignId}`),
     cancelAdvanceBooking: (campaignId, data) =>
         axiosInstance.put(`/orders/admin/advance-bookings/${campaignId}/cancel`, data),
+
+    // Sellers & Transactions
+    getSellers: (params) => axiosInstance.get('/admin/sellers', { params }),
+    getSellerTransactions: (params) => axiosInstance.get('/seller-transactions', { params }),
 };

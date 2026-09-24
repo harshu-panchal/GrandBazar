@@ -493,25 +493,42 @@ export async function fetchAvailableOrdersForDelivery({
   };
 }
 
+function extractLatLng(loc) {
+  if (!loc) return null;
+  if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+    const lng = Number(loc.coordinates[0]);
+    const lat = Number(loc.coordinates[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  if (Array.isArray(loc) && loc.length >= 2) {
+    const lng = Number(loc[0]);
+    const lat = Number(loc[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  const lat = Number(loc.lat ?? loc.latitude);
+  const lng = Number(loc.lng ?? loc.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  return null;
+}
+
 /** Adds shop-to-customer distanceKm and a real riderEarnings estimate so the app's
  * new-order popup shows the same figures the rider will actually get, instead of
  * a "Nearby" placeholder and a naive 10%-of-total guess. */
 function attachDistanceAndEarningsPreview(order) {
-  const dropCoords = order.isReturnPickup
-    ? order.seller?.location?.coordinates
-    : order.address?.location?.coordinates;
-  const originCoords = order.isReturnPickup
-    ? order.address?.location?.coordinates
-    : order.seller?.location?.coordinates;
+  const sellerLoc = extractLatLng(order.seller?.location || order.sellerStore?.location);
+  const addressLoc = extractLatLng(order.address?.location || order.address);
+  const originLoc = order.isReturnPickup ? addressLoc : sellerLoc;
+  const dropLoc = order.isReturnPickup ? sellerLoc : addressLoc;
+
   let distanceKm;
-  if (
-    Array.isArray(originCoords) && originCoords.length >= 2 &&
-    Array.isArray(dropCoords) && dropCoords.length >= 2
-  ) {
-    const meters = distanceMeters(originCoords[1], originCoords[0], dropCoords[1], dropCoords[0]);
+  if (originLoc && dropLoc) {
+    const meters = distanceMeters(originLoc.lat, originLoc.lng, dropLoc.lat, dropLoc.lng);
     if (Number.isFinite(meters)) distanceKm = Math.round((meters / 1000) * 10) / 10;
   }
-  const riderEarnings = Number(order.paymentBreakdown?.riderPayoutTotal);
+  const riderEarnings = order.isReturnPickup
+    ? (Number(order.returnDeliveryCommission) || 30)
+    : Number(order.paymentBreakdown?.riderPayoutTotal);
+
   return {
     ...order,
     distanceKm,

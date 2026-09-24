@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronLeft, ShoppingBag, CreditCard, AlertTriangle, Star, Info } from "lucide-react";
+import { Bell, ChevronLeft, ShoppingBag, CreditCard, AlertTriangle, Star, Info, Trash2 } from "lucide-react";
 import { useToast } from "@shared/components/ui/Toast";
 import { sellerApi } from "../services/sellerApi";
 
@@ -62,6 +62,28 @@ const Notifications = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!window.confirm("Are you sure you want to delete all notifications?")) return;
+    try {
+      await sellerApi.clearAllNotifications();
+      setNotifications([]);
+      showToast("All notifications deleted", "success");
+    } catch (error) {
+      showToast("Failed to delete notifications", "error");
+    }
+  };
+
+  const handleDeleteOne = async (e, id) => {
+    e.stopPropagation();
+    try {
+      await sellerApi.deleteNotification(id);
+      setNotifications((current) => current.filter((n) => (n.id || n._id) !== id));
+      showToast("Notification removed", "success");
+    } catch (error) {
+      showToast("Failed to remove notification", "error");
+    }
+  };
+
   const hasUnread = (notifications || []).some((n) => !n.isRead);
 
   return (
@@ -74,14 +96,25 @@ const Notifications = () => {
           <ChevronLeft size={22} className="text-slate-800" />
         </button>
         <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Notifications</h1>
-        {hasUnread && (
-          <button
-            onClick={handleMarkAllRead}
-            className="ml-auto text-xs font-bold text-primary hover:bg-primary/5 px-3 py-1.5 rounded-full transition-colors"
-          >
-            Mark all read
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {hasUnread && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs font-bold text-primary hover:bg-primary/5 px-3 py-1.5 rounded-full transition-colors"
+            >
+              Mark all read
+            </button>
+          )}
+          {notifications && notifications.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="text-xs font-bold text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+            >
+              <Trash2 size={13} />
+              Delete all
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4">
@@ -136,6 +169,13 @@ const Notifications = () => {
                         {formatTimestamp(notification.createdAt)}
                       </p>
                     </div>
+                    <button
+                      onClick={(e) => handleDeleteOne(e, notification.id || notification._id)}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Delete notification"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
               );

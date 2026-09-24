@@ -77,7 +77,7 @@ const settingSchema = new mongoose.Schema(
         returnDeliveryCommission: {
             // Flat amount per return pickup, paid by seller
             type: Number,
-            default: 0,
+            default: 30,
         },
 
         /**

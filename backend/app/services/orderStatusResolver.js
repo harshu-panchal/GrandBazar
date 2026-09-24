@@ -165,7 +165,9 @@ export function resolveOrderStatus(order) {
   // lifecycle status — an order sitting at "delivered" with an active return
   // should read as the return state, not silently look finished.
   const returnLabel = returnStatusRaw
-    ? RETURN_STATUS_LABELS[returnStatusRaw] || returnStatusRaw.replace(/_/g, " ")
+    ? (returnStatusRaw === "return_pickup_assigned" && !order.returnDeliveryBoy
+        ? "Notifying Riders"
+        : (RETURN_STATUS_LABELS[returnStatusRaw] || returnStatusRaw.replace(/_/g, " ")))
     : null;
   if (returnLabel) label = returnLabel;
   else if (cancellationPending) label = "Cancellation Requested";

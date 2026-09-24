@@ -5,6 +5,7 @@ import Setting from "../models/setting.js";
 import handleResponse from "../utils/helper.js";
 import mongoose from "mongoose";
 import Wallet from "../models/wallet.js";
+import Store from "../models/store.js";
 import { resolveOrderStatus } from "../services/orderStatusResolver.js";
 
 const PERIOD_COMPARE_LABEL = {
@@ -415,7 +416,26 @@ export const getSellerStats = async (req, res) => {
 export const getSellerEarnings = async (req, res) => {
     try {
         const sellerId = req.user.id;
-        const sellerOid = new mongoose.Types.ObjectId(sellerId);
+        const candidateIds = [
+            sellerId,
+            req.user.activeStoreId,
+            req.user.accountId,
+        ].filter(Boolean);
+
+        const storeDocs = await Store.find({
+            $or: [
+                { _id: { $in: candidateIds.filter(id => mongoose.Types.ObjectId.isValid(id)) } },
+                { ownerId: { $in: candidateIds.filter(id => mongoose.Types.ObjectId.isValid(id)) } }
+            ]
+        }).select("_id").lean();
+
+        storeDocs.forEach(s => {
+            if (s._id) candidateIds.push(String(s._id));
+        });
+
+        const candidateOids = Array.from(new Set(candidateIds))
+            .filter(id => mongoose.Types.ObjectId.isValid(id))
+            .map(id => new mongoose.Types.ObjectId(id));
 
         const platformSettings = await Setting.findOne({}).select("sellerSettlementModuleEnabled").lean();
         const moduleEnabled = platformSettings?.sellerSettlementModuleEnabled !== false;
@@ -428,15 +448,11 @@ export const getSellerEarnings = async (req, res) => {
             });
         }
 
-        // Withdrawal-request Transactions are stored with userModel: "Store"
-        // (sellerController.js's requestWithdrawal), not "Seller" — querying
-        // "Seller" alone silently excludes every withdrawal this seller has
-        // ever made or has pending, so pendingPayouts/totalWithdrawn below
-        // always computed as 0 and "available balance" never reflected money
-        // already tied up or paid out. requestWithdrawal's own balance check
-        // already queries both models; mirror that here so what the seller
-        // sees matches what withdrawal submission actually enforces.
-        const transactions = await Transaction.find({ user: sellerId, userModel: { $in: ['Seller', 'Store'] } })
+        // Query transactions matching all candidate IDs (Store and Seller)
+        const transactions = await Transaction.find({
+            user: { $in: candidateOids },
+            userModel: { $in: ['Seller', 'Store'] }
+        })
             .sort({ createdAt: -1 })
             .populate({
                 path: "order",
@@ -456,25 +472,25 @@ export const getSellerEarnings = async (req, res) => {
             .filter(t => t.type === 'Withdrawal' && (t.status === 'Pending' || t.status === 'Processing'))
             .reduce((acc, t) => acc + Math.abs(t.amount), 0);
 
-        // Fetch wallet for live pending balance (money on hold due to return window)
-        const wallet = await Wallet.findOne({ ownerType: 'SELLER', ownerId: sellerId });
-        const onHoldBalance = wallet ? wallet.pendingBalance : 0;
-        // Net of pending/processing withdrawal requests, matching what requestWithdrawal
-        // actually allows a seller to withdraw right now.
+        // Fetch wallets for live balance (checking all candidate store/seller owner IDs)
+        const wallets = await Wallet.find({
+            ownerType: 'SELLER',
+            ownerId: { $in: candidateOids }
+        });
+        const totalWalletAvailable = wallets.reduce((acc, w) => acc + Number(w.availableBalance || 0), 0);
+        const onHoldBalance = wallets.reduce((acc, w) => acc + Number(w.pendingBalance || 0), 0);
+        // Net of pending/processing withdrawal requests, matching what requestWithdrawal allows
         const liveAvailableBalance = Math.max(
             0,
-            (wallet ? Number(wallet.availableBalance || 0) : settledBalance) - pendingPayouts,
+            (wallets.length > 0 ? totalWalletAvailable : settledBalance) - pendingPayouts,
         );
 
-        // "Total Revenue" here means the seller's own item revenue — the value of
-        // what they sold — not `pricing.total`, which is the customer's full grand
-        // total including delivery fee, platform fee, tax and tip (most of which
-        // never belongs to the seller).
+        // "Total Revenue": Seller's true earnings (sellerPayoutTotal), net of cancelled and refunded items
         const [orderRevenueAgg] = await Order.aggregate([
             {
                 $match: {
-                    seller: sellerOid,
-                    status: { $ne: 'cancelled' },
+                    seller: { $in: candidateOids },
+                    status: { $nin: ['cancelled', 'refunded'] },
                 },
             },
             {
@@ -482,16 +498,51 @@ export const getSellerEarnings = async (req, res) => {
                     _id: null,
                     totalRevenue: {
                         $sum: {
-                            $ifNull: [
-                                "$paymentBreakdown.productSubtotal",
-                                { $ifNull: ["$pricing.subtotal", 0] },
+                            $subtract: [
+                                {
+                                    $ifNull: [
+                                        "$paymentBreakdown.sellerPayoutTotal",
+                                        {
+                                            $ifNull: [
+                                                "$pricing.sellerPayoutTotal",
+                                                {
+                                                    $ifNull: [
+                                                        "$paymentBreakdown.productSubtotal",
+                                                        { $ifNull: ["$pricing.subtotal", 0] },
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                                {
+                                    $cond: [
+                                        {
+                                            $in: [
+                                                "$returnStatus",
+                                                [
+                                                    "qc_passed",
+                                                    "refund_initiated",
+                                                    "refund_completed",
+                                                ],
+                                            ],
+                                        },
+                                        {
+                                            $ifNull: [
+                                                "$paymentBreakdown.returnSellerClawback",
+                                                { $ifNull: ["$returnRefundAmount", 0] },
+                                            ],
+                                        },
+                                        0,
+                                    ],
+                                },
                             ],
                         },
                     },
                 },
             },
         ]);
-        const totalRevenue = Number(orderRevenueAgg?.totalRevenue || 0);
+        const totalRevenue = Math.max(0, Number(orderRevenueAgg?.totalRevenue || 0));
 
         const totalWithdrawn = transactions
             .filter(t => t.type === 'Withdrawal' && t.status === 'Settled')
@@ -504,9 +555,9 @@ export const getSellerEarnings = async (req, res) => {
         const monthlyAggregation = await Transaction.aggregate([
             {
                 $match: {
-                    user: new mongoose.Types.ObjectId(sellerId),
-                    userModel: 'Seller',
-                    type: 'Order Payment',
+                    user: { $in: candidateOids },
+                    userModel: { $in: ['Seller', 'Store'] },
+                    type: { $in: ['Order Payment', 'Seller Earning', 'Settlement'] },
                     createdAt: { $gte: sixMonthsAgo }
                 }
             },

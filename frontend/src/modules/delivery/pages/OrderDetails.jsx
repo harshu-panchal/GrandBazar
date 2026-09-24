@@ -934,20 +934,26 @@ const OrderDetails = () => {
                         >
                           {order.payment?.method?.toUpperCase() || "PENDING"}
                         </p>
-                        <p className="text-[10px] text-gray-400 font-medium">Bill: Rs.{order.pricing?.total}</p>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                          {isReturn
+                            ? `Refund: Rs.${order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total}`
+                            : `Bill: Rs.${order.pricing?.total}`}
+                        </p>
                       </div>
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 bg-brand-50 hover:bg-brand-100 text-brand-600 border-brand-200"
-                      title="Chat with Customer"
-                      onClick={() => setShowChatModal(true)}
-                    >
-                      <MessageSquare size={18} />
-                    </Button>
+                    {!isReturn && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 bg-brand-50 hover:bg-brand-100 text-brand-600 border-brand-200"
+                        title="Chat with Customer"
+                        onClick={() => setShowChatModal(true)}
+                      >
+                        <MessageSquare size={18} />
+                      </Button>
+                    )}
                     {(isReturn ? order.seller?.phone : order.address?.phone) && (
                       <Button
                         variant="outline"
@@ -1015,20 +1021,38 @@ const OrderDetails = () => {
                 className="overflow-hidden"
               >
                 <div className="p-4 border-t border-gray-100 bg-white space-y-3">
-                  {(isReturn ? order.returnItems : order.items)?.map((item, i) => (
-                    <div key={i} className="flex justify-between items-center text-sm">
-                      <div className="flex items-center">
-                        <span className="font-bold text-gray-500 mr-3 text-xs w-6 bg-white border border-gray-200 text-center rounded py-0.5">
-                          x{item.quantity}
-                        </span>
-                        <span className="text-gray-800 font-medium">{item.name}</span>
+                  {(isReturn ? order.returnItems : order.items)?.map((item, i) => {
+                    const itemImg = item.image || item.thumbnail || (order.items || []).find((it) => it.name === item.name)?.image;
+                    return (
+                      <div key={i} className="flex justify-between items-center text-sm gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {itemImg ? (
+                            <img
+                              src={itemImg}
+                              alt={item.name}
+                              className="h-10 w-10 rounded-lg object-cover border border-gray-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 shrink-0 text-xs font-bold">
+                              x{item.quantity}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-gray-800 font-medium text-xs truncate">{item.name}</p>
+                            <span className="text-[10px] text-gray-500 font-bold">Qty: {item.quantity}</span>
+                          </div>
+                        </div>
+                        <span className="font-bold text-gray-700 text-xs shrink-0">Rs.{item.price * item.quantity}</span>
                       </div>
-                      <span className="font-bold text-gray-600">Rs.{item.price * item.quantity}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="pt-3 mt-2 border-t border-gray-200 flex justify-between items-center">
-                    <span className="text-gray-500 text-sm">Total Bill</span>
-                    <span className="text-lg font-bold text-gray-900">Rs.{order.pricing?.total}</span>
+                    <span className="text-gray-500 text-sm">
+                      {isReturn ? "Refund Subtotal" : "Total Bill"}
+                    </span>
+                    <span className="text-lg font-bold text-gray-900">
+                      Rs.{isReturn ? (order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total) : order.pricing?.total}
+                    </span>
                   </div>
                 </div>
               </motion.div>

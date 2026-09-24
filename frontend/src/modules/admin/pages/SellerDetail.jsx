@@ -69,6 +69,8 @@ const SellerDetail = () => {
     const [sellerProductsPage, setSellerProductsPage] = useState(1);
     const [sellerProductsPageSize, setSellerProductsPageSize] = useState(25);
     const [sellerProductsTotal, setSellerProductsTotal] = useState(0);
+    const [transactions, setTransactions] = useState([]);
+    const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
     const [deliveryPolicyForm, setDeliveryPolicyForm] = useState({
         customerPickup: false,
         sellerDelivery: false,
@@ -388,6 +390,26 @@ const SellerDetail = () => {
             })
             .finally(() => {
                 if (!cancelled) setIsLoadingDeliveryPolicy(false);
+            });
+        return () => { cancelled = true; };
+    }, [activeTab, id, showToast]);
+
+    useEffect(() => {
+        if (activeTab !== 'transactions' || !id) return;
+        let cancelled = false;
+        setIsLoadingTransactions(true);
+        adminApi.getSellerTransactions({ sellerId: id, limit: 50 })
+            .then((res) => {
+                if (cancelled) return;
+                const payload = res.data?.result || res.data?.data || {};
+                const list = Array.isArray(payload.items) ? payload.items : (Array.isArray(payload) ? payload : []);
+                setTransactions(list);
+            })
+            .catch(() => {
+                if (!cancelled) showToast('Failed to load seller transactions', 'error');
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoadingTransactions(false);
             });
         return () => { cancelled = true; };
     }, [activeTab, id, showToast]);
@@ -780,31 +802,50 @@ const SellerDetail = () => {
                                     <Badge variant="blue" className="text-[9px] font-black">LAST 30 DAYS</Badge>
                                 </div>
                                 <div className="space-y-4">
-                                    {[
-                                        { id: 'TXN-8821', type: 'credit', desc: 'Order #ORD-9912 Settlement', amount: 765, date: 'Today, 14:20' },
-                                        { id: 'TXN-8810', type: 'debit', desc: 'Withdrawal to Bank', amount: 15000, date: 'Yesterday' },
-                                        { id: 'TXN-8792', type: 'credit', desc: 'Order #ORD-9821 Settlement', amount: 405, date: 'Yesterday' },
-                                        { id: 'TXN-8750', type: 'credit', desc: 'Order #ORD-9690 Settlement', amount: 135, date: '14 Feb' },
-                                    ].map((txn, i) => (
-                                        <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-md transition-all">
-                                            <div className="flex items-center gap-4">
-                                                <div className={cn("p-2 rounded-xl flex items-center justify-center",
-                                                    txn.type === 'credit' ? "bg-brand-100 text-brand-600" : "bg-rose-100 text-rose-600"
-                                                )}>
-                                                    {txn.type === 'credit' ? <TrendingUp className="h-4 w-4" /> : <Banknote className="h-4 w-4" />}
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs font-black text-slate-900">{txn.desc}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{txn.id} • {txn.date}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className={cn("text-sm font-black", txn.type === 'credit' ? "text-brand-600" : "text-rose-600")}>
-                                                    {txn.type === 'credit' ? '+' : '-'} ₹{txn.amount.toLocaleString()}
-                                                </p>
-                                            </div>
+                                    {isLoadingTransactions ? (
+                                        <div className="flex items-center justify-center p-12 text-slate-400">
+                                            <RotateCw className="h-6 w-6 animate-spin mr-2" /> Loading ledger transactions...
                                         </div>
-                                    ))}
+                                    ) : transactions.length === 0 ? (
+                                        <div className="text-center py-12 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                            No transactions recorded yet for this seller.
+                                        </div>
+                                    ) : (
+                                        transactions.map((txn, i) => {
+                                            const isCredit = txn.type === 'Credit' || txn.type === 'credit' || txn.amount > 0;
+                                            const formattedDate = txn.createdAt
+                                                ? new Date(txn.createdAt).toLocaleDateString('en-IN', {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })
+                                                : '—';
+                                            const txnId = txn.reference || txn.txnNumber || txn.id || (txn._id ? `TXN-${String(txn._id).slice(-6).toUpperCase()}` : `TXN-${i}`);
+                                            const desc = txn.description || txn.notes || (txn.order ? `Order #${txn.order?.orderId || txn.order?._id || txn.order} Settlement` : `${txn.type || 'Transaction'}`);
+
+                                            return (
+                                                <div key={txn._id || i} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-md transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={cn("p-2 rounded-xl flex items-center justify-center",
+                                                            isCredit ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                                                        )}>
+                                                            {isCredit ? <TrendingUp className="h-4 w-4" /> : <Banknote className="h-4 w-4" />}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-black text-slate-900">{desc}</p>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{txnId} • {formattedDate} • <span className="capitalize">{txn.status || 'Completed'}</span></p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className={cn("text-sm font-black", isCredit ? "text-emerald-600" : "text-rose-600")}>
+                                                            {isCredit ? '+' : '-'} ₹{Math.abs(txn.amount || 0).toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
                         )}

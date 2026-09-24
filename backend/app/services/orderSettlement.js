@@ -1,4 +1,5 @@
 import Transaction from "../models/transaction.js";
+import Order from "../models/order.js";
 import {
   handleCodOrderFinance,
   settleDeliveredOrder,
@@ -86,6 +87,51 @@ export async function applyDeliveredSettlement(order, orderIdString) {
     await handleCodOrderFinance(settled._id, {
       deliveryPartnerId: settled.deliveryBoy,
     });
+  } else if (isCod && settled.fulfillmentMethod === "seller_delivery" && !settled.financeFlags?.codMarkedCollected) {
+    // Seller delivered COD order: seller holds full cash (order total).
+    // Auto-deduct platform commission directly from seller's wallet balance (wallet can go negative).
+    const adminCommission = Number(
+      settled.paymentBreakdown?.adminProductCommissionTotal ??
+      settled.paymentBreakdown?.platformTotalEarning ??
+      0,
+    );
+    if (adminCommission > 0 && settled.seller) {
+      try {
+        const { debitWallet } = await import("./finance/walletService.js");
+        const { createLedgerEntry } = await import("./finance/ledgerService.js");
+        const { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } = await import("../constants/finance.js");
+        const debitRes = await debitWallet({
+          ownerType: OWNER_TYPE.SELLER,
+          ownerId: settled.seller,
+          amount: adminCommission,
+          bucket: "available",
+          allowNegative: true,
+        });
+
+        await createLedgerEntry({
+          orderId: settled._id,
+          walletId: debitRes.wallet._id,
+          actorType: OWNER_TYPE.SELLER,
+          actorId: settled.seller,
+          type: LEDGER_TRANSACTION_TYPE.ORDER_SETTLEMENT,
+          direction: LEDGER_DIRECTION.DEBIT,
+          amount: adminCommission,
+          paymentMode: "COD",
+          metadata: {
+            description: `Admin commission deduction for self-delivered COD order #${settled.shortOrderId || settled.orderId}`,
+          },
+        });
+
+        await Order.findByIdAndUpdate(settled._id, {
+          $set: {
+            "financeFlags.codMarkedCollected": true,
+            "paymentBreakdown.codCollectedAmount": settled.paymentBreakdown?.grandTotal || settled.pricing?.total || 0,
+          },
+        });
+      } catch (err) {
+        console.error(`[COD Settlement] Failed to auto-deduct commission from seller ${settled.seller}:`, err.message);
+      }
+    }
   }
 
   await syncLegacyDeliveryTransactions(settled, orderIdString);

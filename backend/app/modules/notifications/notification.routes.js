@@ -5,6 +5,7 @@ import {
   removePushToken,
   getNotifications,
   markNotificationsRead,
+  clearNotifications,
   getNotificationPreferences,
   updateNotificationPreferences,
   testPushNotification,
@@ -19,6 +20,9 @@ notificationRouter.use(verifyToken, resolveActiveStore);
 // Required APIs
 notificationRouter.get("/", getNotifications);
 notificationRouter.patch("/read", markNotificationsRead);
+notificationRouter.delete("/", clearNotifications);
+notificationRouter.delete("/clear-all", clearNotifications);
+notificationRouter.delete("/:id", clearNotifications);
 notificationRouter.post("/broadcast", allowRoles("admin"), broadcastNotification);
 notificationRouter.get("/broadcast/audience-stats", allowRoles("admin"), getBroadcastAudienceStats);
 

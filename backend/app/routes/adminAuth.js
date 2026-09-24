@@ -66,6 +66,9 @@ import {
     getCashSettlementHistory,
     getUsers,
     getUserById,
+    updateUser,
+    updateUserStatus,
+    sendCustomerNotification,
     getSellers,
     getSellerLocations,
     sendMessageToSeller,
@@ -297,6 +300,9 @@ router.delete("/staff/:id", verifyToken, allowSuperAdminOnly, deleteStaff);
 
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);
+router.put("/users/:id", verifyToken, allowRoles("admin"), updateUser);
+router.patch("/users/:id/status", verifyToken, allowRoles("admin"), updateUserStatus);
+router.post("/users/:id/notify", verifyToken, allowRoles("admin"), sendCustomerNotification);
 router.get("/login-activities", verifyToken, allowRoles("admin"), getLoginActivities);
 router.delete("/login-activities/:id", verifyToken, allowRoles("admin"), terminateSession);
 router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);

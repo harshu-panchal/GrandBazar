@@ -62,8 +62,9 @@ export const getSellerTransactions = async (req, res) => {
       defaultLimit: 25,
       maxLimit: 200,
     });
+    const { sellerId, storeId } = req.query;
 
-    const data = await getSellerTransactionsData({ page, limit, skip });
+    const data = await getSellerTransactionsData({ page, limit, skip, sellerId, storeId });
     return handleResponse(res, 200, "Seller transactions fetched", data);
   } catch (error) {
     return handleResponse(res, 500, error.message);

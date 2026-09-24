@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useAuth } from "@core/context/AuthContext";
 import Card from "@shared/components/ui/Card";
 import {
   Plus,
@@ -61,6 +62,13 @@ const makeSlug = (value) =>
     .replace(/-+/g, "-");
 
 const HeaderCategories = () => {
+  const { user, role } = useAuth();
+  const isSuperAdmin =
+    role === "superadmin" ||
+    role === "SUPER_ADMIN" ||
+    user?.role === "superadmin" ||
+    user?.role === "SUPER_ADMIN";
+
   const [categories, setCategories] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -344,7 +352,7 @@ const HeaderCategories = () => {
               Edit Rates ({selectedItems.length})
             </button>
           )}
-          {selectedItems.length > 0 && (
+          {isSuperAdmin && selectedItems.length > 0 && (
             <button
               onClick={handleBulkDelete}
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors text-sm font-medium">
@@ -516,14 +524,18 @@ const HeaderCategories = () => {
                         className="p-1 text-gray-500 hover:text-brand-600 transition-colors">
                         <Edit className="w-5 h-5" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setDeleteTarget(cat);
-                          setIsDeleteModalOpen(true);
-                        }}
-                        className="p-1 text-gray-500 hover:text-red-600 transition-colors">
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => {
+                            setDeleteTarget(cat);
+                            setIsDeleteModalOpen(true);
+                          }}
+                          className="p-1 text-gray-500 hover:text-red-600 transition-colors"
+                          title="Delete Category"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
                       </div>
                     </td>
                   </tr>

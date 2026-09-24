@@ -326,6 +326,7 @@ const AdminRoutes = () => {
   const { user } = useAuth();
   const [pendingDeliveryCount, setPendingDeliveryCount] = React.useState(0);
   const [pendingSellerCount, setPendingSellerCount] = React.useState(0);
+  const [pendingReturnCount, setPendingReturnCount] = React.useState(0);
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
     const r = user?.role;
@@ -379,6 +380,33 @@ const AdminRoutes = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdminOrAdmin]);
 
+  React.useEffect(() => {
+    if (!hasPermission("orders")) return undefined;
+    let cancelled = false;
+    const fetchPendingReturnCount = async () => {
+      try {
+        const res = await adminApi.getReturns();
+        const payload = res?.data?.result || {};
+        const items = Array.isArray(payload.items)
+          ? payload.items
+          : res?.data?.results || [];
+        const count = items.filter(
+          (r) => r.returnStatus === "return_requested" || r.returnStatus === "returned"
+        ).length;
+        if (!cancelled) setPendingReturnCount(count);
+      } catch {
+        // Non-fatal — badge just stays at its last known value.
+      }
+    };
+    fetchPendingReturnCount();
+    const poll = setInterval(fetchPendingReturnCount, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdminOrAdmin]);
+
   const navItemsWithBadges = React.useMemo(() => {
     const filteredItems = navItems.filter((item) => {
       if (item.label === "My Profile") return true;
@@ -390,6 +418,7 @@ const AdminRoutes = () => {
     const supportCount = Number.isFinite(totalUnread) ? totalUnread : 0;
     const deliveryCount = Number.isFinite(pendingDeliveryCount) ? pendingDeliveryCount : 0;
     const sellerCount = Number.isFinite(pendingSellerCount) ? pendingSellerCount : 0;
+    const returnCount = Number.isFinite(pendingReturnCount) ? pendingReturnCount : 0;
 
     return filteredItems.map((item) => {
       if (item?.label === "Customer Support" && supportCount > 0) {
@@ -401,9 +430,21 @@ const AdminRoutes = () => {
       if (item?.label === "Sellers" && sellerCount > 0) {
         return { ...item, badgeCount: sellerCount, badgePath: "/admin/sellers/pending" };
       }
+      if (item?.label === "Orders" && returnCount > 0) {
+        return {
+          ...item,
+          badgeCount: returnCount,
+          badgePath: "/admin/returns",
+          children: item.children?.map((child) =>
+            child.label === "Return Requests"
+              ? { ...child, badgeCount: returnCount }
+              : child
+          ),
+        };
+      }
       return item;
     });
-  }, [totalUnread, pendingDeliveryCount, pendingSellerCount, user, isSuperAdminOrAdmin]);
+  }, [totalUnread, pendingDeliveryCount, pendingSellerCount, pendingReturnCount, user, isSuperAdminOrAdmin]);
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">
@@ -500,7 +541,7 @@ const AdminRoutes = () => {
         {hasPermission("settings") && <Route path="/settings" element={<AdminSettings />} />}
         {hasPermission("system") && <Route path="/env" element={<EnvSettings />} />}
         
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </DashboardLayout>
   );

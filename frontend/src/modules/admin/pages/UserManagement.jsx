@@ -11,7 +11,9 @@ import {
   HiOutlinePencil, 
   HiOutlineLockClosed, 
   HiOutlineCheck,
-  HiOutlineX
+  HiOutlineX,
+  HiOutlineEye,
+  HiOutlineEyeOff
 } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -44,6 +46,7 @@ const UserManagement = () => {
   // Modal states
   const [isOpen, setIsOpen] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -84,6 +87,7 @@ const UserManagement = () => {
 
   const handleOpenCreate = () => {
     setEditId(null);
+    setShowPassword(false);
     setFormData({
       name: '',
       email: '',
@@ -96,6 +100,7 @@ const UserManagement = () => {
 
   const handleOpenEdit = (staff) => {
     setEditId(staff._id);
+    setShowPassword(false);
     setFormData({
       name: staff.name,
       email: staff.email,
@@ -326,7 +331,7 @@ const UserManagement = () => {
       {/* Modal dialog */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -359,6 +364,7 @@ const UserManagement = () => {
               {/* Modal Scrollable Form */}
               <form 
                 onSubmit={handleSubmit} 
+                autoComplete="off"
                 className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6"
                 data-lenis-prevent
                 data-lenis-prevent-touch
@@ -372,6 +378,7 @@ const UserManagement = () => {
                     <input
                       type="text"
                       required
+                      autoComplete="off"
                       placeholder="e.g. Rahul Sharma"
                       value={formData.name}
                       onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -384,6 +391,7 @@ const UserManagement = () => {
                     <input
                       type="email"
                       required
+                      autoComplete="off"
                       placeholder="e.g. rahul@zinto.com"
                       value={formData.email}
                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
@@ -395,14 +403,25 @@ const UserManagement = () => {
                     <label className="text-xs font-black uppercase tracking-wider text-slate-400">
                       Password {editId ? '(Leave blank to keep current)' : '*'}
                     </label>
-                    <input
-                      type="password"
-                      required={!editId}
-                      placeholder={editId ? '••••••••' : 'Minimum 6 characters'}
-                      value={formData.password}
-                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required={!editId}
+                        autoComplete="new-password"
+                        placeholder={editId ? '••••••••' : 'Minimum 6 characters'}
+                        value={formData.password}
+                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                        className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <HiOutlineEyeOff className="h-5 w-5" /> : <HiOutlineEye className="h-5 w-5" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">

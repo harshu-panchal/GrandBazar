@@ -301,6 +301,24 @@ export const markNotificationsRead = async (req, res) => {
   }
 };
 
+export const clearNotifications = async (req, res) => {
+  try {
+    const baseFilter = resolveNotificationFilter(req);
+    const notificationId = String(req.params?.id || req.body?.notificationId || "").trim();
+    const filter =
+      notificationId && mongoose.Types.ObjectId.isValid(notificationId)
+        ? { ...baseFilter, _id: notificationId }
+        : baseFilter;
+
+    const result = await Notification.deleteMany(filter);
+    return handleResponse(res, 200, "Notifications cleared successfully", {
+      deletedCount: Number(result.deletedCount || 0),
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 export const getNotificationPreferences = async (req, res) => {
   try {
     const userId = req?.user?.id;

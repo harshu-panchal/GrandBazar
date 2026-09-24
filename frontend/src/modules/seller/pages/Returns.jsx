@@ -44,7 +44,7 @@ const Returns = () => {
         "Completed",
     ];
 
-    const mapReturnStatusLabel = (status) => {
+    const mapReturnStatusLabel = (status, deliveryBoy = null) => {
         switch (status) {
             case "return_requested":
                 return "Requested";
@@ -53,7 +53,7 @@ const Returns = () => {
             case "return_rejected":
                 return "Rejected";
             case "return_pickup_assigned":
-                return "Pickup Assigned";
+                return deliveryBoy ? "Pickup Assigned" : "Notifying Riders";
             case "return_in_transit":
             case "return_drop_pending":
                 return "In Transit";
@@ -69,7 +69,7 @@ const Returns = () => {
         }
     };
 
-    const getStatusVariant = (status) => {
+    const getStatusVariant = (status, deliveryBoy = null) => {
         switch (status) {
             case "return_requested":
                 return "warning";
@@ -78,6 +78,7 @@ const Returns = () => {
             case "return_rejected":
                 return "error";
             case "return_pickup_assigned":
+                return deliveryBoy ? "secondary" : "warning";
             case "return_in_transit":
             case "return_drop_pending":
                 return "secondary";
@@ -391,11 +392,12 @@ const Returns = () => {
                                                 <div className="flex flex-col items-end gap-2 shrink-0">
                                                     <Badge
                                                         variant={getStatusVariant(
-                                                            ret.returnStatus
+                                                            ret.returnStatus,
+                                                            ret.returnDeliveryBoy
                                                         )}
                                                         className="text-[10px] font-black uppercase px-2 py-0"
                                                     >
-                                                        {mapReturnStatusLabel(ret.returnStatus)}
+                                                        {mapReturnStatusLabel(ret.returnStatus, ret.returnDeliveryBoy)}
                                                     </Badge>
                                                     <p className="text-xs font-black text-slate-900">
                                                         {"\u20B9"}
@@ -422,7 +424,7 @@ const Returns = () => {
 
             <AnimatePresence>
                 {isDetailsOpen && selectedReturn && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 lg:p-8">
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-6 lg:p-8">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -445,12 +447,14 @@ const Returns = () => {
                                     <div className="flex items-center space-x-2 mt-0.5">
                                         <Badge
                                             variant={getStatusVariant(
-                                                selectedReturn.returnStatus
+                                                selectedReturn.returnStatus,
+                                                selectedReturn.returnDeliveryBoy
                                             )}
                                             className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0"
                                         >
                                             {mapReturnStatusLabel(
-                                                selectedReturn.returnStatus
+                                                selectedReturn.returnStatus,
+                                                selectedReturn.returnDeliveryBoy
                                             )}
                                         </Badge>
                                     </div>
@@ -749,7 +753,7 @@ const Returns = () => {
                                             ) : (
                                                 <HiOutlineInboxStack className="h-4 w-4 mr-2" />
                                             )}
-                                            Assign Pickup
+                                            Notify Riders
                                         </Button>
                                     )}
                                 </div>
@@ -760,7 +764,7 @@ const Returns = () => {
             </AnimatePresence>
             <AnimatePresence>
                 {canManageReturns && isRejectModalOpen && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="fixed inset-0 z-[310] flex items-center justify-center p-4">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

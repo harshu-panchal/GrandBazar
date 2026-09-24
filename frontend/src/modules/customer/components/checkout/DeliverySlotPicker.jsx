@@ -101,8 +101,11 @@ export default function DeliverySlotPicker({
         if (Number.isFinite(Number(result.maxDaysAhead)) && Number(result.maxDaysAhead) > 0) {
           setMaxDaysAhead(Number(result.maxDaysAhead));
         }
+        const targetLabel = windowLabel || initLabel;
+        const matchingWindow = list.find((w) => w.label === targetLabel && w.available !== false);
         const firstAvailable = list.find((w) => w.available !== false);
-        const label = firstAvailable?.label || "";
+        const selectedWindow = matchingWindow || firstAvailable;
+        const label = selectedWindow?.label || "";
         setWindowLabel(label);
         if (!firstAvailable) {
           const reason =

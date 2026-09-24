@@ -35,9 +35,18 @@ function getFrontendBaseUrl() {
   return String(explicit).trim().replace(/\/+$/, "");
 }
 
-function buildOrderLink(orderId) {
+function buildOrderLink(orderId, role = "customer") {
   const id = String(orderId || "").trim();
   const baseUrl = getFrontendBaseUrl();
+  if (role === "seller") {
+    return id ? `${baseUrl}/seller/orders?orderId=${encodeURIComponent(id)}` : `${baseUrl}/seller/orders`;
+  }
+  if (role === "admin") {
+    return id ? `${baseUrl}/admin/orders/all?orderId=${encodeURIComponent(id)}` : `${baseUrl}/admin/orders/all`;
+  }
+  if (role === "delivery") {
+    return id ? `${baseUrl}/delivery/orders/${encodeURIComponent(id)}` : `${baseUrl}/delivery/orders`;
+  }
   if (!id) return `${baseUrl}/orders`;
   return `${baseUrl}/orders/${encodeURIComponent(id)}`;
 }
@@ -108,8 +117,11 @@ function eventDefinition(eventType) {
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Out For Delivery",
-        body: () => "Your order is on the way.",
+        title: (payload) => (payload.otp ? "Your Delivery OTP 🔐" : "Out For Delivery 🚚"),
+        body: (payload) =>
+          payload.otp
+            ? `Your order #${payload.orderId || ""} delivery OTP is ${payload.otp}. Share it with your delivery person upon arrival.`
+            : "Your order is on the way.",
       };
     case NOTIFICATION_EVENTS.ORDER_DELIVERED:
       return {
@@ -263,16 +275,41 @@ function eventDefinition(eventType) {
             ? `Order #${payload.orderId} is ready for pickup.`
             : "An order is ready for pickup.",
       };
+    case NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) =>
+          normalizeIdList(payload.customerId || payload.userId),
+        title: () => "Your Delivery OTP 🔐",
+        body: (payload) =>
+          payload.data?.otp
+            ? `Your delivery verification OTP for order #${payload.orderId || ""} is ${payload.data.otp}. Share this with the delivery partner.`
+            : "Your delivery verification OTP has been generated.",
+      };
     // ── Return Workflow Events ──────────────────────────────────────────────
     case NOTIFICATION_EVENTS.RETURN_REQUESTED:
       return {
-        role: NOTIFICATION_ROLES.SELLER,
-        recipientIds: (payload) => normalizeIdList(payload.sellerId),
-        title: () => "Return Request Received",
-        body: (payload) =>
-          payload.orderId
-            ? `Customer has requested a return for order #${payload.orderId}.`
-            : "A new return request has been received.",
+        multi: true,
+        definitions: [
+          {
+            role: NOTIFICATION_ROLES.SELLER,
+            recipientIds: (payload) => normalizeIdList(payload.sellerId),
+            title: () => "Return Request Received",
+            body: (payload) =>
+              payload.orderId
+                ? `Customer has requested a return for order #${payload.orderId}.`
+                : "A new return request has been received.",
+          },
+          {
+            role: NOTIFICATION_ROLES.ADMIN,
+            recipientIds: (payload) => normalizeIdList(payload.adminIds),
+            title: () => "New Return Request",
+            body: (payload) =>
+              payload.orderId
+                ? `Customer requested return for order #${payload.orderId}.`
+                : "A new return request has been submitted.",
+          },
+        ],
       };
     case NOTIFICATION_EVENTS.RETURN_APPROVED:
       return {
@@ -788,11 +825,31 @@ function eventData(eventType, payload = {}, role) {
 
   const orderId = String(payload.orderId || "").trim() || undefined;
   const checkoutGroupId = String(payload.checkoutGroupId || "").trim() || undefined;
+  let link = buildOrderLink(orderId, role);
+  if (
+    eventType === NOTIFICATION_EVENTS.RETURN_REQUESTED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_APPROVED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_REJECTED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_PICKUP_OTP ||
+    eventType === NOTIFICATION_EVENTS.RETURN_DROP_OTP ||
+    eventType === NOTIFICATION_EVENTS.RETURN_COMPLETED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_QC_REQUESTED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_QC_PASSED ||
+    eventType === NOTIFICATION_EVENTS.RETURN_QC_FAILED
+  ) {
+    const baseUrl = getFrontendBaseUrl();
+    if (role === NOTIFICATION_ROLES.SELLER) {
+      link = orderId ? `${baseUrl}/seller/returns?orderId=${encodeURIComponent(orderId)}` : `${baseUrl}/seller/returns`;
+    } else if (role === NOTIFICATION_ROLES.ADMIN) {
+      link = orderId ? `${baseUrl}/admin/returns?orderId=${encodeURIComponent(orderId)}` : `${baseUrl}/admin/returns`;
+    }
+  }
   return {
     eventType,
     orderId,
     checkoutGroupId,
-    link: buildOrderLink(orderId),
+    link,
     ...(payload.data || {}),
   };
 }

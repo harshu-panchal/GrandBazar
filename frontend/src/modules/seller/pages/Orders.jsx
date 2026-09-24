@@ -268,6 +268,7 @@ const Orders = () => {
     const [pickupOtpCooldown, setPickupOtpCooldown] = useState(0);
     const [pickupVerifyOtp, setPickupVerifyOtp] = useState('');
     const [pickupOtpVerifying, setPickupOtpVerifying] = useState(false);
+    const [deliveryOtp, setDeliveryOtp] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -762,9 +763,10 @@ const Orders = () => {
             return;
         }
 
-        if (normalizedStatus === 'delivered' && !additionalData.deliveryProofImages) {
+        if (normalizedStatus === 'delivered' && (!additionalData.deliveryProofImages || (isSelfDelivery && !additionalData.otp))) {
             setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'deliveryProofImages' });
             setPickupImage(null);
+            setDeliveryOtp('');
             setIsPickupModalOpen(true);
             return;
         }
@@ -1282,6 +1284,14 @@ const Orders = () => {
     };
 
     const confirmPickup = () => {
+        const isDelivery = pendingStatusUpdate?.status === 'delivered';
+        const targetOrder = orders.find((o) => o.id === pendingStatusUpdate?.orderId) || (selectedOrder?.id === pendingStatusUpdate?.orderId ? selectedOrder : null);
+        const isSelfDelivery = targetOrder ? resolveFulfillmentMethod(targetOrder) === 'seller_delivery' : false;
+
+        if (isDelivery && isSelfDelivery && (!deliveryOtp || deliveryOtp.trim().length !== 4)) {
+            showToast('Please enter the 4-digit customer delivery OTP', 'error');
+            return;
+        }
         if (!pickupImage) {
             showToast('Please upload a proof image first', 'error');
             return;
@@ -1289,7 +1299,8 @@ const Orders = () => {
         if (pendingStatusUpdate) {
             const field = pendingStatusUpdate.proofField || 'pickupProofImages';
             handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
-                [field]: [pickupImage]
+                [field]: [pickupImage],
+                otp: deliveryOtp ? deliveryOtp.trim() : undefined,
             });
         }
     };
@@ -1946,6 +1957,24 @@ const Orders = () => {
                                                 ? 'Please upload a photo confirming the order was delivered to the customer.'
                                                 : 'Please upload a photo of the order being handed over to the delivery partner.'}
                                         </p>
+                                        {pendingStatusUpdate?.status === 'delivered' && (
+                                            <div className="space-y-1.5 text-left bg-purple-50 p-3.5 rounded-2xl border border-purple-200">
+                                                <label className="text-[11px] font-black text-purple-900 uppercase tracking-wider block">
+                                                    Customer Delivery OTP *
+                                                </label>
+                                                <Input
+                                                    type="text"
+                                                    maxLength={4}
+                                                    placeholder="Enter 4-digit OTP"
+                                                    value={deliveryOtp}
+                                                    onChange={(e) => setDeliveryOtp(e.target.value.replace(/\D/g, ''))}
+                                                    className="text-center font-mono text-lg font-bold tracking-widest bg-white"
+                                                />
+                                                <p className="text-[10px] font-medium text-purple-700">
+                                                    Ask the customer for the 4-digit delivery OTP shown in their app/notification.
+                                                </p>
+                                            </div>
+                                        )}
                                         <div className="relative h-48 w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors">
                                             {pickupImage ? (
                                                 <img src={pickupImage} alt="Delivery Proof" className="h-full w-full object-cover" />
@@ -2823,6 +2852,8 @@ const Orders = () => {
                                             </div>
                                         )}
                                         {!['delivered', 'cancelled', 'returned'].includes((selectedOrder.status || '').toLowerCase())
+                                            && (!selectedOrder.returnStatus || selectedOrder.returnStatus === 'none')
+                                            && !selectedOrder.isReturn
                                             && selectedOrder.reschedule?.status !== 'requested' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 flex items-center justify-between gap-3">
                                                 <div>
@@ -2844,11 +2875,15 @@ const Orders = () => {
                                         )}
                                         {(() => {
                                             const s = (selectedOrder.status || '').toLowerCase();
+                                            const isOrderReturn = Boolean(
+                                                selectedOrder.returnStatus && selectedOrder.returnStatus !== 'none'
+                                            ) || Boolean(selectedOrder.isReturn);
                                             const canAdjustPrice =
-                                                !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
+                                                !isOrderReturn
+                                                && !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(s)
                                                 && canSellerManuallyUpdateStatus(selectedOrder)
                                                 && selectedOrder.priceAdjustment?.status !== 'pending';
-                                            const canSplitOrReplace = canSellerSplitOrReplace(selectedOrder);
+                                            const canSplitOrReplace = !isOrderReturn && canSellerSplitOrReplace(selectedOrder);
                                             const canCancelItems = canAdjustPrice && selectedOrder.items.length > 1;
                                             const showItemActions = (canAdjustPrice || canSplitOrReplace) && !adjustMode && !cancelItemsMode;
                                             return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../services/adminApi';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
@@ -80,6 +80,13 @@ const CustomerDetail = () => {
         if (id) fetchCustomerDetails();
     }, [id]);
 
+    const [searchParams] = useSearchParams();
+    useEffect(() => {
+        if (searchParams.get('edit') === 'true' && customer) {
+            setIsEditModalOpen(true);
+        }
+    }, [searchParams, customer]);
+
     const handleRefresh = () => {
         setIsRefreshing(true);
         setTimeout(() => {
@@ -88,25 +95,56 @@ const CustomerDetail = () => {
         }, 1000);
     };
 
-    const handleUpdateProfile = (e) => {
+    const handleUpdateProfile = async (e) => {
         e.preventDefault();
-        setCustomer({ ...editForm });
-        setIsEditModalOpen(false);
-        showToast('Profile updated successfully', 'success');
+        try {
+            const { data } = await adminApi.updateUser(id, editForm);
+            if (data.success) {
+                setCustomer(prev => ({ ...prev, ...editForm }));
+                setIsEditModalOpen(false);
+                showToast('Profile updated successfully', 'success');
+            } else {
+                showToast(data.message || 'Failed to update profile', 'error');
+            }
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update profile', 'error');
+        }
     };
 
-    const handleSendNotif = () => {
+    const handleSendNotif = async () => {
         if (!notifMessage.trim()) return;
-        setIsNotifModalOpen(false);
-        setNotifMessage('');
-        showToast('Notification sent to user', 'success');
+        try {
+            const { data } = await adminApi.sendCustomerNotification(id, {
+                title: 'Notification from Admin',
+                message: notifMessage.trim()
+            });
+            if (data.success) {
+                setIsNotifModalOpen(false);
+                setNotifMessage('');
+                showToast('Notification sent to user', 'success');
+            } else {
+                showToast(data.message || 'Failed to send notification', 'error');
+            }
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to send notification', 'error');
+        }
     };
 
-    const handleRestrictAccount = () => {
-        const newStatus = customer.status === 'active' ? 'restricted' : 'active';
-        setCustomer({ ...customer, status: newStatus });
-        setIsRestrictModalOpen(false);
-        showToast(`Account successfully ${newStatus === 'restricted' ? 'restricted' : 'activated'}`, newStatus === 'restricted' ? 'warning' : 'success');
+    const handleRestrictAccount = async () => {
+        const newStatus = customer.status === 'active' ? 'inactive' : 'active';
+        const isActive = newStatus === 'active';
+        try {
+            const { data } = await adminApi.updateUserStatus(id, { status: newStatus, isActive });
+            if (data.success) {
+                setCustomer(prev => ({ ...prev, status: newStatus }));
+                setIsRestrictModalOpen(false);
+                showToast(`Account successfully ${newStatus === 'inactive' ? 'restricted' : 'activated'}`, newStatus === 'inactive' ? 'warning' : 'success');
+            } else {
+                showToast(data.message || 'Failed to update account status', 'error');
+            }
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to update account status', 'error');
+        }
     };
 
     const handleSaveNotes = () => {

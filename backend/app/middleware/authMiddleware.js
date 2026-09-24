@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
+import User from "../models/customer.js";
 import Seller from "../models/seller.js";
 import Store from "../models/store.js";
 import { isStoreApproved, loadOwnerStores, pickDefaultActiveStoreId } from "../services/storeService.js";
@@ -89,7 +90,7 @@ import { updateLastActive } from "../services/loginActivityService.js";
 /* ===============================
    Verify Token
 ================================ */
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   try {
     const token = extractJwtFromHeaders(req);
 
@@ -101,6 +102,17 @@ export const verifyToken = (req, res, next) => {
 
     if (decoded?.purpose === "password_reset") {
       return handleResponse(res, 401, "Invalid or expired token");
+    }
+
+    if (decoded.role === "user" || decoded.role === "customer") {
+      const userDoc = await User.findById(decoded.id).select("isActive").lean();
+      if (userDoc && userDoc.isActive === false) {
+        return handleResponse(
+          res,
+          403,
+          "Your account has been suspended or restricted. Please contact customer support.",
+        );
+      }
     }
 
     req.user = decoded;

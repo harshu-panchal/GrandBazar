@@ -8,6 +8,7 @@ import {
     Search,
     Download,
     Eye,
+    Edit,
     Phone,
     ShoppingBag,
     MoreVertical,
@@ -285,11 +286,16 @@ const CustomerManagement = () => {
                                                 <button
                                                     onClick={() => navigate(`/admin/customers/${cust.id}`)}
                                                     className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all"
+                                                    title="View Details"
                                                 >
                                                     <Eye className="ds-icon-sm" />
                                                 </button>
-                                                <button className="p-2 bg-gray-50 text-gray-400 rounded-lg hover:bg-gray-900 hover:text-white transition-all">
-                                                    <MoreVertical className="ds-icon-sm" />
+                                                <button
+                                                    onClick={() => navigate(`/admin/customers/${cust.id}?edit=true`)}
+                                                    className="p-2 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-900 hover:text-white transition-all"
+                                                    title="Edit Profile"
+                                                >
+                                                    <Edit className="ds-icon-sm" />
                                                 </button>
                                             </div>
                                         </td>

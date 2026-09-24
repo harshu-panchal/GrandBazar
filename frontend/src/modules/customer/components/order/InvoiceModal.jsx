@@ -157,13 +157,18 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
                                     {/* Billed From (Seller) */}
                                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Billed From (Seller)</p>
-                                        <h3 className="text-sm font-bold text-slate-900">{order.sellerStoreName || order.sellerName || 'Merchant Store'}</h3>
+                                        <h3 className="text-sm font-bold text-slate-900">{order.sellerStoreName || order.seller?.shopName || order.sellerName || 'Merchant Store'}</h3>
+                                        {(order.sellerName || order.seller?.ownerId?.name) && (order.sellerName !== (order.sellerStoreName || order.seller?.shopName)) && (
+                                            <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                                                Sold by: {order.sellerName || order.seller?.ownerId?.name}
+                                            </p>
+                                        )}
                                         <p className="text-xs text-slate-600 mt-1 whitespace-pre-line leading-relaxed">
-                                            {order.sellerAddress || 'Verified Store Partner'}
+                                            {order.sellerAddress || order.seller?.address || 'Verified Store Partner'}
                                         </p>
-                                        {order.sellerGst && (
+                                        {(order.sellerGst || order.seller?.gstNumber) && (
                                             <p className="text-xs font-mono font-semibold text-slate-700 mt-2 bg-slate-100 px-2.5 py-1 rounded-md inline-block">
-                                                GSTIN: {order.sellerGst}
+                                                GSTIN: {order.sellerGst || order.seller?.gstNumber}
                                             </p>
                                         )}
                                     </div>

@@ -253,6 +253,7 @@ const CartPage = () => {
                                                         sellerId={primarySellerId}
                                                         fulfillmentType="preorder"
                                                         campaignId={preorderItem.campaignId}
+                                                        initialTimeSlot={schedulePayload?.timeSlot}
                                                         onChange={setSchedule}
                                                     />
                                                 ) : null}
@@ -286,6 +287,7 @@ const CartPage = () => {
                                                     <DeliverySlotPicker
                                                         sellerId={primarySellerId}
                                                         fulfillmentType={fulfillmentType}
+                                                        initialTimeSlot={schedulePayload?.timeSlot}
                                                         onChange={setSchedule}
                                                     />
                                                 ) : null}
@@ -309,7 +311,7 @@ const CartPage = () => {
                                     ) : (
                                         <Link to="/checkout" className="block">
                                             <Button className="h-14 w-full rounded-full bg-brand-400 text-slate-950 hover:bg-brand-300 text-base font-black flex items-center justify-center gap-2 shadow-[0_18px_35px_rgba(16,185,129,0.3)] transition-all">
-                                                Place Order <ArrowRight size={18} />
+                                                Proceed to Checkout <ArrowRight size={18} />
                                             </Button>
                                         </Link>
                                     )}

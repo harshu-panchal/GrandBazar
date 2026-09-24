@@ -511,10 +511,20 @@ export const getOrderDetails = async (req, res) => {
       .populate("deliveryBoy", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
       .populate("deliveryPartner", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
       .populate("returnDeliveryBoy", "name phone email profileImage vehicleType vehicleNumber")
-      .populate("seller", "shopName name address phone location")
+      .populate({
+        path: "seller",
+        select: "shopName name address city state pincode gstNumber location phone ownerId",
+        populate: { path: "ownerId", select: "name phone email" },
+      })
       .lean();
 
     if (order) {
+      if (order.seller && typeof order.seller === "object") {
+        order.sellerStoreName = order.seller.shopName || order.seller.name;
+        order.sellerName = order.seller.ownerId?.name || order.seller.name;
+        order.sellerAddress = order.seller.address || [order.seller.city, order.seller.state, order.seller.pincode].filter(Boolean).join(", ");
+        order.sellerGst = order.seller.gstNumber;
+      }
       [order] = await attachDeliveryPartners([order]);
     }
 
@@ -863,7 +873,13 @@ export const requestReturn = async (req, res) => {
       return handleResponse(res, 404, "Order not found");
     }
 
-    if (order.status !== "delivered") {
+    const isDelivered =
+      order.status === "delivered" ||
+      order.status === "disputed" ||
+      Boolean(order.deliveredAt) ||
+      order.workflowStatus === "DELIVERED";
+
+    if (!isDelivered) {
       return handleResponse(
         res,
         400,
@@ -976,6 +992,7 @@ export const requestReturn = async (req, res) => {
         name: original.name,
         quantity: qty,
         price: original.price,
+        image: original.image || original.thumbnail || "",
         variantSlot: original.variantSlot,
         itemIndex,
         status: "requested",
@@ -995,11 +1012,14 @@ export const requestReturn = async (req, res) => {
 
     await order.save();
 
+    const adminIds = (await Admin.find().select("_id").lean()).map((a) => a?._id).filter(Boolean);
+
     emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REQUESTED, {
       orderId: order.orderId,
       customerId: order.customer,
       sellerId: order.seller,
+      adminIds,
       data: {
         reason: order.returnReason,
         reasonDetail: order.returnReasonDetail,
@@ -1079,9 +1099,9 @@ export const getReturnDetails = async (req, res) => {
     ) {
       try {
         const settings = await Setting.findOne({});
-        returnDeliveryCommission = settings?.returnDeliveryCommission ?? 0;
+        returnDeliveryCommission = Number(settings?.returnDeliveryCommission) || 30;
       } catch {
-        returnDeliveryCommission = 0;
+        returnDeliveryCommission = 30;
       }
     }
 
@@ -1431,7 +1451,7 @@ export const approveReturnRequest = async (req, res) => {
     );
 
     const settings = await Setting.findOne({});
-    const returnCommission = settings?.returnDeliveryCommission ?? 0;
+    const returnCommission = Number(settings?.returnDeliveryCommission) || 30;
 
     order.returnItems = order.returnItems.map((item) => ({
       ...(item.toObject?.() ?? item),
@@ -1745,7 +1765,8 @@ export const assignReturnDelivery = async (req, res) => {
           preview: {
             pickup: "Customer Address",
             drop: "Seller Store",
-            total: order.pricing?.total || 0,
+            total: order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0,
+            earnings: order.returnDeliveryCommission || 30,
           },
           deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
           at: new Date().toISOString(),
@@ -1753,20 +1774,21 @@ export const assignReturnDelivery = async (req, res) => {
       });
     } else {
       // Trigger broadcast for nearby riders
+      const returnItemList = order.returnItems?.length ? order.returnItems : (order.items || []);
       const payload = {
         orderId: order.orderId,
         type: "RETURN_PICKUP",
         isReturnPickup: true,
-        items: (order.items || []).map(item => ({
+        items: returnItemList.map(item => ({
           name: item.name,
           quantity: item.quantity,
-          image: item.image || item.thumbnail
+          image: item.image || item.thumbnail || (order.items || []).find(it => it.name === item.name)?.image || ""
         })),
         preview: {
           pickup: order.address?.completeAddress || "Customer Address",
           drop: order.sellerBranchArea || "Seller Store",
-          total: order.pricing?.total || 0,
-          earnings: order.paymentBreakdown?.riderPayoutTotal || 0,
+          total: order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0,
+          earnings: order.returnDeliveryCommission || 30,
         },
         deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
       };
@@ -2121,6 +2143,7 @@ export const completeReturnAndRefund = async (order) => {
           ownerId: order.seller,
           amount: sellerClawback,
           bucket: "available",
+          allowNegative: true,
         });
         actualSellerDebit = sellerClawback;
       } catch (error) {

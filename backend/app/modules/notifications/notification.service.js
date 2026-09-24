@@ -18,7 +18,15 @@ const localDedupeStore = new Map();
 let listenerRegistered = false;
 
 function dedupeKeyForNotification(eventType, notification, payload = {}) {
+  const isOtpEvent = [
+    NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
+    NOTIFICATION_EVENTS.RETURN_DROP_OTP,
+    NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
+  ].includes(eventType);
+  const otpCode = isOtpEvent ? (payload.data?.otp || payload.otp || Date.now()) : null;
+
   const orderRef =
+    otpCode ||
     payload.messageId ||
     payload.messageCreatedAt ||
     payload.ticketId ||
@@ -98,8 +106,10 @@ function isDeliveryUpdateEvent(eventType) {
   return [
     NOTIFICATION_EVENTS.DELIVERY_ASSIGNED,
     NOTIFICATION_EVENTS.ORDER_READY,
+    NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
     NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED,
     NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
+    NOTIFICATION_EVENTS.RETURN_DROP_OTP,
   ].includes(eventType);
 }
 
@@ -151,7 +161,12 @@ export async function notify(eventType, payload = {}) {
     return { enqueued: 0, skipped: 0, duplicates: 0, notificationIds: [] };
   }
 
-  const dedupeTtlSeconds = DEFAULT_DEDUP_TTL_SECONDS();
+  const isOtpEvent = [
+    NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
+    NOTIFICATION_EVENTS.RETURN_DROP_OTP,
+    NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
+  ].includes(eventType);
+  const dedupeTtlSeconds = isOtpEvent ? 5 : DEFAULT_DEDUP_TTL_SECONDS();
   let enqueued = 0;
   let skipped = 0;
   let duplicates = 0;

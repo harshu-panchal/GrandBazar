@@ -1018,6 +1018,7 @@ export async function generateOrderPaymentBreakdown({
   session = null,
   skipDeliveryFee = false,
   includeCustomerSurcharge = true,
+  fulfillmentMethod = null,
 }) {
   const normalizedItems = Array.isArray(preHydratedItems) && preHydratedItems.length > 0
     ? preHydratedItems
@@ -1409,6 +1410,11 @@ export async function generateOrderPaymentBreakdown({
   // category-hierarchy packing fee below, which is a platform line-item fee.
   sellerPayoutTotal = addMoney(sellerPayoutTotal, packing.productPackagingFeeCharged);
 
+  // If seller fulfills delivery directly, the delivery fee charged to customer belongs to seller
+  if (fulfillmentMethod === "seller_delivery") {
+    sellerPayoutTotal = addMoney(sellerPayoutTotal, delivery.deliveryFeeCharged);
+  }
+
   // Odd-hour / weather surcharges use a configurable platform/seller revenue
   // split (default 100% platform, matching the legacy single-surcharge behavior).
   const oddHourSellerShare = oddHourActive
@@ -1425,7 +1431,7 @@ export async function generateOrderPaymentBreakdown({
   // The optional per-product packaging charge is excluded here — it's
   // already routed to the seller above, not platform margin.
   const platformLogisticsMargin = roundCurrency(
-    delivery.deliveryFeeCharged +
+    (fulfillmentMethod === "seller_delivery" ? 0 : delivery.deliveryFeeCharged) +
       handling.handlingFeeCharged +
       (packing.packingFeeCharged - packing.productPackagingFeeCharged) -
       (rider.riderPayoutBase + rider.riderPayoutDistance + rider.riderPayoutBonus),

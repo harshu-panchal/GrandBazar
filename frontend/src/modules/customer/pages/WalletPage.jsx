@@ -57,18 +57,43 @@ const WalletPage = () => {
                 }));
                 setTransactions(items);
 
-                // Bug #268 — Refunds: orders that were refunded to wallet
-                const refundedOrders = orders.filter(
-                    (o) => o.status === 'cancelled' && Number(o.refundAmount || 0) > 0
-                );
-                const refundItems = refundedOrders.map((o) => ({
-                    _id: `refund-${o._id}`,
-                    type: 'credit',
-                    title: 'Refund',
-                    amount: o.refundAmount,
-                    date: o.updatedAt || o.createdAt,
-                    orderId: o.orderId,
-                }));
+                // Refunds: orders that were cancelled/refunded or returned/refunded to wallet
+                const refundItems = [];
+                for (const o of orders) {
+                    const cancelRefund = Number(o.refundAmount || 0);
+                    const returnRefund = Number(o.returnRefundAmount || 0);
+                    const isReturnRefund = (o.returnStatus === 'refund_completed' || o.returnStatus === 'refund_initiated' || o.returnStatus === 'returned' || o.returnStatus === 'qc_passed') && (returnRefund > 0 || cancelRefund > 0);
+                    const isCancelledRefund = (o.status === 'cancelled' || o.refundStatus === 'refunded') && cancelRefund > 0;
+
+                    if (isReturnRefund) {
+                        refundItems.push({
+                            _id: `refund-return-${o._id}`,
+                            type: 'credit',
+                            title: 'Return Refund',
+                            amount: returnRefund || cancelRefund,
+                            date: o.updatedAt || o.createdAt,
+                            orderId: o.orderId,
+                        });
+                    } else if (isCancelledRefund) {
+                        refundItems.push({
+                            _id: `refund-cancel-${o._id}`,
+                            type: 'credit',
+                            title: 'Cancellation Refund',
+                            amount: cancelRefund,
+                            date: o.updatedAt || o.createdAt,
+                            orderId: o.orderId,
+                        });
+                    } else if (cancelRefund > 0) {
+                        refundItems.push({
+                            _id: `refund-${o._id}`,
+                            type: 'credit',
+                            title: 'Refund',
+                            amount: cancelRefund,
+                            date: o.updatedAt || o.createdAt,
+                            orderId: o.orderId,
+                        });
+                    }
+                }
                 setRefunds(refundItems);
             } catch (err) {
                 console.error('Wallet fetch error:', err);

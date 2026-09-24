@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useAuth } from "@core/context/AuthContext";
 import Card from "@shared/components/ui/Card";
 import Pagination from "@shared/components/ui/Pagination";
 import { handleCategoryImageError } from "@core/utils/imageUtils";
@@ -36,6 +37,13 @@ const makeSlug = (value) =>
     .replace(/-+/g, "-");
 
 const SubCategories = () => {
+  const { user, role } = useAuth();
+  const isSuperAdmin =
+    role === "superadmin" ||
+    role === "SUPER_ADMIN" ||
+    user?.role === "superadmin" ||
+    user?.role === "SUPER_ADMIN";
+
   const [categories, setCategories] = useState([]);
   const [level2Categories, setLevel2Categories] = useState([]);
   const [headerCategories, setHeaderCategories] = useState([]);
@@ -574,14 +582,18 @@ const SubCategories = () => {
                           className="p-1 text-gray-500 hover:text-brand-600 transition-colors">
                           <Edit className="w-5 h-5" />
                         </button>
-                        <button
-                          onClick={() => {
-                            setDeleteTarget(cat);
-                            setIsDeleteModalOpen(true);
-                          }}
-                          className="p-1 text-gray-500 hover:text-red-600 transition-colors">
-                          <Trash className="w-5 h-5" />
-                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => {
+                              setDeleteTarget(cat);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="p-1 text-gray-500 hover:text-red-600 transition-colors"
+                            title="Delete Category"
+                          >
+                            <Trash className="w-5 h-5" />
+                          </button>
+                        )}
                         </div>
                       </td>
                     </tr>

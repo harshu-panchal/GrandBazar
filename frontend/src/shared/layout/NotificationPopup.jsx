@@ -12,7 +12,11 @@ const resolveNotificationPath = (notif) => {
     if (!link || typeof link !== 'string') return null;
     try {
         const url = new URL(link, window.location.origin);
-        return `${url.pathname}${url.search}${url.hash}`;
+        let path = `${url.pathname}${url.search}${url.hash}`;
+        if (window.location.pathname.startsWith('/seller') && (path === '/orders' || path.startsWith('/orders/'))) {
+            path = `/seller/orders`;
+        }
+        return path;
     } catch {
         return null;
     }

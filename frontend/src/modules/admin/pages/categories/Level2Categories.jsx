@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useAuth } from "@core/context/AuthContext";
 import { createPortal } from "react-dom";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
@@ -38,6 +39,13 @@ const makeSlug = (value) =>
     .replace(/-+/g, "-");
 
 const Level2Categories = () => {
+  const { user, role } = useAuth();
+  const isSuperAdmin =
+    role === "superadmin" ||
+    role === "SUPER_ADMIN" ||
+    user?.role === "superadmin" ||
+    user?.role === "SUPER_ADMIN";
+
   const [categories, setCategories] = useState([]);
   const [headerCategories, setHeaderCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -377,7 +385,7 @@ const Level2Categories = () => {
               Edit Rates ({selectedItems.length})
             </button>
           )}
-          {selectedItems.length > 0 && (
+          {isSuperAdmin && selectedItems.length > 0 && (
             <button
               onClick={handleBulkDelete}
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium">
@@ -589,14 +597,18 @@ const Level2Categories = () => {
                         className="p-1 text-gray-500 hover:text-brand-600 transition-colors">
                         <Edit className="w-5 h-5" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setDeleteTarget(cat);
-                          setIsDeleteModalOpen(true);
-                        }}
-                        className="p-1 text-gray-500 hover:text-red-600 transition-colors">
-                        <Trash className="w-5 h-5" />
-                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => {
+                            setDeleteTarget(cat);
+                            setIsDeleteModalOpen(true);
+                          }}
+                          className="p-1 text-gray-500 hover:text-red-600 transition-colors"
+                          title="Delete Category"
+                        >
+                          <Trash className="w-5 h-5" />
+                        </button>
+                      )}
                       </div>
                     </td>
                   </tr>

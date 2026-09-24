@@ -33,6 +33,22 @@ export async function getOrCreateWallet(ownerType, ownerId, { session } = {}) {
   if (session) options.session = session;
 
   let wallet = await Wallet.findOne(query, null, options);
+  if (!wallet && (ownerType === "SELLER" || ownerType === OWNER_TYPE.SELLER) && normalizedOwnerId) {
+    try {
+      const Store = (await import("../../models/store.js")).default;
+      const store = await Store.findOne({
+        $or: [{ _id: normalizedOwnerId }, { ownerId: normalizedOwnerId }],
+      }).lean();
+      if (store) {
+        const altId = String(store._id) === String(normalizedOwnerId) ? store.ownerId : store._id;
+        if (altId) {
+          wallet = await Wallet.findOne({ ownerType, ownerId: altId }, null, options);
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
   if (!wallet) {
     wallet = await Wallet.create(
       [
@@ -87,6 +103,7 @@ export async function debitWallet({
   ownerId,
   amount,
   bucket = "available",
+  allowNegative = false,
   session,
 }) {
   const normalizedAmount = assertPositiveAmount(amount);
@@ -98,7 +115,7 @@ export async function debitWallet({
 
   const field = `${bucket}Balance`;
   const before = roundCurrency(wallet[field] || 0);
-  if (before < normalizedAmount) {
+  if (!allowNegative && before < normalizedAmount) {
     throw new Error(`Insufficient ${bucket} balance`);
   }
 
