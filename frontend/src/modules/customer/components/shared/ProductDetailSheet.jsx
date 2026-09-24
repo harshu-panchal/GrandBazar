@@ -49,6 +49,7 @@ const ProductDetailSheet = () => {
     const [expandedSections, setExpandedSections] = useState(['description']); // Start with description open
     const [sellerProfile, setSellerProfile] = useState(null);
     const [sellerLoading, setSellerLoading] = useState(false);
+    const [addons, setAddons] = useState([]);
 
     const toggleSection = (section) => {
         setExpandedSections(prev => 
@@ -103,6 +104,36 @@ const ProductDetailSheet = () => {
         if (selectedProduct?.sellerId?._id || selectedProduct?.sellerId) {
             const id = typeof selectedProduct.sellerId === 'object' ? selectedProduct.sellerId._id : selectedProduct.sellerId;
             fetchSellerProfile(id);
+        }
+
+        // Fetch / hydrate product add-ons
+        if (selectedProduct?.addons && selectedProduct.addons.length > 0) {
+            const first = selectedProduct.addons[0];
+            if (typeof first === "object" && first !== null) {
+                setAddons(selectedProduct.addons);
+            } else {
+                const ids = selectedProduct.addons.map((a) => (typeof a === "object" ? a?._id || a?.id : a)).filter(Boolean);
+                if (ids.length > 0) {
+                    customerApi.getProducts({ productIds: ids.join(",") })
+                        .then((res) => {
+                            if (res.data?.success) {
+                                setAddons(res.data.result?.items || []);
+                            }
+                        })
+                        .catch(() => setAddons([]));
+                }
+            }
+        } else if (selectedProduct?.id || selectedProduct?._id) {
+            const pid = selectedProduct.id || selectedProduct._id;
+            customerApi.getProductById(pid)
+                .then((res) => {
+                    if (res.data?.success && Array.isArray(res.data.result?.addons)) {
+                        setAddons(res.data.result.addons);
+                    }
+                })
+                .catch(() => setAddons([]));
+        } else {
+            setAddons([]);
         }
     }, [selectedProduct]);
 
@@ -724,6 +755,53 @@ const ProductDetailSheet = () => {
                                             <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
                                             <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-white border border-gray-200 rounded-full" />
                                         </div>
+
+                                        {/* Frequently Paired Add-ons */}
+                                        {addons && addons.length > 0 && (
+                                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 my-3">
+                                                <div className="flex items-center gap-2 mb-2.5">
+                                                    <span className="text-amber-600 font-bold">✨</span>
+                                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Frequently Paired Add-ons</h4>
+                                                </div>
+                                                <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
+                                                    {addons.map((addon) => {
+                                                        const aid = addon._id || addon.id;
+                                                        const aPrice = addon.effectivePrice ?? addon.customerSalePrice ?? addon.salePrice ?? addon.price;
+                                                        const inCart = cart.some((c) => String(c.id || c._id) === String(aid));
+                                                        return (
+                                                            <div key={aid} className="flex-shrink-0 w-28 bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs flex flex-col justify-between">
+                                                                <div>
+                                                                    {addon.mainImage && (
+                                                                        <img src={applyCloudinaryTransform(addon.mainImage, "f_auto,q_auto,w_120")} alt={addon.name} className="w-full h-16 object-contain rounded-lg mb-1.5" />
+                                                                    )}
+                                                                    <p className="text-[11px] font-bold text-slate-800 line-clamp-1">{addon.name}</p>
+                                                                    <p className="text-[11px] font-black text-amber-600 mt-0.5">₹{aPrice}</p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        addToCart({
+                                                                            ...addon,
+                                                                            id: aid,
+                                                                            price: Number(aPrice),
+                                                                        });
+                                                                        showToast(`${addon.name} added to cart`, "success");
+                                                                    }}
+                                                                    className={cn(
+                                                                        "mt-2 w-full py-1 text-[10px] font-black rounded-lg uppercase tracking-wider transition-all",
+                                                                        inCart
+                                                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                                            : "bg-slate-900 text-white hover:bg-slate-800"
+                                                                    )}
+                                                                >
+                                                                    {inCart ? "In cart" : "+ Add"}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Product Information Accordion (Desktop) */}
                                         <div className="mt-8 border-t border-slate-100">

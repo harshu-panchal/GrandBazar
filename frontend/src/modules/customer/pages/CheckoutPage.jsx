@@ -69,6 +69,7 @@ import {
   getCartSellerIds,
   isSellerCoupon,
   isSellerCouponEligibleForCart,
+  resolveCartItemSellerId,
 } from "@shared/utils/couponEligibility";
 import CheckoutRecommendedProducts from "./checkout/components/CheckoutRecommendedProducts";
 import CheckoutWishlistSection from "./checkout/components/CheckoutWishlistSection";
@@ -923,20 +924,22 @@ const CheckoutPage = () => {
       return;
     }
 
-    const cartIds = new Set(cart.map((i) => i.id || i._id));
+    const cartIds = new Set(cart.map((i) => String(i.id || i._id)));
     const allAddons = new Set();
     
-    cart.forEach(item => {
+    cart.forEach((item) => {
       if (item.addons && Array.isArray(item.addons)) {
-        item.addons.forEach(addon => {
-          // If the addon isn't already in the cart, add it to our list
-          if (!cartIds.has(addon)) allAddons.add(addon);
+        item.addons.forEach((addon) => {
+          const addonId = typeof addon === "object" ? String(addon?._id || addon?.id || "") : String(addon || "");
+          if (addonId && addonId !== "[object Object]" && !cartIds.has(addonId)) {
+            allAddons.add(addonId);
+          }
         });
       }
     });
 
     const addonIdsStr = Array.from(allAddons).join(",");
-    const primarySellerId = cart[0]?.sellerId || cart[0]?.storeId || cart[0]?.seller?._id || cart[0]?.seller;
+    const primarySellerId = resolveCartItemSellerId(cart[0]);
 
     // Build common query parameters
     const queryParams = { limit: 12 };
@@ -958,12 +961,12 @@ const CheckoutPage = () => {
 
     const isAvailable = (p) => {
       const stock = Number(p.stock ?? p.quantity ?? 1);
-      const isOos = Boolean(p.isOutOfStock || p.outOfStock);
+      const hasVariantStock = Array.isArray(p.variants) && p.variants.some((v) => Number(v?.stock || 0) > 0);
+      const isOos = Boolean(p.isOutOfStock || p.outOfStock) || (stock <= 0 && !hasVariantStock);
       const isActive = p.status ? p.status === "active" : true;
-      const matchesSeller = primarySellerId
-        ? String(p.sellerId || p.storeId || p.seller?._id || p.seller || "") === String(primarySellerId)
-        : true;
-      return stock > 0 && !isOos && isActive && matchesSeller && !cartIds.has(p._id || p.id);
+      const productSellerId = resolveCartItemSellerId(p);
+      const matchesSeller = primarySellerId ? productSellerId === primarySellerId : true;
+      return !isOos && isActive && matchesSeller && !cartIds.has(String(p._id || p.id));
     };
 
     if (addonIdsStr) {
@@ -980,19 +983,57 @@ const CheckoutPage = () => {
         })
         .catch(() => {});
     } else {
-      // Fallback: fetch by category of the first item
-      const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
-      if (!categoryId) return;
-
+      // Check if any product in cart has newly configured addons on backend (stale cart fallback)
+      const cartProductIdsStr = Array.from(cartIds).join(",");
       customerApi
-        .getProducts({ categoryId, ...queryParams })
+        .getProducts({ productIds: cartProductIdsStr, ...queryParams })
         .then((res) => {
           if (res.data?.success) {
-            const rawItems = res.data.result?.items || [];
-            const items = rawItems.filter(isAvailable).map(formatRecommended);
-            setRecommendedProducts(items.slice(0, 8));
-            setIsAddonRecommendation(false);
+            const freshItems = res.data.result?.items || [];
+            const freshAddons = new Set();
+            freshItems.forEach((item) => {
+              if (item.addons && Array.isArray(item.addons)) {
+                item.addons.forEach((addon) => {
+                  const aid = typeof addon === "object" ? String(addon?._id || addon?.id || "") : String(addon || "");
+                  if (aid && aid !== "[object Object]" && !cartIds.has(aid)) {
+                    freshAddons.add(aid);
+                  }
+                });
+              }
+            });
+
+            if (freshAddons.size > 0) {
+              const freshAddonsStr = Array.from(freshAddons).join(",");
+              customerApi
+                .getProducts({ productIds: freshAddonsStr, ...queryParams })
+                .then((addonRes) => {
+                  if (addonRes.data?.success) {
+                    const rawAddons = addonRes.data.result?.items || [];
+                    const items = rawAddons.filter(isAvailable).map(formatRecommended);
+                    setRecommendedProducts(items.slice(0, 8));
+                    setIsAddonRecommendation(true);
+                  }
+                })
+                .catch(() => {});
+              return;
+            }
           }
+
+          // Fallback: fetch by category of the first item
+          const categoryId = cart[0]?.categoryId?._id || cart[0]?.categoryId;
+          if (!categoryId) return;
+
+          customerApi
+            .getProducts({ categoryId, ...queryParams })
+            .then((catRes) => {
+              if (catRes.data?.success) {
+                const rawItems = catRes.data.result?.items || [];
+                const items = rawItems.filter(isAvailable).map(formatRecommended);
+                setRecommendedProducts(items.slice(0, 8));
+                setIsAddonRecommendation(false);
+              }
+            })
+            .catch(() => {});
         })
         .catch(() => {});
     }

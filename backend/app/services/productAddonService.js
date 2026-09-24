@@ -6,7 +6,7 @@ import { getApprovedOrLegacyFilter } from "./productModerationService.js";
 import { computeCustomerPriceFieldsForWrite } from "./finance/customerPriceService.js";
 
 const ADDON_FIELDS =
-  "name slug price salePrice customerPrice customerSalePrice mainImage stock status sellerId subcategoryId applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status sellerId subcategoryId variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule";
 
 /**
  * Hydrates a product's addons[] (bare Product refs) into full addon cards,
@@ -24,7 +24,10 @@ export async function resolveProductAddons(product) {
     Product.find({
       _id: { $in: addonIds },
       status: "active",
-      stock: { $gt: 0 },
+      $or: [
+        { stock: { $gt: 0 } },
+        { "variants.stock": { $gt: 0 } },
+      ],
       isCurrentlyAvailable: { $ne: false },
       ...getApprovedOrLegacyFilter(),
     })
@@ -67,6 +70,11 @@ export async function resolveProductAddons(product) {
           addonProduct.customerPrice ??
           addonProduct.salePrice ??
           addonProduct.price;
+
+        if (!effectivePrice && Array.isArray(addonProduct.variants) && addonProduct.variants.length > 0) {
+          const v = addonProduct.variants[0];
+          effectivePrice = v?.customerSalePrice ?? v?.customerPrice ?? v?.salePrice ?? v?.price ?? 0;
+        }
       }
 
       return {

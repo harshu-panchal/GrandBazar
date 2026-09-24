@@ -88,9 +88,21 @@ const ProductDetailPage = () => {
             const res = await customerApi.getProductById(productId, params);
             if (res.data.success) {
                 const p = res.data.result;
+                let resolvedAddons = Array.isArray(p.addons) ? p.addons : [];
+                if (resolvedAddons.length > 0 && typeof resolvedAddons[0] === 'string') {
+                    try {
+                        const addonRes = await customerApi.getProducts({ productIds: resolvedAddons.join(','), ...params });
+                        if (addonRes.data?.success) {
+                            resolvedAddons = addonRes.data.result?.items || [];
+                        }
+                    } catch (e) {
+                        console.error("Failed to hydrate addons in detail page:", e);
+                    }
+                }
                 const formatted = {
                     ...p,
                     id: p._id,
+                    addons: resolvedAddons,
                     images: [p.mainImage, ...(p.galleryImages || [])].filter(Boolean)
                 };
                 setProduct(formatted);
@@ -160,10 +172,12 @@ const ProductDetailPage = () => {
     };
 
     const handleAddToCart = async (addon) => {
+        const addonId = addon._id || addon.id;
+        const addonPrice = addon.effectivePrice ?? addon.customerSalePrice ?? addon.salePrice ?? addon.price;
         const res = await addToCart({
             ...addon,
-            id: addon._id,
-            price: addon.effectivePrice ?? addon.salePrice ?? addon.price,
+            id: addonId,
+            price: Number(addonPrice),
         });
         if (res?.ok !== false) {
             showToast(`${addon.name} added to cart`, 'success');
@@ -420,6 +434,50 @@ const ProductDetailPage = () => {
                 </div>
             </div>
 
+            {/* Frequently Paired Add-ons Section */}
+            {product?.addons && Array.isArray(product.addons) && product.addons.length > 0 && (
+                <div className="mt-12 bg-amber-50/60 border border-amber-200/70 rounded-[2.5rem] p-6 md:p-8 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Sparkles className="h-6 w-6 text-amber-600" />
+                        <div>
+                            <h3 className="text-xl md:text-2xl font-black text-slate-900">Frequently Paired Add-ons</h3>
+                            <p className="text-xs text-amber-800/80 font-medium">Recommended by seller to pair with {product.name}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {product.addons.map((addon) => {
+                            const addonPrice = addon.effectivePrice ?? addon.customerSalePrice ?? addon.salePrice ?? addon.price;
+                            const isAdded = cart.some((c) => String(c.id || c._id) === String(addon._id || addon.id));
+                            return (
+                                <div key={addon._id || addon.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col justify-between group hover:shadow-md transition-shadow">
+                                    <div>
+                                        {addon.mainImage && (
+                                            <div className="w-full h-28 overflow-hidden rounded-xl mb-3 bg-slate-50 flex items-center justify-center">
+                                                <img src={applyCloudinaryTransform(addon.mainImage, "f_auto,q_auto,w_300")} alt={addon.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                                            </div>
+                                        )}
+                                        <p className="text-xs font-black text-slate-800 line-clamp-2">{addon.name}</p>
+                                        <p className="text-xs font-bold text-amber-600 mt-1">₹{addonPrice}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddToCart(addon)}
+                                        className={cn(
+                                            "mt-3 w-full py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95",
+                                            isAdded
+                                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                                : "bg-slate-900 text-white hover:bg-slate-800"
+                                        )}
+                                    >
+                                        {isAdded ? "Added in cart" : "+ Add"}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <div className="mt-20 border-t border-slate-100 pt-16">
                 <div className="flex flex-col lg:flex-row gap-12">
                     <div className="lg:w-[40%]">
@@ -467,36 +525,6 @@ const ProductDetailPage = () => {
                             </form>
                         </div>
                     </div>
-
-                    {/* Frequently Paired Add-ons Section */}
-                    {product?.addons && Array.isArray(product.addons) && product.addons.length > 0 && (
-                        <div className="w-full col-span-full mb-10 bg-amber-50/50 border border-amber-200/60 rounded-[2.5rem] p-8 shadow-sm">
-                            <div className="flex items-center gap-3 mb-6">
-                                <Sparkles className="h-6 w-6 text-amber-600" />
-                                <h3 className="text-2xl font-black text-slate-900">Frequently Paired Add-ons</h3>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                {product.addons.map((addon) => (
-                                    <div key={addon._id || addon.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col justify-between">
-                                        <div>
-                                            {addon.mainImage && (
-                                                <img src={addon.mainImage} alt={addon.name} className="w-full h-24 object-cover rounded-xl mb-3" />
-                                            )}
-                                            <p className="text-xs font-black text-slate-800 line-clamp-1">{addon.name}</p>
-                                            <p className="text-xs font-bold text-amber-600 mt-1">₹{addon.salePrice || addon.price}</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleAddToCart(addon)}
-                                            className="mt-3 w-full py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all active:scale-95"
-                                        >
-                                            + Add
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
                     <div className="lg:w-[60%] space-y-8">
                         <div className="flex items-center justify-between mb-4">
