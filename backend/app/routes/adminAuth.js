@@ -99,6 +99,7 @@ import {
     holdSellerPayoutController,
     releaseSellerPayoutController,
 } from "../controller/adminFinanceController.js";
+import { adminReconcileSellerCommissionController } from "../controller/sellerCodCommissionController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
 import {
     getStoreCommission,
@@ -243,6 +244,12 @@ router.post(
     verifyToken,
     allowRoles("admin"),
     settleSellerPayoutManualController,
+);
+router.post(
+    "/finance/reconcile-seller-cod",
+    verifyToken,
+    allowRoles("admin"),
+    adminReconcileSellerCommissionController,
 );
 router.post(
     "/finance/payouts/:payoutId/adjust",

@@ -151,6 +151,24 @@ export async function createPendingSellerPayout(order, { session, actorId } = {}
     return null;
   }
 
+  const method = (order.payment?.method || "").toLowerCase();
+  const isCod = order.paymentMode === "COD" || method === "cash" || method === "cod";
+  const isSellerFulfilled = order.fulfillmentMethod === "seller_delivery" || (!order.deliveryBoy && !order.deliveryPartner);
+
+  if (isCod && isSellerFulfilled) {
+    // Seller collected all cash (including product earnings) directly from the customer at delivery.
+    // A platform payout is not applicable and must not be queued to avoid double payout.
+    order.settlementStatus = {
+      ...(order.settlementStatus || {}),
+      sellerPayout: "SETTLED_VIA_CASH",
+    };
+    order.financeFlags = {
+      ...(order.financeFlags || {}),
+      sellerPayoutQueued: true,
+    };
+    return null;
+  }
+
   const payout = await createPendingPayoutForOrder(
     {
       order,

@@ -37,6 +37,7 @@ export const handleResponse = (res, statusCode, message, data = {}) => {
 
   if (Array.isArray(sanitizedData)) {
     responsePayload.results = sanitizedData;
+    responsePayload.result = sanitizedData;
   } else {
     responsePayload.result = sanitizedData;
   }

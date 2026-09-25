@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Clock } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Clock, Loader2 } from "lucide-react";
 import { customerApi } from "../../services/customerApi";
 
 const formatLocalDate = (date) => {
@@ -15,27 +15,56 @@ export default function DeliverySlotPicker({
   onChange,
   campaignId = null,
   initialTimeSlot = null,
+  initialDeliveryDate = null,
+  initialWindowLabel = null,
 }) {
   const [initDate, initLabel] = useMemo(() => {
-    if (initialTimeSlot && typeof initialTimeSlot === "string" && initialTimeSlot.includes("|")) {
+    let date = initialDeliveryDate;
+    let label = initialWindowLabel;
+
+    if ((!date || !label) && initialTimeSlot && typeof initialTimeSlot === "string" && initialTimeSlot.includes("|")) {
       const parts = initialTimeSlot.split("|");
-      return [parts[0], parts[1]];
+      if (!date) date = parts[0];
+      if (!label) label = parts[1];
     }
-    return [formatLocalDate(new Date()), ""];
-  }, [initialTimeSlot]);
+
+    if (date) {
+      if (typeof date === "string" && date.includes("T")) {
+        date = date.split("T")[0];
+      } else if (date instanceof Date) {
+        date = formatLocalDate(date);
+      }
+    }
+
+    return [date || formatLocalDate(new Date()), label || ""];
+  }, [initialTimeSlot, initialDeliveryDate, initialWindowLabel]);
 
   const [deliveryDate, setDeliveryDate] = useState(initDate);
   const [windows, setWindows] = useState([]);
   const [windowLabel, setWindowLabel] = useState(initLabel);
+
+  // Sync state if initial props change while component is mounted
+  useEffect(() => {
+    if (initDate && initDate !== deliveryDate) {
+      setDeliveryDate(initDate);
+    }
+  }, [initDate]);
+
+  useEffect(() => {
+    if (initLabel && initLabel !== windowLabel) {
+      setWindowLabel(initLabel);
+    }
+  }, [initLabel]);
+
   const [loading, setLoading] = useState(false);
   const [schedulingEnabled, setSchedulingEnabled] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [campaignDeliveryWindow, setCampaignDeliveryWindow] = useState(null);
-  // Store-configurable "how many days ahead can a regular scheduled order be
-  // placed" (backend default: 30). Starts at that same default and is
-  // corrected once the store's actual setting comes back from the API, so
-  // there's no hardcoded cap here regardless of what a given store configures.
   const [maxDaysAhead, setMaxDaysAhead] = useState(30);
+
+  // Fast in-component memory cache keyed by "sellerId_deliveryDate_campaignId"
+  const cacheRef = useRef(new Map());
+  const lastEmittedRef = useRef("");
 
   const isScheduled = fulfillmentType === "scheduled" || fulfillmentType === "preorder";
 
@@ -73,16 +102,60 @@ export default function DeliverySlotPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateOptions.join(","), campaignId]);
 
+  const emitChange = (label, date = deliveryDate) => {
+    const timeSlot = label ? `${date}|${label}` : "";
+    const key = `${fulfillmentType}|${date}|${label}|${campaignId || ""}`;
+    if (lastEmittedRef.current === key) return;
+    lastEmittedRef.current = key;
+    onChange?.({
+      fulfillmentType,
+      deliveryDate: date,
+      windowLabel: label,
+      timeSlot,
+      campaignId,
+      preOrderCampaignId: campaignId,
+    });
+  };
+
   useEffect(() => {
     if (!isScheduled || !sellerId) {
       onChange?.({ fulfillmentType: "instant", timeSlot: "now" });
       return;
     }
 
+    const cacheKey = `${sellerId}_${deliveryDate}_${fulfillmentType}_${campaignId || ""}`;
+    const cachedData = cacheRef.current.get(cacheKey);
+
+    // If already in memory cache, restore instantly without blanking the UI
+    if (cachedData) {
+      setSchedulingEnabled(cachedData.schedulingEnabled);
+      setWindows(cachedData.windows);
+      if (cachedData.campaignDeliveryWindow) {
+        setCampaignDeliveryWindow(cachedData.campaignDeliveryWindow);
+      }
+      if (cachedData.maxDaysAhead) {
+        setMaxDaysAhead(cachedData.maxDaysAhead);
+      }
+      const targetLabel = windowLabel || initLabel;
+      const matchingWindow = cachedData.windows.find(
+        (w) => w.label === targetLabel && w.available !== false
+      );
+      const firstAvailable = cachedData.windows.find((w) => w.available !== false);
+      const selected = matchingWindow || firstAvailable;
+      const label = selected?.label || "";
+      setWindowLabel(label);
+      setErrorMessage(cachedData.errorMessage || "");
+      emitChange(label, deliveryDate);
+    }
+
     let cancelled = false;
     const load = async () => {
-      setLoading(true);
-      setErrorMessage("");
+      // Only set loading true if we don't have cached data to show
+      if (!cachedData) {
+        setLoading(true);
+        setErrorMessage("");
+      }
+
       try {
         const res = await customerApi.getDeliverySlots({
           sellerId,
@@ -93,7 +166,9 @@ export default function DeliverySlotPicker({
         const result = res.data?.result || res.data?.results || {};
         const list = Array.isArray(result.windows) ? result.windows : [];
         if (cancelled) return;
-        setSchedulingEnabled(result.schedulingEnabled !== false);
+
+        const isEnabled = result.schedulingEnabled !== false;
+        setSchedulingEnabled(isEnabled);
         setWindows(list);
         if (campaignId && result.campaignDeliveryWindow) {
           setCampaignDeliveryWindow(result.campaignDeliveryWindow);
@@ -101,50 +176,50 @@ export default function DeliverySlotPicker({
         if (Number.isFinite(Number(result.maxDaysAhead)) && Number(result.maxDaysAhead) > 0) {
           setMaxDaysAhead(Number(result.maxDaysAhead));
         }
+
         const targetLabel = windowLabel || initLabel;
         const matchingWindow = list.find((w) => w.label === targetLabel && w.available !== false);
         const firstAvailable = list.find((w) => w.available !== false);
         const selectedWindow = matchingWindow || firstAvailable;
         const label = selectedWindow?.label || "";
         setWindowLabel(label);
+
+        let calculatedError = "";
         if (!firstAvailable) {
-          const reason =
+          calculatedError =
             list.find((w) => w.reason)?.reason ||
-            (result.schedulingEnabled === false
-              ? "Scheduling is not enabled for this store"
-              : "No delivery windows available for this date");
-          setErrorMessage(reason);
+            (isEnabled
+              ? "No delivery windows available for this date"
+              : "Scheduling is not enabled for this store");
+          setErrorMessage(calculatedError);
+        } else {
+          setErrorMessage("");
         }
-        onChange?.({
-          fulfillmentType,
-          deliveryDate,
-          windowLabel: label,
-          timeSlot: label ? `${deliveryDate}|${label}` : "",
-          campaignId,
-          preOrderCampaignId: campaignId,
+
+        // Save into local memory cache
+        cacheRef.current.set(cacheKey, {
+          windows: list,
+          schedulingEnabled: isEnabled,
+          campaignDeliveryWindow: result.campaignDeliveryWindow || null,
+          maxDaysAhead: result.maxDaysAhead || 30,
+          errorMessage: calculatedError,
         });
+
+        emitChange(label, deliveryDate);
       } catch (error) {
         if (cancelled) return;
         setWindows([]);
         setWindowLabel("");
-        setErrorMessage(error?.response?.data?.message || "Failed to load delivery slots");
-        onChange?.({
-          fulfillmentType,
-          deliveryDate,
-          windowLabel: "",
-          timeSlot: "",
-          campaignId,
-          preOrderCampaignId: campaignId,
-        });
+        const msg = error?.response?.data?.message || "Failed to load delivery slots";
+        setErrorMessage(msg);
+        emitChange("", deliveryDate);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
+
     load();
-    // A slot that's valid at fetch time can pass while this picker stays
-    // open (e.g. customer leaves the tab open past a window's end time) —
-    // re-fetch periodically so an ended slot gets disabled live instead of
-    // staying selectable until something else re-triggers this effect.
+
     const refreshInterval = setInterval(load, 90 * 1000);
     return () => {
       cancelled = true;
@@ -152,17 +227,10 @@ export default function DeliverySlotPicker({
     };
   }, [sellerId, deliveryDate, isScheduled, fulfillmentType, campaignId]);
 
-  useEffect(() => {
-    if (!isScheduled) return;
-    onChange?.({
-      fulfillmentType,
-      deliveryDate,
-      windowLabel,
-      timeSlot: windowLabel ? `${deliveryDate}|${windowLabel}` : "",
-      campaignId,
-      preOrderCampaignId: campaignId,
-    });
-  }, [windowLabel]);
+  const handleSelectWindow = (label) => {
+    setWindowLabel(label);
+    emitChange(label, deliveryDate);
+  };
 
   if (!isScheduled) {
     return (
@@ -171,57 +239,107 @@ export default function DeliverySlotPicker({
           <Clock className="h-4 w-4 text-emerald-600" />
           Deliver now
         </div>
-        <p className="mt-1 text-xs text-slate-500">Your order will be prepared immediately after seller accepts.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Your order will be prepared immediately after seller accepts.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-        <Calendar className="h-4 w-4 text-emerald-600" />
-        Choose delivery date & window
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+          <Calendar className="h-4 w-4 text-emerald-600" />
+          Choose delivery date & window
+        </div>
+        {loading && windows.length > 0 && (
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Updating...</span>
+          </div>
+        )}
       </div>
+
       <select
-        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-900 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none cursor-pointer"
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-900 bg-white shadow-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-hidden cursor-pointer"
         value={deliveryDate}
         onChange={(e) => setDeliveryDate(e.target.value)}
       >
-        {dateOptions.map((d) => (
-          <option key={d} value={d} className="bg-white text-slate-900 font-bold py-1.5" style={{ color: '#0f172a', backgroundColor: '#ffffff' }}>
-            {d}
-          </option>
-        ))}
+        {dateOptions.map((d, idx) => {
+          let dayLabel = d;
+          try {
+            const dateObj = new Date(`${d}T12:00:00`);
+            const formatted = dateObj.toLocaleDateString("en-IN", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            });
+            if (idx === 0) dayLabel = `Today (${formatted})`;
+            else if (idx === 1) dayLabel = `Tomorrow (${formatted})`;
+            else dayLabel = formatted;
+          } catch (_) {
+            dayLabel = d;
+          }
+
+          return (
+            <option
+              key={d}
+              value={d}
+              className="bg-white text-slate-900 font-bold py-1.5"
+              style={{ color: "#0f172a", backgroundColor: "#ffffff" }}
+            >
+              {dayLabel}
+            </option>
+          );
+        })}
       </select>
-      {loading ? (
-        <p className="text-xs text-slate-500">Loading slots...</p>
+
+      {/* Loading Skeleton if no windows yet */}
+      {loading && windows.length === 0 ? (
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-10 rounded-xl border border-slate-100 bg-slate-100/70 animate-pulse flex items-center px-3"
+            >
+              <div className="h-3 w-16 bg-slate-200 rounded-md" />
+            </div>
+          ))}
+        </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            className={`grid grid-cols-2 gap-2 transition-opacity duration-150 ${
+              loading ? "opacity-60 pointer-events-none" : "opacity-100"
+            }`}
+          >
             {windows.map((w) => (
               <button
                 key={w.label}
                 type="button"
                 disabled={w.available === false}
                 title={w.reason || ""}
-                onClick={() => setWindowLabel(w.label)}
-                className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold ${
+                onClick={() => handleSelectWindow(w.label)}
+                className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors ${
                   windowLabel === w.label
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-500"
                     : w.available === false
-                      ? "border-slate-100 bg-slate-50 text-slate-400"
-                      : "border-slate-200 bg-white text-slate-700"
+                      ? "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                 }`}
               >
                 {w.label}
               </button>
             ))}
           </div>
+
           {!schedulingEnabled && (
             <p className="text-xs font-semibold text-amber-700">
               Scheduling is not enabled for this store. Ask the seller to enable it in Delivery Policy, or use Deliver now.
             </p>
           )}
+
           {schedulingEnabled && errorMessage && !windowLabel && (
             <p className="text-xs font-semibold text-amber-700">{errorMessage}</p>
           )}

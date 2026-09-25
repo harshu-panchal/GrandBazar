@@ -51,19 +51,26 @@ const SellerMultiSelect = ({ value, onChange, sellers, loading, placeholder = "S
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  const selectedIds = useMemo(() => new Set(value), [value]);
+  const selectedIds = useMemo(() => new Set((value || []).map(String)), [value]);
   const selectedSellers = useMemo(
-    () => sellers.filter((s) => selectedIds.has(s._id)),
+    () => (sellers || []).filter((s) => selectedIds.has(String(s._id || s.id))),
     [sellers, selectedIds],
   );
   const filteredSellers = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sellers;
-    return sellers.filter((s) => (s.shopName || "").toLowerCase().includes(q));
+    if (!q) return sellers || [];
+    return (sellers || []).filter((s) =>
+      (s.shopName || s.name || "").toLowerCase().includes(q),
+    );
   }, [sellers, query]);
 
-  const toggle = (id) => {
-    onChange(selectedIds.has(id) ? value.filter((v) => v !== id) : [...value, id]);
+  const toggle = (rawId) => {
+    const id = String(rawId);
+    onChange(
+      selectedIds.has(id)
+        ? (value || []).filter((v) => String(v) !== id)
+        : [...(value || []), id],
+    );
   };
 
   return (
@@ -83,27 +90,35 @@ const SellerMultiSelect = ({ value, onChange, sellers, loading, placeholder = "S
 
       {selectedSellers.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
-          {selectedSellers.map((s) => (
-            <span
-              key={s._id}
-              className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-1 rounded-lg"
-            >
-              {s.shopName}
-              <button
-                type="button"
-                onClick={() => toggle(s._id)}
-                className="text-slate-400 hover:text-slate-700"
-                aria-label={`Remove ${s.shopName}`}
+          {selectedSellers.map((s) => {
+            const sid = String(s._id || s.id);
+            return (
+              <span
+                key={sid}
+                className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-1 rounded-lg"
               >
-                ×
-              </button>
-            </span>
-          ))}
+                {s.shopName || s.name || "Unnamed Shop"}
+                <button
+                  type="button"
+                  onClick={() => toggle(sid)}
+                  className="text-slate-400 hover:text-slate-700"
+                  aria-label={`Remove ${s.shopName || s.name}`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
       {open && (
-        <div className="absolute z-20 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 flex flex-col overflow-hidden">
+        <div
+          data-lenis-prevent
+          data-lenis-prevent-wheel
+          data-lenis-prevent-touch
+          className="absolute z-20 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 flex flex-col overflow-hidden"
+        >
           <input
             autoFocus
             value={query}
@@ -111,26 +126,35 @@ const SellerMultiSelect = ({ value, onChange, sellers, loading, placeholder = "S
             placeholder="Search sellers…"
             className="px-3 py-2.5 text-sm border-b border-slate-100 outline-none shrink-0"
           />
-          <div className="overflow-y-auto">
+          <div
+            data-lenis-prevent
+            data-lenis-prevent-wheel
+            data-lenis-prevent-touch
+            className="overflow-y-auto overscroll-contain"
+            style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+          >
             {loading ? (
               <p className="px-3 py-3 text-xs text-slate-400">Loading sellers…</p>
             ) : filteredSellers.length === 0 ? (
               <p className="px-3 py-3 text-xs text-slate-400">No sellers found</p>
             ) : (
-              filteredSellers.map((s) => (
-                <label
-                  key={s._id}
-                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(s._id)}
-                    onChange={() => toggle(s._id)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/30"
-                  />
-                  <span className="truncate">{s.shopName}</span>
-                </label>
-              ))
+              filteredSellers.map((s) => {
+                const sid = String(s._id || s.id);
+                return (
+                  <label
+                    key={sid}
+                    className="flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(sid)}
+                      onChange={() => toggle(sid)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/30"
+                    />
+                    <span className="truncate">{s.shopName || s.name}</span>
+                  </label>
+                );
+              })
             )}
           </div>
         </div>
@@ -162,10 +186,42 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
   useEffect(() => {
     if (!open) return;
     setSellersLoading(true);
+
+    const extractSellers = (res) => {
+      const raw = res?.data;
+      const list = Array.isArray(raw?.results)
+        ? raw.results
+        : Array.isArray(raw?.result)
+        ? raw.result
+        : Array.isArray(raw?.items)
+        ? raw.items
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : Array.isArray(raw)
+        ? raw
+        : [];
+      return list;
+    };
+
     adminApi
       .getSellers()
-      .then((res) => setSellerOptions(res.data?.result || []))
-      .catch(() => setSellerOptions([]))
+      .then((res) => {
+        const list = extractSellers(res);
+        if (list.length > 0) {
+          setSellerOptions(list);
+        } else {
+          return adminApi.getActiveSellers({ limit: 200 }).then((activeRes) => {
+            setSellerOptions(extractSellers(activeRes));
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load sellers via getSellers, trying fallback:", err);
+        adminApi
+          .getActiveSellers({ limit: 200 })
+          .then((activeRes) => setSellerOptions(extractSellers(activeRes)))
+          .catch(() => setSellerOptions([]));
+      })
       .finally(() => setSellersLoading(false));
   }, [open]);
 

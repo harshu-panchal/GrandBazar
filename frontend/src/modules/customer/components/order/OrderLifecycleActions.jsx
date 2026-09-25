@@ -17,6 +17,8 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const [reviewingReplacement, setReviewingReplacement] = useState("");
   const [disputeCountdown, setDisputeCountdown] = useState(null);
   const [showAddItems, setShowAddItems] = useState(false);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
   const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
 
@@ -55,10 +57,20 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const canReschedule = ["pending", "confirmed", "reschedule_requested", "preorder_confirmed"].includes(
     legacyStatus,
   );
+  const hasDispute = Boolean(
+    disputeSubmitted ||
+    order.disputeRef ||
+    order.dispute ||
+    order.status === "disputed" ||
+    order.orderStatus === "disputed" ||
+    order.workflowStatus === "DISPUTED" ||
+    legacyStatus === "disputed"
+  );
+
   // The server is always the source of truth and will reject a late
   // request regardless — this just keeps the button from inviting a
   // complaint the backend is going to refuse anyway.
-  const canDispute = isDelivered && disputeCountdown !== 0;
+  const canDispute = isDelivered && disputeCountdown !== 0 && !hasDispute;
   const canAddItems = canCustomerAddItems(order);
   const pendingReplacementRequests = Array.isArray(order.replacementRequests)
     ? order.replacementRequests.filter((request) => request?.customerDecision === "pending")
@@ -128,15 +140,19 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
       return;
     }
     try {
+      setSubmittingDispute(true);
       await customerApi.raiseDispute(order.orderId, {
         reason: disputeReason.trim(),
         reasonCategory: "other",
       });
-      toast.success("Dispute raised");
+      setDisputeSubmitted(true);
+      toast.success("Dispute raised successfully");
       setDisputeReason("");
       onRefresh?.();
     } catch (e) {
       toast.error(e.response?.data?.message || "Could not raise dispute");
+    } finally {
+      setSubmittingDispute(false);
     }
   };
 
@@ -170,6 +186,22 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const isAdjustmentPending = priceAdjustment?.status === "pending";
   const adjustmentNeedsPayment = isAdjustmentPending && priceAdjustment?.requiresPayment;
   const adjustmentNeedsApproval = isAdjustmentPending && !priceAdjustment?.requiresPayment;
+
+  const hasVisibleActions = Boolean(
+    showPriceAdjustmentNotice ||
+    order.itemAdditionRequest?.status === "requested" ||
+    order.itemAdditionRequest?.status === "rejected" ||
+    adjustmentNeedsPayment ||
+    adjustmentNeedsApproval ||
+    canAddItems ||
+    canReschedule ||
+    canDispute ||
+    pendingReplacementRequests.length > 0
+  );
+
+  if (!hasVisibleActions) {
+    return null;
+  }
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
@@ -354,7 +386,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
         </>
       )}
 
-      {canDispute && !order.disputeRef && (
+      {canDispute && (
         <div className="space-y-2">
           {disputeCountdown && disputeCountdown !== 0 && (
             <p className="text-xs font-semibold text-red-600">
@@ -362,21 +394,23 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
             </p>
           )}
           <textarea
-            className="w-full rounded-xl border border-slate-200 p-2 text-sm"
+            className="w-full rounded-xl border border-slate-200 p-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
             placeholder="Describe the issue"
             value={disputeReason}
             onChange={(e) => setDisputeReason(e.target.value)}
+            disabled={submittingDispute}
           />
           <button
             type="button"
+            disabled={submittingDispute}
             onClick={raiseDispute}
-            className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+            className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
           >
-            Raise dispute
+            {submittingDispute ? "Submitting dispute..." : "Raise dispute"}
           </button>
         </div>
       )}
-      {isDelivered && disputeCountdown === 0 && !order.disputeRef && (
+      {isDelivered && disputeCountdown === 0 && !hasDispute && (
         <p className="text-xs font-semibold text-slate-400">
           The complaint window for this order has closed.
         </p>

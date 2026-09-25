@@ -251,19 +251,34 @@ export async function removeStoredFcmToken({
   token = "",
 } = {}) {
   const candidateToken = String(token || getStoredFcmToken(role) || "").trim();
-  if (!candidateToken) {
+
+  try {
+    await axiosInstance.delete("/push/remove", {
+      data: candidateToken ? { token: candidateToken } : {},
+    });
+  } catch (error) {
+    console.warn("Failed to delete push token from backend on logout:", error);
+  } finally {
     clearStoredFcmToken(role);
-    return false;
   }
 
-  await axiosInstance.delete("/push/remove", {
-    data: {
-      token: candidateToken,
-    },
-  });
-
-  clearStoredFcmToken(role);
   return true;
+}
+
+const foregroundDedupeChannel =
+  typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel("push_foreground_dedupe")
+    : null;
+const recentForegroundKeys = new Set();
+
+if (foregroundDedupeChannel) {
+  foregroundDedupeChannel.onmessage = (event) => {
+    const key = String(event?.data || "");
+    if (key) {
+      recentForegroundKeys.add(key);
+      setTimeout(() => recentForegroundKeys.delete(key), 5000);
+    }
+  };
 }
 
 export async function startForegroundPushListener() {
@@ -294,6 +309,23 @@ export async function startForegroundPushListener() {
 
   const messaging = getMessaging(app);
   const unsubscribe = onMessage(messaging, async (payload) => {
+    const dedupKey =
+      payload?.messageId ||
+      `${payload?.data?.orderId || ""}_${payload?.data?.eventType || ""}_${payload?.notification?.title || payload?.data?.title || ""}`;
+
+    if (dedupKey && dedupKey !== "__") {
+      if (recentForegroundKeys.has(dedupKey)) {
+        return; // Already presented by another open tab
+      }
+      recentForegroundKeys.add(dedupKey);
+      setTimeout(() => recentForegroundKeys.delete(dedupKey), 5000);
+      try {
+        foregroundDedupeChannel?.postMessage(dedupKey);
+      } catch {
+        // ignore
+      }
+    }
+
     const title =
       payload?.notification?.title || payload?.data?.title || "Notification";
     const body =

@@ -40,6 +40,18 @@ const releaseExpiredSellerHolds = async () => {
           status: { $in: ["PENDING", "PROCESSING"] },
         }).select("_id").lean();
 
+        // Clear the automatic return-window hold on the order first so
+        // processPayout validation passes (it rejects orders marked HOLD).
+        await Order.updateOne(
+          { _id: row._id },
+          {
+            $set: {
+              "settlementStatus.sellerPayout": "PENDING",
+              "financeFlags.sellerPayoutHeld": false,
+            },
+          },
+        );
+
         if (AUTO_RELEASE_SELLER_PAYOUT && payout?._id) {
           try {
             await processPayout(payout._id);
@@ -51,16 +63,6 @@ const releaseExpiredSellerHolds = async () => {
               error: err.message,
             });
           }
-        } else if (payout?._id) {
-          await Order.updateOne(
-            { _id: row._id },
-            {
-              $set: {
-                "settlementStatus.sellerPayout": "PENDING",
-                "financeFlags.sellerPayoutHeld": false,
-              },
-            },
-          );
         }
       } catch (err) {
         logger.error("Failed to release seller payout hold", {

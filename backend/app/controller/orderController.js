@@ -1174,7 +1174,7 @@ export const updateOrderStatus = async (req, res) => {
           userId,
           canonicalOrderId,
           String(status).toLowerCase(),
-          { cancelReason, pickupProofImages: req.body.pickupProofImages, deliveryProofImages: req.body.deliveryProofImages },
+          { cancelReason, pickupProofImages: req.body.pickupProofImages, deliveryProofImages: req.body.deliveryProofImages, otp: req.body.otp },
         );
         if (updated) {
           if (updated.__pendingApproval) {

@@ -175,10 +175,12 @@ const ActiveSellers = () => {
   };
   const [stats, setStats] = useState(emptyStats);
   const [categories, setCategories] = useState([]);
+  const [owners, setOwners] = useState([]);
   const [dbCategories, setDbCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
   const [sortBy, setSortBy] = useState("recent");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -287,7 +289,7 @@ const ActiveSellers = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [categoryFilter, sortBy, pageSize]);
+  }, [categoryFilter, ownerFilter, sortBy, pageSize]);
 
   useEffect(() => {
     const loadDbCategories = async () => {
@@ -374,6 +376,7 @@ const ActiveSellers = () => {
         const response = await adminApi.getActiveSellers({
           q: debouncedSearch || undefined,
           category: categoryFilter !== "all" ? categoryFilter : undefined,
+          owner: ownerFilter !== "all" ? ownerFilter : undefined,
           sort: sortBy,
           page,
           limit: pageSize,
@@ -392,6 +395,9 @@ const ActiveSellers = () => {
         });
         setCategories(
           Array.isArray(payload.filters?.categories) ? payload.filters.categories : [],
+        );
+        setOwners(
+          Array.isArray(payload.filters?.owners) ? payload.filters.owners : [],
         );
         setTotal(safeNumber(payload.total) || normalizedItems.length);
         setTotalPages(safeNumber(payload.totalPages) || 1);
@@ -415,7 +421,7 @@ const ActiveSellers = () => {
     };
 
     loadSellers();
-  }, [debouncedSearch, categoryFilter, sortBy, page, pageSize, refreshTick]);
+  }, [debouncedSearch, categoryFilter, ownerFilter, sortBy, page, pageSize, refreshTick]);
 
   const handleReactivateOwner = async (seller) => {
     const ownerAccountId = seller?.ownerAccountId;
@@ -559,7 +565,7 @@ const ActiveSellers = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full lg:w-auto">
             <select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
@@ -569,6 +575,20 @@ const ActiveSellers = () => {
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={ownerFilter}
+              onChange={(event) => setOwnerFilter(event.target.value)}
+              className="px-4 py-3 bg-white ring-1 ring-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none cursor-pointer max-w-full truncate"
+              title="Filter by shop owner"
+            >
+              <option value="all">All shop owners</option>
+              {owners.map((owner) => (
+                <option key={owner.id || owner._id} value={owner.id || owner._id}>
+                  {owner.name}
                 </option>
               ))}
             </select>
@@ -598,18 +618,20 @@ const ActiveSellers = () => {
 
       <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden rounded-xl">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] table-fixed text-left border-collapse">
+          <table className="w-full min-w-[1240px] table-fixed text-left border-collapse">
             <colgroup>
-              <col className="w-[26%]" />
-              <col className="w-[15%]" />
-              <col className="w-[22%]" />
-              <col className="w-[11%]" />
-              <col className="w-[14%]" />
-              <col className="w-[190px]" />
+              <col className="w-[21%]" />
+              <col className="w-[18%]" />
+              <col className="w-[13%]" />
+              <col className="w-[18%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[170px]" />
             </colgroup>
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="ds-table-header-cell px-6 whitespace-nowrap">Store Entity</th>
+                <th className="ds-table-header-cell px-6 whitespace-nowrap">Shop Owner</th>
                 <th className="ds-table-header-cell px-6 whitespace-nowrap">Performance</th>
                 <th className="ds-table-header-cell px-6 whitespace-nowrap">Business Intel</th>
                 <th className="ds-table-header-cell px-6 whitespace-nowrap text-center">Commission</th>
@@ -620,7 +642,7 @@ const ActiveSellers = () => {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <HiOutlineArrowPath className="h-8 w-8 text-slate-300 animate-spin" />
                       <p className="text-slate-500 font-bold text-sm">
@@ -631,7 +653,7 @@ const ActiveSellers = () => {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-16 w-16 rounded-full bg-rose-50 flex items-center justify-center">
                         <HiOutlineXMark className="h-8 w-8 text-rose-400" />
@@ -680,6 +702,41 @@ const ActiveSellers = () => {
                             </span>
                           </div>
                         </div>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-5 align-middle">
+                      <div className="space-y-1.5 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate" title={seller.ownerName || "Unnamed Owner"}>
+                          {seller.ownerName || "Unnamed Owner"}
+                        </p>
+                        {seller.email ? (
+                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                            <HiOutlineEnvelope className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <a
+                              href={`mailto:${seller.email}`}
+                              className="text-xs text-slate-600 hover:text-primary transition-colors truncate"
+                              title={seller.email}
+                            >
+                              {seller.email}
+                            </a>
+                          </div>
+                        ) : null}
+                        {seller.phone ? (
+                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                            <HiOutlinePhone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <a
+                              href={`tel:${seller.phone}`}
+                              className="text-xs font-medium text-slate-600 hover:text-primary transition-colors truncate"
+                              title={seller.phone}
+                            >
+                              {seller.phone}
+                            </a>
+                          </div>
+                        ) : null}
+                        {!seller.email && !seller.phone && (
+                          <span className="text-[11px] text-slate-400 italic">No contact details</span>
+                        )}
                       </div>
                     </td>
 
@@ -827,7 +884,7 @@ const ActiveSellers = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center">
                         <HiOutlineBuildingOffice2 className="h-8 w-8 text-slate-200" />

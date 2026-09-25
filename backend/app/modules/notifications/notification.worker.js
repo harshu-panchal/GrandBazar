@@ -108,14 +108,22 @@ export async function deliverNotificationById(notificationId) {
     .sort({ lastUsedAt: -1 })
     .lean();
 
-  // One FCM token should only be sent once even if multiple identity ids matched.
+  // For this recipient, send at most one active token per platform
+  // (preferring the most recently active token) to prevent duplicate
+  // notifications on the same device or multiple stale historical sessions.
   const seenTokens = new Set();
-  const tokens = tokensRaw.filter((doc) => {
-    const key = String(doc.token || "");
-    if (!key || seenTokens.has(key)) return false;
+  const seenPlatforms = new Set();
+  const tokens = [];
+
+  for (const doc of tokensRaw) {
+    const key = String(doc.token || "").trim();
+    const platform = String(doc.platform || "web").toLowerCase();
+    if (!key || seenTokens.has(key)) continue;
+    if (seenPlatforms.has(platform)) continue;
     seenTokens.add(key);
-    return true;
-  });
+    seenPlatforms.add(platform);
+    tokens.push(doc);
+  }
 
   if (!tokens.length) {
     await Notification.updateOne(

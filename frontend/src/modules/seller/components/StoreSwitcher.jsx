@@ -88,14 +88,25 @@ export function StoreSwitcherSidebar() {
   const { stores, activeStore, switchStore, isSwitching } = storeCtx;
 
   return (
-    <div className="px-3 pb-3 border-b border-slate-100">
+    <div
+      data-lenis-prevent
+      data-lenis-prevent-wheel
+      data-lenis-prevent-touch
+      className="px-3 pb-3 border-b border-slate-100"
+    >
       <div className="flex items-center justify-between px-1 mb-2">
         <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
           Your stores
         </p>
         {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
       </div>
-      <div className="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar-light pr-1">
+      <div
+        data-lenis-prevent
+        data-lenis-prevent-wheel
+        data-lenis-prevent-touch
+        className="space-y-1.5 max-h-44 overflow-y-auto overscroll-contain custom-scrollbar-light pr-1"
+        style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
+      >
         {stores.map((store) => {
           const isActive = String(store._id) === String(activeStore?._id);
           return (
@@ -165,7 +176,12 @@ const StoreSwitcher = ({ className = '', compact = false }) => {
         )}
       </button>
       {open && (
-        <div className="absolute top-full right-0 md:left-0 md:right-auto mt-2 w-72 bg-white rounded-xl border border-slate-100 shadow-xl z-[250] py-1 overflow-hidden">
+        <div
+          data-lenis-prevent
+          data-lenis-prevent-wheel
+          data-lenis-prevent-touch
+          className="absolute top-full right-0 md:left-0 md:right-auto mt-2 w-72 bg-white rounded-xl border border-slate-100 shadow-xl z-[250] py-1 overflow-hidden"
+        >
           <div className="px-4 py-2 border-b border-slate-100">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
               Switch store panel
@@ -179,7 +195,13 @@ const StoreSwitcher = ({ className = '', compact = false }) => {
               </p>
             )}
           </div>
-          <div className="max-h-64 overflow-y-auto">
+          <div
+            data-lenis-prevent
+            data-lenis-prevent-wheel
+            data-lenis-prevent-touch
+            className="max-h-64 overflow-y-auto overscroll-contain"
+            style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
+          >
             {stores.map((store) => {
               const isActive = String(store._id) === String(activeStore?._id);
               return (

@@ -117,6 +117,7 @@ import {
   sellerVerifyPickup,
   getPickupStatus,
   sellerResendPickupOtp,
+  sellerResendDeliveryOtp,
   adminGetStoreDeliveryPolicy,
   adminUpdateStoreDeliveryPolicy,
 } from "../controller/deliveryPolicyController.js";
@@ -679,6 +680,11 @@ router.post(
   "/:orderId/pickup/resend-otp",
   ...sellerOrdersWriteChain,
   sellerResendPickupOtp,
+);
+router.post(
+  "/:orderId/delivery/resend-otp",
+  ...sellerOrdersWriteChain,
+  sellerResendDeliveryOtp,
 );
 router.get(
   "/stores/:storeId/delivery-policy",

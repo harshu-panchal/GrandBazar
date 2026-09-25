@@ -479,6 +479,7 @@ export const getSellerEarnings = async (req, res) => {
         });
         const totalWalletAvailable = wallets.reduce((acc, w) => acc + Number(w.availableBalance || 0), 0);
         const onHoldBalance = wallets.reduce((acc, w) => acc + Number(w.pendingBalance || 0), 0);
+        const codCommissionDue = wallets.reduce((acc, w) => acc + Number(w.codCommissionDue || 0), 0);
         // Net of pending/processing withdrawal requests, matching what requestWithdrawal allows
         const liveAvailableBalance = Math.max(
             0,
@@ -590,6 +591,7 @@ export const getSellerEarnings = async (req, res) => {
                 pendingPayouts: pendingPayouts,
                 onHoldBalance: onHoldBalance, // New field
                 availableBalance: liveAvailableBalance, // New field for clarity
+                codCommissionDue: codCommissionDue,
                 totalRevenue: totalRevenue,
                 totalWithdrawn: totalWithdrawn
             },
@@ -604,14 +606,16 @@ export const getSellerEarnings = async (req, res) => {
                 const customerPhone =
                     order?.address?.phone || customerDoc?.phone || "";
                 const customerEmail = customerDoc?.email || "";
-                const orderTotal = Number(
-                    order?.paymentBreakdown?.grandTotal ??
-                        order?.pricing?.total ??
+                const sellerPayout = Number(
+                    order?.paymentBreakdown?.sellerPayoutTotal ??
+                        order?.pricing?.sellerPayoutTotal ??
+                        order?.pricing?.sellerPayout ??
+                        order?.paymentBreakdown?.productSubtotal ??
+                        order?.pricing?.subtotal ??
+                        t.amount ??
                         0,
                 );
-                const sellerPayout = Number(
-                    order?.paymentBreakdown?.sellerPayoutTotal ?? 0,
-                );
+                const orderTotal = sellerPayout;
                 const itemCount = Array.isArray(order?.items)
                     ? order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
                     : 0;

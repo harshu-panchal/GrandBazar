@@ -1,6 +1,8 @@
+import mongoose from "mongoose";
 import Store from "../../models/store.js";
 import Order from "../../models/order.js";
 import Product from "../../models/product.js";
+import Seller from "../../models/seller.js";
 import {
   computeMapBounds,
   computeMapCenter,
@@ -272,6 +274,7 @@ export async function getSellerLocationsData({
 export async function getActiveSellersData({
   q = "",
   category = "all",
+  owner = "all",
   sort = "recent",
   page,
   limit,
@@ -286,14 +289,44 @@ export async function getActiveSellersData({
     });
   }
 
+  const normalizedOwner = String(owner || "all").trim();
+  if (normalizedOwner && normalizedOwner !== "all") {
+    if (mongoose.Types.ObjectId.isValid(normalizedOwner)) {
+      filters.push({
+        ownerId: new mongoose.Types.ObjectId(normalizedOwner),
+      });
+    } else {
+      const matchingOwners = await Seller.find({
+        $or: [
+          { name: new RegExp(escapeRegExp(normalizedOwner), "i") },
+          { email: new RegExp(escapeRegExp(normalizedOwner), "i") },
+        ],
+      }).select("_id").lean();
+      const matchingIds = matchingOwners.map((o) => o._id);
+      filters.push({
+        ownerId: { $in: matchingIds },
+      });
+    }
+  }
+
   const search = String(q || "").trim();
   if (search) {
     const regex = new RegExp(escapeRegExp(search), "i");
+    const matchingOwners = await Seller.find({
+      $or: [
+        { name: regex },
+        { email: regex },
+        { phone: regex },
+      ],
+    }).select("_id").lean();
+    const ownerIds = matchingOwners.map((o) => o._id);
+
     filters.push({
       $or: [
         { shopName: regex },
         { address: regex },
         { category: regex },
+        ...(ownerIds.length ? [{ ownerId: { $in: ownerIds } }] : []),
       ],
     });
   }
@@ -309,7 +342,8 @@ export async function getActiveSellersData({
       .lean(),
     Store.countDocuments(baseQuery),
     Store.find(baseQuery)
-      .select("_id createdAt category")
+      .select("_id createdAt category ownerId")
+      .populate("ownerId", "name email phone")
       .lean(),
   ]);
 
@@ -417,6 +451,7 @@ export async function getActiveSellersData({
       id: String(store._id),
       _id: store._id,
       shopName: store.shopName || "Unnamed Store",
+      ownerId: owner._id ? String(owner._id) : "",
       ownerName: owner.name || "Unnamed Owner",
       email: owner.email || "",
       phone: owner.phone || "",
@@ -501,6 +536,26 @@ export async function getActiveSellersData({
     ),
   ].sort((a, b) => a.localeCompare(b));
 
+  const uniqueOwnerMap = new Map();
+  for (const store of allActiveStores) {
+    const ownerDoc = store.ownerId;
+    if (ownerDoc && ownerDoc._id) {
+      const ownerIdStr = String(ownerDoc._id);
+      if (!uniqueOwnerMap.has(ownerIdStr)) {
+        uniqueOwnerMap.set(ownerIdStr, {
+          id: ownerIdStr,
+          _id: ownerIdStr,
+          name: ownerDoc.name || "Unnamed Owner",
+          email: ownerDoc.email || "",
+          phone: ownerDoc.phone || "",
+        });
+      }
+    }
+  }
+  const uniqueOwners = Array.from(uniqueOwnerMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
   return {
     items: pagedItems,
     page,
@@ -518,6 +573,7 @@ export async function getActiveSellersData({
     },
     filters: {
       categories: uniqueCategories,
+      owners: uniqueOwners,
     },
   };
 }

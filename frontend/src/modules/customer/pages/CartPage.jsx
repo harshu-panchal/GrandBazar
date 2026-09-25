@@ -254,6 +254,8 @@ const CartPage = () => {
                                                         fulfillmentType="preorder"
                                                         campaignId={preorderItem.campaignId}
                                                         initialTimeSlot={schedulePayload?.timeSlot}
+                                                        initialDeliveryDate={schedulePayload?.deliveryDate}
+                                                        initialWindowLabel={schedulePayload?.windowLabel}
                                                         onChange={setSchedule}
                                                     />
                                                 ) : null}
@@ -288,6 +290,9 @@ const CartPage = () => {
                                                         sellerId={primarySellerId}
                                                         fulfillmentType={fulfillmentType}
                                                         initialTimeSlot={schedulePayload?.timeSlot}
+                                                        initialDeliveryDate={schedulePayload?.deliveryDate}
+                                                        initialWindowLabel={schedulePayload?.windowLabel}
+                                                        campaignId={schedulePayload?.campaignId || schedulePayload?.preOrderCampaignId}
                                                         onChange={setSchedule}
                                                     />
                                                 ) : null}

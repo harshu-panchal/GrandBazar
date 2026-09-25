@@ -21,6 +21,11 @@ import {
 } from "../controller/seller/staffController.js";
 import { getSellerWalletSummaryController, getSellerBulkSettlementsController } from "../controller/adminFinanceController.js";
 import {
+    getSellerCodCommissionSummaryController,
+    initiateSellerCodCommissionCheckoutController,
+    verifySellerCodCommissionPaymentController,
+} from "../controller/sellerCodCommissionController.js";
+import {
     createSellerCoupon,
     getSellerCoupons,
     updateSellerCoupon,
@@ -172,6 +177,9 @@ router.get("/dashboard", ...sellerOpsChain, checkSubSellerPermission("analytics"
 router.get("/stats", ...sellerOpsChain, checkSubSellerPermission("analytics", "read"), getSellerStats);
 router.get("/earnings", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerEarnings);
 router.get("/wallet/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerWalletSummaryController);
+router.get("/cod-commission/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerCodCommissionSummaryController);
+router.post("/cod-commission/initiate", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), initiateSellerCodCommissionCheckoutController);
+router.get("/cod-commission/status/:merchantOrderId", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), verifySellerCodCommissionPaymentController);
 router.get("/finance/bulk-settlements", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerBulkSettlementsController);
 router.post("/request-withdrawal", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), requestWithdrawal);
 

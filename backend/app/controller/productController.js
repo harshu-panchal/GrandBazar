@@ -491,10 +491,22 @@ export const getProducts = async (req, res) => {
     if (enforceRadius) {
       finalQuery.status = "active";
       finalQuery.isPublished = { $ne: false };
-      finalQuery.stock = { $gt: 0 }; // Hide out-of-stock products from customer app
       finalQuery.isCurrentlyAvailable = { $ne: false }; // Hide seller-scheduled/paused products
-      finalQuery.isHidden = { $ne: true };
-      finalQuery = { $and: [finalQuery, getApprovedOrLegacyFilter()] };
+      if (!query._id) {
+        finalQuery.isHidden = { $ne: true };
+      }
+      finalQuery = {
+        $and: [
+          finalQuery,
+          {
+            $or: [
+              { stock: { $gt: 0 } },
+              { "variants.stock": { $gt: 0 } },
+            ],
+          },
+          getApprovedOrLegacyFilter(),
+        ],
+      };
     } else {
       if (status && status !== "all") {
         finalQuery.status = status;

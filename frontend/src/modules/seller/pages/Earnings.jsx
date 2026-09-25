@@ -13,6 +13,8 @@ import {
   Receipt,
   Clock,
   History,
+  AlertTriangle,
+  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -79,6 +81,9 @@ const Earnings = () => {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isPayCommissionModalOpen, setIsPayCommissionModalOpen] = useState(false);
+  const [isPayingCommission, setIsPayingCommission] = useState(false);
+  const [commissionPayAmount, setCommissionPayAmount] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [page, setPage] = useState(1);
@@ -163,6 +168,42 @@ const Earnings = () => {
     }
   };
 
+  const codCommissionDue = Number(data?.balances?.codCommissionDue || 0);
+
+  const handleOpenPayCommission = () => {
+    setCommissionPayAmount(codCommissionDue > 0 ? String(codCommissionDue) : "");
+    setIsPayCommissionModalOpen(true);
+  };
+
+  const handlePayCommission = async () => {
+    const amount = parseFloat(commissionPayAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Please enter a valid payment amount greater than ₹0");
+      return;
+    }
+    if (amount > codCommissionDue) {
+      toast.error(`Amount cannot exceed total due of ₹${codCommissionDue.toLocaleString()}`);
+      return;
+    }
+
+    try {
+      setIsPayingCommission(true);
+      const res = await sellerApi.initiateCodCommissionPayment({ amount });
+      const redirectUrl = res.data?.data?.redirectUrl;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        toast.success("Payment initiated successfully");
+        setIsPayCommissionModalOpen(false);
+        refreshEarnings();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to initiate payment");
+    } finally {
+      setIsPayingCommission(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen font-black text-slate-600">
@@ -202,26 +243,24 @@ const Earnings = () => {
                   toast.info("No earnings rows to export.");
                   return;
                 }
-                const exportData = filteredLedger.map((txn) => ({
-                  date: txn.date ?? "",
-                  time: txn.time ?? "",
-                  orderId: txn.orderId || txn.ref || "",
-                  customer: txn.customerName || txn.customer || "",
-                  phone: txn.customerPhone || "",
-                  email: txn.customerEmail || "",
-                  items: txn.itemsSummary || "",
-                  orderTotal: Number(txn.orderTotal ?? 0),
-                  commissionAmount: Number(txn.commissionAmount ?? 0),
-                  packagingAmount: Number(txn.packagingAmount ?? 0),
-                  taxAmount: Number(txn.taxAmount ?? 0),
-                  earning: Number(txn.amount ?? 0),
-                  sellerPayout: Number(txn.sellerPayout ?? 0),
-                  isBulkOrder: txn.isBulkOrder ? "Yes" : "No",
-                  type: txn.type ?? "",
-                  status: txn.status ?? "",
-                  paymentMethod: txn.paymentMethod ?? "",
-                  orderStatus: txn.displayStatus?.label || txn.orderStatus || "",
-                }));
+                const exportData = filteredLedger.map((txn) => {
+                  const earningVal = Number(txn.sellerPayout || txn.orderTotal || txn.amount || 0);
+                  return {
+                    date: txn.date ?? "",
+                    time: txn.time ?? "",
+                    orderId: txn.orderId || txn.ref || "",
+                    customer: txn.customerName || txn.customer || "",
+                    phone: txn.customerPhone || "",
+                    email: txn.customerEmail || "",
+                    items: txn.itemsSummary || "",
+                    earning: earningVal,
+                    isBulkOrder: txn.isBulkOrder ? "Yes" : "No",
+                    type: txn.type ?? "",
+                    status: txn.status ?? "",
+                    paymentMethod: txn.paymentMethod ?? "",
+                    orderStatus: txn.displayStatus?.label || txn.orderStatus || "",
+                  };
+                });
                 exportToCSV(exportData, "Seller_Earnings_Detailed", {
                   date: "Date",
                   time: "Time",
@@ -230,12 +269,7 @@ const Earnings = () => {
                   phone: "Customer Phone",
                   email: "Customer Email",
                   items: "Items",
-                  orderTotal: "Order Total",
-                  commissionAmount: "Platform Commission (paid by customer)",
-                  packagingAmount: "Packaging Charge",
-                  taxAmount: "Tax (GST)",
-                  earning: "Earning Amount",
-                  sellerPayout: "Seller Payout",
+                  earning: "Your Earning (₹)",
                   isBulkOrder: "Bulk Order",
                   type: "Type",
                   status: "Payout Status",
@@ -260,7 +294,7 @@ const Earnings = () => {
         </div>
       </BlurFade>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <BlurFade delay={0.2}>
           <Card className="bg-gradient-to-br from-brand-600 to-teal-700 text-white border-none shadow-lg h-full">
             <div className="flex justify-between items-start">
@@ -281,7 +315,7 @@ const Earnings = () => {
           </Card>
         </BlurFade>
 
-        <BlurFade delay={0.3}>
+        <BlurFade delay={0.25}>
           <Card className="h-full border-none shadow-md bg-white p-6 flex flex-col justify-between group hover:shadow-xl transition-all duration-300">
             <div className="flex justify-between items-start">
               <div>
@@ -300,12 +334,12 @@ const Earnings = () => {
               <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs">
                 <History className="h-4 w-4" />
               </div>
-              <p className="text-xs text-slate-500">Paid out to your bank account so far</p>
+              <p className="text-xs text-slate-500">Paid out to bank so far</p>
             </div>
           </Card>
         </BlurFade>
 
-        <BlurFade delay={0.4}>
+        <BlurFade delay={0.3}>
           <Card className="h-full border-none shadow-md bg-white p-6 flex flex-col justify-between group hover:shadow-xl transition-all duration-300">
             <div className="flex justify-between items-start">
               <div>
@@ -327,9 +361,59 @@ const Earnings = () => {
               <div>
                 <p className="text-xs font-bold text-amber-700 uppercase">On Hold (Return Window)</p>
                 <p className="text-xs font-black text-slate-900">
-                  {formatMoney(data?.balances?.onHoldBalance)} — releases automatically once the return window closes
+                  {formatMoney(data?.balances?.onHoldBalance)}
                 </p>
               </div>
+            </div>
+          </Card>
+        </BlurFade>
+
+        <BlurFade delay={0.35}>
+          <Card
+            className={cn(
+              "h-full border-none shadow-md p-6 flex flex-col justify-between group hover:shadow-xl transition-all duration-300",
+              codCommissionDue > 0
+                ? "bg-amber-50/60 border border-amber-200/80 ring-1 ring-amber-300/50"
+                : "bg-white",
+            )}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  COD Commission Due
+                </p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+                  {formatMoney(codCommissionDue)}
+                </h2>
+              </div>
+              <div
+                className={cn(
+                  "p-3 rounded-lg group-hover:scale-110 transition-transform duration-300",
+                  codCommissionDue > 0
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-500",
+                )}
+              >
+                <CreditCard className="h-6 w-6" />
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2.5">
+              <p className="text-xs text-slate-500">
+                {codCommissionDue > 0
+                  ? "Cash collected from customer, payable to admin"
+                  : "All COD order commissions are fully settled"}
+              </p>
+              {codCommissionDue > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenPayCommission}
+                  className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black shadow-md shadow-amber-200 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Pay Commission
+                </button>
+              )}
             </div>
           </Card>
         </BlurFade>
@@ -380,8 +464,6 @@ const Earnings = () => {
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Order</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Customer</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Items</th>
-                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Order Total</th>
-                  <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Commission &amp; Fees</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Your Earning</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Payment</th>
                   <th className="px-4 py-3 sm:px-6 whitespace-nowrap">Status</th>
@@ -390,7 +472,7 @@ const Earnings = () => {
               <tbody className="divide-y divide-slate-100">
                 {paginatedLedger.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-16 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
                       No earnings records found yet.
                     </td>
                   </tr>
@@ -448,29 +530,10 @@ const Earnings = () => {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Order Total">
-                        <p className="text-sm font-bold text-slate-900">
-                          {row.orderId ? formatMoney(row.orderTotal) : "—"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Commission & Fees">
-                        {row.orderId && (row.commissionAmount || row.packagingAmount) ? (
-                          <div className="space-y-0.5 text-[11px] text-slate-500">
-                            {/* Commission is added to the customer's price, not
-                                deducted from your payout — you keep 100% of the
-                                price you set. Shown here to reconcile Order
-                                Total down to Your Earning below. */}
-                            {row.commissionAmount > 0 && <p>Platform commission (paid by customer): {formatMoney(row.commissionAmount)}</p>}
-                            {row.packagingAmount > 0 && <p>Packaging: +{formatMoney(row.packagingAmount)}</p>}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-300">—</span>
-                        )}
-                      </td>
                       <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Your Earning">
-                        {row.orderId && row.sellerPayout > 0 ? (
+                        {row.orderId ? (
                           <p className="text-sm font-black text-emerald-600">
-                            +{formatMoney(row.sellerPayout)}
+                            +{formatMoney(row.sellerPayout > 0 ? row.sellerPayout : (row.orderTotal > 0 ? row.orderTotal : Math.abs(Number(row.amount || 0))))}
                           </p>
                         ) : (
                           <p
@@ -537,12 +600,29 @@ const Earnings = () => {
               </div>
 
               <h2 className="text-2xl font-black text-slate-900 mb-2">Withdraw Funds</h2>
-              <p className="text-sm text-slate-600 font-medium mb-8">
-                Available Balance:{" "}
+              <p className="text-sm text-slate-600 font-medium mb-4">
+                Available to Withdraw:{" "}
                 <span className="text-brand-600 font-bold">
                   {formatMoney(resolveAvailableBalance(data?.balances))}
                 </span>
               </p>
+
+              {Number(data?.balances?.onHoldBalance || 0) > 0 && (
+                <div className="mb-6 p-3 bg-amber-50 border border-amber-200/80 rounded-lg text-left text-xs text-amber-800 space-y-1">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1.5 text-amber-900">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      On Hold (Return Window):
+                    </span>
+                    <span className="text-amber-900 font-black">
+                      {formatMoney(data?.balances?.onHoldBalance)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-relaxed">
+                    Earnings are temporarily held during the 24-hour customer return window. They release automatically to your available balance once the window expires.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4 text-left">
                 <div>
@@ -603,6 +683,78 @@ const Earnings = () => {
                   className="py-3 rounded-lg bg-brand-600 text-white font-black shadow-lg shadow-brand-200 hover:bg-brand-700 transition-all disabled:opacity-60"
                 >
                   {isWithdrawing ? "SUBMITTING..." : "CONFIRM"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isPayCommissionModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md relative z-10 bg-white rounded-lg shadow-2xl overflow-hidden p-8 text-center"
+            >
+              <div className="h-16 w-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+                <CreditCard className="h-8 w-8 text-amber-600" />
+              </div>
+
+              <h2 className="text-2xl font-black text-slate-900 mb-2">Pay COD Commission</h2>
+              <p className="text-sm text-slate-600 font-medium mb-6">
+                Total Due to Platform:{" "}
+                <span className="text-amber-600 font-bold">
+                  {formatMoney(codCommissionDue)}
+                </span>
+              </p>
+
+              <div className="space-y-4 text-left">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 block">
+                    Payment Amount
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 font-bold">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      className="w-full pl-8 pr-4 py-3 rounded-lg border-slate-200 bg-slate-50 font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
+                      placeholder="0.00"
+                      value={commissionPayAmount}
+                      onChange={(e) => setCommissionPayAmount(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    Pay securely using UPI, Cards, NetBanking via PhonePe.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200/70 rounded-lg text-xs text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
+                    Cash Collection Remittance
+                  </p>
+                  <p className="text-amber-800 text-[11px] leading-relaxed">
+                    This settles the platform commission &amp; handling fees that you collected directly from customers on self-delivered COD orders.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-8">
+                <button
+                  onClick={() => setIsPayCommissionModalOpen(false)}
+                  className="py-3 rounded-lg font-black text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handlePayCommission}
+                  disabled={isPayingCommission}
+                  className="py-3 rounded-lg bg-amber-600 text-white font-black shadow-lg shadow-amber-200 hover:bg-amber-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {isPayingCommission ? "PROCEEDING..." : "PAY NOW"}
                 </button>
               </div>
             </motion.div>

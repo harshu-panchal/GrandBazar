@@ -48,10 +48,42 @@ const Invoices = () => {
     try {
       const res = await sellerApi.getOrderInvoice(orderId);
       const pdfUrl = res?.data?.result?.pdfUrl;
-      if (pdfUrl) {
-        window.open(pdfUrl, "_blank", "noopener,noreferrer");
-      } else {
+      const invoiceNumber = res?.data?.result?.invoiceNumber || orderId || "Invoice";
+      const filename = `${invoiceNumber}.pdf`;
+
+      if (!pdfUrl) {
         toast.error("Invoice not available yet — please try again shortly.");
+        return;
+      }
+
+      try {
+        const response = await fetch(pdfUrl);
+        if (!response.ok) throw new Error("Failed to download PDF");
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }, 1500);
+        toast.success("Invoice downloaded successfully");
+      } catch (blobErr) {
+        console.warn("Direct blob download failed, falling back to direct anchor:", blobErr);
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.download = filename;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 1000);
       }
     } catch (error) {
       toast.error(

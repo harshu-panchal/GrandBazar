@@ -176,6 +176,29 @@ export const registerPushToken = async (req, res) => {
       },
     ).lean();
 
+    // Deactivate previous active tokens for this user/role on the same platform
+    // to avoid duplicate notification dispatch across stale/historical tokens
+    const identityIds = role === "seller"
+      ? [userId, req.user?.accountId, req.user?.activeStoreId, req.user?.subSellerId].filter(Boolean)
+      : [userId];
+
+    await PushToken.updateMany(
+      {
+        userId: { $in: identityIds },
+        role,
+        platform,
+        token: { $ne: token },
+        isActive: true,
+      },
+      {
+        $set: {
+          isActive: false,
+          invalidatedAt: new Date(),
+          invalidReason: "Replaced by new token registration",
+        },
+      },
+    );
+
     const bearerToken = resolveBearerToken(req);
     const userModelName = ROLE_TO_USER_MODEL[role];
     const identityId = role === "seller" ? (req.user.accountId || req.user.subSellerId || userId) : userId;
@@ -212,9 +235,13 @@ export const removePushToken = async (req, res) => {
       return handleResponse(res, 401, "Unauthorized");
     }
 
+    const identityIds = role === "seller"
+      ? [userId, req.user?.accountId, req.user?.activeStoreId, req.user?.subSellerId].filter(Boolean)
+      : [userId];
+
     const filter = token
-      ? { userId, role, token }
-      : { userId, role };
+      ? { token }
+      : { userId: { $in: identityIds }, role };
     const result = await PushToken.deleteMany(filter);
 
     return handleResponse(res, 200, "Push token removed successfully", {

@@ -2236,3 +2236,71 @@ export async function verifyHandoffOtpAndDeliver(deliveryId, orderId, code) {
   });
   return updated;
 }
+
+export async function resendDeliveryOtpBySeller(sellerId, orderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const candidateSellerIds = [sellerId];
+  if (mongoose.Types.ObjectId.isValid(sellerId)) {
+    const stores = await Store.find({
+      $or: [{ _id: sellerId }, { ownerId: sellerId }],
+    }).select("_id").lean();
+    stores.forEach((s) => candidateSellerIds.push(String(s._id)));
+  }
+
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  const method = String(
+    order.fulfillmentMethod ||
+      (order.logisticsMode === "external"
+        ? FULFILLMENT_METHOD.SELLER_DELIVERY
+        : FULFILLMENT_METHOD.PLATFORM_LOGISTICS),
+  ).toLowerCase();
+
+  if (method !== FULFILLMENT_METHOD.SELLER_DELIVERY) {
+    const err = new Error("Not a seller delivery order");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const ws = String(order.workflowStatus || "").toUpperCase();
+  if (ws !== WORKFLOW_STATUS.OUT_FOR_DELIVERY && order.status !== "out_for_delivery") {
+    const err = new Error("Order is not out for delivery");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const now = new Date();
+  const generatedDeliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
+  const codeHash = OrderOtp.hashCode(generatedDeliveryOtp);
+  await OrderOtp.deleteMany({ orderId, type: "delivery", consumedAt: null });
+  await OrderOtp.create({
+    orderId,
+    orderMongoId: order._id,
+    type: "delivery",
+    codeHash,
+    code: generatedDeliveryOtp,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    lastGeneratedAt: now,
+  });
+
+  emitToCustomer(order.customer.toString(), {
+    event: "delivery:otp:generated",
+    payload: {
+      orderId,
+      otp: generatedDeliveryOtp,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      deliveryPersonNearby: true,
+    },
+  });
+  emitToCustomer(order.customer.toString(), {
+    event: "order:otp",
+    payload: { orderId, code: generatedDeliveryOtp },
+  });
+
+  return { orderId, success: true, message: "Delivery OTP resent to customer" };
+}
+

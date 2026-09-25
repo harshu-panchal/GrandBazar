@@ -87,49 +87,143 @@ export async function applyDeliveredSettlement(order, orderIdString) {
     await handleCodOrderFinance(settled._id, {
       deliveryPartnerId: settled.deliveryBoy,
     });
-  } else if (isCod && settled.fulfillmentMethod === "seller_delivery" && !settled.financeFlags?.codMarkedCollected) {
-    // Seller delivered COD order: seller holds full cash (order total).
-    // Auto-deduct platform commission directly from seller's wallet balance (wallet can go negative).
-    const adminCommission = Number(
-      settled.paymentBreakdown?.adminProductCommissionTotal ??
-      settled.paymentBreakdown?.platformTotalEarning ??
-      0,
+  } else if (
+    isCod &&
+    (settled.fulfillmentMethod === "seller_delivery" || !settled.deliveryBoy) &&
+    !settled.financeFlags?.codMarkedCollected
+  ) {
+    // Seller delivered COD order: seller holds 100% cash collected from customer at the door.
+    // The admin commission is tracked in the seller's dedicated codCommissionDue liability bucket.
+    const adminCommission = roundCurrency(
+      Number(
+        settled.paymentBreakdown?.platformTotalEarning ??
+          settled.paymentBreakdown?.adminProductCommissionTotal ??
+          0,
+      ),
     );
+    const totalCashCollected = roundCurrency(
+      Number(settled.paymentBreakdown?.grandTotal || settled.pricing?.total || 0),
+    );
+
     if (adminCommission > 0 && settled.seller) {
       try {
-        const { debitWallet } = await import("./finance/walletService.js");
+        const {
+          updateCodCommissionDue,
+          getOrCreateWallet,
+          debitWallet,
+          creditWallet,
+        } = await import("./finance/walletService.js");
         const { createLedgerEntry } = await import("./finance/ledgerService.js");
-        const { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } = await import("../constants/finance.js");
-        const debitRes = await debitWallet({
+        const {
+          OWNER_TYPE,
+          LEDGER_TRANSACTION_TYPE,
+          LEDGER_DIRECTION,
+        } = await import("../constants/finance.js");
+
+        // 1. Record the cash commission liability in the seller's wallet
+        const walletRes = await updateCodCommissionDue({
           ownerType: OWNER_TYPE.SELLER,
           ownerId: settled.seller,
-          amount: adminCommission,
-          bucket: "available",
-          allowNegative: true,
+          deltaAmount: adminCommission,
         });
 
+        // 2. Create ledger entry for the commission liability
         await createLedgerEntry({
           orderId: settled._id,
-          walletId: debitRes.wallet._id,
+          walletId: walletRes.wallet._id,
           actorType: OWNER_TYPE.SELLER,
           actorId: settled.seller,
-          type: LEDGER_TRANSACTION_TYPE.ORDER_SETTLEMENT,
+          type: LEDGER_TRANSACTION_TYPE.SELLER_COD_COMMISSION_DUE,
           direction: LEDGER_DIRECTION.DEBIT,
           amount: adminCommission,
           paymentMode: "COD",
           metadata: {
-            description: `Admin commission deduction for self-delivered COD order #${settled.shortOrderId || settled.orderId}`,
+            description: `Admin commission due for self-delivered COD order #${settled.shortOrderId || settled.orderId}`,
+            totalCashCollected,
+            adminCommission,
           },
         });
 
+        // 3. Auto-offset if seller has available balance from previous online earnings
+        let offsetAmount = 0;
+        const currentWallet = await getOrCreateWallet(OWNER_TYPE.SELLER, settled.seller);
+        if (currentWallet.availableBalance > 0) {
+          offsetAmount = roundCurrency(Math.min(currentWallet.availableBalance, adminCommission));
+          if (offsetAmount > 0) {
+            await debitWallet({
+              ownerType: OWNER_TYPE.SELLER,
+              ownerId: settled.seller,
+              amount: offsetAmount,
+              bucket: "available",
+              allowNegative: false,
+            });
+            await updateCodCommissionDue({
+              ownerType: OWNER_TYPE.SELLER,
+              ownerId: settled.seller,
+              deltaAmount: -offsetAmount,
+            });
+            await creditWallet({
+              ownerType: OWNER_TYPE.ADMIN,
+              ownerId: null,
+              amount: offsetAmount,
+              bucket: "available",
+            });
+            await createLedgerEntry({
+              orderId: settled._id,
+              walletId: currentWallet._id,
+              actorType: OWNER_TYPE.SELLER,
+              actorId: settled.seller,
+              type: LEDGER_TRANSACTION_TYPE.SELLER_COD_COMMISSION_REMITTED,
+              direction: LEDGER_DIRECTION.DEBIT,
+              amount: offsetAmount,
+              paymentMode: "COD",
+              metadata: {
+                description: `Auto-offset COD commission from available wallet balance for order #${settled.shortOrderId || settled.orderId}`,
+                offsetAmount,
+              },
+            });
+          }
+        }
+
+        // 4. Update order finance flags
         await Order.findByIdAndUpdate(settled._id, {
           $set: {
             "financeFlags.codMarkedCollected": true,
-            "paymentBreakdown.codCollectedAmount": settled.paymentBreakdown?.grandTotal || settled.pricing?.total || 0,
+            "paymentBreakdown.codCollectedAmount": totalCashCollected,
+            "paymentBreakdown.codCommissionDue": Math.max(0, roundCurrency(adminCommission - offsetAmount)),
+            paymentStatus: "CASH_COLLECTED",
           },
         });
+
+        // 5. Track in Transaction collection for seller ledger visibility
+        await Transaction.findOneAndUpdate(
+          { reference: `COD-COM-${orderIdString}` },
+          {
+            $set: {
+              amount: -adminCommission,
+              status: "Settled",
+              meta: {
+                totalCashCollected,
+                adminCommission,
+                offsetAmount,
+                unsettledDue: Math.max(0, roundCurrency(adminCommission - offsetAmount)),
+              },
+            },
+            $setOnInsert: {
+              user: settled.seller,
+              userModel: "Seller",
+              order: settled._id,
+              type: "Commission Deduction",
+              reference: `COD-COM-${orderIdString}`,
+            },
+          },
+          { upsert: true, new: true },
+        );
       } catch (err) {
-        console.error(`[COD Settlement] Failed to auto-deduct commission from seller ${settled.seller}:`, err.message);
+        console.error(
+          `[COD Settlement] Failed to record commission liability for seller ${settled.seller}:`,
+          err.message,
+        );
       }
     }
   }

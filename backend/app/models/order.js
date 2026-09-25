@@ -918,6 +918,7 @@ orderSchema.index({ seller: 1, returnStatus: 1, returnRequestedAt: -1 });
 orderSchema.index({ workflowStatus: 1, sellerPendingExpiresAt: 1 });
 orderSchema.index({ workflowStatus: 1, deliverySearchExpiresAt: 1 });
 orderSchema.index({ fulfillmentType: 1, "schedule.deliveryDate": 1, workflowStatus: 1 });
+orderSchema.index({ seller: 1, "schedule.deliveryDate": 1, fulfillmentType: 1 });
 orderSchema.index({ "schedule.activationAt": 1, workflowStatus: 1 });
 orderSchema.index({ "reschedule.status": 1, createdAt: -1 });
 orderSchema.index({ "priceAdjustment.status": 1, createdAt: -1 });

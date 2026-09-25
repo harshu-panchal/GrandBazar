@@ -85,7 +85,7 @@ export const uploadRawToCloudinary = async (fileBuffer, folder = 'documents', { 
  * Cloudinary bakes the format extension into the public_id itself, so
  * no separate `format` option should be passed here (it would double it up).
  */
-export const getSignedRawUrl = (publicId) => {
+export const getSignedRawUrl = (publicId, { attachment = true } = {}) => {
     // publicId from uploadRawToCloudinary already has the format extension
     // baked in as literal characters (confirmed via Admin API lookup — that's
     // how this account stores authenticated raw uploads) — pass it whole and
@@ -94,6 +94,7 @@ export const getSignedRawUrl = (publicId) => {
     return cloudinary.utils.private_download_url(publicId, null, {
         resource_type: 'raw',
         type: 'authenticated',
+        ...(attachment ? { attachment: true } : {}),
     });
 };
 

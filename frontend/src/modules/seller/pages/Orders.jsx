@@ -20,7 +20,9 @@ import {
     HiOutlineMapPin,
     HiOutlinePhone,
     HiOutlineCalendarDays,
-    HiOutlineCamera
+    HiOutlineCamera,
+    HiOutlineShieldCheck,
+    HiOutlineCheckCircle
 } from 'react-icons/hi2';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -269,6 +271,10 @@ const Orders = () => {
     const [pickupVerifyOtp, setPickupVerifyOtp] = useState('');
     const [pickupOtpVerifying, setPickupOtpVerifying] = useState(false);
     const [deliveryOtp, setDeliveryOtp] = useState('');
+    const [sellerDeliveryOtp, setSellerDeliveryOtp] = useState('');
+    const [sellerDeliveryOtpCooldown, setSellerDeliveryOtpCooldown] = useState(0);
+    const [sellerDeliveryOtpSending, setSellerDeliveryOtpSending] = useState(false);
+    const [sellerDeliveryVerifying, setSellerDeliveryVerifying] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -707,6 +713,8 @@ const Orders = () => {
         setAdjustReason('');
         setPickupVerifyOtp('');
         setPickupOtpCooldown(0);
+        setSellerDeliveryOtp('');
+        setSellerDeliveryOtpCooldown(0);
         setIsDetailsModalOpen(true);
 
         try {
@@ -763,12 +771,16 @@ const Orders = () => {
             return;
         }
 
-        if (normalizedStatus === 'delivered' && (!additionalData.deliveryProofImages || (isSelfDelivery && !additionalData.otp))) {
-            setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'deliveryProofImages' });
-            setPickupImage(null);
-            setDeliveryOtp('');
-            setIsPickupModalOpen(true);
-            return;
+        if (normalizedStatus === 'delivered') {
+            const needsOtp = isSelfDelivery && !additionalData.otp;
+            const needsProof = !isSelfDelivery && (!additionalData.deliveryProofImages || !additionalData.deliveryProofImages.length);
+            if (needsOtp || needsProof) {
+                setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'deliveryProofImages' });
+                setPickupImage(null);
+                setDeliveryOtp(additionalData.otp || '');
+                setIsPickupModalOpen(true);
+                return;
+            }
         }
 
         if (normalizedStatus === 'cancelled' && !additionalData.cancelReason) {
@@ -1292,16 +1304,53 @@ const Orders = () => {
             showToast('Please enter the 4-digit customer delivery OTP', 'error');
             return;
         }
-        if (!pickupImage) {
+        if (!isDelivery && !pickupImage) {
             showToast('Please upload a proof image first', 'error');
             return;
         }
         if (pendingStatusUpdate) {
             const field = pendingStatusUpdate.proofField || 'pickupProofImages';
             handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
-                [field]: [pickupImage],
+                [field]: pickupImage ? [pickupImage] : [],
                 otp: deliveryOtp ? deliveryOtp.trim() : undefined,
             });
+        }
+    };
+
+    useEffect(() => {
+        if (sellerDeliveryOtpCooldown <= 0) return undefined;
+        const iv = setInterval(() => {
+            setSellerDeliveryOtpCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+        }, 1000);
+        return () => clearInterval(iv);
+    }, [sellerDeliveryOtpCooldown]);
+
+    const handleSendSellerDeliveryOtp = async (orderId) => {
+        if (sellerDeliveryOtpSending || sellerDeliveryOtpCooldown > 0) return;
+        setSellerDeliveryOtpSending(true);
+        try {
+            await sellerApi.resendDeliveryOtp(orderId);
+            showToast('Delivery OTP sent to the customer', 'success');
+            setSellerDeliveryOtpCooldown(30);
+        } catch (err) {
+            showToast(err?.response?.data?.message || 'Failed to send OTP', 'error');
+        } finally {
+            setSellerDeliveryOtpSending(false);
+        }
+    };
+
+    const handleVerifySellerDelivery = async (orderId) => {
+        const trimmed = (sellerDeliveryOtp || '').trim();
+        if (sellerDeliveryVerifying || trimmed.length !== 4) {
+            showToast('Please enter the 4-digit customer delivery OTP', 'error');
+            return;
+        }
+        setSellerDeliveryVerifying(true);
+        try {
+            await handleStatusUpdate(orderId, 'delivered', { otp: trimmed });
+            setSellerDeliveryOtp('');
+        } finally {
+            setSellerDeliveryVerifying(false);
         }
     };
 
@@ -1924,7 +1973,7 @@ const Orders = () => {
                     {/* Pickup Proof Modal */}
                     <AnimatePresence>
                         {isPickupModalOpen && (
-                            <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -1940,8 +1989,12 @@ const Orders = () => {
                                 >
                                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                                         <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                                            <HiOutlineCamera className="h-5 w-5 text-primary" />
-                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Capture Delivery Proof' : 'Capture Pickup Proof'}
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? (
+                                                <HiOutlineShieldCheck className="h-5 w-5 text-purple-600" />
+                                            ) : (
+                                                <HiOutlineCamera className="h-5 w-5 text-primary" />
+                                            )}
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Confirm Delivery & Enter OTP' : 'Capture Pickup Proof'}
                                         </h3>
                                         <button
                                             onClick={() => setIsPickupModalOpen(false)}
@@ -1954,7 +2007,7 @@ const Orders = () => {
                                     <div className="p-6 space-y-4 text-center">
                                         <p className="text-xs font-bold text-slate-600">
                                             {pendingStatusUpdate?.proofField === 'deliveryProofImages'
-                                                ? 'Please upload a photo confirming the order was delivered to the customer.'
+                                                ? 'Enter the customer delivery OTP to complete handover (photo proof is optional).'
                                                 : 'Please upload a photo of the order being handed over to the delivery partner.'}
                                         </p>
                                         {pendingStatusUpdate?.status === 'delivered' && (
@@ -1985,7 +2038,9 @@ const Orders = () => {
                                                     ) : (
                                                         <>
                                                             <HiOutlineCamera className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors" />
-                                                            <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest group-hover:text-primary">Tap to Upload</span>
+                                                            <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest group-hover:text-primary">
+                                                                {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Optional: Tap to Upload Photo' : 'Tap to Upload'}
+                                                            </span>
                                                         </>
                                                     )}
                                                 </div>
@@ -2011,8 +2066,13 @@ const Orders = () => {
                                         </Button>
                                         <Button
                                             onClick={confirmPickup}
-                                            disabled={!pickupImage || isUploading}
-                                            className="flex-1 text-xs"
+                                            disabled={
+                                                isUploading ||
+                                                (pendingStatusUpdate?.status === 'delivered'
+                                                    ? !deliveryOtp || deliveryOtp.trim().length !== 4
+                                                    : !pickupImage)
+                                            }
+                                            className="flex-1 text-xs bg-purple-600 hover:bg-purple-700 text-white"
                                         >
                                             {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'CONFIRM DELIVERY' : 'CONFIRM HANDOVER'}
                                         </Button>
@@ -2024,7 +2084,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isRescheduleModalOpen && rescheduleTarget && (
-                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2128,7 +2188,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isCancelReasonModalOpen && (
-                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2193,7 +2253,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isBulkRejectModalOpen && (
-                            <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2258,7 +2318,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isReplacementModalOpen && selectedOrder && (
-                            <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2372,7 +2432,7 @@ const Orders = () => {
 
                     <AnimatePresence>
                         {isSplitModalOpen && selectedOrder && (
-                            <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-4">
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4">
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -2713,6 +2773,74 @@ const Orders = () => {
                                                             ? `Resend code to customer in ${pickupOtpCooldown}s`
                                                             : "Resend code to customer"}
                                                 </button>
+                                            </div>
+                                        )}
+                                        {resolveFulfillmentMethod(selectedOrder) === 'seller_delivery'
+                                            && ['out_for_delivery', 'in_delivery'].includes(String(selectedOrder.status || selectedOrder.workflowStatus || '').toLowerCase()) && (
+                                            <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-purple-50 ring-1 ring-purple-200 space-y-3">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                                                            <HiOutlineShieldCheck className="h-4 w-4 sm:h-5 sm:w-5" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-black uppercase tracking-wider text-purple-900 truncate">
+                                                                Verify Customer Delivery OTP
+                                                            </p>
+                                                            <p className="text-[11px] font-medium text-purple-700">
+                                                                Ask the customer for the 4-digit code shown on their screen to complete handover.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Badge className="bg-purple-100 text-purple-800 border border-purple-200 text-[9px] font-bold uppercase tracking-wider shrink-0">
+                                                        Seller Delivery
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        maxLength={4}
+                                                        value={sellerDeliveryOtp}
+                                                        onChange={(e) => setSellerDeliveryOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                                        placeholder="Enter 4-digit OTP"
+                                                        className="min-w-0 flex-1 rounded-xl border border-purple-300 bg-white px-3 py-2.5 text-center text-lg font-mono font-black tracking-[0.3em] outline-none focus:ring-2 focus:ring-purple-400 placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-sans placeholder:text-xs"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        onClick={() => handleVerifySellerDelivery(selectedOrder.id)}
+                                                        disabled={sellerDeliveryVerifying || (sellerDeliveryOtp || '').trim().length !== 4}
+                                                        className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                                    >
+                                                        {sellerDeliveryVerifying ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                                                        ) : (
+                                                            <>
+                                                                <HiOutlineCheckCircle className="h-4 w-4" />
+                                                                <span>Verify & Deliver</span>
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-0.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSendSellerDeliveryOtp(selectedOrder.id)}
+                                                        disabled={sellerDeliveryOtpSending || sellerDeliveryOtpCooldown > 0}
+                                                        className="text-[11px] font-bold text-purple-700 hover:text-purple-900 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed transition-all"
+                                                    >
+                                                        {sellerDeliveryOtpSending
+                                                            ? 'Resending code...'
+                                                            : sellerDeliveryOtpCooldown > 0
+                                                                ? `Resend code to customer in ${sellerDeliveryOtpCooldown}s`
+                                                                : "Resend code to customer"}
+                                                    </button>
+                                                    <span className="text-[10px] text-purple-600 font-medium hidden sm:inline">
+                                                        Code is shown in customer's order tracker
+                                                    </span>
+                                                </div>
                                             </div>
                                         )}
                                         {selectedOrder.reschedule?.status === 'requested' && (
@@ -3127,8 +3255,19 @@ const Orders = () => {
 
                                     {/* Modal Footer */}
                                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end shrink-0">
-                                        <div className="flex gap-2 items-center">
+                                        <div className="flex gap-2 items-center flex-wrap justify-end">
                                             <button onClick={() => setIsDetailsModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all">CLOSE</button>
+                                            {resolveFulfillmentMethod(selectedOrder) === 'seller_delivery'
+                                                && ['out_for_delivery', 'in_delivery'].includes(String(selectedOrder.status || selectedOrder.workflowStatus || '').toLowerCase()) && (
+                                                <Button
+                                                    type="button"
+                                                    onClick={() => handleStatusUpdate(selectedOrder.id, 'delivered')}
+                                                    className="px-4 py-2 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-700 text-white uppercase tracking-wider shadow-xs flex items-center gap-1.5"
+                                                >
+                                                    <HiOutlineShieldCheck className="h-4 w-4" />
+                                                    <span>Enter OTP & Deliver</span>
+                                                </Button>
+                                            )}
                                             {canSellerManuallyUpdateStatus(selectedOrder) && (
                                                 <OrderStatusControl
                                                     order={selectedOrder}

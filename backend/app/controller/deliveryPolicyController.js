@@ -323,3 +323,17 @@ export const getPickupStatus = async (req, res) => {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
+
+export const sellerResendDeliveryOtp = async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const sellerId = req.user?.id;
+    const { resendDeliveryOtpBySeller } = await import("../services/orderWorkflowService.js");
+    const result = await resendDeliveryOtpBySeller(sellerId, orderId);
+    return handleResponse(res, 200, "Delivery OTP resent to customer", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+

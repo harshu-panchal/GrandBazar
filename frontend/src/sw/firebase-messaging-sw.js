@@ -79,7 +79,12 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.apiKey
   });
 
   messaging.onBackgroundMessage((payload) => {
-    const { title, options } = buildNotificationOptions(payload);
-    self.registration.showNotification(title, options);
+    // If the payload contains a notification object (or webpush.notification),
+    // the FCM compat SDK automatically shows a system notification on its own.
+    // Manually calling showNotification here causes duplicate banners.
+    if (!payload?.notification && !payload?.webpush?.notification) {
+      const { title, options } = buildNotificationOptions(payload);
+      self.registration.showNotification(title, options);
+    }
   });
 }

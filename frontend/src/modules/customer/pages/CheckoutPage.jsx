@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import Lottie from "lottie-react";
 import { useInViewAnimation } from "@/core/hooks/useInViewAnimation";
@@ -223,6 +224,17 @@ const CheckoutPage = () => {
   } = useAppLocation();
   const [fulfillmentMethod, setFulfillmentMethod] = useState("platform_logistics");
   const [isScheduleSheetOpen, setIsScheduleSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (isScheduleSheetOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isScheduleSheetOpen]);
   const [selectedPayment, setSelectedPayment] = useState("cash");
   const [selectedTip, setSelectedTip] = useState(0);
   const [showAllCartItems, setShowAllCartItems] = useState(false);
@@ -1424,21 +1436,21 @@ const CheckoutPage = () => {
               </button>
             </div>
 
-            {isScheduleSheetOpen && (
+            {isScheduleSheetOpen && typeof document !== "undefined" && createPortal(
               <div
-                className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
+                className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4"
                 onClick={() => setIsScheduleSheetOpen(false)}
               >
                 <div
-                  className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-5 space-y-4"
+                  className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-5 space-y-4 shadow-2xl"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-black text-slate-900">Delivery mode</p>
+                    <p className="text-base font-black text-slate-900">Delivery mode</p>
                     <button
                       type="button"
                       onClick={() => setIsScheduleSheetOpen(false)}
-                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500"
+                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
                     >
                       <X size={18} />
                     </button>
@@ -1469,18 +1481,23 @@ const CheckoutPage = () => {
                     <DeliverySlotPicker
                       sellerId={primarySellerId}
                       fulfillmentType={fulfillmentType}
+                      initialTimeSlot={schedulePayload?.timeSlot || (selectedTimeSlot !== "now" ? selectedTimeSlot : null)}
+                      initialDeliveryDate={schedulePayload?.deliveryDate}
+                      initialWindowLabel={schedulePayload?.windowLabel}
+                      campaignId={schedulePayload?.campaignId || schedulePayload?.preOrderCampaignId}
                       onChange={setSchedule}
                     />
                   )}
                   <button
                     type="button"
                     onClick={() => setIsScheduleSheetOpen(false)}
-                    className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold"
+                    className="w-full py-3 rounded-xl bg-primary text-white text-sm font-bold shadow-md hover:brightness-105 active:scale-[0.99] transition-all"
                   >
                     Done
                   </button>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
 
             {/* Payment Selector */}

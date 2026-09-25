@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence, useAnimation, useDragControls } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { X, ChevronDown, Share2, Heart, Search, Clock, Minus, Plus, ShoppingBag, Star, MessageSquare, ArrowLeft, ChevronRight, Store } from 'lucide-react';
+import { X, ChevronDown, Share2, Heart, Search, Clock, Minus, Plus, ShoppingBag, Star, MessageSquare, ArrowLeft, ChevronRight, Store, Sparkles } from 'lucide-react';
 import { useProductDetail } from '../../context/ProductDetailContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
@@ -107,31 +107,37 @@ const ProductDetailSheet = () => {
         }
 
         // Fetch / hydrate product add-ons
-        if (selectedProduct?.addons && selectedProduct.addons.length > 0) {
-            const first = selectedProduct.addons[0];
-            if (typeof first === "object" && first !== null) {
-                setAddons(selectedProduct.addons);
-            } else {
-                const ids = selectedProduct.addons.map((a) => (typeof a === "object" ? a?._id || a?.id : a)).filter(Boolean);
-                if (ids.length > 0) {
-                    customerApi.getProducts({ productIds: ids.join(",") })
-                        .then((res) => {
-                            if (res.data?.success) {
-                                setAddons(res.data.result?.items || []);
-                            }
-                        })
-                        .catch(() => setAddons([]));
-                }
-            }
-        } else if (selectedProduct?.id || selectedProduct?._id) {
-            const pid = selectedProduct.id || selectedProduct._id;
-            customerApi.getProductById(pid)
+        const pid = selectedProduct?.id || selectedProduct?._id;
+        const firstAddon = selectedProduct?.addons?.[0];
+        const isAlreadyHydrated = Boolean(
+            firstAddon &&
+            typeof firstAddon === "object" &&
+            (firstAddon.name || firstAddon.effectivePrice || firstAddon.price)
+        );
+
+        if (isAlreadyHydrated) {
+            setAddons(selectedProduct.addons);
+        } else if (pid) {
+            const hasValidLocation =
+                Number.isFinite(currentLocation?.latitude) &&
+                Number.isFinite(currentLocation?.longitude);
+            const params = hasValidLocation ? {
+                lat: currentLocation.latitude,
+                lng: currentLocation.longitude
+            } : {};
+
+            customerApi.getProductById(pid, params)
                 .then((res) => {
                     if (res.data?.success && Array.isArray(res.data.result?.addons)) {
                         setAddons(res.data.result.addons);
+                    } else {
+                        setAddons([]);
                     }
                 })
-                .catch(() => setAddons([]));
+                .catch((err) => {
+                    console.error("Failed to fetch product addons:", err);
+                    setAddons([]);
+                });
         } else {
             setAddons([]);
         }
@@ -435,6 +441,113 @@ const ProductDetailSheet = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+            </div>
+        );
+    };
+
+    const renderAddonsSection = () => {
+        if (!addons || addons.length === 0) return null;
+
+        return (
+            <div className="bg-gradient-to-br from-amber-50/70 via-orange-50/30 to-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 my-3 shadow-xs">
+                <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-600" />
+                        <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+                            Frequently Paired Add-ons
+                        </h4>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-full">
+                        {addons.length} {addons.length === 1 ? "option" : "options"}
+                    </span>
+                </div>
+
+                <div className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar">
+                    {addons.map((addon) => {
+                        const aid = addon._id || addon.id;
+                        const aPrice = addon.effectivePrice ?? addon.customerSalePrice ?? addon.customerPrice ?? addon.salePrice ?? addon.price;
+                        const cartItem = cart.find((c) => String(c.id || c._id) === String(aid));
+                        const itemQty = cartItem ? cartItem.quantity : 0;
+
+                        return (
+                            <div
+                                key={aid}
+                                className="flex-shrink-0 w-28 sm:w-32 bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
+                            >
+                                <div>
+                                    <div className="w-full h-16 sm:h-20 bg-slate-50/80 rounded-lg flex items-center justify-center p-1 mb-1.5 overflow-hidden">
+                                        {addon.mainImage ? (
+                                            <img
+                                                src={applyCloudinaryTransform(addon.mainImage, "f_auto,q_auto,w_160")}
+                                                alt={addon.name}
+                                                className="w-full h-full object-contain"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <ShoppingBag size={20} className="text-slate-300" />
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-800 line-clamp-1 leading-snug" title={addon.name}>
+                                        {addon.name}
+                                    </p>
+                                    <div className="flex items-baseline gap-1 mt-0.5">
+                                        <p className="text-[12px] font-black text-amber-700">₹{aPrice}</p>
+                                        {addon.customerPrice && Number(addon.customerPrice) > Number(aPrice) && (
+                                            <span className="text-[9px] text-slate-400 line-through">₹{addon.customerPrice}</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {itemQty > 0 ? (
+                                    <div className="mt-2 flex items-center justify-between bg-emerald-50 border border-emerald-200/90 rounded-lg px-1.5 py-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (itemQty <= 1) {
+                                                    removeFromCart(aid, String(cartItem?.variantSku || ""));
+                                                } else {
+                                                    updateQuantity(aid, -1, String(cartItem?.variantSku || ""));
+                                                }
+                                            }}
+                                            className="w-5 h-5 flex items-center justify-center text-emerald-800 hover:bg-emerald-100 rounded active:scale-90 transition-transform"
+                                        >
+                                            <Minus size={11} strokeWidth={3} />
+                                        </button>
+                                        <span className="text-[11px] font-black text-emerald-800 tabular-nums">
+                                            {itemQty}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateQuantity(aid, 1, String(cartItem?.variantSku || ""))}
+                                            className="w-5 h-5 flex items-center justify-center text-emerald-800 hover:bg-emerald-100 rounded active:scale-90 transition-transform"
+                                        >
+                                            <Plus size={11} strokeWidth={3} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const res = await addToCart({
+                                                ...addon,
+                                                id: aid,
+                                                price: Number(aPrice),
+                                                sellerId: addon.sellerId || selectedProduct.sellerId,
+                                            });
+                                            if (res?.ok !== false) {
+                                                showToast(`${addon.name} added to cart`, "success");
+                                            }
+                                        }}
+                                        className="mt-2 w-full py-1 text-[10px] font-black rounded-lg uppercase tracking-wider bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-1 shadow-xs"
+                                    >
+                                        <Plus size={10} strokeWidth={3} />
+                                        Add
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         );
     };
@@ -756,52 +869,8 @@ const ProductDetailSheet = () => {
                                             <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-white border border-gray-200 rounded-full" />
                                         </div>
 
-                                        {/* Frequently Paired Add-ons */}
-                                        {addons && addons.length > 0 && (
-                                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 my-3">
-                                                <div className="flex items-center gap-2 mb-2.5">
-                                                    <span className="text-amber-600 font-bold">✨</span>
-                                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Frequently Paired Add-ons</h4>
-                                                </div>
-                                                <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
-                                                    {addons.map((addon) => {
-                                                        const aid = addon._id || addon.id;
-                                                        const aPrice = addon.effectivePrice ?? addon.customerSalePrice ?? addon.salePrice ?? addon.price;
-                                                        const inCart = cart.some((c) => String(c.id || c._id) === String(aid));
-                                                        return (
-                                                            <div key={aid} className="flex-shrink-0 w-28 bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs flex flex-col justify-between">
-                                                                <div>
-                                                                    {addon.mainImage && (
-                                                                        <img src={applyCloudinaryTransform(addon.mainImage, "f_auto,q_auto,w_120")} alt={addon.name} className="w-full h-16 object-contain rounded-lg mb-1.5" />
-                                                                    )}
-                                                                    <p className="text-[11px] font-bold text-slate-800 line-clamp-1">{addon.name}</p>
-                                                                    <p className="text-[11px] font-black text-amber-600 mt-0.5">₹{aPrice}</p>
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        addToCart({
-                                                                            ...addon,
-                                                                            id: aid,
-                                                                            price: Number(aPrice),
-                                                                        });
-                                                                        showToast(`${addon.name} added to cart`, "success");
-                                                                    }}
-                                                                    className={cn(
-                                                                        "mt-2 w-full py-1 text-[10px] font-black rounded-lg uppercase tracking-wider transition-all",
-                                                                        inCart
-                                                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                                                            : "bg-slate-900 text-white hover:bg-slate-800"
-                                                                    )}
-                                                                >
-                                                                    {inCart ? "In cart" : "+ Add"}
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
+                                        {/* Frequently Paired Add-ons (Desktop) */}
+                                        {renderAddonsSection()}
 
                                         {/* Product Information Accordion (Desktop) */}
                                         <div className="mt-8 border-t border-slate-100">
@@ -1118,6 +1187,9 @@ const ProductDetailSheet = () => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Frequently Paired Add-ons (Mobile) */}
+                                {renderAddonsSection()}
 
                                 {/* Product Information Accordion (Mobile) */}
                                 <div className="mt-4 border-t border-slate-100">

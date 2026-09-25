@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../models/order.js";
 import Store from "../models/store.js";
 import {
@@ -73,6 +74,45 @@ export async function countOrdersForWindow({ sellerId, deliveryDate, windowLabel
   });
 }
 
+export async function countOrdersForDayByWindow({ sellerId, deliveryDate }) {
+  if (!sellerId || !deliveryDate) return {};
+  const delivery = new Date(deliveryDate);
+  if (Number.isNaN(delivery.getTime())) return {};
+  const dayStart = startOfDayUtc(delivery);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  const sellerMatch = mongoose.Types.ObjectId.isValid(sellerId)
+    ? new mongoose.Types.ObjectId(sellerId)
+    : sellerId;
+
+  const counts = await Order.aggregate([
+    {
+      $match: {
+        seller: sellerMatch,
+        fulfillmentType: { $in: [FULFILLMENT_TYPE.SCHEDULED, FULFILLMENT_TYPE.PREORDER] },
+        workflowStatus: {
+          $nin: [WORKFLOW_STATUS.CANCELLED],
+        },
+        status: { $ne: "cancelled" },
+        "schedule.deliveryDate": { $gte: dayStart, $lt: dayEnd },
+      },
+    },
+    {
+      $group: {
+        _id: "$schedule.windowLabel",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const map = {};
+  for (const row of counts) {
+    if (row._id) map[row._id] = row.count;
+  }
+  return map;
+}
+
 export async function validateScheduleSelection({
   sellerId,
   deliveryDate,
@@ -81,8 +121,10 @@ export async function validateScheduleSelection({
   campaign = null,
   now = new Date(),
   checkRescheduleCutoff = false,
+  store: preloadedStore = null,
+  bookedCount = null,
 }) {
-  const store = await Store.findById(sellerId).lean();
+  const store = preloadedStore || (await Store.findById(sellerId).lean());
   if (!store) {
     const err = new Error("Store not found");
     err.statusCode = 404;
@@ -182,7 +224,10 @@ export async function validateScheduleSelection({
   }
 
   const capacity = Number(window.capacityPerDay || 50);
-  const booked = await countOrdersForWindow({ sellerId, deliveryDate: delivery, windowLabel });
+  const booked =
+    bookedCount != null
+      ? Number(bookedCount)
+      : await countOrdersForWindow({ sellerId, deliveryDate: delivery, windowLabel });
   if (booked >= capacity) {
     const err = new Error("Selected delivery window is fully booked");
     err.statusCode = 409;

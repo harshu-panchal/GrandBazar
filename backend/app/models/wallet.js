@@ -34,6 +34,11 @@ const walletSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    codCommissionDue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     totalCredited: {
       type: Number,
       default: 0,

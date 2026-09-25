@@ -38,6 +38,7 @@ const Returns = React.lazy(() => import("../pages/Returns"));
 const Earnings = React.lazy(() => import("../pages/Earnings"));
 const BulkSettlements = React.lazy(() => import("../pages/BulkSettlements"));
 const Invoices = React.lazy(() => import("../pages/Invoices"));
+const CodCommissionPaymentStatus = React.lazy(() => import("../pages/CodCommissionPaymentStatus"));
 const Analytics = React.lazy(() => import("../pages/Analytics"));
 const Transactions = React.lazy(() => import("../pages/Transactions"));
 const DeliveryTracking = React.lazy(() => import("../pages/DeliveryTracking"));
@@ -206,6 +207,7 @@ const SellerRoutes = () => {
             <Route path="earnings" element={<Earnings />} />
             <Route path="bulk-settlements" element={<BulkSettlements />} />
             <Route path="invoices" element={<Invoices />} />
+            <Route path="cod-commission-status" element={<CodCommissionPaymentStatus />} />
           </>
         )}
         <Route path="profile" element={<Profile />} />

@@ -70,6 +70,8 @@ export const LEDGER_TRANSACTION_TYPE = {
   // such ledger write threw a validation error. Adding it here fixes that
   // pre-existing bug.
   PAYOUT_CANCELLED: "PAYOUT_CANCELLED",
+  SELLER_COD_COMMISSION_DUE: "SELLER_COD_COMMISSION_DUE",
+  SELLER_COD_COMMISSION_REMITTED: "SELLER_COD_COMMISSION_REMITTED",
 };
 
 export const PAYOUT_TYPE = {

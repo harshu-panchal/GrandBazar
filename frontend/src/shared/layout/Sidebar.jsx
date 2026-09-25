@@ -269,7 +269,13 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
     location.pathname.startsWith("/seller");
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div
+      data-lenis-prevent
+      data-lenis-prevent-wheel
+      data-lenis-prevent-touch
+      className="flex flex-col h-full min-h-0 overscroll-contain"
+      style={{ overscrollBehavior: 'contain' }}
+    >
       <div className={cn(
         "flex-shrink-0 flex h-16 items-center justify-between px-5 border-b z-10",
         isLightTheme
@@ -322,12 +328,14 @@ const SidebarContent = ({ items, title, onClose, openMenu, handleToggle, hovered
 
       <nav
         data-lenis-prevent
+        data-lenis-prevent-wheel
+        data-lenis-prevent-touch
         onMouseLeave={() => setHoveredIdx(null)}
         className={cn(
           "mt-4 px-3 space-y-1.5 flex-1 overflow-y-auto overscroll-contain min-h-0 pb-6 relative z-20",
           isLightTheme ? "custom-scrollbar-light" : "custom-scrollbar-dark"
         )}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
       >
         <p className={cn(
           "px-3 text-[9px] font-black uppercase tracking-[0.3em] mb-3",
@@ -446,20 +454,31 @@ const Sidebar = ({ items, title, isOpen, onClose }) => {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className={cn(
-        "fixed left-0 inset-y-0 w-72 border-r z-50 transition-all duration-300 flex-col",
-        isLightTheme
-          ? "bg-white text-slate-500 border-slate-200/60 shadow-[20px_0_60px_rgba(0,0,0,0.02)]"
-          : "bg-[#0a0c10] text-gray-400 border-white/5 shadow-[20px_0_60px_rgba(0,0,0,0.4)]",
-        (role === "admin" || role === "seller") ? "hidden md:flex" : "flex",
-      )}>
+      <aside
+        data-lenis-prevent
+        data-lenis-prevent-wheel
+        data-lenis-prevent-touch
+        style={{ overscrollBehavior: 'contain' }}
+        className={cn(
+          "fixed left-0 inset-y-0 w-72 border-r z-50 transition-all duration-300 flex-col",
+          isLightTheme
+            ? "bg-white text-slate-500 border-slate-200/60 shadow-[20px_0_60px_rgba(0,0,0,0.02)]"
+            : "bg-[#0a0c10] text-gray-400 border-white/5 shadow-[20px_0_60px_rgba(0,0,0,0.4)]",
+          (role === "admin" || role === "seller") ? "hidden md:flex" : "flex",
+        )}
+      >
         <SidebarContent {...commonProps} />
       </aside>
 
       {/* Mobile Sidebar (Drawer) */}
       <AnimatePresence mode="wait">
         {isOpen && (
-          <div className="fixed inset-0 z-[100] md:hidden">
+          <div
+            data-lenis-prevent
+            data-lenis-prevent-wheel
+            data-lenis-prevent-touch
+            className="fixed inset-0 z-[100] md:hidden"
+          >
             {/* Backdrop Overlay */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -470,7 +489,12 @@ const Sidebar = ({ items, title, isOpen, onClose }) => {
             />
 
             {/* Outer Container (Fixed Shell - NO TRANSFORM) */}
-            <div className="absolute left-0 inset-y-0 w-72 flex flex-col pointer-events-none">
+            <div
+              data-lenis-prevent
+              data-lenis-prevent-wheel
+              data-lenis-prevent-touch
+              className="absolute left-0 inset-y-0 w-72 flex flex-col pointer-events-none"
+            >
               {/* Inner Animation Wrapper (TRANSFORM APPLIED HERE) */}
               <motion.div
                 initial={{ x: "-100%" }}

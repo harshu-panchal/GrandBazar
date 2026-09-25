@@ -4,6 +4,7 @@ import PreOrderCampaign from "../models/preOrderCampaign.js";
 import {
   resolveStoreSchedulingSettings,
   validateScheduleSelection,
+  countOrdersForDayByWindow,
 } from "../services/orderSchedulingService.js";
 import {
   customerRescheduleInstant,
@@ -105,21 +106,26 @@ export const updateSellerSchedulingSettings = async (req, res) => {
 export const getAvailableDeliverySlots = async (req, res) => {
   try {
     const { sellerId, deliveryDate, campaignId } = req.query;
+    if (!sellerId) return handleResponse(res, 400, "Seller ID is required");
     const fulfillmentType = campaignId ? "preorder" : (req.query.fulfillmentType || "scheduled");
-    const store = await Store.findById(sellerId).lean();
-    if (!store) return handleResponse(res, 404, "Store not found");
-    const settings = resolveStoreSchedulingSettings(store);
 
-    let campaign = null;
-    if (campaignId) {
-      campaign = await PreOrderCampaign.findOne({
-        campaignId,
-        status: { $ne: "cancelled" },
-      })
-        .select("campaignId deliveryWindow deliveryWindows rescheduleCutoffDays")
-        .lean();
-      if (!campaign) return handleResponse(res, 404, "Campaign not found");
-    }
+    // Fetch store, day order counts by window, and campaign (if applicable) in parallel
+    const [store, bookedMap, campaign] = await Promise.all([
+      Store.findById(sellerId).lean(),
+      countOrdersForDayByWindow({ sellerId, deliveryDate }),
+      campaignId
+        ? PreOrderCampaign.findOne({
+            campaignId,
+            status: { $ne: "cancelled" },
+          })
+            .select("campaignId deliveryWindow deliveryWindows rescheduleCutoffDays")
+            .lean()
+        : Promise.resolve(null),
+    ]);
+
+    if (!store) return handleResponse(res, 404, "Store not found");
+    if (campaignId && !campaign) return handleResponse(res, 404, "Campaign not found");
+    const settings = resolveStoreSchedulingSettings(store);
 
     // The store's general "scheduling enabled" toggle only governs regular
     // scheduled orders — a pre-order campaign's own delivery window applies
@@ -145,6 +151,8 @@ export const getAvailableDeliverySlots = async (req, res) => {
       try {
         await validateScheduleSelection({
           sellerId,
+          store,
+          bookedCount: bookedMap[window.label] || 0,
           deliveryDate,
           windowLabel: window.label,
           fulfillmentType,

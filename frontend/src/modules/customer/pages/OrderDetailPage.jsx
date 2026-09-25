@@ -696,10 +696,16 @@ const OrderDetailPage = () => {
 
   const canRequestReturn = () => {
     if (!order) return false;
-    if (order.status === "cancelled") return false;
+    if (
+      order.status === "cancelled" ||
+      order.status === "disputed" ||
+      order.workflowStatus === "DISPUTED" ||
+      Boolean(order.disputeRef)
+    ) {
+      return false;
+    }
     const isOrderDelivered =
       order.status === "delivered" ||
-      order.status === "disputed" ||
       Boolean(order.deliveredAt) ||
       order.workflowStatus === "DELIVERED";
     if (!isOrderDelivered) return false;
@@ -1403,6 +1409,25 @@ const OrderDetailPage = () => {
                 Admin note: {order.cancellationRequest.adminNote}
               </p>
             )}
+          </motion.div>
+        )}
+
+        {(status === "disputed" || order?.workflowStatus === "DISPUTED" || Boolean(order?.disputeRef)) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+            className="rounded-3xl p-5 border border-amber-200 bg-amber-50/90 shadow-xs"
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+              <p className="text-sm font-bold text-amber-900">
+                Dispute Under Review
+              </p>
+            </div>
+            <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+              Your dispute has been submitted. Our support team is reviewing the issue and will resolve it shortly.
+            </p>
           </motion.div>
         )}
 

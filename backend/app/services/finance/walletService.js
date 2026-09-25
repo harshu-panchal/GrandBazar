@@ -191,6 +191,35 @@ export async function updateCashInHand({
   };
 }
 
+export async function updateCodCommissionDue({
+  ownerType = OWNER_TYPE.SELLER,
+  ownerId,
+  deltaAmount,
+  session,
+}) {
+  const wallet = await getOrCreateWallet(ownerType, ownerId, { session });
+  const delta = roundCurrency(deltaAmount || 0);
+  if (delta === 0) {
+    return {
+      wallet,
+      before: roundCurrency(wallet.codCommissionDue || 0),
+      after: roundCurrency(wallet.codCommissionDue || 0),
+      delta: 0,
+    };
+  }
+
+  const before = roundCurrency(wallet.codCommissionDue || 0);
+  wallet.codCommissionDue = clampMoney(before + delta, 0);
+  await wallet.save({ session });
+
+  return {
+    wallet,
+    before,
+    after: roundCurrency(wallet.codCommissionDue),
+    delta,
+  };
+}
+
 export async function getAdminFinanceSummary() {
   const adminWallet = await getOrCreateWallet(OWNER_TYPE.ADMIN, null);
 
