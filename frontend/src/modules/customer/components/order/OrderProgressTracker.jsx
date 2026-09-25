@@ -72,9 +72,16 @@ const OrderProgressTracker = ({
     return stepFullIndexMap[step.id] <= fullIndex ? idx : closest;
   }, 0);
 
+  const isDeliveredOrDisputed =
+    status === "delivered" ||
+    status === "disputed" ||
+    order?.workflowStatus === "DELIVERED" ||
+    order?.workflowStatus === "DISPUTED" ||
+    Boolean(order?.deliveredAt);
+
   const getStepStatus = (index) => {
     if (index < currentStepPosition) return "completed";
-    if (index === currentStepPosition) return status === "delivered" ? "completed" : "active";
+    if (index === currentStepPosition) return isDeliveredOrDisputed ? "completed" : "active";
     return "pending";
   };
 
@@ -159,8 +166,8 @@ const OrderProgressTracker = ({
         })}
       </motion.div>
 
-      {/* ETA Display — not applicable to self-pickup orders */}
-      {status !== "delivered" && !isCustomerPickup && (
+      {/* ETA Display — not applicable to self-pickup orders or delivered/disputed orders */}
+      {!isDeliveredOrDisputed && !isCustomerPickup && (
         <div className="mt-6 pt-5 border-t border-slate-100">
           <div className="flex items-center justify-between bg-amber-50 rounded-2xl p-4 gap-4">
             <div className="flex items-center gap-3">

@@ -107,8 +107,8 @@ function ItemRatingRow({ item, orderId, onRated }) {
 }
 
 export default function RateOrderItems({ order }) {
-  const [ratedCount, setRatedCount] = useState(0);
-  const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
+  const legacy = getLegacyStatusFromOrder(order);
+  const isDelivered = legacy === "delivered" || legacy === "disputed" || Boolean(order?.deliveredAt);
   const items = Array.isArray(order?.items) ? order.items : [];
 
   if (!isDelivered || !items.length) return null;

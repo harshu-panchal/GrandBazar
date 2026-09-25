@@ -137,8 +137,10 @@ const getTrackingRoutePhase = (order) => {
   const isDeliveryPhase =
     workflowStatus === "OUT_FOR_DELIVERY" ||
     workflowStatus === "DELIVERED" ||
+    workflowStatus === "DISPUTED" ||
     legacyStatus === "out_for_delivery" ||
     legacyStatus === "delivered" ||
+    legacyStatus === "disputed" ||
     riderStep >= 3 ||
     Boolean(order.pickupConfirmedAt);
 
@@ -550,6 +552,12 @@ const OrderDetailPage = () => {
   };
 
   const status = order ? getLegacyStatusFromOrder(order) : null;
+  const isDeliveredOrder =
+    status === "delivered" ||
+    status === "disputed" ||
+    order?.workflowStatus === "DELIVERED" ||
+    order?.workflowStatus === "DISPUTED" ||
+    Boolean(order?.deliveredAt);
   const cancellationState = getCustomerCancellationState(order);
   const canCancelOrder = canCustomerCancelOrder(order);
   const cancellationRequestStatus = String(order?.cancellationRequest?.status || "none").toLowerCase();
@@ -578,7 +586,7 @@ const OrderDetailPage = () => {
       };
     }
 
-    if (status === "delivered") {
+    if (isDeliveredOrder) {
       return {
         arrivalTimeText: "Arrived",
         arrivingInText: "Delivered",
@@ -623,11 +631,12 @@ const OrderDetailPage = () => {
     routePhase,
     sellerLocation,
     status,
+    isDeliveredOrder,
     clockTick,
   ]);
 
   useEffect(() => {
-    if (!orderId || status === "delivered" || status === "cancelled") return;
+    if (!orderId || isDeliveredOrder || status === "cancelled") return;
     if (!hasValidLatLng(liveLocation)) return;
 
     const currentOrigin = {
@@ -684,6 +693,7 @@ const OrderDetailPage = () => {
     orderId,
     routePhase,
     status,
+    isDeliveredOrder,
   ]);
 
   if (loading) {
@@ -1013,11 +1023,11 @@ const OrderDetailPage = () => {
           </div>
         )}
 
-        {/* Enhanced Map with Cleaner Design - Hide when delivered or cancelled.
+        {/* Enhanced Map with Cleaner Design - Hide when delivered, disputed or cancelled.
             Also hidden for self-pickup orders: there's no rider to search for,
             track, or estimate an arrival time for — the customer travels to
             the store, not the other way around. */}
-        {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled"
+        {!isAwaitingOnlinePayment && !isDeliveredOrder && status !== "cancelled"
           && order.logisticsMode !== "external" && !order.externalTrackingLink
           && order.fulfillmentMethod !== "customer_pickup" && (
           <motion.div
@@ -1049,7 +1059,7 @@ const OrderDetailPage = () => {
         {/* Self-pickup orders get a route from the customer to the store
             instead — there's no rider to track, but the customer still
             needs to know how to get there. */}
-        {!isAwaitingOnlinePayment && status !== "delivered" && status !== "cancelled"
+        {!isAwaitingOnlinePayment && !isDeliveredOrder && status !== "cancelled"
           && order.fulfillmentMethod === "customer_pickup" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1106,10 +1116,12 @@ const OrderDetailPage = () => {
         )}
 
         {/* Proximity-based Delivery OTP Display */}
-        <DeliveryOtpDisplay
-          orderId={order?.orderId || orderId}
-          checkoutGroupId={order?.checkoutGroupId || orderId}
-        />
+        {!isDeliveredOrder && (
+          <DeliveryOtpDisplay
+            orderId={order?.orderId || orderId}
+            checkoutGroupId={order?.checkoutGroupId || orderId}
+          />
+        )}
 
         {order?.fulfillmentMethod === "customer_pickup" && (
           <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 space-y-3">
@@ -1456,7 +1468,7 @@ const OrderDetailPage = () => {
           </motion.button>
         )}
 
-        {status === "delivered" && (
+        {isDeliveredOrder && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -83,6 +83,7 @@ describe("resolveOrderStatus — v2 orders at each workflow state", () => {
     const result = resolveOrderStatus(v2(WORKFLOW_STATUS.DISPUTED));
     expect(result.legacyStatus).toBe("disputed");
     expect(result.isDisputed).toBe(true);
+    expect(result.step).toBe(6);
   });
 
   it("AWAITING_EXTRA_PAYMENT -> awaiting_extra_payment", () => {

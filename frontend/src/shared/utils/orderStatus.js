@@ -459,11 +459,11 @@ const WORKFLOW_STAGE_INDEX = {
   CUSTOMER_PICKUP_READY: 4,
   OUT_FOR_DELIVERY: 5,
   DELIVERED: 6,
-  DISPUTED: 5,
+  DISPUTED: 6,
 };
 
 function legacyStageIndex(order, legacyStatus) {
-  if (legacyStatus === "delivered") return 6;
+  if (legacyStatus === "delivered" || legacyStatus === "disputed") return 6;
   if (legacyStatus === "out_for_delivery") return 5;
   if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
   if (order?.deliveryBoy || order?.assignedAt) return 3;
