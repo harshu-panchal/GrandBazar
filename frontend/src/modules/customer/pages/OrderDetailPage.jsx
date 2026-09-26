@@ -490,7 +490,14 @@ const OrderDetailPage = () => {
     }
 
     const calculateCountdown = () => {
-      if (order.status !== "delivered") {
+      const isDelivered =
+        order.status === "delivered" ||
+        order.status === "disputed" ||
+        order.workflowStatus === "DELIVERED" ||
+        order.workflowStatus === "DISPUTED" ||
+        Boolean(order.deliveredAt);
+
+      if (!isDelivered) {
         setReturnCountdown(null);
         return;
       }
@@ -504,9 +511,19 @@ const OrderDetailPage = () => {
         return;
       }
 
-      const mins = Math.floor(remaining / 60000);
-      const secs = Math.floor((remaining % 60000) / 1000);
-      setReturnCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
+      const totalSeconds = Math.floor(remaining / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+
+      if (hours > 0) {
+        const formattedHours = hours.toString().padStart(2, "0");
+        const formattedMins = mins.toString().padStart(2, "0");
+        const formattedSecs = secs.toString().padStart(2, "0");
+        setReturnCountdown(`${formattedHours}:${formattedMins}:${formattedSecs}`);
+      } else {
+        setReturnCountdown(`${mins}:${secs.toString().padStart(2, "0")}`);
+      }
     };
 
     calculateCountdown();
@@ -706,18 +723,15 @@ const OrderDetailPage = () => {
 
   const canRequestReturn = () => {
     if (!order) return false;
-    if (
-      order.status === "cancelled" ||
-      order.status === "disputed" ||
-      order.workflowStatus === "DISPUTED" ||
-      Boolean(order.disputeRef)
-    ) {
+    if (order.status === "cancelled") {
       return false;
     }
     const isOrderDelivered =
       order.status === "delivered" ||
-      Boolean(order.deliveredAt) ||
-      order.workflowStatus === "DELIVERED";
+      order.status === "disputed" ||
+      order.workflowStatus === "DELIVERED" ||
+      order.workflowStatus === "DISPUTED" ||
+      Boolean(order.deliveredAt);
     if (!isOrderDelivered) return false;
     if (
       returnDetails &&
