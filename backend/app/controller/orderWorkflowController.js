@@ -10,6 +10,8 @@ import { getCachedRoute } from "../services/mapsRouteService.js";
 import { geocodeAddress } from "../services/mapsGeocodeService.js";
 import Order from "../models/order.js";
 import Customer from "../models/customer.js";
+import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 import Transaction from "../models/transaction.js";
 import Admin from "../models/admin.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
@@ -20,7 +22,7 @@ import {
   validateReturnDropOtp,
   getActiveReturnDropOtp,
 } from "../services/deliveryOtpService.js";
-import { emitToCustomer, emitToSeller, emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
+import { emitToCustomer, emitToSeller, emitOrderStatusUpdate, getIo } from "../services/orderSocketEmitter.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
 import { creditWallet } from "../services/finance/walletService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -379,7 +381,7 @@ export const requestReturnDropOtp = async (req, res) => {
     const { id: userId } = req.user;
 
     const orderKey = orderMatchQueryFromRouteParam(orderId);
-    const order = await Order.findOne(orderKey).populate("seller", "name phone").lean();
+    const order = await Order.findOne(orderKey).lean();
     if (!order) return handleResponse(res, 404, "Order not found");
 
     if (order.returnDeliveryBoy?.toString() !== userId) {
@@ -391,7 +393,7 @@ export const requestReturnDropOtp = async (req, res) => {
       return handleResponse(res, 400, `Cannot request seller OTP in status: ${order.returnStatus}`);
     }
 
-    const result = await generateReturnDropOtp(orderId);
+    const result = await generateReturnDropOtp(order.orderId);
     if (!result.success) {
       return handleResponse(res, 400, result.error);
     }
@@ -400,48 +402,81 @@ export const requestReturnDropOtp = async (req, res) => {
     await Order.updateOne({ _id: order._id }, { $set: { returnStatus: "return_drop_pending" } });
     emitOrderStatusUpdate(order.orderId, { returnStatus: "return_drop_pending" }, order.customer);
 
-    const sellerId = order.seller?._id?.toString() || order.seller?.toString();
+    const storeId = order.seller?.toString();
+    let sellerPhone = "";
+    let ownerId = null;
+
+    if (storeId) {
+      const storeDoc = await Store.findById(storeId).select("ownerId shopName").lean();
+      if (storeDoc?.ownerId) {
+        ownerId = storeDoc.ownerId.toString();
+        const sellerDoc = await Seller.findById(storeDoc.ownerId).select("name phone").lean();
+        if (sellerDoc?.phone) {
+          sellerPhone = sellerDoc.phone;
+        }
+      } else {
+        const sellerDoc = await Seller.findById(storeId).select("name phone").lean();
+        if (sellerDoc?.phone) {
+          sellerPhone = sellerDoc.phone;
+          ownerId = sellerDoc._id.toString();
+        }
+      }
+    }
 
     // ── Emit OTP to seller via Socket/SMS ─────────────────────────────────────────
     try {
-      if (sellerId) {
-        emitToSeller(sellerId, {
+      const payload = {
+        orderId: order.orderId,
+        otp: result.otp,
+        expiresAt: result.expiresAt,
+        message: `Return drop OTP for order #${order.orderId}: ${result.otp}. Share with delivery partner to confirm receipt.`,
+      };
+
+      if (storeId) {
+        emitToSeller(storeId, {
           event: "return:drop:otp",
-          payload: {
-            orderId,
-            otp: result.otp,
-            expiresAt: result.expiresAt,
-            message: `Return drop OTP for order #${orderId}: ${result.otp}. Share with delivery partner to confirm receipt.`,
-          },
+          payload,
         });
+      }
 
-        // ── Push notification to seller (FCM) ──
-        emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_DROP_OTP, {
-          orderId,
-          sellerId,
-          data: { otp: result.otp },
+      if (ownerId && ownerId !== storeId) {
+        emitToSeller(ownerId, {
+          event: "return:drop:otp",
+          payload,
         });
+      }
 
-        // ── Send SMS to seller (BACKGROUND) ──
+      const io = getIo();
+      if (io) {
+        io.to(`order:${order.orderId}`).emit("return:drop:otp", payload);
+      }
+
+      // ── Push notification to seller (FCM) ──
+      emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_DROP_OTP, {
+        orderId: order.orderId,
+        sellerId: ownerId || storeId,
+        data: { otp: result.otp },
+      });
+
+      // ── Send SMS to seller (BACKGROUND) ──
+      if (sellerPhone) {
         setImmediate(async () => {
           try {
-            const sellerPhone = order.seller?.phone;
-            if (sellerPhone) {
-              await sendSmsIndiaHubOtp({
-                phone: sellerPhone,
-                otp: result.otp,
-                message: `Return drop OTP for order #${orderId} is ${result.otp}. Noyo-kart.`,
-              });
-            }
+            await sendSmsIndiaHubOtp({
+              phone: sellerPhone,
+              otp: result.otp,
+              message: `Return drop OTP for order #${order.orderId} is ${result.otp}. Noyo-kart.`,
+            });
           } catch (smsErr) {
             console.warn("[requestReturnDropOtp] SMS failed:", smsErr.message);
           }
         });
+      } else {
+        console.warn("[requestReturnDropOtp] No phone found for seller of order", order.orderId);
       }
     } catch (socketErr) {
       console.warn("[requestReturnDropOtp] Socket emit failed:", socketErr.message);
     }
-
 
     return handleResponse(res, 200, "Return drop OTP sent to seller via app and SMS", {
       expiresAt: result.expiresAt,
@@ -468,7 +503,7 @@ export const verifyReturnDropOtp = async (req, res) => {
       return handleResponse(res, 403, "Not assigned to this return");
     }
 
-    const validation = await validateReturnDropOtp(orderId, code);
+    const validation = await validateReturnDropOtp(order.orderId, code);
     if (!validation.valid) {
       return handleResponse(res, 400, validation.message, {
         error: validation.error,
@@ -529,11 +564,26 @@ export const verifyReturnDropOtp = async (req, res) => {
 export const getReturnDropOtpStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { id: sellerId } = req.user;
+    const { id: sellerId, role } = req.user;
 
     const orderKey = orderMatchQueryFromRouteParam(orderId);
-    const order = await Order.findOne({ ...orderKey, seller: sellerId }).select("orderId returnStatus").lean();
+    const order = await Order.findOne(orderKey).select("orderId returnStatus seller").lean();
     if (!order) return handleResponse(res, 404, "Order not found");
+
+    if (role !== "admin") {
+      let isAllowed = String(order.seller) === String(sellerId);
+      if (!isAllowed) {
+        const store = await Store.findById(order.seller).select("ownerId").lean();
+        if (store) {
+          isAllowed =
+            String(store.ownerId) === String(sellerId) ||
+            (req.user.accountId && String(store.ownerId) === String(req.user.accountId));
+        }
+      }
+      if (!isAllowed) {
+        return handleResponse(res, 403, "Not authorized for this order return");
+      }
+    }
 
     const status = await getActiveReturnDropOtp(order.orderId);
     return handleResponse(res, 200, "Return drop OTP status", {

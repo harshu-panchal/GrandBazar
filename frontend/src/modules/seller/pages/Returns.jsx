@@ -103,6 +103,26 @@ const Returns = () => {
                 ? payload.items
                 : res.data.results || [];
             setReturns(items || []);
+
+            const initialOtps = {};
+            items.forEach((item) => {
+                if (item.returnDropOtp) {
+                    initialOtps[item.orderId] = { otp: item.returnDropOtp, expiresAt: item.returnDropOtpExpiresAt };
+                } else if (item.returnStatus === "return_drop_pending" && item.orderId) {
+                    sellerApi.getReturnDropOtpStatus(item.orderId).then((otpRes) => {
+                        const r = otpRes.data?.result || otpRes.data || {};
+                        if (r.otp) {
+                            setActiveOtps((prev) => ({
+                                ...prev,
+                                [item.orderId]: { otp: r.otp, expiresAt: r.expiresAt }
+                            }));
+                        }
+                    }).catch(() => {});
+                }
+            });
+            if (Object.keys(initialOtps).length > 0) {
+                setActiveOtps((prev) => ({ ...prev, ...initialOtps }));
+            }
         } catch (error) {
             console.error("Failed to fetch returns", error);
             showToast("Failed to fetch return requests", "error");
@@ -161,7 +181,8 @@ const Returns = () => {
         if (ret?.returnStatus === "return_drop_pending" && ret?.orderId) {
             sellerApi.getReturnDropOtpStatus(ret.orderId)
                 .then((res) => {
-                    const { otp, expiresAt } = res.data || {};
+                    const r = res.data?.result || res.data || {};
+                    const { otp, expiresAt } = r;
                     if (otp) {
                         setActiveOtps((prev) => ({
                             ...prev,
@@ -379,6 +400,17 @@ const Returns = () => {
                                                         <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-brand-50 rounded-lg border border-brand-100 w-fit">
                                                             <HiOutlineTruck className="h-3 w-3 text-brand-600" />
                                                             <span className="text-[10px] font-bold text-brand-700">Rider: {ret.returnDeliveryBoy.name}</span>
+                                                        </div>
+                                                    )}
+                                                    {/* Proper Data: Return Drop OTP */}
+                                                    {ret.returnStatus === "return_drop_pending" && (
+                                                        <div className="mt-2 flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 w-fit">
+                                                            <span className="text-[10px] font-bold text-emerald-800">
+                                                                Rider at store • Drop OTP:
+                                                            </span>
+                                                            <span className="text-xs font-black tracking-widest text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-300">
+                                                                {activeOtps[ret.orderId]?.otp || ret.returnDropOtp || "••••"}
+                                                            </span>
                                                         </div>
                                                     )}
                                                     {/* Proper Data: QC Note for passed/failed */}
@@ -694,23 +726,27 @@ const Returns = () => {
                                 </div>
 
                                 {/* Active OTP Display */}
-                                {activeOtps[selectedReturn.orderId] && (
-                                    <div className="bg-brand-50 border-2 border-dashed border-brand-200 rounded-3xl p-6 text-center space-y-3 animate-in fade-in zoom-in duration-500">
-                                        <p className="text-[10px] font-black text-brand-600 uppercase tracking-[0.2em]">
-                                            Rider Arrived - Share OTP
-                                        </p>
-                                        <div className="flex items-center justify-center gap-3">
-                                            {activeOtps[selectedReturn.orderId].otp.split('').map((char, i) => (
-                                                <div key={i} className="h-14 w-12 bg-white rounded-xl shadow-sm border border-brand-100 flex items-center justify-center text-3xl font-black text-slate-900 border-b-4 border-b-brand-500">
-                                                    {char}
-                                                </div>
-                                            ))}
+                                {(() => {
+                                    const currentOtp = activeOtps[selectedReturn.orderId]?.otp || selectedReturn.returnDropOtp;
+                                    if (!currentOtp) return null;
+                                    return (
+                                        <div className="bg-brand-50 border-2 border-dashed border-brand-200 rounded-3xl p-6 text-center space-y-3 animate-in fade-in zoom-in duration-500">
+                                            <p className="text-[10px] font-black text-brand-600 uppercase tracking-[0.2em]">
+                                                Rider Arrived - Share OTP
+                                            </p>
+                                            <div className="flex items-center justify-center gap-3">
+                                                {String(currentOtp).split('').map((char, i) => (
+                                                    <div key={i} className="h-14 w-12 bg-white rounded-xl shadow-sm border border-brand-100 flex items-center justify-center text-3xl font-black text-slate-900 border-b-4 border-b-brand-500">
+                                                        {char}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <p className="text-[10px] font-bold text-slate-500 italic">
+                                                Sharing this code confirms you have received the returned product.
+                                            </p>
                                         </div>
-                                        <p className="text-[10px] font-bold text-slate-500 italic">
-                                            Sharing this code confirms you have received the product.
-                                        </p>
-                                    </div>
-                                )}
+                                    );
+                                })()}
                             </div>
 
                             <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center justify-end shrink-0">

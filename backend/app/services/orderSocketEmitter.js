@@ -17,7 +17,7 @@ export function registerOrderSocketGetter(fn) {
   _getIo = fn;
 }
 
-function getIo() {
+export function getIo() {
   try {
     return _getIo ? _getIo() : null;
   } catch {

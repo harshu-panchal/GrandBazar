@@ -49,6 +49,7 @@ import {
   orderMatchQueryFlexible,
 } from "../utils/orderLookup.js";
 import { createFinanceOrderSchema } from "../validation/financeValidation.js";
+import { getActiveReturnDropOtp } from "../services/deliveryOtpService.js";
 import { placeOrderAtomic } from "../services/orderPlacementService.js";
 import { releaseCouponUsageForOrder } from "../services/couponUsageService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -341,6 +342,23 @@ export const getSellerReturns = async (req, res) => {
         .lean(),
       Order.countDocuments(query),
     ]);
+
+    const pendingDropOrders = orders.filter((o) => o.returnStatus === "return_drop_pending");
+    if (pendingDropOrders.length > 0) {
+      await Promise.all(
+        pendingDropOrders.map(async (o) => {
+          try {
+            const otpInfo = await getActiveReturnDropOtp(o.orderId);
+            if (otpInfo?.otp) {
+              o.returnDropOtp = otpInfo.otp;
+              o.returnDropOtpExpiresAt = otpInfo.expiresAt;
+            }
+          } catch (err) {
+            // non-fatal
+          }
+        })
+      );
+    }
 
     return handleResponse(res, 200, "Seller returns fetched", {
       items: orders,

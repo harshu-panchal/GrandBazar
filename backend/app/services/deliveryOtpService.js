@@ -4,6 +4,7 @@ import OrderOtp from '../models/orderOtp.js';
 import { checkProximity } from './proximityService.js';
 import { emitToCustomer, emitOrderStatusUpdate } from './orderSocketEmitter.js';
 import { isMockOtpBypassAllowed, getMockOtp } from '../utils/otp.js';
+import { orderMatchQueryFromRouteParam } from '../utils/orderLookup.js';
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -457,7 +458,8 @@ export async function validateReturnPickupOtp(orderId, enteredOtp) {
  */
 export async function generateReturnDropOtp(orderId) {
   try {
-    const order = await Order.findOne({ orderId });
+    const orderKey = orderMatchQueryFromRouteParam(orderId) || { orderId };
+    const order = await Order.findOne(orderKey);
     if (!order) {
       return { success: false, error: 'Order not found' };
     }
@@ -474,14 +476,26 @@ export async function generateReturnDropOtp(orderId) {
     const codeHash = OrderOtp.hashCode(otp);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+    const humanOrderId = order.orderId;
+    const orderMongoId = order._id;
+
     await OrderOtp.updateMany(
-      { orderId, type: 'return_drop', consumedAt: null },
+      {
+        $or: [
+          { orderId: humanOrderId },
+          { orderId: String(orderMongoId) },
+          { orderId },
+          { orderMongoId },
+        ],
+        type: 'return_drop',
+        consumedAt: null,
+      },
       { consumedAt: new Date() }
     );
 
     await OrderOtp.create({
-      orderId,
-      orderMongoId: order._id,
+      orderId: humanOrderId,
+      orderMongoId,
       type: 'return_drop',
       codeHash,
       code: otp,
@@ -491,7 +505,7 @@ export async function generateReturnDropOtp(orderId) {
       lastGeneratedAt: new Date(),
     });
 
-    return { success: true, otp, expiresAt };
+    return { success: true, otp, expiresAt, canonicalOrderId: humanOrderId };
   } catch (error) {
     console.error('Error generating return drop OTP:', error);
     return { success: false, error: 'Failed to generate return drop OTP.' };
@@ -510,7 +524,24 @@ export async function validateReturnDropOtp(orderId, enteredOtp) {
       return { valid: false, error: 'INVALID_FORMAT', message: 'orderId and OTP are required' };
     }
 
-    const otpRecord = await OrderOtp.findOne({ orderId, type: 'return_drop' }).sort({
+    const orderKey = orderMatchQueryFromRouteParam(orderId) || { orderId };
+    const order = await Order.findOne(orderKey).select('_id orderId').lean();
+
+    const otpQuery = {
+      type: 'return_drop',
+      $or: [
+        { orderId },
+        ...(order
+          ? [
+              { orderId: order.orderId },
+              { orderId: String(order._id) },
+              { orderMongoId: order._id },
+            ]
+          : []),
+      ],
+    };
+
+    const otpRecord = await OrderOtp.findOne(otpQuery).sort({
       lastGeneratedAt: -1,
       createdAt: -1,
     });
@@ -566,14 +597,36 @@ export async function validateReturnDropOtp(orderId, enteredOtp) {
  * having caught the live push.
  */
 export async function getActiveReturnDropOtp(orderId) {
-  const otpRecord = await OrderOtp.findOne({ orderId, type: 'return_drop' }).sort({
-    lastGeneratedAt: -1,
-    createdAt: -1,
-  });
+  try {
+    const orderKey = orderMatchQueryFromRouteParam(orderId) || { orderId };
+    const order = await Order.findOne(orderKey).select('_id orderId').lean();
 
-  if (!otpRecord || otpRecord.consumedAt || isOtpExpired(otpRecord.expiresAt)) {
+    const otpQuery = {
+      type: 'return_drop',
+      $or: [
+        { orderId },
+        ...(order
+          ? [
+              { orderId: order.orderId },
+              { orderId: String(order._id) },
+              { orderMongoId: order._id },
+            ]
+          : []),
+      ],
+    };
+
+    const otpRecord = await OrderOtp.findOne(otpQuery).sort({
+      lastGeneratedAt: -1,
+      createdAt: -1,
+    });
+
+    if (!otpRecord || otpRecord.consumedAt || isOtpExpired(otpRecord.expiresAt)) {
+      return { otp: null, expiresAt: null };
+    }
+
+    return { otp: otpRecord.code || null, expiresAt: otpRecord.expiresAt };
+  } catch (error) {
+    console.error('Error getting active return drop OTP:', error);
     return { otp: null, expiresAt: null };
   }
-
-  return { otp: otpRecord.code || null, expiresAt: otpRecord.expiresAt };
 }

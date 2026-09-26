@@ -141,10 +141,19 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
 
     setIsGenerating(true);
     try {
-      const response = isReturn
-        ? await deliveryApi.requestReturnOtp(orderId, {})
-        : await deliveryApi.generateDeliveryOtp(orderId);
-      toast.success(response.data?.message || "OTP generated and sent to customer");
+      const response = isReturnDrop
+        ? await deliveryApi.requestReturnDropOtp(orderId, {})
+        : isReturn
+          ? await deliveryApi.requestReturnOtp(orderId, {})
+          : await deliveryApi.generateDeliveryOtp(orderId);
+      toast.success(
+        response.data?.message ||
+        (isReturnDrop
+          ? "OTP sent to seller via app and SMS"
+          : isReturn
+            ? "Return pickup OTP sent to customer"
+            : "OTP generated and sent to customer")
+      );
       setError(null);
       setLastErrorCode(null);
       clearInputs();
@@ -409,7 +418,11 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
       {/* Help Text */}
       <div className="bg-brand-50 border border-brand-200 rounded-xl p-3">
         <p className="text-xs text-brand-800 text-center">
-          💡 The customer will see this OTP on their app when you're nearby
+          {isReturnDrop
+            ? "💡 Ask the seller for the OTP shown on their seller portal or SMS"
+            : isReturn
+              ? "💡 Ask the customer for the return pickup code shown on their app"
+              : "💡 The customer will see this OTP on their app when you're nearby"}
         </p>
       </div>
     </div>
