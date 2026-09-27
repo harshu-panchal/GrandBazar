@@ -149,9 +149,23 @@ export async function updateUserStatusData(id, { status, isActive }) {
     activeValue = status === "active";
   }
 
+  // Track admin blocks explicitly (blockedByAdmin) so the signup/OTP
+  // reactivation path in otpAuthService can distinguish an admin block
+  // (must NOT be reversible by re-signing-up) from a customer's own
+  // soft-deletion (isActive=false via deleteCustomerAccount, which IS
+  // reactivatable). Admin re-activation clears the flag.
+  const update = { isActive: activeValue };
+  if (activeValue === false) {
+    update.blockedByAdmin = true;
+    update.blockedAt = new Date();
+  } else {
+    update.blockedByAdmin = false;
+    update.blockedAt = null;
+  }
+
   const updated = await User.findByIdAndUpdate(
     id,
-    { $set: { isActive: activeValue } },
+    { $set: update },
     { new: true }
   ).lean();
   return updated;
@@ -166,10 +180,18 @@ export async function sendCustomerNotificationData(id, { title, message }) {
   const { default: logger } = await import("../../services/logger.js");
 
   const notifDoc = await Notification.create({
-    userId: String(id),
+    userId: user._id,
+    // Legacy compatibility fields are required by the schema (recipient +
+    // recipientModel with refPath). Customer role maps to the "User" model
+    // (see ROLE_TO_USER_MODEL in notification.constants.js).
+    recipient: user._id,
+    recipientModel: "User",
     role: "customer",
-    type: "admin_announcement",
+    // "admin_announcement" is not in the schema's type enum — use "system",
+    // which is an explicitly allowed value, and keep the source tag in data.
+    type: "system",
     title: title || "Message from Support",
+    message: message,
     body: message,
     data: { source: "admin_custom_message" },
     status: "pending",

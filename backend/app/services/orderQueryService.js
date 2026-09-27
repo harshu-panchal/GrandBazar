@@ -422,7 +422,7 @@ export async function fetchAvailableOrdersForDelivery({
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .populate("customer", "name phone")
-      .populate("seller", "shopName address name location serviceRadius")
+      .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius")
       .lean();
 
     v2Orders = filterV2OrdersByRadius(
@@ -446,7 +446,7 @@ export async function fetchAvailableOrdersForDelivery({
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .populate("customer", "name phone")
-      .populate("seller", "shopName address name location")
+      .populate("seller", "shopName address name location locality city state pincode landmark")
       .lean();
   }
 
@@ -468,7 +468,7 @@ export async function fetchAvailableOrdersForDelivery({
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .populate("customer", "name phone")
-      .populate("seller", "shopName address name location")
+      .populate("seller", "shopName address name location locality city state pincode landmark")
       .lean();
 
     returnPickups = returnPickupsRaw.map((rp) => ({
@@ -521,18 +521,48 @@ function attachDistanceAndEarningsPreview(order) {
   const dropLoc = order.isReturnPickup ? sellerLoc : addressLoc;
 
   let distanceKm;
+  let distanceM;
   if (originLoc && dropLoc) {
     const meters = distanceMeters(originLoc.lat, originLoc.lng, dropLoc.lat, dropLoc.lng);
-    if (Number.isFinite(meters)) distanceKm = Math.round((meters / 1000) * 10) / 10;
+    if (Number.isFinite(meters) && meters >= 0) {
+      distanceM = Math.round(meters);
+      distanceKm = Math.round((meters / 1000) * 10) / 10;
+    }
   }
-  const riderEarnings = order.isReturnPickup
+  if (distanceKm == null && Number(order.paymentBreakdown?.distanceKmActual) > 0) {
+    distanceKm = Number(order.paymentBreakdown.distanceKmActual);
+  }
+
+  const distanceText = distanceM != null
+    ? (distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`)
+    : (distanceKm != null ? `${distanceKm} km` : "Nearby");
+
+  let riderEarnings = order.isReturnPickup
     ? (Number(order.returnDeliveryCommission) || 30)
     : Number(order.paymentBreakdown?.riderPayoutTotal);
+
+  if (!Number.isFinite(riderEarnings) || riderEarnings <= 0) {
+    const snapshotBase = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.riderBasePayout);
+    const orderRiderEarnings = Number(order.riderEarnings);
+    if (Number.isFinite(snapshotBase) && snapshotBase > 0) {
+      riderEarnings = snapshotBase;
+    } else if (Number.isFinite(orderRiderEarnings) && orderRiderEarnings > 0) {
+      riderEarnings = orderRiderEarnings;
+    } else {
+      riderEarnings = 30;
+    }
+    const perKm = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.deliveryPartnerRatePerKm || 5);
+    const baseDist = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.baseDistanceCapacityKm || 0.5);
+    if (distanceKm && distanceKm > baseDist) {
+      riderEarnings += Math.ceil(distanceKm - baseDist) * perKm;
+    }
+  }
 
   return {
     ...order,
     distanceKm,
-    riderEarnings: Number.isFinite(riderEarnings) ? riderEarnings : undefined,
+    distanceText,
+    riderEarnings: Number.isFinite(riderEarnings) ? riderEarnings : 30,
   };
 }
 

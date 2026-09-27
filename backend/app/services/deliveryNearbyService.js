@@ -146,7 +146,19 @@ export async function getDeliveryPartnerIdsWithinRadius(lat, lng, radiusKm = 5) 
  * Finds riders near a customer's location for return pickup.
  */
 export async function getDeliveryPartnerIdsWithinCustomerRadius(customerLocation, radiusKm = 5) {
-  const lat = customerLocation?.lat;
-  const lng = customerLocation?.lng;
+  if (!customerLocation) return [];
+
+  let lat = Number(customerLocation?.lat ?? customerLocation?.latitude);
+  let lng = Number(customerLocation?.lng ?? customerLocation?.longitude);
+
+  if (Array.isArray(customerLocation.coordinates) && customerLocation.coordinates.length >= 2) {
+    lng = Number(customerLocation.coordinates[0]);
+    lat = Number(customerLocation.coordinates[1]);
+  } else if (Array.isArray(customerLocation) && customerLocation.length >= 2) {
+    lng = Number(customerLocation[0]);
+    lat = Number(customerLocation[1]);
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
   return getDeliveryPartnerIdsWithinRadius(lat, lng, radiusKm);
 }

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Transaction from "../../models/transaction.js";
 import Notification from "../../models/notification.js";
 import Store from "../../models/store.js";
@@ -97,7 +98,7 @@ export async function getSellerWithdrawalsData({ page, limit, skip }) {
 export async function getSellerTransactionsData({ page, limit, skip, sellerId, storeId }) {
   const query = { userModel: "Seller" };
   const targetId = sellerId || storeId;
-  if (targetId) {
+  if (targetId && mongoose.isValidObjectId(targetId)) {
     const stores = await Store.find({
       $or: [{ _id: targetId }, { ownerId: targetId }],
     }).select("_id ownerId").lean();

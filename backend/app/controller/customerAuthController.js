@@ -275,29 +275,68 @@ export const deleteCustomerAccount = async (req, res) => {
 export const getCustomerTransactions = async (req, res) => {
     try {
         const customerId = req.user.id;
-        const { page = 1, limit = 20 } = req.query;
-        const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(50, Math.max(1, parseInt(limit, 10)));
-        const perPage = Math.min(50, Math.max(1, parseInt(limit, 10)));
+        const { page = 1, limit = 50 } = req.query;
+        const perPage = Math.min(100, Math.max(1, parseInt(limit, 10)));
+        const skip = (Math.max(1, parseInt(page, 10)) - 1) * perPage;
+
+        const query = {
+            user: customerId,
+            $or: [{ userModel: "User" }, { userModel: { $exists: false } }],
+        };
 
         const [transactions, total] = await Promise.all([
-            Transaction.find({ user: customerId, userModel: "User" })
+            Transaction.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(perPage)
                 .populate("order", "orderId")
                 .lean(),
-            Transaction.countDocuments({ user: customerId, userModel: "User" }),
+            Transaction.countDocuments(query),
         ]);
 
-        const items = transactions.map((t) => ({
-            _id: t._id,
-            type: t.type === "Refund" ? "credit" : "debit",
-            title: t.type === "Refund" ? "Refund" : t.type,
-            amount: Math.abs(t.amount),
-            date: t.createdAt,
-            reference: t.reference,
-            orderId: t.order?.orderId,
-        }));
+        const items = transactions.map((t) => {
+            const isCredit =
+                t.type === "Refund" ||
+                t.type === "Incentive" ||
+                t.type === "Bonus" ||
+                Number(t.amount) > 0;
+
+            let orderId = t.order?.orderId;
+            if (!orderId && t.meta?.orderId) {
+                orderId = typeof t.meta.orderId === "object" ? String(t.meta.orderId) : t.meta.orderId;
+            }
+            if (!orderId && typeof t.reference === "string") {
+                if (t.reference.startsWith("REF-WALLET-")) {
+                    orderId = t.reference.replace("REF-WALLET-", "");
+                } else if (t.reference.startsWith("ADDITEMS-")) {
+                    orderId = t.reference.replace("ADDITEMS-", "").split("-")[0];
+                } else if (t.reference.startsWith("WLT-CHOUT-")) {
+                    orderId = t.reference.replace("WLT-CHOUT-", "");
+                }
+            }
+
+            let title = t.type;
+            if (t.type === "Refund") {
+                title = t.meta?.type === "return_wallet"
+                    ? "Return Refund"
+                    : t.meta?.disputeId
+                        ? "Dispute Refund"
+                        : "Refund";
+            } else if (t.type === "Order Payment") {
+                title = "Order Payment";
+            }
+
+            return {
+                _id: t._id,
+                rawType: t.type,
+                type: isCredit ? "credit" : "debit",
+                title,
+                amount: Math.abs(t.amount),
+                date: t.createdAt || t.date,
+                reference: t.reference,
+                orderId: orderId || null,
+            };
+        });
 
         return handleResponse(res, 200, "Transactions fetched", {
             items,

@@ -28,6 +28,7 @@ import {
 } from "./walletService.js";
 import { createPendingPayoutForOrder } from "./payoutService.js";
 import { computeOverallSettlement } from "../../utils/settlementStatus.js";
+import { buildKey, invalidate } from "../cacheService.js";
 
 function toOrderIdQuery(orderOrId) {
   if (!orderOrId) return null;
@@ -700,6 +701,16 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
 
     await order.save({ session });
     await session.commitTransaction();
+
+    // Delivery changes the admin finance summary (admin earning, platform
+    // gross, pending payouts). Drop the cached summary so the admin wallet
+    // dashboard reflects the new delivery immediately instead of waiting out
+    // the dashboard TTL. Never let a cache failure fail the settlement.
+    try {
+      await invalidate(buildKey("admin", "financeSummary"));
+    } catch (cacheErr) {
+      console.warn("[orderFinanceService] finance summary cache invalidation failed:", cacheErr.message);
+    }
 
     // PDF generation + Cloudinary upload are slow I/O — never do them inside
     // the DB transaction. Fire-and-forget after commit; failures are logged

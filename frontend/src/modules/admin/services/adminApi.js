@@ -155,6 +155,7 @@ export const adminApi = {
     getNotifications: () => axiosInstance.get('/notifications'),
     markNotificationRead: (id) => axiosInstance.put(`/notifications/${id}/read`),
     markAllNotificationsRead: () => axiosInstance.put('/notifications/mark-all-read'),
+    clearAllNotifications: () => axiosInstance.delete('/notifications/clear-all'),
     broadcastNotification: (data) => axiosInstance.post('/notifications/broadcast', data),
     getBroadcastAudienceStats: () => axiosInstance.get('/notifications/broadcast/audience-stats'),
 
@@ -267,8 +268,4 @@ export const adminApi = {
         axiosInstance.delete(`/orders/admin/advance-bookings/${campaignId}`),
     cancelAdvanceBooking: (campaignId, data) =>
         axiosInstance.put(`/orders/admin/advance-bookings/${campaignId}/cancel`, data),
-
-    // Sellers & Transactions
-    getSellers: (params) => axiosInstance.get('/admin/sellers', { params }),
-    getSellerTransactions: (params) => axiosInstance.get('/seller-transactions', { params }),
 };

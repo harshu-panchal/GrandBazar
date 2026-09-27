@@ -104,19 +104,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleAcceptReturn = async (orderId) => {
-    try {
-      const response = await deliveryApi.acceptReturnPickup(orderId);
-      if (response.data.success) {
-        toast.success("Return pickup accepted!");
-        fetchAvailableOrders();
-        // Option: navigate to details
-        navigate(`/delivery/order-details/${orderId}`);
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to accept return");
-    }
-  };
 
   return (
     <div className="bg-white min-h-screen pb-24 relative overflow-hidden font-sans">
@@ -420,72 +407,62 @@ const Dashboard = () => {
               </motion.div>
             )
           ) : (
-            <motion.div
-              key="returns-list"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-4"
-            >
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="text-sm font-bold text-gray-800 tracking-tight">Available Return Pickups</h3>
-                <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full uppercase italic">Open for Acceptance</span>
-              </div>
-              {availableOrders.length > 0 ? (
-                availableOrders.map((order) => (
-                  <div key={order._id} className="p-4 border-2 border-primary/5 hover:border-primary/20 transition-all shadow-sm">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1 block">Return Task</span>
-                        <h4 className="font-bold text-gray-900">#{order.orderId}</h4>
-                      </div>
-                      <div className="text-right">
-                        <span className="block font-black text-brand-600 text-lg">₹{order.returnDeliveryCommission || 0}</span>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Commission</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 mb-5">
-                      <div className="flex items-center text-xs text-gray-600">
-                        <MapPin size={12} className="mr-2 text-gray-400" />
-                        <span className="truncate">{order.seller?.shopName || "Store"}</span>
-                      </div>
-                      <div className="flex items-center text-[11px] text-gray-500 font-medium">
-                        <Package size={12} className="mr-2 text-gray-400" />
-                        <span>Pickup from Customer & Return to Store</span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                       <Button 
-                        variant="primary" 
-                        size="sm" 
-                        className="flex-1 font-black text-[10px] tracking-widest uppercase h-10 shadow-lg shadow-primary/20"
-                        onClick={() => handleAcceptReturn(order.orderId)}
-                      >
-                        Accept Pickup
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="px-4 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 hover:bg-gray-100 h-10"
-                        onClick={() => navigate(`/delivery/order-details/${order.orderId}`)}
-                      >
-                        View
-                      </Button>
-                    </div>
+          <motion.div
+            key="returns-waiting"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="space-y-4"
+          >
+            {availableOrders.length > 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl p-6 border-2 border-primary/25 shadow-md shadow-primary/5 text-center"
+              >
+                <div className="flex justify-center mb-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Package className="text-primary" size={24} />
                   </div>
-                ))
-              ) : (
-                <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-100 flex flex-col items-center">
-                  <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-100 opacity-60">
-                    <Package size={20} className="text-gray-400" />
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-800 mb-1">No returns nearby</h4>
-                  <p className="text-[11px] text-gray-400">Keep checking back for new return tasks.</p>
                 </div>
-              )}
-            </motion.div>
+                <h3 className="ds-h3 text-gray-900 mb-1">
+                  {availableOrders.length === 1
+                    ? "1 return task nearby"
+                    : `${availableOrders.length} return tasks nearby`}
+                </h3>
+                <p className="text-sm text-gray-600 leading-relaxed px-1">
+                  A fullscreen alert will open with <strong>Accept</strong> and{" "}
+                  <strong>Reject</strong>. Use that to respond before the timer ends.
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  <span className="w-2 h-2 bg-brand-500 rounded-full animate-pulse" />
+                  Listening for assignments
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-white rounded-2xl p-8 text-center border-2 border-dashed border-gray-200 relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-tr from-brand-50/50 to-purple-50/50 opacity-50" />
+                <div className="relative z-10">
+                  <div className="relative w-24 h-24 mx-auto mb-6">
+                    <div className="absolute inset-0 bg-brand-100 rounded-full animate-ping opacity-20" />
+                    <div className="absolute inset-2 bg-brand-100 rounded-full animate-ping opacity-40 delay-150" />
+                    <div className="relative w-full h-full bg-brand-50 rounded-full flex items-center justify-center border border-brand-100 shadow-sm">
+                      <Package size={36} className="text-brand-600" />
+                    </div>
+                  </div>
+                  <h3 className="ds-h3 mb-2 text-gray-800">Looking for Return Tasks...</h3>
+                  <p className="text-sm text-gray-500 max-w-[220px] mx-auto mb-6">
+                    When a customer's return is approved nearby, you'll get a full-screen alert.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
           )}
         </AnimatePresence>
       </div>

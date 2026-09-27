@@ -33,39 +33,75 @@ const WalletPage = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const [profileRes, ordersRes] = await Promise.all([
-                    customerApi.getProfile(),
-                    customerApi.getMyOrders(),
+                const [profileRes, txRes, ordersRes] = await Promise.all([
+                    customerApi.getProfile().catch(() => null),
+                    customerApi.getWalletTransactions({ limit: 100 }).catch(() => null),
+                    customerApi.getMyOrders().catch(() => null),
                 ]);
-                const profile = profileRes.data?.result ?? profileRes.data?.data ?? profileRes.data;
-                const rawOrders = ordersRes.data?.results ?? ordersRes.data?.result ?? [];
-                const orders = Array.isArray(rawOrders) ? rawOrders : [];
+
+                const profile = profileRes?.data?.result ?? profileRes?.data?.data ?? profileRes?.data;
                 setBalance(profile?.walletBalance ?? 0);
 
-                // Wallet payments (debits)
-                const walletOrders = orders.filter(
-                    (o) => (o.payment?.method || '').toLowerCase() === 'wallet' ||
-                            Number(o.walletAmountUsed || o.payment?.walletAmount || 0) > 0
-                );
-                const items = walletOrders.map((o) => ({
-                    _id: o._id,
-                    type: 'debit',
-                    title: 'Order Payment',
-                    amount: o.walletAmountUsed ?? o.payment?.walletAmount ?? o.pricing?.total ?? o.payableAmount ?? 0,
-                    date: o.createdAt,
-                    orderId: o.orderId,
-                }));
-                setTransactions(items);
+                const rawTx = txRes?.data?.result?.items ?? txRes?.data?.items ?? (Array.isArray(txRes?.data?.result) ? txRes.data.result : []);
+                const txItems = Array.isArray(rawTx) ? rawTx : [];
 
-                // Refunds: orders that were cancelled/refunded or returned/refunded to wallet
+                const paymentItems = [];
                 const refundItems = [];
+                const seenOrderIds = new Set();
+                const seenTxIds = new Set();
+
+                // 1. Process actual ledger transactions first
+                for (const t of txItems) {
+                    if (t._id) seenTxIds.add(String(t._id));
+                    if (t.orderId) seenOrderIds.add(String(t.orderId));
+
+                    const item = {
+                        _id: t._id,
+                        type: t.type,
+                        title: t.title || (t.type === 'credit' ? 'Return Refund' : 'Order Payment'),
+                        amount: Math.abs(Number(t.amount || 0)),
+                        date: t.date || t.createdAt,
+                        orderId: t.orderId || null,
+                        reference: t.reference,
+                    };
+
+                    if (t.type === 'credit') {
+                        refundItems.push(item);
+                    } else {
+                        paymentItems.push(item);
+                    }
+                }
+
+                // 2. Merge from orders as supplementary fallback
+                const rawOrders = ordersRes?.data?.results ?? ordersRes?.data?.result?.items ?? ordersRes?.data?.result ?? [];
+                const orders = Array.isArray(rawOrders) ? rawOrders : [];
+
                 for (const o of orders) {
+                    const orderIdStr = String(o.orderId || o._id);
+                    if (seenOrderIds.has(orderIdStr)) continue;
+
+                    // Order payments via wallet
+                    const walletUsed = Number(o.walletAmountUsed ?? o.payment?.walletAmount ?? 0);
+                    const isWalletMethod = (o.payment?.method || '').toLowerCase() === 'wallet';
+                    if (walletUsed > 0 || isWalletMethod) {
+                        paymentItems.push({
+                            _id: `order-pay-${o._id}`,
+                            type: 'debit',
+                            title: 'Order Payment',
+                            amount: walletUsed || o.pricing?.total || o.payableAmount || 0,
+                            date: o.createdAt,
+                            orderId: o.orderId,
+                        });
+                        seenOrderIds.add(orderIdStr);
+                    }
+
+                    // Refunds on orders
                     const cancelRefund = Number(o.refundAmount || 0);
                     const returnRefund = Number(o.returnRefundAmount || 0);
-                    const isReturnRefund = (o.returnStatus === 'refund_completed' || o.returnStatus === 'refund_initiated' || o.returnStatus === 'returned' || o.returnStatus === 'qc_passed') && (returnRefund > 0 || cancelRefund > 0);
-                    const isCancelledRefund = (o.status === 'cancelled' || o.refundStatus === 'refunded') && cancelRefund > 0;
+                    const hasReturnRefund = (o.returnStatus === 'refund_completed' || o.returnStatus === 'refund_initiated' || o.returnStatus === 'returned' || o.returnStatus === 'qc_passed') && (returnRefund > 0 || cancelRefund > 0);
+                    const hasCancelRefund = (o.status === 'cancelled' || o.refundStatus === 'refunded') && cancelRefund > 0;
 
-                    if (isReturnRefund) {
+                    if (hasReturnRefund) {
                         refundItems.push({
                             _id: `refund-return-${o._id}`,
                             type: 'credit',
@@ -74,7 +110,8 @@ const WalletPage = () => {
                             date: o.updatedAt || o.createdAt,
                             orderId: o.orderId,
                         });
-                    } else if (isCancelledRefund) {
+                        seenOrderIds.add(orderIdStr);
+                    } else if (hasCancelRefund || cancelRefund > 0) {
                         refundItems.push({
                             _id: `refund-cancel-${o._id}`,
                             type: 'credit',
@@ -83,17 +120,15 @@ const WalletPage = () => {
                             date: o.updatedAt || o.createdAt,
                             orderId: o.orderId,
                         });
-                    } else if (cancelRefund > 0) {
-                        refundItems.push({
-                            _id: `refund-${o._id}`,
-                            type: 'credit',
-                            title: 'Refund',
-                            amount: cancelRefund,
-                            date: o.updatedAt || o.createdAt,
-                            orderId: o.orderId,
-                        });
+                        seenOrderIds.add(orderIdStr);
                     }
                 }
+
+                // Sort both by date descending
+                paymentItems.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+                refundItems.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+                setTransactions(paymentItems);
                 setRefunds(refundItems);
             } catch (err) {
                 console.error('Wallet fetch error:', err);
@@ -168,7 +203,7 @@ const WalletPage = () => {
                             </p>
                             <p className="text-xs text-slate-400">
                                 {activeTab === 'refunds'
-                                    ? 'Cancelled order refunds will appear here.'
+                                    ? 'Return and cancellation refunds will appear here.'
                                     : 'Orders paid using wallet will appear here.'}
                             </p>
                         </div>

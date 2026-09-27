@@ -49,9 +49,20 @@ const safeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const formatLocation = (loc) => {
+  if (!loc || loc === "Location not set") return "Location not set";
+  const coordsMatch = String(loc).match(/^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$/);
+  if (coordsMatch) {
+    const lat = Number(coordsMatch[1]).toFixed(3);
+    const lng = Number(coordsMatch[3]).toFixed(3);
+    return `GPS (${lat}, ${lng})`;
+  }
+  return loc;
+};
+
 const statClass = {
-  blue: "bg-brand-50 text-brand-600",
-  emerald: "bg-brand-50 text-brand-600",
+  blue: "bg-blue-50 text-blue-600",
+  emerald: "bg-emerald-50 text-emerald-600",
   amber: "bg-amber-50 text-amber-600",
   rose: "bg-rose-50 text-rose-600",
 };
@@ -618,31 +629,31 @@ const ActiveSellers = () => {
 
       <Card className="border-none shadow-xl ring-1 ring-slate-100 overflow-hidden rounded-xl">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1240px] table-fixed text-left border-collapse">
+          <table className="w-full min-w-[1180px] table-fixed text-left border-collapse">
             <colgroup>
-              <col className="w-[21%]" />
-              <col className="w-[18%]" />
-              <col className="w-[13%]" />
-              <col className="w-[18%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[170px]" />
+              <col className="w-[20%]" />
+              <col className="w-[17%]" />
+              <col className="w-[17%]" />
+              <col className="w-[15%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
             </colgroup>
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="ds-table-header-cell px-6 whitespace-nowrap">Store Entity</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap">Shop Owner</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap">Performance</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap">Business Intel</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap text-center">Commission</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap">Status</th>
-                <th className="ds-table-header-cell px-6 whitespace-nowrap text-right">Actions</th>
+              <tr className="bg-slate-50/80 border-b border-slate-200/80">
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Store</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Shop Owner</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Inventory & Location</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Performance</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap text-center">Commission</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-4 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <HiOutlineArrowPath className="h-8 w-8 text-slate-300 animate-spin" />
                       <p className="text-slate-500 font-bold text-sm">
@@ -653,7 +664,7 @@ const ActiveSellers = () => {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-4 py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-16 w-16 rounded-full bg-rose-50 flex items-center justify-center">
                         <HiOutlineXMark className="h-8 w-8 text-rose-400" />
@@ -670,10 +681,15 @@ const ActiveSellers = () => {
                 </tr>
               ) : sellers.length > 0 ? (
                 sellers.map((seller) => (
-                  <tr key={seller.id} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="px-6 py-5 align-middle">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="h-12 w-12 shrink-0 rounded-2xl overflow-hidden bg-slate-100 ring-2 ring-slate-100 flex items-center justify-center">
+                  <tr key={seller.id} className="hover:bg-slate-50/60 transition-colors">
+                    {/* Store Column */}
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div
+                          onClick={() => setSelectedSeller(seller)}
+                          className="relative h-10 w-10 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/80 shadow-xs flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all mt-0.5"
+                          title="View seller profile"
+                        >
                           <img
                             src={getAvatarImageUrl(seller.avatar)}
                             alt={seller.shopName}
@@ -681,37 +697,37 @@ const ActiveSellers = () => {
                             onError={handleAvatarImageError}
                           />
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate" title={seller.shopName}>
+                        <div className="min-w-0 flex-1">
+                          <button
+                            onClick={() => setSelectedSeller(seller)}
+                            className="text-sm font-semibold text-slate-900 hover:text-primary transition-colors truncate block text-left max-w-full cursor-pointer leading-tight"
+                            title={seller.shopName}
+                          >
                             {seller.shopName}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-[10px] font-semibold text-slate-400">
-                              {seller.ownerName}
-                            </span>
-                            <span className="h-1 w-1 rounded-full bg-slate-300" />
-                            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
+                          </button>
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200/60">
                               {seller.category || "General"}
                             </span>
-                            <span className="h-1 w-1 rounded-full bg-slate-300" />
-                            <span className="text-[10px] font-bold text-amber-600">
-                              ★ {Number(seller.avgRating || 0).toFixed(1)}/5
-                              {Number(seller.reviewCount || 0) > 0
-                                ? ` · ${seller.reviewCount}`
-                                : ""}
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                              ★ {Number(seller.avgRating || 0).toFixed(1)}
+                              {Number(seller.reviewCount || 0) > 0 && (
+                                <span className="text-amber-600/70 font-normal">({seller.reviewCount})</span>
+                              )}
                             </span>
                           </div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 align-middle">
-                      <div className="space-y-1.5 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate" title={seller.ownerName || "Unnamed Owner"}>
+                    {/* Shop Owner Column */}
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="space-y-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate leading-tight" title={seller.ownerName || "Unnamed Owner"}>
                           {seller.ownerName || "Unnamed Owner"}
                         </p>
                         {seller.email ? (
-                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                          <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
                             <HiOutlineEnvelope className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                             <a
                               href={`mailto:${seller.email}`}
@@ -723,11 +739,11 @@ const ActiveSellers = () => {
                           </div>
                         ) : null}
                         {seller.phone ? (
-                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                          <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
                             <HiOutlinePhone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                             <a
                               href={`tel:${seller.phone}`}
-                              className="text-xs font-medium text-slate-600 hover:text-primary transition-colors truncate"
+                              className="text-xs text-slate-600 hover:text-primary transition-colors truncate"
                               title={seller.phone}
                             >
                               {seller.phone}
@@ -740,140 +756,190 @@ const ActiveSellers = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 align-middle">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-slate-900">
-                            {(seller.totalOrders || 0).toLocaleString("en-IN")} Orders
-                          </span>
-                          <span className="text-[10px] font-bold text-brand-600">
-                            {currency(seller.totalRevenue)}
-                          </span>
-                        </div>
-                        <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-brand-500 rounded-full"
-                            style={{
-                              width: `${Math.min(100, seller.fulfillmentRate || 0)}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          {(seller.fulfillmentRate || 0)}% fulfillment
-                        </p>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5 align-middle">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <HiOutlineDocumentText className="h-3.5 w-3.5 text-slate-400" />
-                          <span className="text-[10px] font-bold">
-                            {(seller.productCount || 0).toLocaleString("en-IN")} products
+                    {/* Inventory & Location Column */}
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-1.5 text-slate-800">
+                          <HiOutlineDocumentText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="text-xs font-semibold">
+                            {(seller.productCount || 0).toLocaleString("en-IN")}{" "}
+                            <span className="font-normal text-slate-500 text-[11px]">products</span>
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-700 min-w-0">
+                        <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
                           <HiOutlineMapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                          <span className="text-[10px] font-bold truncate" title={seller.location || "Location not set"}>
-                            {seller.location || "Location not set"}
+                          <span
+                            className="text-xs text-slate-600 truncate"
+                            title={seller.location || "Location not set"}
+                          >
+                            {formatLocation(seller.location)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-400">
-                          <HiOutlineCalendarDays className="h-3.5 w-3.5" />
-                          <span className="text-[10px] font-bold">
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <HiOutlineCalendarDays className="h-3.5 w-3.5 shrink-0" />
+                          <span className="text-[11px] text-slate-500">
                             Joined {seller.joinedDate || "N/A"}
                           </span>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 align-middle">
-                      <div className="flex justify-center">
-                      {seller.businessModel === "subscription" ? (
-                        <span
-                          className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600"
-                          title="This seller is on a subscription plan, so no commission is charged.">
-                          Subscription
-                        </span>
-                      ) : (
-                        <EditableCell
-                          centered
-                          initialValue={seller.applyCommission ? seller.adminCommissionValue : ""}
-                          prefix={seller.applyCommission && seller.adminCommissionType === "fixed" ? "₹" : undefined}
-                          suffix={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "%"}
-                          max={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "100"}
-                          onSave={(v) => saveShopCommission(seller, v)}
-                          display={
-                            seller.applyCommission ? (
-                              <span
-                                className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100"
-                                title={
-                                  seller.adminCommissionType === "fixed"
-                                    ? `Fixed ${String(seller.adminCommissionFixedRule || "per_qty").replace("_", " ")}`
-                                    : "Shop-wise custom rate"
-                                }>
-                                {seller.adminCommissionType === "fixed"
-                                  ? `₹${seller.adminCommissionValue}`
-                                  : `${seller.adminCommissionValue}%`}
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                                title="No shop-wise rate: category rates apply. Click to set one for this shop.">
-                                Category rate
-                              </span>
-                            )
-                          }
-                        />
-                      )}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5 align-middle">
-                      <div className="flex flex-col items-start gap-2">
-                        <div className="flex flex-wrap gap-1.5">
-                        <Badge
-                          variant="success"
-                          className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
-                        >
-                          Store Active
-                        </Badge>
-                        {seller.ownerAccountApproved ? (
-                          <Badge
-                            variant="success"
-                            className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
-                          >
-                            Owner Approved
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="error"
-                            className="w-fit whitespace-nowrap text-[8px] font-black uppercase tracking-widest"
-                          >
-                            Owner {seller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
-                          </Badge>
-                        )}
+                    {/* Performance Column */}
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="space-y-1.5">
+                        <div className="flex items-baseline justify-between gap-2 max-w-[150px]">
+                          <span className="text-xs font-semibold text-slate-800">
+                            {(seller.totalOrders || 0).toLocaleString("en-IN")}{" "}
+                            <span className="font-normal text-slate-500 text-[11px]">orders</span>
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {currency(seller.totalRevenue)}
+                          </span>
                         </div>
-                        <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">
-                          Last order: <span className="font-semibold text-slate-500">{seller.lastOrderLabel || "No orders yet"}</span>
-                        </span>
+                        <div className="max-w-[150px]">
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                            <span>Fulfillment</span>
+                            <span
+                              className={cn(
+                                "font-bold",
+                                (seller.fulfillmentRate || 0) >= 80
+                                  ? "text-emerald-600"
+                                  : (seller.fulfillmentRate || 0) >= 40
+                                  ? "text-amber-600"
+                                  : "text-slate-500",
+                              )}
+                            >
+                              {seller.fulfillmentRate || 0}%
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-300",
+                                (seller.fulfillmentRate || 0) >= 80
+                                  ? "bg-emerald-500"
+                                  : (seller.fulfillmentRate || 0) >= 40
+                                  ? "bg-amber-500"
+                                  : (seller.fulfillmentRate || 0) > 0
+                                  ? "bg-rose-400"
+                                  : "bg-slate-300",
+                              )}
+                              style={{
+                                width: `${Math.min(100, Math.max(seller.fulfillmentRate || 0, 0))}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </td>
 
-                    <td className="px-6 py-5 align-middle text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    {/* Commission Column */}
+                    <td className="px-4 py-3.5 align-top text-center">
+                      <div className="flex justify-center">
+                        {seller.businessModel === "subscription" ? (
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span
+                              className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-200/70 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700"
+                              title="This seller is on a subscription plan, no commission charged."
+                            >
+                              Subscription
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">0% fee</span>
+                          </div>
+                        ) : (
+                          <EditableCell
+                            centered
+                            initialValue={seller.applyCommission ? seller.adminCommissionValue : ""}
+                            prefix={seller.applyCommission && seller.adminCommissionType === "fixed" ? "₹" : undefined}
+                            suffix={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "%"}
+                            max={seller.applyCommission && seller.adminCommissionType === "fixed" ? undefined : "100"}
+                            onSave={(v) => saveShopCommission(seller, v)}
+                            display={
+                              seller.applyCommission ? (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                    title={
+                                      seller.adminCommissionType === "fixed"
+                                        ? `Fixed ₹${seller.adminCommissionValue} (${String(seller.adminCommissionFixedRule || "per_qty").replace("_", " ")}) - Click to edit`
+                                        : `${seller.adminCommissionValue}% Custom Rate - Click to edit`
+                                    }
+                                  >
+                                    {seller.adminCommissionType === "fixed"
+                                      ? `₹${seller.adminCommissionValue}`
+                                      : `${seller.adminCommissionValue}%`}
+                                    <HiOutlinePencilSquare className="h-3 w-3 text-emerald-600 opacity-60 hover:opacity-100" />
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-medium">Custom</span>
+                                </div>
+                              ) : (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200/80 hover:bg-slate-200 transition-colors cursor-pointer"
+                                    title="No custom rate: category default rates apply. Click to customize."
+                                  >
+                                    Category
+                                    <HiOutlinePencilSquare className="h-3 w-3 text-slate-400 opacity-60" />
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-medium">Default</span>
+                                </div>
+                              )
+                            }
+                          />
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Status Column */}
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            Active
+                          </span>
+                          {seller.ownerAccountApproved ? (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200/60"
+                              title="Owner account is approved and verified"
+                            >
+                              Verified
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200"
+                              title={seller.ownerRejectionReason || "Owner account is restricted"}
+                            >
+                              {seller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                          Last order:{" "}
+                          <span className={cn(
+                            seller.lastOrderLabel === "No orders yet" ? "text-slate-400 italic" : "text-slate-600 font-medium"
+                          )}>
+                            {seller.lastOrderLabel || "No orders yet"}
+                          </span>
+                        </p>
+                      </div>
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-4 py-3.5 align-top text-right">
+                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
                         <button
                           onClick={() => setSelectedSeller(seller)}
-                          title="View profile"
-                          className="px-3.5 py-2 bg-slate-900 text-white rounded-lg text-[11px] font-bold whitespace-nowrap hover:bg-slate-800 transition-all shadow-sm flex items-center gap-1.5"
+                          title="View seller profile"
+                          className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium whitespace-nowrap transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
                         >
                           <HiOutlineEye className="h-3.5 w-3.5" />
                           View
                         </button>
                         <button
                           onClick={() => navigate(`/admin/sellers/active/${seller.id}`)}
-                          title="Edit shop"
-                          className="px-3.5 py-2 bg-white text-slate-700 ring-1 ring-slate-200 rounded-lg text-[11px] font-bold whitespace-nowrap hover:bg-slate-50 transition-all flex items-center gap-1.5"
+                          title="Edit shop details"
+                          className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
                         >
                           <HiOutlinePencilSquare className="h-3.5 w-3.5" />
                           Edit
@@ -954,33 +1020,22 @@ const ActiveSellers = () => {
                       Owned by {selectedSeller.ownerName}
                     </p>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <Badge
-                        variant="success"
-                        className="text-[8px] font-black uppercase tracking-widest"
-                      >
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                         Store Active
-                      </Badge>
+                      </span>
                       {selectedSeller.ownerAccountApproved ? (
-                        <Badge
-                          variant="success"
-                          className="text-[8px] font-black uppercase tracking-widest"
-                        >
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200/60">
                           Owner Approved
-                        </Badge>
+                        </span>
                       ) : (
-                        <Badge
-                          variant="error"
-                          className="text-[8px] font-black uppercase tracking-widest"
-                        >
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/80">
                           Owner {selectedSeller.ownerAccountStatus === "rejected" ? "Rejected" : "Blocked"}
-                        </Badge>
+                        </span>
                       )}
-                      <Badge
-                        variant="primary"
-                        className="text-[8px] font-black uppercase tracking-widest"
-                      >
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/60 uppercase tracking-wide">
                         {selectedSeller.category || "General"}
-                      </Badge>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1025,7 +1080,7 @@ const ActiveSellers = () => {
                         <div className="flex items-center gap-3 text-slate-700">
                           <HiOutlineMapPin className="h-4 w-4 text-slate-400" />
                           <span className="text-xs font-semibold leading-relaxed">
-                            {selectedSeller.location || "Location not set"}
+                            {formatLocation(selectedSeller.location)}
                           </span>
                         </div>
                       </div>

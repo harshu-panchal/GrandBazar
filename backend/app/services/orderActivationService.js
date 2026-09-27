@@ -120,7 +120,7 @@ export async function processOrderActivationJob({ orderId }) {
     { new: true },
   )
     .populate("customer", "name phone")
-    .populate("seller", "shopName address name location serviceRadius");
+    .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius");
 
   if (!updated) return;
 

@@ -57,6 +57,7 @@ import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.const
 import {
   emitDeliveryBroadcastForSeller,
   emitReturnBroadcastForCustomer,
+  emitReturnBroadcastForSeller,
   retractDeliveryBroadcastForOrder,
   emitToSeller,
   emitToDelivery,
@@ -268,7 +269,7 @@ export const getMyOrders = async (req, res) => {
         const [orders, total] = await Promise.all([
           Order.find({ customer: customerId })
             .select(
-              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus disputeRef timeSlot createdAt",
+              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus disputeRef timeSlot createdAt refundAmount returnRefundAmount walletAmountUsed refundStatus",
             )
             .sort({ createdAt: -1, _id: -1 })
             .skip(skip)
@@ -1043,6 +1044,17 @@ export const requestReturn = async (req, res) => {
         reasonDetail: order.returnReasonDetail,
       },
     });
+    // Fetch customer name/phone to enrich the seller popup
+    let customerName = order.address?.name || "";
+    let customerPhone = order.address?.phone || "";
+    try {
+      const customerDoc = await User.findById(order.customer).select("name phone").lean();
+      if (customerDoc) {
+        customerName = customerName || customerDoc.name || "";
+        customerPhone = customerPhone || customerDoc.phone || "";
+      }
+    } catch { /* non-critical */ }
+
     emitToSeller(order.seller?.toString(), {
       event: "return:requested",
       payload: {
@@ -1051,6 +1063,17 @@ export const requestReturn = async (req, res) => {
         returnReason: order.returnReason,
         returnReasonDetail: order.returnReasonDetail,
         returnRequestedAt: order.returnRequestedAt,
+        // Customer details
+        customerName,
+        customerPhone,
+        // Return items (selected products)
+        returnItems: (order.returnItems || []).map((item) => ({
+          name: item.name || "",
+          quantity: item.quantity,
+          price: item.price,
+          image: item.image || "",
+          variantSlot: item.variantSlot || "",
+        })),
       },
     });
 
@@ -1516,28 +1539,43 @@ export const approveReturnRequest = async (req, res) => {
       customerInfo = null;
     }
 
+    // Format seller address as a plain string (address field can be an object)
+    const sellerAddressStr = typeof sellerInfo?.address === "string"
+      ? sellerInfo.address
+      : [sellerInfo?.address?.address, sellerInfo?.address?.locality, sellerInfo?.address?.city]
+          .filter(Boolean).join(", ") || "";
+
+    const returnItemList = Array.isArray(order.returnItems) && order.returnItems.length > 0
+      ? order.returnItems
+      : (Array.isArray(order.items) ? order.items : []);
+
+    const mappedItems = returnItemList.map((i) => ({
+      name: i.name || i.productName || "",
+      quantity: i.quantity || 1,
+      price: i.price || 0,
+      image: i.image || i.thumbnail || "",
+    }));
+
     const payload = {
       orderId: order.orderId,
       type: "RETURN_PICKUP",
-      commission: returnCommission,
+      isReturnPickup: true,
+      items: mappedItems,
       preview: {
-        pickup: order.address?.address || "Customer Address",
+        pickup: order.address?.address || order.address?.completeAddress || "Customer Address",
+        pickupTitle: order.address?.name || customerInfo?.name || "Customer",
+        pickupAddress: order.address?.address || order.address?.completeAddress || "Customer Address",
         pickupPhone: order.address?.phone || customerInfo?.phone || "",
-        customerName: order.address?.name || customerInfo?.name || "Customer",
         drop: sellerInfo?.shopName || "Seller Store",
-        dropAddress: sellerInfo?.address || "",
+        dropTitle: sellerInfo?.shopName || "Seller Store",
+        dropAddress: sellerAddressStr || sellerInfo?.shopName || "Seller Store",
         total: order.pricing?.total || 0,
+        earnings: returnCommission,
+        isReturnPickup: true,
+        items: mappedItems,
         returnReason: order.returnReason || "",
-        returnItems: Array.isArray(order.returnItems)
-          ? order.returnItems.map((i) => ({
-            name: i.name || "",
-            quantity: i.quantity || 1,
-            price: i.price || 0,
-            image: i.image || "",
-          }))
-          : [],
       },
-      deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      // No deliverySearchExpiresAt — return pickups stay open until a rider accepts
     };
 
     const customerLocation = order.address?.location;
@@ -1738,11 +1776,11 @@ export const assignReturnDelivery = async (req, res) => {
       );
     }
 
-    if (order.returnStatus !== "return_requested" && order.returnStatus !== "return_approved") {
+    if (order.returnStatus !== "return_requested" && order.returnStatus !== "return_approved" && order.returnStatus !== "return_pickup_assigned") {
       return handleResponse(
         res,
         400,
-        "Return pickup can only be assigned for pending or approved returns.",
+        "Return pickup can only be assigned for pending, approved, or already-broadcasting returns.",
       );
     }
 
@@ -1762,12 +1800,46 @@ export const assignReturnDelivery = async (req, res) => {
       // If undefined/empty object, we want nearby riders to pick it up via broadcast (available orders pool)
       // `orderQueryService` will serve orders where `returnStatus="return_pickup_assigned"` and `returnDeliveryBoy=null`
       order.returnDeliveryBoy = null;
+      // Reset skippedBy so previously rejecting riders get the broadcast again on renotify
+      order.skippedBy = [];
     }
 
     order.returnStatus = "return_pickup_assigned";
 
     await order.save();
     emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+
+    // Fetch seller + customer info for enriched broadcast payloads
+    let assignSellerInfo = null;
+    let assignCustomerInfo = null;
+    try {
+      assignSellerInfo = await Store.findById(order.seller).select("shopName address phone").lean();
+    } catch { /* ignore */ }
+    try {
+      assignCustomerInfo = await User.findById(order.customer).select("name phone").lean();
+    } catch { /* ignore */ }
+
+    const assignSellerAddrStr = typeof assignSellerInfo?.address === "string"
+      ? assignSellerInfo.address
+      : [assignSellerInfo?.address?.address, assignSellerInfo?.address?.locality, assignSellerInfo?.address?.city]
+          .filter(Boolean).join(", ") || "";
+
+    const assignReturnItemList = Array.isArray(order.returnItems) && order.returnItems.length > 0
+      ? order.returnItems
+      : (Array.isArray(order.items) ? order.items : []);
+
+    const assignMappedItems = assignReturnItemList.map((i) => ({
+      name: i.name || i.productName || "",
+      quantity: i.quantity || 1,
+      price: i.price || 0,
+      image: i.image || i.thumbnail || "",
+    }));
+
+    const assignEarnings = order.returnDeliveryCommission || 30;
+    const assignTotal = order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0;
+    const assignPickup = order.address?.address || order.address?.completeAddress || "Customer Address";
+    const assignDrop = assignSellerInfo?.shopName || "Seller Store";
+
     if (riderId) {
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
         orderId: order.orderId,
@@ -1780,40 +1852,52 @@ export const assignReturnDelivery = async (req, res) => {
         payload: {
           orderId: order.orderId,
           type: "RETURN_PICKUP",
+          isReturnPickup: true,
+          items: assignMappedItems,
           preview: {
-            pickup: "Customer Address",
-            drop: "Seller Store",
-            total: order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0,
-            earnings: order.returnDeliveryCommission || 30,
+            pickup: assignPickup,
+            pickupTitle: order.address?.name || assignCustomerInfo?.name || "Customer",
+            pickupAddress: assignPickup,
+            drop: assignDrop,
+            dropTitle: assignDrop,
+            dropAddress: assignSellerAddrStr || assignDrop,
+            total: assignTotal,
+            earnings: assignEarnings,
+            isReturnPickup: true,
+            items: assignMappedItems,
+            returnReason: order.returnReason || "",
           },
-          deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+          // No deliverySearchExpiresAt — return pickups stay open until accepted
           at: new Date().toISOString(),
         },
       });
     } else {
-      // Trigger broadcast for nearby riders
-      const returnItemList = order.returnItems?.length ? order.returnItems : (order.items || []);
-      const payload = {
+      const broadcastPayload = {
         orderId: order.orderId,
         type: "RETURN_PICKUP",
         isReturnPickup: true,
-        items: returnItemList.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          image: item.image || item.thumbnail || (order.items || []).find(it => it.name === item.name)?.image || ""
-        })),
+        items: assignMappedItems,
         preview: {
-          pickup: order.address?.completeAddress || "Customer Address",
-          drop: order.sellerBranchArea || "Seller Store",
-          total: order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0,
-          earnings: order.returnDeliveryCommission || 30,
+          pickup: assignPickup,
+          pickupTitle: order.address?.name || assignCustomerInfo?.name || "Customer",
+          pickupAddress: assignPickup,
+          drop: assignDrop,
+          dropTitle: assignDrop,
+          dropAddress: assignSellerAddrStr || assignDrop,
+          total: assignTotal,
+          earnings: assignEarnings,
+          isReturnPickup: true,
+          items: assignMappedItems,
+          returnReason: order.returnReason || "",
         },
-        deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+        // No deliverySearchExpiresAt — return pickups stay open until a rider accepts
       };
 
-      // Trigger broadcast for nearby riders (Riders near Customer for returns)
       const customerLocation = order.address?.location;
-      emitReturnBroadcastForCustomer(customerLocation, payload);
+      // Broadcast to riders within the SELLER's service radius —
+      // the return item goes back to the seller, so riders near the
+      // seller's store are the right ones to notify.
+      emitReturnBroadcastForSeller(order.seller?.toString(), broadcastPayload);
 
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
         orderId: order.orderId,

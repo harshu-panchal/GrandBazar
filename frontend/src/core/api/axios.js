@@ -103,7 +103,48 @@ axiosInstance.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response?.status === 401 && !originalRequest._retry) {
+
+        // The backend's verifyToken middleware returns 403 with this message when a
+        // customer has been deactivated (blocked/suspended) by an admin. The JWT itself
+        // is still technically valid, so without handling it here the customer stays
+        // logged in indefinitely despite every authenticated request failing.
+        const status = error.response?.status;
+        const message = error.response?.data?.message || error.response?.data?.error || '';
+        const isSuspendedAccount =
+            status === 403 &&
+            typeof message === 'string' &&
+            message.toLowerCase().includes('suspended or restricted');
+
+        if (isSuspendedAccount && !originalRequest._blockedSessionCleared) {
+            originalRequest._blockedSessionCleared = true;
+            try {
+                const { clearRoleToken } = await import('@core/utils/authSession');
+                const pagePath = window.location.pathname;
+                const role = pagePath.startsWith('/seller')
+                    ? 'seller'
+                    : pagePath.startsWith('/admin')
+                        ? 'admin'
+                        : pagePath.startsWith('/delivery')
+                            ? 'delivery'
+                            : 'customer';
+                // Only force a logout when the suspended account matches the role whose
+                // request failed — never clear unrelated role sessions.
+                const failedToken = resolveTokenForRequest(pagePath, originalRequest?.url || '');
+                const roleToken = localStorage.getItem(`auth_${role}`);
+                if (failedToken && failedToken === roleToken) {
+                    clearRoleToken(role);
+                    sessionStorage.removeItem(`push:registered:${role}`);
+                    sessionStorage.removeItem('auth_customer_profile_snapshot');
+                    if (!window.location.pathname.startsWith('/login')) {
+                        window.location.href = '/login';
+                    }
+                }
+            } catch (cleanupError) {
+                console.error('[axios] Failed to clear suspended-account session:', cleanupError);
+            }
+        }
+
+        if (status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             const hasStoredRoleToken = ROLE_STORAGE_KEYS.some((key) => localStorage.getItem(key));
             if (hasStoredRoleToken) {

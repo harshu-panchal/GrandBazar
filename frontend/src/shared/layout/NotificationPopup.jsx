@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { HiOutlineBell, HiOutlineCheckCircle, HiOutlineExclamationCircle, HiOutlineClock } from 'react-icons/hi2';
+import { HiOutlineBell, HiOutlineCheckCircle, HiOutlineExclamationCircle, HiOutlineClock, HiOutlineTrash } from 'react-icons/hi2';
 import { cn } from '@/lib/utils';
 import Button from '@shared/components/ui/Button';
 
@@ -22,8 +22,16 @@ const resolveNotificationPath = (notif) => {
     }
 };
 
-const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClose }) => {
+const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onDeleteAll, onClose }) => {
     const navigate = useNavigate();
+
+    const handleDeleteAllClick = () => {
+        // Deliberately destructive and irreversible — require an explicit
+        // confirmation so a stray click can't wipe the whole feed.
+        if (window.confirm("Delete all notifications? This cannot be undone.")) {
+            onDeleteAll?.();
+        }
+    };
 
     const handleNotificationClick = (notif, notificationId) => {
         if (!notif.isRead) onMarkAsRead(notificationId);
@@ -50,12 +58,24 @@ const NotificationPopup = ({ notifications, onMarkAsRead, onMarkAllAsRead, onClo
                     <h3 className="text-sm font-black text-slate-900 tracking-tight">Notifications</h3>
                 </div>
                 {notifications.length > 0 && (
-                    <button
-                        onClick={onMarkAllAsRead}
-                        className="text-[10px] font-black text-primary hover:text-primary/80 uppercase tracking-widest transition-colors"
-                    >
-                        Mark all as read
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={onMarkAllAsRead}
+                            className="text-[10px] font-black text-primary hover:text-primary/80 uppercase tracking-widest transition-colors"
+                        >
+                            Mark all as read
+                        </button>
+                        {onDeleteAll && (
+                            <button
+                                onClick={handleDeleteAllClick}
+                                className="flex items-center gap-1 text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-widest transition-colors"
+                                title="Delete all notifications"
+                            >
+                                <HiOutlineTrash className="h-3 w-3" />
+                                Delete all
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 

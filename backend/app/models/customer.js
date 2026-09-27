@@ -143,6 +143,24 @@ const userSchema = new mongoose.Schema(
             default: true,
         },
 
+        /**
+         * Set when an ADMIN deactivates (blocks) this account via
+         * updateUserStatusData. Unlike a customer self-deletion (isActive=false
+         * via deleteCustomerAccount), an admin block must NOT be reversible by
+         * the customer re-signing-up on the same phone/email — the signup
+         * reactivation path in otpAuthService checks this flag and refuses.
+         * Cleared only when an admin re-activates the account.
+         */
+        blockedByAdmin: {
+            type: Boolean,
+            default: false,
+        },
+
+        blockedAt: {
+            type: Date,
+            default: null,
+        },
+
         /** Customer-controlled preference: whether push notifications should be sent to this account. */
         notificationsEnabled: {
             type: Boolean,

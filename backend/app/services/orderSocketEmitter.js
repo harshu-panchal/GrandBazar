@@ -4,6 +4,7 @@
 
 import mongoose from "mongoose";
 import Notification from "../models/notification.js";
+import Delivery from "../models/delivery.js";
 import { 
   getDeliveryPartnerIdsWithinSellerRadius,
   getDeliveryPartnerIdsWithinCustomerRadius
@@ -283,52 +284,147 @@ export function emitOrderChatMessage(orderId, messageObj, customerId, deliveryId
 }
 
 /**
- * Notify delivery partners near a CUSTOMER for return pickups.
- * Sends both Socket events (for open app) and Push (for background).
+ * Notify delivery partners within the SELLER's service radius for return pickups.
+ * This is used when the seller clicks "Notify Riders" — riders near the seller
+ * store get the popup, since the return goes back to the seller.
  */
-export async function emitReturnBroadcastForCustomer(customerLocation, payload) {
+export async function emitReturnBroadcastForSeller(sellerId, payload) {
   const s = getIo();
-  if (!customerLocation) return;
 
-  const ids = await getDeliveryPartnerIdsWithinCustomerRadius(customerLocation);
-  if (!ids.length) {
-    if (process.env.NODE_ENV !== "production" && s) {
-      s.to("delivery:online").emit("delivery:broadcast", { ...payload, at: new Date().toISOString() });
+  let ids = [];
+  try {
+    if (sellerId) {
+      ids = await getDeliveryPartnerIdsWithinSellerRadius(sellerId);
     }
-    return;
+  } catch (err) {
+    console.warn("[emitReturnBroadcastForSeller] seller radius lookup error:", err.message);
+  }
+
+  // Fallback: if no riders found in seller radius, notify all online riders
+  if (!ids || ids.length === 0) {
+    try {
+      const onlineRiders = await Delivery.find({ isOnline: true }).select("_id").lean();
+      ids = onlineRiders.map((r) => r._id.toString());
+    } catch (err) {
+      console.warn("[emitReturnBroadcastForSeller] online riders fallback error:", err.message);
+      ids = [];
+    }
   }
 
   const body = { ...payload, at: new Date().toISOString() };
 
   if (s) {
+    // Emit to specific rider rooms
     for (const id of ids) {
       s.to(`delivery:${id}`).emit("delivery:broadcast", body);
     }
+    // Safety net: always emit to delivery:online room
+    s.to("delivery:online").emit("delivery:broadcast", body);
   }
 
-  // Send Push Notification
-  emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
-    orderId: payload.orderId,
-    deliveryIds: ids,
-  });
+  // Push notification
+  if (ids.length > 0) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
+      orderId: payload.orderId,
+      deliveryIds: ids,
+    });
+  }
 
-  // DB Sync for in-app notification list
+  // DB notification list
   try {
-    await Notification.insertMany(
-      ids.map((id) => ({
-        recipient: new mongoose.Types.ObjectId(id),
-        recipientModel: "Delivery",
-        title: "New Return Pickup Task",
-        message: `Return pickup ${payload.orderId} nearby — tap to Accept.`,
-        type: "order",
-        data: {
-          orderId: payload.orderId,
-          type: "RETURN_PICKUP",
-          preview: payload.preview || null,
-        },
-      })),
-      { ordered: false }
-    );
+    if (ids.length > 0) {
+      await Notification.insertMany(
+        ids.map((id) => ({
+          recipient: new mongoose.Types.ObjectId(id),
+          recipientModel: "Delivery",
+          title: "New Return Pickup Task",
+          message: `Return pickup ${payload.orderId} nearby — tap to Accept.`,
+          type: "order",
+          data: {
+            orderId: payload.orderId,
+            type: "RETURN_PICKUP",
+            isReturnPickup: true,
+            preview: payload.preview || null,
+            items: payload.items || payload.preview?.items || [],
+            deliverySearchExpiresAt: payload.deliverySearchExpiresAt || null,
+          },
+        })),
+        { ordered: false }
+      );
+    }
+  } catch (err) {
+    console.warn("[emitReturnBroadcastForSeller] DB error", err.message);
+  }
+}
+
+/**
+ * Notify delivery partners near a CUSTOMER for return pickups.
+ * Sends both Socket events (for open app) and Push (for background).
+ */
+export async function emitReturnBroadcastForCustomer(customerLocation, payload) {
+  const s = getIo();
+
+  let ids = [];
+  try {
+    if (customerLocation) {
+      ids = await getDeliveryPartnerIdsWithinCustomerRadius(customerLocation);
+    }
+  } catch (err) {
+    console.warn("[emitReturnBroadcastForCustomer] location lookup error:", err.message);
+  }
+
+  // If no nearby riders found via radius (e.g. riders without live GPS), fallback to all online riders
+  if (!ids || ids.length === 0) {
+    try {
+      const onlineRiders = await Delivery.find({ isOnline: true }).select("_id").lean();
+      ids = onlineRiders.map((r) => r._id.toString());
+    } catch (err) {
+      console.warn("[emitReturnBroadcastForCustomer] online riders lookup error:", err.message);
+      ids = [];
+    }
+  }
+
+  const body = { ...payload, at: new Date().toISOString() };
+
+  if (s) {
+    // 1. Emit to specific rider rooms
+    for (const id of ids) {
+      s.to(`delivery:${id}`).emit("delivery:broadcast", body);
+    }
+    // 2. Always emit to the general delivery:online room as a safety net
+    s.to("delivery:online").emit("delivery:broadcast", body);
+  }
+
+  // 3. Send Push Notification via FCM
+  if (ids.length > 0) {
+    emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
+      orderId: payload.orderId,
+      deliveryIds: ids,
+    });
+  }
+
+  // 4. DB Sync for in-app notification list
+  try {
+    if (ids.length > 0) {
+      await Notification.insertMany(
+        ids.map((id) => ({
+          recipient: new mongoose.Types.ObjectId(id),
+          recipientModel: "Delivery",
+          title: "New Return Pickup Task",
+          message: `Return pickup ${payload.orderId} nearby — tap to Accept.`,
+          type: "order",
+          data: {
+            orderId: payload.orderId,
+            type: "RETURN_PICKUP",
+            isReturnPickup: true,
+            preview: payload.preview || null,
+            items: payload.items || payload.preview?.items || [],
+            deliverySearchExpiresAt: payload.deliverySearchExpiresAt || null,
+          },
+        })),
+        { ordered: false }
+      );
+    }
   } catch (err) {
     console.warn("[emitReturnBroadcastForCustomer] DB error", err.message);
   }

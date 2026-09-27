@@ -1328,10 +1328,14 @@ export async function generateOrderPaymentBreakdown({
   if (packagingChargeAmount > 0 && packing.packingFeeCharged > 0) {
     packagingChargeAmount = 0;
   }
+  const isSelfFulfillment =
+    fulfillmentMethod === "seller_delivery" ||
+    fulfillmentMethod === "customer_pickup";
+  const rawDelivery = calculateCustomerDeliveryFee(distanceKm, effectiveSettings);
   const delivery = skipDeliveryFee
-    ? { deliveryFeeCharged: 0, distanceKmActual: 0, distanceKmRounded: 0 }
-    : calculateCustomerDeliveryFee(distanceKm, effectiveSettings);
-  const rider = skipDeliveryFee
+    ? { ...rawDelivery, deliveryFeeCharged: 0 }
+    : rawDelivery;
+  const rider = isSelfFulfillment
     ? {
         riderPayoutBase: 0,
         riderPayoutDistance: 0,

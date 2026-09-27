@@ -568,12 +568,6 @@ const OrderDetails = () => {
     return String(returnRiderId) === String(user._id);
   }, [order, user, isReturn]);
 
-  const isReturnWaitAccept = useMemo(() => {
-    if (!order) return false;
-    const isReturn = order.returnStatus && order.returnStatus !== "none";
-    return isReturn && !order.returnDeliveryBoy;
-  }, [order]);
-
   // Determine current phase for map
   // Return: steps 1-2 = navigate to customer (pickup), steps 3-4 = navigate to seller (delivery)
   const currentPhase = isReturn ? (step <= 2 ? "pickup" : "delivery") : step <= 2 ? "pickup" : "delivery";
@@ -637,118 +631,6 @@ const OrderDetails = () => {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {/* Acceptance Guard for Returns */}
-        <AnimatePresence>
-          {isReturnWaitAccept && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.1 }}
-              className="bg-brand-600 rounded-[32px] p-8 text-white shadow-xl relative overflow-hidden mb-6"
-            >
-              <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-brand-400/20 rounded-full blur-3xl" />
-
-              <div className="relative z-10 flex flex-col items-center text-center space-y-6">
-                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                  <Package className="text-white" size={32} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black mb-1 uppercase tracking-tight text-white">
-                    New Return Task
-                  </h2>
-                  <p className="text-brand-100 text-sm font-medium leading-relaxed">
-                    Pick up product from customer and deliver back to seller.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 w-full pt-4">
-                  <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
-                    <p className="text-[10px] uppercase font-bold text-brand-200 mb-1">
-                      Earnings
-                    </p>
-                    <p className="text-xl font-black text-white">
-                      ₹{order.returnDeliveryCommission || 0}
-                    </p>
-                  </div>
-                  <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
-                    <p className="text-[10px] uppercase font-bold text-brand-200 mb-1">
-                      Distance
-                    </p>
-                    <p className="text-xl font-black text-white">
-                      {summary.totalDistanceText}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Product Detail List */}
-                <div className="w-full space-y-3 pt-2">
-                  <p className="text-[10px] uppercase font-bold text-brand-200 text-left px-1">
-                    Items to pick up
-                  </p>
-                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar-dark text-left">
-                    {(order.returnItems || order.items)?.map((item, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-white/10 p-2 rounded-xl border border-white/5">
-                        <div className="h-12 w-12 rounded-lg bg-white overflow-hidden flex-shrink-0">
-                          <img
-                            src={item.image || (item.product?.mainImage) || "/placeholder.png"}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{item.name}</p>
-                          <p className="text-[10px] text-brand-200 font-medium">Qty: {item.quantity}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {order.returnReason && (
-                    <div className="bg-brand-900/30 rounded-xl p-3 border border-brand-400/20 text-left">
-                      <p className="text-[10px] uppercase font-bold text-brand-200 mb-1">Reason for return</p>
-                      <p className="text-xs text-white leading-relaxed line-clamp-2">{order.returnReason}</p>
-                      {order.returnReasonDetail && (
-                        <p className="text-[10px] text-brand-100 italic mt-1 line-clamp-2">"{order.returnReasonDetail}"</p>
-                      )}
-
-                      {order.returnImages?.length > 0 && (
-                        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                          {order.returnImages.map((img, idx) => (
-                            <img key={idx} src={img} alt={`Return Proof ${idx}`} className="w-10 h-10 rounded-lg object-cover border border-white/20 shrink-0" />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="w-full pt-4">
-                  <Button
-                    loading={accepting}
-                    onClick={handleAcceptReturn}
-                    className="w-full bg-white text-brand-700 hover:bg-slate-50 h-14 rounded-2xl font-black text-lg shadow-lg border-none"
-                  >
-                    ACCEPT TASK
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {isReturn && order.returnDeliveryBoy && !isAssignedRider && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-red-50 rounded-2xl p-4 border border-red-100 flex items-center text-red-700 mb-6"
-            >
-              <AlertTriangle className="mr-3" size={20} />
-              <p className="font-bold text-sm">
-                This task has been accepted by another partner.
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
 
         {/* Map Section - Hidden when completed */}
         {(isReturn ? step < 5 : step < 4) && (!isReturn || isAssignedRider) && (

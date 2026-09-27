@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
 import { onReturnDropOtp } from "@core/services/orderSocket";
+import NotifyRidersModal from "../components/NotifyRidersModal";
 
 const Returns = () => {
     const { showToast } = useToast();
@@ -30,6 +31,7 @@ const Returns = () => {
     const [submittingReject, setSubmittingReject] = useState(false);
     const [assigningPickup, setAssigningPickup] = useState(false);
     const [activeOtps, setActiveOtps] = useState({}); // { orderId: { otp, expiresAt } }
+    const [isNotifyModalOpen, setIsNotifyModalOpen] = useState(false);
     const canManageReturns = true;
 
     const tabs = [
@@ -236,6 +238,7 @@ const Returns = () => {
             setAssigningPickup(true);
             await sellerApi.assignReturnDelivery(orderId, {});
             showToast("Riders notified for return pickup", "success");
+            setIsNotifyModalOpen(false);
             setIsDetailsOpen(false);
             await fetchReturns();
         } catch (error) {
@@ -247,6 +250,11 @@ const Returns = () => {
         } finally {
             setAssigningPickup(false);
         }
+    };
+
+    /** Open the NotifyRidersModal confirmation dialog */
+    const openNotifyModal = () => {
+        setIsNotifyModalOpen(true);
     };
 
     return (
@@ -780,9 +788,9 @@ const Returns = () => {
                                     {/* Action: Assign Pickup */}
                                     {canManageReturns && (selectedReturn.returnStatus === "return_approved") && (
                                         <Button
-                                            className="text-xs font-bold bg-brand-600 text-white hover:bg-brand-700"
+                                            className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200"
                                             disabled={assigningPickup}
-                                            onClick={() => handleAssignPickup(selectedReturn.orderId)}
+                                            onClick={openNotifyModal}
                                         >
                                             {assigningPickup ? (
                                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -790,6 +798,24 @@ const Returns = () => {
                                                 <HiOutlineInboxStack className="h-4 w-4 mr-2" />
                                             )}
                                             Notify Riders
+                                        </Button>
+                                    )}
+
+                                    {/* Action: Renotify Riders — shown when broadcast is active but no rider has accepted yet */}
+                                    {canManageReturns &&
+                                        selectedReturn.returnStatus === "return_pickup_assigned" &&
+                                        !selectedReturn.returnDeliveryBoy && (
+                                        <Button
+                                            className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200"
+                                            disabled={assigningPickup}
+                                            onClick={openNotifyModal}
+                                        >
+                                            {assigningPickup ? (
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                            ) : (
+                                                <HiOutlineInboxStack className="h-4 w-4 mr-2" />
+                                            )}
+                                            Renotify Riders
                                         </Button>
                                     )}
                                 </div>
@@ -850,6 +876,15 @@ const Returns = () => {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* ── NotifyRidersModal ────────────────────────────────────── */}
+            <NotifyRidersModal
+                isOpen={isNotifyModalOpen}
+                returnOrder={selectedReturn}
+                onConfirm={handleAssignPickup}
+                onClose={() => setIsNotifyModalOpen(false)}
+                isLoading={assigningPickup}
+            />
         </div>
     );
 };

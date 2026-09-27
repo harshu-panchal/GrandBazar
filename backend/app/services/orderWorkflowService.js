@@ -52,54 +52,217 @@ const DELIVERY_RADIUS_MULTIPLIER = () =>
 const INITIAL_DELIVERY_RADIUS_M = () =>
   parseInt(process.env.INITIAL_DELIVERY_RADIUS_METERS || "5000", 10);
 
+function extractLatLngCoords(target) {
+  if (!target) return null;
+  const loc = target.location || target;
+  if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+    const lng = Number(loc.coordinates[0]);
+    const lat = Number(loc.coordinates[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  if (Array.isArray(loc) && loc.length >= 2) {
+    const lng = Number(loc[0]);
+    const lat = Number(loc[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  const lat = Number(loc.lat ?? loc.latitude ?? target.lat ?? target.latitude);
+  const lng = Number(loc.lng ?? loc.longitude ?? target.lng ?? target.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  return null;
+}
+
+function formatFullAddress(addrObj) {
+  if (!addrObj) return "";
+  const base = typeof addrObj === "string" ? addrObj : (addrObj.address || "");
+  const parts = [];
+  if (base.trim()) parts.push(base.trim());
+  const extraFields = [
+    addrObj.locality,
+    addrObj.landmark,
+    addrObj.city,
+    addrObj.state,
+    addrObj.pincode,
+  ].flatMap((p) => {
+    if (!p || typeof p !== "string") return [];
+    return p.split(",").map((s) => s.trim()).filter(Boolean);
+  });
+
+  for (const part of extraFields) {
+    const combined = parts.join(", ").toLowerCase();
+    if (!combined.includes(part.toLowerCase())) {
+      parts.push(part);
+    }
+  }
+  return parts.join(", ");
+}
+
 /** Payload for `delivery:broadcast` + Notification.data — lets the app show a modal without relying on GET /available alone. */
 export function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
   const seller =
     order.seller && typeof order.seller === "object" && order.seller !== null
       ? order.seller
       : null;
-  const sellerAddress =
-    typeof seller?.address === "string" && seller.address.trim()
-      ? seller.address.trim()
-      : null;
-  const pickup = seller?.shopName
-    ? sellerAddress
-      ? `${seller.shopName} - ${sellerAddress}`
-      : seller.shopName
-    : "Seller";
-  const drop =
-    typeof order.address?.address === "string" && order.address.address.trim()
-      ? order.address.address.trim()
-      : "Customer address";
+
+  const fullSellerAddress = formatFullAddress(seller);
+  const pickupTitle = seller?.shopName || "Seller Store";
+  const pickupAddress = fullSellerAddress || pickupTitle;
+  const pickup = fullSellerAddress && seller?.shopName
+    ? `${seller.shopName} - ${fullSellerAddress}`
+    : (fullSellerAddress || seller?.shopName || "Seller Store");
+
+  const customerName = order.address?.name || order.customer?.name || "Customer";
+  const fullDropAddress = formatFullAddress(order.address) || "Customer address";
+  const dropTitle = customerName;
+  const dropAddress = fullDropAddress;
+  const drop = fullDropAddress;
+
   const meta = order.deliverySearchMeta || {};
   const sid = seller?._id ?? order.seller;
 
-  const sellerCoords = seller?.location?.coordinates;
-  const dropCoords = order.address?.location?.coordinates;
+  const sCoords = extractLatLngCoords(seller);
+  const dCoords = extractLatLngCoords(order.address);
   let distanceKm;
-  if (
-    Array.isArray(sellerCoords) && sellerCoords.length >= 2 &&
-    Array.isArray(dropCoords) && dropCoords.length >= 2
-  ) {
-    const meters = distanceMeters(sellerCoords[1], sellerCoords[0], dropCoords[1], dropCoords[0]);
-    if (Number.isFinite(meters)) distanceKm = Math.round((meters / 1000) * 10) / 10;
+  let distanceM;
+  if (sCoords && dCoords) {
+    const meters = distanceMeters(sCoords.lat, sCoords.lng, dCoords.lat, dCoords.lng);
+    if (Number.isFinite(meters) && meters >= 0) {
+      distanceM = Math.round(meters);
+      distanceKm = Math.round((meters / 1000) * 10) / 10;
+    }
+  }
+  if (distanceKm == null && Number(order.paymentBreakdown?.distanceKmActual) > 0) {
+    distanceKm = Number(order.paymentBreakdown.distanceKmActual);
   }
 
-  const earningsEstimate = Number(order.paymentBreakdown?.riderPayoutTotal);
+  const distanceText = distanceM != null
+    ? (distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`)
+    : (distanceKm != null ? `${distanceKm} km` : "Nearby");
+
+  const rawEarnings = Number(order.paymentBreakdown?.riderPayoutTotal);
+  let earningsEstimate;
+  if (Number.isFinite(rawEarnings) && rawEarnings > 0) {
+    earningsEstimate = rawEarnings;
+  } else {
+    const snapshotBase = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.riderBasePayout);
+    const orderRiderEarnings = Number(order.riderEarnings);
+    if (Number.isFinite(snapshotBase) && snapshotBase > 0) {
+      earningsEstimate = snapshotBase;
+    } else if (Number.isFinite(orderRiderEarnings) && orderRiderEarnings > 0) {
+      earningsEstimate = orderRiderEarnings;
+    } else {
+      earningsEstimate = 30;
+    }
+    const perKm = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.deliveryPartnerRatePerKm || 5);
+    const baseDist = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.baseDistanceCapacityKm || 0.5);
+    if (distanceKm && distanceKm > baseDist) {
+      earningsEstimate += Math.ceil(distanceKm - baseDist) * perKm;
+    }
+  }
+
+  const items = Array.isArray(order.items)
+    ? order.items.map((i) => ({
+        name: i.name || i.productName || "Product",
+        image: i.image || i.productImage || (Array.isArray(i.images) ? i.images[0] : "") || "",
+        quantity: Number(i.quantity) || 1,
+        price: Number(i.price ?? i.unitPrice ?? 0),
+      }))
+    : [];
 
   return {
     orderId: order.orderId,
     workflowStatus: order.workflowStatus || WORKFLOW_STATUS.DELIVERY_SEARCH,
     sellerId: sid != null ? String(sid) : undefined,
     radiusMeters: meta.radiusMeters ?? INITIAL_DELIVERY_RADIUS_M(),
+    items,
     preview: {
       pickup,
+      pickupTitle,
+      pickupAddress,
       drop,
-      total: order.pricing?.total ?? 0,
+      dropTitle,
+      dropAddress,
+      items,
+      total: order.pricing?.total ?? order.total ?? 0,
       distanceKm,
-      earnings: Number.isFinite(earningsEstimate) ? earningsEstimate : undefined,
+      distanceText,
+      earnings: earningsEstimate,
     },
     deliverySearchExpiresAt: order.deliverySearchExpiresAt,
+    ...extra,
+  };
+}
+
+/** Payload for return pickup broadcast + Notification.data */
+export function returnBroadcastPayloadFromOrder(order, seller = null, customer = null, extra = {}) {
+  const sellerObj = seller || (order.seller && typeof order.seller === "object" ? order.seller : null);
+  const customerObj = customer || (order.customer && typeof order.customer === "object" ? order.customer : null);
+
+  const fullSellerAddress = formatFullAddress(sellerObj);
+  const sellerTitle = sellerObj?.shopName || "Seller Store";
+  const dropAddress = fullSellerAddress || sellerTitle;
+  const dropTitle = sellerTitle;
+  const drop = fullSellerAddress ? `${sellerTitle} - ${fullSellerAddress}` : sellerTitle;
+
+  const customerName = order.address?.name || customerObj?.name || "Customer";
+  const fullCustomerAddress = formatFullAddress(order.address) || "Customer Address";
+  const pickupTitle = customerName;
+  const pickupAddress = fullCustomerAddress;
+  const pickup = fullCustomerAddress;
+
+  const sCoords = extractLatLngCoords(sellerObj);
+  const dCoords = extractLatLngCoords(order.address);
+  let distanceKm;
+  let distanceM;
+  if (sCoords && dCoords) {
+    const meters = distanceMeters(dCoords.lat, dCoords.lng, sCoords.lat, sCoords.lng);
+    if (Number.isFinite(meters) && meters >= 0) {
+      distanceM = Math.round(meters);
+      distanceKm = Math.round((meters / 1000) * 10) / 10;
+    }
+  }
+
+  const distanceText = distanceM != null
+    ? (distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`)
+    : (distanceKm != null ? `${distanceKm} km` : "Nearby");
+
+  const returnItems = Array.isArray(order.returnItems) && order.returnItems.length > 0
+    ? order.returnItems
+    : (Array.isArray(order.items) ? order.items : []);
+
+  const items = returnItems.map((item) => ({
+    name: item.name || item.productName || "Product",
+    image: item.image || item.thumbnail || (Array.isArray(order.items) ? order.items.find((it) => it.name === item.name)?.image : "") || "",
+    quantity: Number(item.quantity) || 1,
+    price: Number(item.price ?? item.unitPrice ?? 0),
+  }));
+
+  const earnings = Number(order.returnDeliveryCommission) || 30;
+  const total = order.returnRefundAmount || order.pricing?.subtotal || order.pricing?.total || 0;
+
+  return {
+    orderId: order.orderId,
+    type: "RETURN_PICKUP",
+    isReturnPickup: true,
+    workflowStatus: order.workflowStatus || "return_approved",
+    sellerId: sellerObj?._id ? String(sellerObj._id) : (order.seller ? String(order.seller) : undefined),
+    items,
+    preview: {
+      pickup,
+      pickupTitle,
+      pickupAddress,
+      pickupPhone: order.address?.phone || customerObj?.phone || "",
+      drop,
+      dropTitle,
+      dropAddress,
+      items,
+      total,
+      distanceKm,
+      distanceText,
+      earnings,
+      isReturnPickup: true,
+      returnReason: order.returnReason || "",
+    },
+    deliverySearchExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
     ...extra,
   };
 }
@@ -490,7 +653,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     { new: true },
   )
     .populate("customer", "name phone")
-    .populate("seller", "shopName address name location serviceRadius");
+    .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius");
 
   if (!updated) {
     const rawOrder = await Order.findOne({ orderId, seller: sellerId });
@@ -517,7 +680,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
         { new: true },
       )
         .populate("customer", "name phone")
-        .populate("seller", "shopName address name location serviceRadius");
+        .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius");
 
       if (cancelled) {
         await compensateOrderCancellation(cancelled, orderId);
@@ -1206,7 +1369,7 @@ export async function adminAssignRiderAtomic(adminId, orderId, riderId) {
       $inc: { assignmentVersion: 1 },
     },
     { new: true },
-  ).populate("seller", "location shopName address");
+  ).populate("seller", "location shopName address locality city state pincode landmark");
 
   if (!updated) {
     const o = await Order.findOne({ orderId }).lean();
@@ -1428,7 +1591,7 @@ export async function processDeliveryTimeoutJob({ orderId, attempt }) {
     await scheduleDeliveryTimeoutJob(orderId, currentAttempt + 1);
 
     const orderRich = await Order.findOne({ orderId })
-      .populate("seller", "shopName address name location serviceRadius")
+      .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius")
       .lean();
     if (orderRich) {
       await emitDeliveryBroadcastForSeller(

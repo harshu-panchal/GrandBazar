@@ -178,7 +178,19 @@ export async function issueCustomerOtp({
     // was deleted (belt-and-suspenders alongside the reset in
     // deleteCustomerAccount — covers accounts deleted before that reset
     // existed), so this "fresh" signup isn't blocked by stale state.
+    //
+    // EXCEPTION: an account blocked by an ADMIN (blockedByAdmin=true) must stay
+    // blocked — otherwise a blocked customer could lift their own ban simply by
+    // re-signing-up on the same phone number. Re-signup on an admin-blocked
+    // account is rejected outright.
     if (customer.isActive === false) {
+      if (customer.blockedByAdmin === true) {
+        const err = new Error(
+          "This account has been suspended. Please contact customer support.",
+        );
+        err.statusCode = 403;
+        throw err;
+      }
       customer.isActive = true;
       customer.isVerified = false;
       customer.otpFailedAttempts = 0;

@@ -7,13 +7,13 @@ import BottomNav from './BottomNav';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { useAuth } from "@core/context/AuthContext";
 import { motion, AnimatePresence } from 'framer-motion';
-import { BellRing, Check, X, Clock, Truck, Bell } from 'lucide-react';
+import { BellRing, Check, X, Clock, Truck, Bell, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
-import { getOrderSocket, onSellerOrderNew, onReturnDropOtp, onOrderStatusUpdate } from '@/core/services/orderSocket';
+import { getOrderSocket, onSellerOrderNew, onReturnDropOtp, onOrderStatusUpdate, onSellerReturnRequested } from '@/core/services/orderSocket';
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 import orderAlertSound from '@/assets/sounds/order_alert.mp3';
 
@@ -427,10 +427,27 @@ const DashboardLayout = ({ children, navItems, title }) => {
             audio.play().catch(() => { });
         });
 
+        const unsubscribeReturn = onSellerReturnRequested(getToken, (payload) => {
+            console.log("[DashboardLayout] Received return:requested socket event:", payload);
+            if (!payload?.orderId) return;
+            if (shownReturnOrderIdsRef.current.has(payload.orderId)) return;
+            setNewReturnAlert(payload);
+            newReturnAlertRef.current = payload;
+            setShownReturnOrderIds((prev) => new Set(prev).add(payload.orderId));
+            shownReturnOrderIdsRef.current = new Set(shownReturnOrderIdsRef.current).add(payload.orderId);
+            // Play a short chime to grab attention
+            try {
+                const returnChime = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                returnChime.volume = 0.7;
+                returnChime.play().catch(() => { });
+            } catch { /* ignore */ }
+        });
+
         return () => {
             unsubscribeSellerNew();
             unsubscribeOrderStatus();
             unsubscribeDrop();
+            unsubscribeReturn();
         };
     }, [role]);
 
@@ -796,6 +813,147 @@ const DashboardLayout = ({ children, navItems, title }) => {
                         </motion.div>
                     </div>
                 )}
+
+                {/* Global Return Request Alert Modal */}
+                {newReturnAlert && (
+                    <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.85, opacity: 0, y: 30 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.85, opacity: 0, y: 30 }}
+                            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+                            className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-amber-100 overflow-hidden max-h-[90vh] flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 pt-6 pb-5 flex flex-col items-center text-center shrink-0">
+                                <div className="relative h-14 w-14 flex items-center justify-center mb-3">
+                                    <div className="absolute inset-0 rounded-full bg-white/30 animate-ping opacity-70" />
+                                    <div className="relative h-14 w-14 bg-white/20 rounded-full flex items-center justify-center ring-4 ring-white/30">
+                                        <RotateCcw className="h-7 w-7 text-white" />
+                                    </div>
+                                </div>
+                                <h2 className="text-xl font-black text-white tracking-tight mb-0.5">Return Requested!</h2>
+                                <p className="text-amber-100 text-xs font-medium">
+                                    Order{' '}
+                                    <span className="font-mono font-bold text-white bg-white/20 px-2 py-0.5 rounded-md text-xs tracking-wider">
+                                        {formatShortOrderId(newReturnAlert.orderId)}
+                                    </span>
+                                </p>
+                            </div>
+
+                            {/* Scrollable body */}
+                            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
+
+                                {/* Customer Info Card */}
+                                {(newReturnAlert.customerName || newReturnAlert.customerPhone) && (
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Customer</p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 font-black text-base">
+                                                {(newReturnAlert.customerName || '?').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                                {newReturnAlert.customerName && (
+                                                    <p className="text-sm font-bold text-slate-900 truncate">{newReturnAlert.customerName}</p>
+                                                )}
+                                                {newReturnAlert.customerPhone && (
+                                                    <p className="text-xs text-slate-500 font-medium">{newReturnAlert.customerPhone}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Return Items */}
+                                {Array.isArray(newReturnAlert.returnItems) && newReturnAlert.returnItems.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5">
+                                        <div className="flex items-center justify-between mb-2.5">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Items to Return</p>
+                                            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                                {newReturnAlert.returnItems.length} {newReturnAlert.returnItems.length === 1 ? 'item' : 'items'}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2.5 max-h-44 overflow-y-auto pr-1">
+                                            {newReturnAlert.returnItems.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-3 bg-white rounded-xl p-2.5 border border-slate-100">
+                                                    {item.image ? (
+                                                        <img
+                                                            src={getProductImageUrl(item.image)}
+                                                            alt={item.name}
+                                                            onError={handleProductImageError}
+                                                            className="h-11 w-11 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="h-11 w-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
+                                                            <RotateCcw className="h-4 w-4 text-amber-400" />
+                                                        </div>
+                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-bold text-slate-900 truncate leading-snug">{item.name || 'Product'}</p>
+                                                        {item.variantSlot && (
+                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5">{item.variantSlot}</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="shrink-0 text-right space-y-1">
+                                                        <div className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                            Qty {item.quantity}
+                                                        </div>
+                                                        {item.price != null && (
+                                                            <div className="text-[10px] font-bold text-slate-800">
+                                                                ₹{Number(item.price).toFixed(0)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Return Reason */}
+                                {newReturnAlert.returnReason && (
+                                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3.5 space-y-1.5">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Reason</p>
+                                        <p className="text-sm font-semibold text-slate-800 leading-snug">{newReturnAlert.returnReason}</p>
+                                        {newReturnAlert.returnReasonDetail && (
+                                            <p className="text-xs text-slate-500 leading-relaxed border-t border-amber-100 pt-2">{newReturnAlert.returnReasonDetail}</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                <p className="text-[11px] text-slate-400 font-medium text-center pb-1">
+                                    Go to <span className="font-bold text-slate-600">Returns</span> to approve or reject this request.
+                                </p>
+                            </div>
+
+                            {/* Footer buttons */}
+                            <div className="grid grid-cols-2 gap-3 px-5 pb-5 pt-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setNewReturnAlert(null);
+                                        newReturnAlertRef.current = null;
+                                    }}
+                                    className="py-3.5 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all active:scale-95"
+                                >
+                                    Dismiss
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setNewReturnAlert(null);
+                                        newReturnAlertRef.current = null;
+                                        navigate('/seller/returns');
+                                    }}
+                                    className="py-3.5 rounded-2xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 shadow-lg shadow-amber-500/25 transition-all active:scale-95"
+                                >
+                                    View Returns
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
 
                 {/* Global Return Drop OTP Modal */}
                 {returnDropOtpAlert && (

@@ -246,9 +246,24 @@ export async function getAdminFinanceSummary() {
         { $group: { _id: null, amount: { $sum: "$paymentBreakdown.codRemittedAmount" } } },
       ]),
       Order.aggregate([
-        // Requirement: Total Admin Earning should not include COD orders.
-        { $match: { status: "delivered", paymentMode: "ONLINE" } },
-        { $group: { _id: null, amount: { $sum: "$paymentBreakdown.platformTotalEarning" } } },
+        // Total Admin Earning = commission + logistics margin recognized on
+        // delivered orders of BOTH payment modes. COD admin earning is a real
+        // earning (tracked as the seller's codCommissionDue liability and
+        // recognized via remittance) — excluding COD here kept the card pinned
+        // at ₹0 on COD-dominant platforms, since virtually every delivered
+        // order was filtered out. Cancelled orders never reach status
+        // "delivered", so no extra status guard is needed.
+        { $match: { status: "delivered" } },
+        {
+          $group: {
+            _id: null,
+            amount: {
+              $sum: {
+                $ifNull: ["$paymentBreakdown.platformTotalEarning", 0],
+              },
+            },
+          },
+        },
       ]),
       Payout.aggregate([
         { $match: { status: { $in: [PAYOUT_STATUS.PENDING, PAYOUT_STATUS.PROCESSING] } } },
