@@ -169,6 +169,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const newOrderAlertRef = useRef(null);
     const newReturnAlertRef = useRef(null);
     const fetchOrdersRef = useRef(null);
+    const fetchPendingReturnsRef = useRef(null);
     const isOrdersFetchInFlightRef = useRef(false);
     const earningsFetchedRef = useRef(false);
     const orderRingtoneRef = useRef(null);
@@ -326,6 +327,44 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
         fetchOrdersRef.current = fetchOrders;
         fetchOrders();
+
+        const fetchPendingReturns = async () => {
+            try {
+                const res = await sellerApi.getReturns({ status: 'return_requested' });
+                const payload = res?.data?.result || {};
+                const items = Array.isArray(payload.items)
+                    ? payload.items
+                    : (res?.data?.results || []);
+                for (const order of items) {
+                    if (!order?.orderId) continue;
+                    if (shownReturnOrderIdsRef.current.has(order.orderId)) continue;
+                    if (newReturnAlertRef.current) break; // don't stack alerts
+                    const alertPayload = {
+                        orderId: order.orderId,
+                        returnStatus: order.returnStatus,
+                        returnReason: order.returnReason,
+                        returnReasonDetail: order.returnReasonDetail,
+                        returnRequestedAt: order.returnRequestedAt,
+                        customerName: order.address?.name || order.customer?.name || '',
+                        customerPhone: order.address?.phone || order.customer?.phone || '',
+                        returnItems: (order.returnItems || []).map((item) => ({
+                            name: item.name || '',
+                            quantity: item.quantity,
+                            price: item.price,
+                            image: item.image || '',
+                            variantSlot: item.variantSlot || '',
+                        })),
+                    };
+                    setNewReturnAlert(alertPayload);
+                    newReturnAlertRef.current = alertPayload;
+                    setShownReturnOrderIds((prev) => new Set(prev).add(order.orderId));
+                    shownReturnOrderIdsRef.current = new Set(shownReturnOrderIdsRef.current).add(order.orderId);
+                    break;
+                }
+            } catch { /* non-critical */ }
+        };
+        fetchPendingReturnsRef.current = fetchPendingReturns;
+        fetchPendingReturns();
     }, [role, canPollSellerOrders]);
 
     // Resilient fallback when socket events are missed (tab backgrounded/suspended).
@@ -334,6 +373,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
         const syncOrders = () => {
             if (fetchOrdersRef.current) fetchOrdersRef.current();
+            if (fetchPendingReturnsRef.current) fetchPendingReturnsRef.current();
         };
 
         const timer = setInterval(syncOrders, POLL_INTERVAL_MS);
