@@ -46,6 +46,7 @@ function hasValidLatLng(location) {
 
 const LiveTrackingMap = memo(({
   status = "out for delivery",
+  workflowStatus,
   eta = "8 mins",
   riderName,
   riderPhoto,
@@ -62,7 +63,12 @@ const LiveTrackingMap = memo(({
   const [mapInstance, setMapInstance] = useState(null);
   const normalizedStatus = status?.toLowerCase();
   const isAwaitingSeller = AWAITING_SELLER_STATUSES.includes(normalizedStatus);
-  const isSearching = SEARCHING_STATUSES.includes(normalizedStatus) || isAwaitingSeller;
+  // DELIVERY_ASSIGNED means a rider has been found — no longer searching even though
+  // legacy status is still "confirmed" (same string as DELIVERY_SEARCH).
+  const ws = String(workflowStatus || "").toUpperCase();
+  const isSearching =
+    ws !== "DELIVERY_ASSIGNED" &&
+    (SEARCHING_STATUSES.includes(normalizedStatus) || isAwaitingSeller);
   const [dots, setDots] = useState("");
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";

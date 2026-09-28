@@ -7,7 +7,7 @@ import BottomNav from './BottomNav';
 import { sellerApi } from '@/modules/seller/services/sellerApi';
 import { useAuth } from "@core/context/AuthContext";
 import { motion, AnimatePresence } from 'framer-motion';
-import { BellRing, Check, X, Clock, Truck, Bell, RotateCcw } from 'lucide-react';
+import { BellRing, Check, X, Clock, Truck, Bell, RotateCcw, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
@@ -666,15 +666,22 @@ const DashboardLayout = ({ children, navItems, title }) => {
                                     </div>
                                 )}
 
-                                <p className="text-slate-500 font-medium text-xs mb-3 flex items-center justify-center gap-1.5">
+                                <p className="text-slate-500 font-medium text-xs mb-2 flex items-center justify-center gap-1.5">
                                     <span>You have a new order</span>
-                                    <span 
-                                        className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 text-xs tracking-wider" 
+                                    <span
+                                        className="font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 text-xs tracking-wider"
                                         title={`Full Order ID: #${newOrderAlert.orderId}`}
                                     >
                                         {formatShortOrderId(newOrderAlert.orderId)}
                                     </span>
                                 </p>
+
+                                {(newOrderAlert.address?.name || newOrderAlert.customer?.name) && (
+                                    <p className="text-slate-700 font-semibold text-sm mb-3 flex items-center justify-center gap-1.5">
+                                        <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                        <span>{newOrderAlert.address?.name || newOrderAlert.customer?.name}</span>
+                                    </p>
+                                )}
 
                                 {/* Ordered Items List */}
                                 {Array.isArray(newOrderAlert.items) && newOrderAlert.items.length > 0 && (

@@ -1051,6 +1051,7 @@ const OrderDetailPage = () => {
           >
             <LiveTrackingMap
               status={getLegacyStatusFromOrder(order)}
+              workflowStatus={order.workflowStatus}
               eta={estimatedArrival.arrivingInText}
               riderName={order.deliveryBoy?.name || "Delivery Partner"}
               riderPhoto={order.deliveryBoy?.profileImage}

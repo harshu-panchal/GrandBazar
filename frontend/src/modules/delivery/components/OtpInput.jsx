@@ -27,7 +27,14 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
   const [attemptsRemaining, setAttemptsRemaining] = useState(3);
   const [deliveryProofImage, setDeliveryProofImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const inputRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   // Auto-focus first input on mount
   useEffect(() => {
@@ -167,6 +174,11 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleResendOtp = async () => {
+    await handleGenerateOtp();
+    setResendCooldown(30);
   };
 
   /**
@@ -343,6 +355,25 @@ const OtpInput = ({ orderId, isReturn = false, isReturnDrop = false, onSuccess, 
           )}
         </button>
       )}
+
+      {/* Resend OTP */}
+      <div className="text-center">
+        <button
+          onClick={handleResendOtp}
+          disabled={isLoading || isGenerating || resendCooldown > 0}
+          className="text-sm font-medium text-brand-600 hover:text-brand-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors underline-offset-2 hover:underline"
+        >
+          {isGenerating
+            ? "Sending..."
+            : resendCooldown > 0
+              ? `Resend OTP in ${resendCooldown}s`
+              : isReturnDrop
+                ? "Resend OTP to seller"
+                : isReturn
+                  ? "Resend OTP to customer"
+                  : "Resend OTP to customer"}
+        </button>
+      </div>
 
       {/* Delivery Proof Upload */}
       {!isReturn && !isReturnDrop && (
