@@ -1076,6 +1076,9 @@ const ProductManagement = () => {
                   Variant
                 </th>
                 <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+                  Stock
+                </th>
+                <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
                   Approval
                 </th>
                 <th className="px-6 py-3 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
@@ -1168,6 +1171,27 @@ const ProductManagement = () => {
                       <span className="text-xs font-medium text-slate-400 bg-slate-50 border border-slate-100 px-2 py-1 rounded italic">
                         None
                       </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-center" data-label="Stock">
+                    {p.variants && p.variants.length > 0 ? (
+                      <div className="flex flex-col gap-0.5 items-start">
+                        {p.variants.map((v, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[11px] w-full">
+                            <span className="text-slate-500 truncate max-w-[70px]" title={v.name || `V${i + 1}`}>
+                              {v.name || `V${i + 1}`}
+                            </span>
+                            <span className={cn(
+                              "font-bold tabular-nums ml-auto",
+                              (v.stock ?? 0) === 0 ? "text-rose-600" : (v.stock ?? 0) <= 10 ? "text-amber-600" : "text-emerald-600"
+                            )}>
+                              {v.stock ?? 0}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[12px] text-slate-400">—</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-center" data-label="Approval">

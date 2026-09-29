@@ -884,16 +884,17 @@ const ProductManagement = () => {
                     <table className="w-full min-w-[1420px] table-fixed text-left border-collapse">
                         <colgroup>
                             <col className="w-[3%]" />
-                            <col className="w-[17%]" />
-                            <col className="w-[9%]" />
+                            <col className="w-[15%]" />
                             <col className="w-[8%]" />
-                            <col className="w-[9%]" />
-                            <col className="w-[9%]" />
+                            <col className="w-[7%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[8%]" />
                             <col className="w-[10%]" />
                             <col className="w-[7%]" />
                             <col className="w-[8%]" />
-                            <col className="w-[10%]" />
-                            <col className="w-[10%]" />
+                            <col className="w-[9%]" />
+                            <col className="w-[9%]" />
                         </colgroup>
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
@@ -909,6 +910,7 @@ const ProductManagement = () => {
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Product</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Seller</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Variant</th>
+                                <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Stock</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Category</th>
                                 <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em]">Subcategory</th>
                                 <th className="px-4 py-3 text-center text-[10px] font-medium text-slate-500 uppercase tracking-[0.18em] whitespace-nowrap">Commission</th>
@@ -921,7 +923,7 @@ const ProductManagement = () => {
                         <tbody className="divide-y divide-slate-50">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="11" className="px-6 py-20 text-center">
+                                    <td colSpan="12" className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center gap-3">
                                             <HiOutlineArrowPath className="h-8 w-8 text-primary animate-spin" />
                                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Products...</p>
@@ -930,7 +932,7 @@ const ProductManagement = () => {
                                 </tr>
                             ) : productsList.length === 0 ? (
                                 <tr>
-                                    <td colSpan="11" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
+                                    <td colSpan="12" className="px-6 py-20 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">No products found</td>
                                 </tr>
                             ) : productsList.map((p, idx) => {
                                 const isGrouped = sortBy === 'seller-asc';
@@ -941,7 +943,7 @@ const ProductManagement = () => {
                                 <React.Fragment key={p._id}>
                                     {showSellerHeader && (
                                         <tr className="bg-slate-100/80">
-                                            <td colSpan="11" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                                            <td colSpan="12" className="px-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
                                                 {p.sellerId?.shopName || 'Admin'}
                                                 <span className="ml-2 font-medium normal-case text-slate-400">
                                                     {productsList.filter((item) => (item.sellerId?._id || item.sellerId) === currentSellerId).length} product(s) on this page
@@ -1012,6 +1014,29 @@ const ProductManagement = () => {
                                             </div>
                                         ) : (
                                             <span className="text-[12px] font-medium text-slate-400">No variants</span>
+                                        )}
+                                    </td>
+
+                                    {/* Stock Column */}
+                                    <td className="px-4 py-5 text-center align-middle">
+                                        {p.variants && p.variants.length > 0 ? (
+                                            <div className="flex flex-col gap-0.5 items-start">
+                                                {p.variants.map((v, i) => (
+                                                    <div key={i} className="flex items-center gap-1.5 text-[11px] w-full">
+                                                        <span className="text-slate-500 truncate max-w-[70px]" title={v.name || `V${i + 1}`}>
+                                                            {v.name || `V${i + 1}`}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "font-bold tabular-nums ml-auto",
+                                                            (v.stock ?? 0) === 0 ? "text-rose-600" : (v.stock ?? 0) <= 10 ? "text-amber-600" : "text-emerald-600"
+                                                        )}>
+                                                            {v.stock ?? 0}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-[12px] text-slate-400">—</span>
                                         )}
                                     </td>
 

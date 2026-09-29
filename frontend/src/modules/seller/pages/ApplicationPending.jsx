@@ -54,7 +54,8 @@ const ApplicationPending = () => {
         (user?.isVerified === true && applicationStatus === "approved");
 
       if (isAccountApproved) {
-        return <Navigate to="/seller/stores" replace />;
+        const hasBusinessModel = Boolean(user?.businessModel);
+        return <Navigate to={hasBusinessModel ? "/seller/stores" : "/seller/choose-model"} replace />;
       }
     } else {
       const isApproved =
