@@ -1,5 +1,6 @@
 import Seller from "../../models/seller.js";
 import Store from "../../models/store.js";
+import SellerRole from "../../models/sellerRole.js";
 import handleResponse from "../../utils/helper.js";
 import { sendSellerStaffWelcomeEmail } from "../../services/emailService.js";
 import { loadOwnerStores } from "../../services/storeService.js";
@@ -7,6 +8,58 @@ import {
   validateSellerPermissionsInput,
   summarizePermissionsForDisplay,
 } from "../../services/sellerPermissionService.js";
+
+// Resolve the role + permission snapshot for a staff account from the
+// request body. If customRoleId is supplied the role name & default
+// permission list come from the SellerRole doc, with the caller still able
+// to override permissions per staff member. Store-scoped roles are rejected
+// when assigned to a different store.
+async function resolveRoleAssignment({ ownerId, storeId, customRoleId, role, allowedPermissions }) {
+  if (customRoleId) {
+    const roleDoc = await SellerRole.findOne({ _id: customRoleId, ownerId });
+    if (!roleDoc) {
+      const err = new Error("Selected role no longer exists");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (roleDoc.storeId && String(roleDoc.storeId) !== String(storeId)) {
+      const err = new Error("This role is scoped to a different store");
+      err.statusCode = 400;
+      throw err;
+    }
+    const permissions = Array.isArray(allowedPermissions)
+      ? allowedPermissions
+      : roleDoc.permissions;
+    const check = validateSellerPermissionsInput(permissions);
+    if (!check.valid) {
+      const err = new Error(check.message);
+      err.statusCode = 400;
+      throw err;
+    }
+    return {
+      role: roleDoc.name,
+      customRoleId: roleDoc._id,
+      allowedPermissions: check.normalized,
+    };
+  }
+
+  const check = validateSellerPermissionsInput(allowedPermissions || []);
+  if (!check.valid) {
+    const err = new Error(check.message);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!check.normalized.length) {
+    const err = new Error("At least one read or write permission is required");
+    err.statusCode = 400;
+    throw err;
+  }
+  return {
+    role: role || "helper",
+    customRoleId: null,
+    allowedPermissions: check.normalized,
+  };
+}
 
 async function resolveTargetStoreId(req, res, storeIdFromBody) {
   const accountId = req.user.accountId;
@@ -101,23 +154,22 @@ export const getSellerStaff = async (req, res) => {
 
 export const createSellerStaff = async (req, res) => {
   try {
-    const { name, email, password, phone, role, allowedPermissions, storeId } = req.body;
+    const { name, email, password, phone, role, customRoleId, allowedPermissions, storeId } = req.body;
 
-    if (!name || !email || !password || !phone || !role) {
-      return handleResponse(res, 400, "Name, email, password, phone and role are required");
+    if (!name || !email || !password || !phone) {
+      return handleResponse(res, 400, "Name, email, password and phone are required");
     }
 
-    const permissionValidation = validateSellerPermissionsInput(allowedPermissions || []);
-    if (!permissionValidation.valid) {
-      return handleResponse(res, 400, permissionValidation.message);
-    }
+    const resolvedStore = await resolveTargetStoreId(req, res, storeId);
+    if (resolvedStore.error) return resolvedStore.error;
 
-    if (!permissionValidation.normalized.length) {
-      return handleResponse(res, 400, "At least one read or write permission is required");
-    }
-
-    const resolved = await resolveTargetStoreId(req, res, storeId);
-    if (resolved.error) return resolved.error;
+    const roleAssignment = await resolveRoleAssignment({
+      ownerId: req.user.accountId,
+      storeId: resolvedStore.storeId,
+      customRoleId,
+      role,
+      allowedPermissions,
+    });
 
     const existing = await Seller.findOne({ $or: [{ email }, { phone }] });
     if (existing) {
@@ -129,13 +181,18 @@ export const createSellerStaff = async (req, res) => {
       email,
       phone,
       password,
-      role: role || "helper",
+      role: roleAssignment.role,
+      customRoleId: roleAssignment.customRoleId,
       accountType: "staff",
-      parentId: resolved.storeId,
-      allowedPermissions: permissionValidation.normalized,
+      parentId: resolvedStore.storeId,
+      allowedPermissions: roleAssignment.allowedPermissions,
       emailVerified: true,
       phoneVerified: true,
     });
+
+    // Give the downstream email a stable shape regardless of which branch
+    // of resolveRoleAssignment ran.
+    const resolved = resolvedStore;
 
     try {
       await sendSellerStaffWelcomeEmail({
@@ -158,7 +215,7 @@ export const createSellerStaff = async (req, res) => {
       },
     });
   } catch (error) {
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
@@ -166,7 +223,7 @@ export const updateSellerStaff = async (req, res) => {
   try {
     const accountId = req.user.accountId;
     const { id } = req.params;
-    const { name, email, password, phone, role, allowedPermissions, storeId } = req.body;
+    const { name, email, password, phone, role, customRoleId, allowedPermissions, storeId } = req.body;
 
     const staff = await Seller.findOne({ _id: id, accountType: "staff" });
     if (!staff) {
@@ -200,9 +257,21 @@ export const updateSellerStaff = async (req, res) => {
     if (password) {
       staff.password = password;
     }
-    if (role) staff.role = role;
 
-    if (allowedPermissions !== undefined) {
+    // Role/permission handling: if a customRoleId or a bare role is sent,
+    // re-resolve. Otherwise, apply any standalone permission override.
+    if (customRoleId !== undefined || role !== undefined) {
+      const roleAssignment = await resolveRoleAssignment({
+        ownerId: accountId,
+        storeId: String(staff.parentId),
+        customRoleId,
+        role,
+        allowedPermissions,
+      });
+      staff.role = roleAssignment.role;
+      staff.customRoleId = roleAssignment.customRoleId;
+      staff.allowedPermissions = roleAssignment.allowedPermissions;
+    } else if (allowedPermissions !== undefined) {
       const permissionValidation = validateSellerPermissionsInput(allowedPermissions);
       if (!permissionValidation.valid) {
         return handleResponse(res, 400, permissionValidation.message);
@@ -225,7 +294,7 @@ export const updateSellerStaff = async (req, res) => {
         : null,
     });
   } catch (error) {
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
