@@ -50,6 +50,16 @@ const sellerSchema = new mongoose.Schema(
       default: [],
     },
 
+    // Links a staff account to the custom SellerRole it was created from.
+    // Role name/permissions are still mirrored on this doc (so hot paths
+    // don't need to look up the role), but keeping the reference here lets
+    // us fan out role edits to every staff member tied to the role.
+    customRoleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SellerRole",
+      default: null,
+    },
+
     lastActiveStoreId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Store",

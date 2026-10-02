@@ -19,6 +19,12 @@ import {
     updateSellerStaff,
     deleteSellerStaff
 } from "../controller/seller/staffController.js";
+import {
+    listSellerRoles,
+    createSellerRole,
+    updateSellerRole,
+    deleteSellerRole,
+} from "../controller/seller/roleController.js";
 import { getSellerWalletSummaryController, getSellerBulkSettlementsController } from "../controller/adminFinanceController.js";
 import {
     getSellerCodCommissionSummaryController,
@@ -195,5 +201,13 @@ router.get("/staff", ...sellerAuthChain, allowOwnerOnly, getSellerStaff);
 router.post("/staff", ...sellerAuthChain, allowOwnerOnly, createSellerStaff);
 router.put("/staff/:id", ...sellerAuthChain, allowOwnerOnly, updateSellerStaff);
 router.delete("/staff/:id", ...sellerAuthChain, allowOwnerOnly, deleteSellerStaff);
+
+// Custom seller-role management (owner only). Roles can be scoped to a
+// single store or to the whole account — staff accounts inherit the role's
+// permission list and can override individual modules per staff member.
+router.get("/roles", ...sellerAuthChain, allowOwnerOnly, listSellerRoles);
+router.post("/roles", ...sellerAuthChain, allowOwnerOnly, createSellerRole);
+router.put("/roles/:id", ...sellerAuthChain, allowOwnerOnly, updateSellerRole);
+router.delete("/roles/:id", ...sellerAuthChain, allowOwnerOnly, deleteSellerRole);
 
 export default router;

@@ -118,6 +118,12 @@ export const sellerApi = {
     updateStaff: (id, data) => axiosInstance.put(`/seller/staff/${id}`, data),
     deleteStaff: (id) => axiosInstance.delete(`/seller/staff/${id}`),
 
+    // Custom seller role management (per-shop or account-wide scope).
+    getSellerRoles: () => axiosInstance.get('/seller/roles'),
+    createSellerRole: (data) => axiosInstance.post('/seller/roles', data),
+    updateSellerRole: (id, data) => axiosInstance.put(`/seller/roles/${id}`, data),
+    deleteSellerRole: (id) => axiosInstance.delete(`/seller/roles/${id}`),
+
     // Business model
     getBusinessModel: () => axiosInstance.get('/seller/business-model'),
     chooseBusinessModel: (data) => axiosInstance.post('/seller/business-model/choose', data),
