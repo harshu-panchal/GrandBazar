@@ -1,7 +1,13 @@
 import Store from "../models/store.js";
 import Category from "../models/category.js";
 import { distanceMeters } from "../utils/geoUtils.js";
-import { HANDLING_FEE_STRATEGY } from "../constants/finance.js";
+import {
+  BILLING_SOURCE,
+  EXTRA_CHARGE_APPLIES_TO,
+  EXTRA_CHARGE_REVENUE_TYPE,
+  EXTRA_CHARGE_TYPE,
+  HANDLING_FEE_STRATEGY,
+} from "../constants/finance.js";
 import {
   calculateHandlingFee,
   calculatePackingFee,
@@ -10,6 +16,7 @@ import {
 } from "./finance/pricingService.js";
 import { getOrCreateFinanceSettings } from "./finance/financeSettingsService.js";
 import { isWithinOddHourWindow } from "./finance/pricingService.js";
+import { resolveCityBillingConfig } from "./finance/cityBillingResolver.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 
 function normalizeLocation(location = null) {
@@ -110,6 +117,13 @@ function buildAggregateBreakdown(sellerBreakdowns = []) {
     oddHourSurchargeAmount: sumField(sellerBreakdowns, "oddHourSurchargeAmount"),
     weatherSurchargeAmount: sumField(sellerBreakdowns, "weatherSurchargeAmount"),
     packagingChargeAmount: sumField(sellerBreakdowns, "packagingChargeAmount"),
+    extraChargesTotal: sumField(sellerBreakdowns, "extraChargesTotal"),
+    extraCharges: sellerBreakdowns.flatMap((row) =>
+      Array.isArray(row.extraCharges) ? row.extraCharges : [],
+    ),
+    billingSource: sellerBreakdowns[0]?.billingSource || null,
+    billingCityKey: sellerBreakdowns[0]?.billingCityKey || "",
+    billingCityName: sellerBreakdowns[0]?.billingCityName || "",
     grandTotal: sumField(sellerBreakdowns, "grandTotal"),
     sellerPayoutTotal: sumField(sellerBreakdowns, "sellerPayoutTotal"),
     adminProductCommissionTotal: sumField(sellerBreakdowns, "adminProductCommissionTotal"),
@@ -447,6 +461,168 @@ function applyDistinctSurchargesToSellerBreakdowns(
   });
 }
 
+/**
+ * City-billing extra charges. Each charge is evaluated against the
+ * aggregate order (subtotal, payment method, fulfillment), then the
+ * total sum lands on the primary (first) seller order alongside the
+ * existing weather/odd-hour surcharge lines. Revenue is split per
+ * charge.revenueType (platform/seller/rider/split).
+ */
+function evaluateExtraCharge(charge, ctx) {
+  if (!charge || charge.enabled === false) return null;
+  const {
+    subtotalTotal,
+    paymentMethod,
+    hasDelivery,
+  } = ctx;
+
+  switch (charge.appliesTo) {
+    case EXTRA_CHARGE_APPLIES_TO.COD:
+      if (String(paymentMethod || "").toUpperCase() !== "COD") return null;
+      break;
+    case EXTRA_CHARGE_APPLIES_TO.ONLINE:
+      if (String(paymentMethod || "").toUpperCase() !== "ONLINE") return null;
+      break;
+    case EXTRA_CHARGE_APPLIES_TO.DELIVERY:
+      if (!hasDelivery) return null;
+      break;
+    case EXTRA_CHARGE_APPLIES_TO.MINIMUM_ORDER_VALUE:
+      if (subtotalTotal < Number(charge.minimumOrderValue || 0)) return null;
+      break;
+    case EXTRA_CHARGE_APPLIES_TO.ALL_ORDERS:
+    default:
+      break;
+  }
+  if (
+    charge.minimumOrderValue &&
+    subtotalTotal < Number(charge.minimumOrderValue)
+  ) {
+    return null;
+  }
+  if (
+    charge.maximumOrderValue &&
+    subtotalTotal > Number(charge.maximumOrderValue)
+  ) {
+    return null;
+  }
+
+  const amount =
+    charge.type === EXTRA_CHARGE_TYPE.PERCENTAGE
+      ? round2((subtotalTotal * Number(charge.amount || 0)) / 100)
+      : round2(charge.amount || 0);
+  if (amount <= 0) return null;
+
+  let platformShare = 0;
+  let sellerShare = 0;
+  let riderShare = 0;
+  switch (charge.revenueType) {
+    case EXTRA_CHARGE_REVENUE_TYPE.SELLER:
+      sellerShare = amount;
+      break;
+    case EXTRA_CHARGE_REVENUE_TYPE.RIDER:
+      riderShare = amount;
+      break;
+    case EXTRA_CHARGE_REVENUE_TYPE.SPLIT:
+      platformShare = round2((amount * Number(charge.platformPercentage || 0)) / 100);
+      sellerShare = round2((amount * Number(charge.sellerPercentage || 0)) / 100);
+      riderShare = round2(amount - platformShare - sellerShare);
+      break;
+    case EXTRA_CHARGE_REVENUE_TYPE.PLATFORM:
+    default:
+      platformShare = amount;
+      break;
+  }
+
+  return {
+    name: charge.name,
+    type: charge.type,
+    amount,
+    appliesTo: charge.appliesTo,
+    revenueType: charge.revenueType,
+    platformShare,
+    sellerShare,
+    riderShare,
+  };
+}
+
+function applyExtraChargesToSellerBreakdowns(
+  sellerBreakdownEntries = [],
+  extraCharges = [],
+  ctx = {},
+) {
+  for (const entry of sellerBreakdownEntries) {
+    if (!entry?.breakdown) continue;
+    entry.breakdown.extraCharges = [];
+    entry.breakdown.extraChargesTotal = 0;
+  }
+  if (!Array.isArray(extraCharges) || extraCharges.length === 0) return;
+  if (sellerBreakdownEntries.length === 0) return;
+
+  const evaluated = extraCharges
+    .map((charge) => evaluateExtraCharge(charge, ctx))
+    .filter(Boolean);
+  if (evaluated.length === 0) return;
+
+  const totalAmount = round2(
+    evaluated.reduce((sum, c) => sum + c.amount, 0),
+  );
+  const totalSellerShare = round2(
+    evaluated.reduce((sum, c) => sum + c.sellerShare, 0),
+  );
+  const totalPlatformShare = round2(
+    evaluated.reduce((sum, c) => sum + c.platformShare, 0),
+  );
+  const totalRiderShare = round2(
+    evaluated.reduce((sum, c) => sum + c.riderShare, 0),
+  );
+
+  const primary = sellerBreakdownEntries[0].breakdown;
+  primary.extraCharges = evaluated;
+  primary.extraChargesTotal = totalAmount;
+  primary.grandTotal = round2(Number(primary.grandTotal || 0) + totalAmount);
+  if (totalSellerShare > 0) {
+    primary.sellerPayoutTotal = round2(
+      Number(primary.sellerPayoutTotal || 0) + totalSellerShare,
+    );
+  }
+  if (totalRiderShare > 0) {
+    primary.riderPayoutBonus = round2(
+      Number(primary.riderPayoutBonus || 0) + totalRiderShare,
+    );
+    primary.riderPayoutTotal = round2(
+      Number(primary.riderPayoutTotal || 0) + totalRiderShare,
+    );
+  }
+  if (totalPlatformShare > 0) {
+    primary.platformTotalEarning = round2(
+      Number(primary.platformTotalEarning || 0) + totalPlatformShare,
+    );
+  }
+  primary.snapshots = {
+    ...(primary.snapshots || {}),
+    extraCharges: evaluated,
+  };
+}
+
+function stampCityBillingOnPrimarySeller(sellerBreakdownEntries, cityMeta, cityConfigSnapshot) {
+  if (sellerBreakdownEntries.length === 0) return;
+  const primary = sellerBreakdownEntries[0].breakdown;
+  primary.billingSource = cityMeta.source;
+  primary.billingCityKey = cityMeta.cityKey;
+  primary.billingCityName = cityMeta.cityName;
+  primary.snapshots = {
+    ...(primary.snapshots || {}),
+    cityBillingConfig: cityConfigSnapshot,
+  };
+  for (let i = 1; i < sellerBreakdownEntries.length; i += 1) {
+    const b = sellerBreakdownEntries[i].breakdown;
+    if (!b) continue;
+    b.billingSource = cityMeta.source;
+    b.billingCityKey = cityMeta.cityKey;
+    b.billingCityName = cityMeta.cityName;
+  }
+}
+
 export async function buildCheckoutPricingSnapshot({
   orderItems = [],
   address = {},
@@ -457,6 +633,10 @@ export async function buildCheckoutPricingSnapshot({
   fulfillmentMethod = null,
   fulfillmentMethodBySeller = null,
   orderPlacedAt = new Date(),
+  // Payment method drives per-city extra-charge applicability
+  // (appliesTo: cod/online). Optional — omitted callers get no
+  // cod/online-conditional charges applied.
+  paymentMethod = null,
   // Real customer checkout must always keep this true — it forces every line
   // to price off the live product record, ignoring any price the caller
   // supplied. Only a privileged, already-authorized flow (e.g. a seller's own
@@ -478,10 +658,18 @@ export async function buildCheckoutPricingSnapshot({
   const sellerIds = Array.from(itemsBySeller.keys()).sort((a, b) => a.localeCompare(b));
   const sellerBreakdownEntries = [];
 
-  const [globalCategoryFees, financeSettings] = await Promise.all([
+  const [globalCategoryFees, financeSettings, cityBilling] = await Promise.all([
     computeGlobalCategoryFeesForCheckout(hydratedItems, { session }),
     getOrCreateFinanceSettings({ session }),
+    resolveCityBillingConfig({ address, session }),
   ]);
+
+  // effectiveSettings merges the customer's city overrides on top of the
+  // global Setting doc. Every downstream reader (delivery calc, weather
+  // /odd-hour applier, free-delivery threshold) reads from this so a
+  // city configuration for Indore actually reshapes Indore checkouts,
+  // while cities with no config keep the global defaults verbatim.
+  const effectiveSettings = cityBilling.deliverySettings;
 
   // Pre-compute each seller's subtotal for proportional discount distribution
   const sellerSubtotals = new Map();
@@ -526,11 +714,12 @@ export async function buildCheckoutPricingSnapshot({
       customerState: address?.state || "",
       orderPlacedAt,
       session,
+      deliverySettings: effectiveSettings,
       skipDeliveryFee:
         isCustomerPickup ||
         Boolean(freeDelivery) ||
-        (Number(financeSettings.freeDeliveryThreshold) > 0 &&
-          totalSubtotal >= Number(financeSettings.freeDeliveryThreshold)),
+        (Number(effectiveSettings.freeDeliveryThreshold) > 0 &&
+          totalSubtotal >= Number(effectiveSettings.freeDeliveryThreshold)),
       includeCustomerSurcharge: false,
     });
     sellerBreakdownEntries.push({
@@ -552,6 +741,8 @@ export async function buildCheckoutPricingSnapshot({
     // toggled customer surcharge both land on the customer as one combined,
     // non-seller-paid line — they share the same breakdown fields/reason so
     // invoices and order screens don't need a second charge type to display.
+    // Platform fee stays global (not city-scoped in this slice); the legacy
+    // customerSurcharge is untouched here so migrated cities keep working.
     const flatPlatformFee = Number(financeSettings.platformFee || 0);
     const toggledSurcharge = financeSettings.customerSurchargeEnabled
       ? Number(financeSettings.customerSurchargeAmount || 0)
@@ -566,28 +757,64 @@ export async function buildCheckoutPricingSnapshot({
       reason: reasonParts.join(" + "),
     });
   }
+  // Odd-hour + weather now read from `effectiveSettings`, so a city with
+  // its own weather charge activated overrides the global weather block,
+  // while cities without one still see the global value.
   const oddHourActive =
-    financeSettings.oddHourSurcharge?.enabled &&
-    Number(financeSettings.oddHourSurcharge?.amount || 0) > 0 &&
+    effectiveSettings.oddHourSurcharge?.enabled &&
+    Number(effectiveSettings.oddHourSurcharge?.amount || 0) > 0 &&
     isWithinOddHourWindow(
       orderPlacedAt,
-      financeSettings.oddHourSurcharge?.windowStart,
-      financeSettings.oddHourSurcharge?.windowEnd,
+      effectiveSettings.oddHourSurcharge?.windowStart,
+      effectiveSettings.oddHourSurcharge?.windowEnd,
     );
   applyDistinctSurchargesToSellerBreakdowns(sellerBreakdownEntries, {
     oddHour: {
-      amount: oddHourActive ? financeSettings.oddHourSurcharge.amount : 0,
-      windowStart: financeSettings.oddHourSurcharge?.windowStart,
-      windowEnd: financeSettings.oddHourSurcharge?.windowEnd,
-      revenueSplit: financeSettings.oddHourSurcharge?.revenueSplit,
+      amount: oddHourActive ? effectiveSettings.oddHourSurcharge.amount : 0,
+      windowStart: effectiveSettings.oddHourSurcharge?.windowStart,
+      windowEnd: effectiveSettings.oddHourSurcharge?.windowEnd,
+      revenueSplit: effectiveSettings.oddHourSurcharge?.revenueSplit,
     },
     weather: {
-      amount: financeSettings.weatherSurcharge?.enabled
-        ? Number(financeSettings.weatherSurcharge?.amount || 0)
+      amount: effectiveSettings.weatherSurcharge?.enabled
+        ? Number(effectiveSettings.weatherSurcharge?.amount || 0)
         : 0,
-      revenueSplit: financeSettings.weatherSurcharge?.revenueSplit,
+      revenueSplit: effectiveSettings.weatherSurcharge?.revenueSplit,
     },
   });
+
+  // Per-city extra charges (city-level rules only; the global Setting has
+  // no equivalent). Filtered by paymentMethod / fulfillment / subtotal.
+  const subtotalTotal = sellerBreakdownEntries.reduce(
+    (sum, e) => sum + Number(e?.breakdown?.productSubtotal || 0),
+    0,
+  );
+  const hasDelivery = sellerBreakdownEntries.some(
+    (e) => Number(e?.breakdown?.deliveryFeeCharged || 0) > 0,
+  );
+  applyExtraChargesToSellerBreakdowns(
+    sellerBreakdownEntries,
+    cityBilling.extraCharges,
+    { subtotalTotal, paymentMethod, hasDelivery },
+  );
+
+  // Freeze the city billing snapshot onto the primary seller's breakdown
+  // so orderPlacementService's later save persists it into paymentBreakdown
+  // + pricingSnapshot.snapshots.cityBillingConfig verbatim.
+  stampCityBillingOnPrimarySeller(
+    sellerBreakdownEntries,
+    cityBilling.meta,
+    cityBilling.meta.source === BILLING_SOURCE.CITY
+      ? {
+          cityKey: cityBilling.meta.cityKey,
+          cityName: cityBilling.meta.cityName,
+          state: cityBilling.meta.state,
+          cityConfigId: cityBilling.meta.cityConfigId,
+          deliverySettings: effectiveSettings,
+          extraChargesConfigured: cityBilling.extraCharges,
+        }
+      : null,
+  );
 
   const aggregateBreakdown = buildAggregateBreakdown(
     sellerBreakdownEntries.map((entry) => entry.breakdown),

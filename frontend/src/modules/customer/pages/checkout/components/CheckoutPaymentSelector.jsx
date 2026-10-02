@@ -38,7 +38,7 @@ const CheckoutPaymentSelector = React.memo(function CheckoutPaymentSelector({
                   Use Wallet Balance
                 </h3>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                  Available: ₹{walletBalance}
+                  Available: ₹{Number(walletBalance || 0).toFixed(2)}
                 </p>
               </div>
             </div>

@@ -179,6 +179,18 @@ export function onSellerOrderNew(getToken, handler) {
   return () => s.off("order:new", handler);
 }
 
+/**
+ * Fires every SELLER_REMINDER_INTERVAL_MS while an order is still in
+ * SELLER_PENDING. Used to reopen the accept-order popup / play the
+ * alert sound after the seller has dismissed the first notification.
+ */
+export function onSellerOrderReminder(getToken, handler) {
+  const s = getOrderSocket(getToken);
+  if (!s || typeof handler !== "function") return () => {};
+  s.on("order:reminder", handler);
+  return () => s.off("order:reminder", handler);
+}
+
 export function onSellerReturnRequested(getToken, handler) {
   const s = getOrderSocket(getToken);
   if (!s || typeof handler !== "function") return () => {};

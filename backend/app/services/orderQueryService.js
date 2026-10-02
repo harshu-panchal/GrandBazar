@@ -1,7 +1,27 @@
 import Order from "../models/order.js";
 import Delivery from "../models/delivery.js";
 import Store from "../models/store.js";
-import { WORKFLOW_STATUS } from "../constants/orderWorkflow.js";
+import { WORKFLOW_STATUS, SELLER_ACCEPT_DEADLINE_MS } from "../constants/orderWorkflow.js";
+
+/**
+ * True when the absolute seller-accept cutoff (24 h from placement by
+ * default) has passed. Uses `sellerAcceptDeadline` when set on the
+ * order; falls back to `createdAt + SELLER_ACCEPT_DEADLINE_MS` for
+ * older orders that predate the field.
+ *
+ * IMPORTANT: this must NOT read from `sellerPendingExpiresAt` — that
+ * field is now the rolling reminder timestamp (e.g. 5 min out) and
+ * would trigger a premature cancel between reminders.
+ */
+function sellerAcceptDeadlinePassed(order, now) {
+  const deadline = order.sellerAcceptDeadline
+    ? new Date(order.sellerAcceptDeadline)
+    : new Date(
+        (order.createdAt ? new Date(order.createdAt).getTime() : Date.now()) +
+          SELLER_ACCEPT_DEADLINE_MS(),
+      );
+  return deadline <= now;
+}
 import { distanceMeters } from "../utils/geoUtils.js";
 import { attachDisplayStatusToList } from "./orderStatusResolver.js";
 import mongoose from "mongoose";
@@ -235,8 +255,7 @@ export async function fetchSellerOrdersPage({
   for (const o of ordersRaw) {
     if (
       (o.status === "pending" || o.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING) &&
-      o.sellerPendingExpiresAt &&
-      new Date(o.sellerPendingExpiresAt) <= now
+      sellerAcceptDeadlinePassed(o, now)
     ) {
       o.status = "cancelled";
       o.orderStatus = "cancelled";

@@ -74,6 +74,7 @@ export async function createProductFromCatalog({
     stock: Number(stock),
     brand: catalogProduct.brand || "",
     weight: catalogProduct.weight || "",
+    productDisclaimer: catalogProduct.productDisclaimer || "",
     tags: catalogProduct.tags || [],
     mainImage: mainImage && String(mainImage).trim()
       ? String(mainImage).trim()

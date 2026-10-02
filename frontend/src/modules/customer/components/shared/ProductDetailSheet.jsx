@@ -26,6 +26,7 @@ import { customerApi } from '../../services/customerApi';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { buildProductPath } from '@/core/seo/url';
+import OtherSellersSection from '../product/OtherSellersSection';
 
 const ProductDetailSheet = () => {
     const { selectedProduct, isOpen, closeProduct } = useProductDetail();
@@ -889,9 +890,9 @@ const ProductDetailSheet = () => {
                                             )}
 
                                             {/* Product Details */}
-                                            <AccordionItem 
-                                                id="details" 
-                                                title="Product Details" 
+                                            <AccordionItem
+                                                id="details"
+                                                title="Product Details"
                                                 icon={<Search size={16} />}
                                             >
                                                 <div className="grid grid-cols-2 gap-3 mt-1">
@@ -1012,6 +1013,20 @@ const ProductDetailSheet = () => {
                                                 </div>
                                             </AccordionItem>
                                         </div>
+
+                                        {/* Other sellers for the same product — plain section, no
+                                            accordion, with inline add-to-cart on each row. */}
+                                        <OtherSellersSection
+                                            productId={selectedProduct?._id || selectedProduct?.id}
+                                            currentPrice={
+                                                selectedProduct?.customerSalePrice ??
+                                                selectedProduct?.customerPrice ??
+                                                selectedProduct?.salePrice ??
+                                                selectedProduct?.price
+                                            }
+                                            lat={currentLocation?.latitude}
+                                            lng={currentLocation?.longitude}
+                                        />
 
                                         {/* Bottom spacer */}
                                         <div className="h-6" />
@@ -1208,9 +1223,9 @@ const ProductDetailSheet = () => {
                                     )}
 
                                     {/* Product Details */}
-                                    <AccordionItem 
-                                        id="details" 
-                                        title="Product Details" 
+                                    <AccordionItem
+                                        id="details"
+                                        title="Product Details"
                                         icon={<Search size={18} strokeWidth={2.5} />}
                                     >
                                         <div className="grid grid-cols-2 gap-3 mt-1">
@@ -1327,6 +1342,19 @@ const ProductDetailSheet = () => {
                                         </div>
                                     </AccordionItem>
                                 </div>
+
+                                {/* Other sellers for the same product — direct section on mobile too. */}
+                                <OtherSellersSection
+                                    productId={selectedProduct?._id || selectedProduct?.id}
+                                    currentPrice={
+                                        selectedProduct?.customerSalePrice ??
+                                        selectedProduct?.customerPrice ??
+                                        selectedProduct?.salePrice ??
+                                        selectedProduct?.price
+                                    }
+                                    lat={currentLocation?.latitude}
+                                    lng={currentLocation?.longitude}
+                                />
 
                                 <div className="h-24" /> {/* Bottom spacer for sticky bar */}
                             </div>

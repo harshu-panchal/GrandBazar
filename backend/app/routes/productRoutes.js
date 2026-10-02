@@ -19,6 +19,8 @@ import {
     getTrendingSearchesController,
     getTrendingProductsController,
     getSimilarProductsController,
+    getOtherSellersForProductController,
+    checkProductStockController,
     getProductAddonMappingsController,
     getSuggestedAddonsController,
     estimateCustomerPrice,
@@ -67,6 +69,8 @@ router.patch("/admin/bulk-update", verifyToken, allowRoles("admin"), bulkUpdateP
 router.patch("/moderation/:id/approve", verifyToken, allowRoles("admin"), approveProduct);
 router.patch("/moderation/:id/reject", verifyToken, allowRoles("admin"), rejectProduct);
 router.get("/:id/similar", optionalVerifyToken, getSimilarProductsController);
+router.get("/:id/other-sellers", optionalVerifyToken, getOtherSellersForProductController);
+router.post("/check-stock", optionalVerifyToken, checkProductStockController);
 router.get("/:id", optionalVerifyToken, getProductById);
 
 router.post(

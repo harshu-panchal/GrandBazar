@@ -74,6 +74,14 @@ const productSchema = new mongoose.Schema(
             type: String,
             trim: true,
         },
+        // Snapshot of CatalogProduct.productDisclaimer taken when the seller claims
+        // the catalogue item; shown at the end of the customer's checkout.
+        productDisclaimer: {
+            type: String,
+            trim: true,
+            default: "",
+            maxlength: 1000,
+        },
         tags: [{
             type: String,
             trim: true,

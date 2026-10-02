@@ -62,6 +62,7 @@ import { Label } from "@/components/ui/label";
 import CheckoutAddressSection from "./checkout/components/CheckoutAddressSection";
 
 import CheckoutCartSummary from "./checkout/components/CheckoutCartSummary";
+import CheckoutProductDisclaimers from "./checkout/components/CheckoutProductDisclaimers";
 import CheckoutPricingBreakdown from "./checkout/components/CheckoutPricingBreakdown";
 import CheckoutPaymentSelector from "./checkout/components/CheckoutPaymentSelector";
 import CheckoutCouponSection from "./checkout/components/CheckoutCouponSection";
@@ -239,6 +240,19 @@ const CheckoutPage = () => {
   const [selectedTip, setSelectedTip] = useState(0);
   const [showAllCartItems, setShowAllCartItems] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  // Populated by the pre-flight stock check; renders as a persistent
+  // banner above the slider so the customer knows exactly which items
+  // to remove instead of relying on the toast.
+  const [unavailableItems, setUnavailableItems] = useState([]);
+  // Clear the banner as soon as the customer edits the cart — a new
+  // slide attempt will re-run the pre-check anyway, and stale warnings
+  // for items they've already removed would be misleading.
+  const cartSignature = cart
+    .map((c) => `${c.id || c._id}:${c.variantSku || ""}:${c.quantity}`)
+    .join("|");
+  useEffect(() => {
+    setUnavailableItems([]);
+  }, [cartSignature]);
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isResolvingAddressCoords, setIsResolvingAddressCoords] = useState(false);
@@ -541,12 +555,21 @@ const CheckoutPage = () => {
       }
 
       setCurrentAddress({
+        // Carry the saved address's id through — the init effect uses
+        // `!prev.id` to decide whether to overwrite currentAddress with
+        // the default saved address, so dropping the id here caused the
+        // selection to snap back on the next currentLocation update.
+        id: addr.id,
         type: addr.label,
         name: user?.name || currentAddress.name,
         address: rawText,
-        city: "",
+        // Preserve city/state/pincode/landmark from the saved address so
+        // the city-billing resolver and address display don't lose them.
+        city: addr.city || "",
+        state: addr.state || "",
+        pincode: addr.pincode || "",
         phone: addr.phone || currentAddress.phone,
-        landmark: "",
+        landmark: addr.landmark || "",
         ...(pid ? { placeId: pid } : {}),
         ...(resolvedLoc ? { location: resolvedLoc } : {}),
       });
@@ -865,7 +888,11 @@ const CheckoutPage = () => {
     }
   }, [cart, coupons, selectedCoupon, showToast]);
 
-  // Debounced checkoutPreview — fires 400 ms after last dependency change
+  // Debounced checkoutPreview. Non-address changes (tip, coupon, payment
+  // toggle) still debounce at 400 ms to avoid a request per keystroke, but
+  // an address swap fires immediately — the customer just picked a new
+  // location and expects the summary to reflect it right away.
+  const lastAddressSigRef = useRef("");
   useEffect(() => {
     if (!isAuthenticated || cart.length === 0) {
       setPricingPreview(null);
@@ -910,8 +937,27 @@ const CheckoutPage = () => {
       }
     };
 
+    // Detect an address swap: the id, coord pair, or city changed since
+    // the last effect run. When it did, skip the debounce and mark the
+    // summary as loading immediately so the user sees the recalculation
+    // happening instead of stale numbers.
+    const addrSig = [
+      currentAddress?.id || "",
+      currentAddress?.city || "",
+      currentAddress?.location?.lat ?? "",
+      currentAddress?.location?.lng ?? "",
+    ].join("|");
+    const addressChanged = addrSig !== lastAddressSigRef.current;
+    lastAddressSigRef.current = addrSig;
+
     clearTimeout(previewDebounceRef.current);
-    previewDebounceRef.current = setTimeout(fetchPreview, 400);
+    if (addressChanged) {
+      setPricingPreview(null);
+      setIsPreviewLoading(true);
+      previewDebounceRef.current = setTimeout(fetchPreview, 0);
+    } else {
+      previewDebounceRef.current = setTimeout(fetchPreview, 400);
+    }
 
     return () => clearTimeout(previewDebounceRef.current);
   }, [
@@ -1079,6 +1125,50 @@ const CheckoutPage = () => {
     }
     setIsPlacingOrder(true);
     try {
+      // Pre-flight stock check. Runs before order creation so the customer
+      // sees a specific "X out of stock, only Y available" toast instead
+      // of a generic transaction failure surfaced mid-placement.
+      try {
+        const stockRes = await customerApi.checkProductStock(
+          cart.map((item) => ({
+            productId: item.id || item._id,
+            variantSku: String(item.variantSku || "").trim(),
+            quantity: item.quantity,
+          })),
+        );
+        const result = stockRes?.data?.result;
+        if (result && result.ok === false) {
+          const rows = (result.unavailable || []).map((u) => {
+            let label;
+            if (u.reason === "out_of_stock") label = "out of stock";
+            else if (u.reason === "insufficient_stock")
+              label = `only ${u.available} left (you selected ${u.requested})`;
+            else if (u.reason === "inactive") label = "no longer available";
+            else if (u.reason === "variant_not_found")
+              label = "selected variant is unavailable";
+            else label = "unavailable";
+            return { productId: u.productId, name: u.name, label };
+          });
+          setUnavailableItems(rows);
+          showToast(
+            rows[0]
+              ? `${rows[0].name}: ${rows[0].label}`
+              : "Some items in your cart are no longer available.",
+            "error",
+          );
+          setIsPlacingOrder(false);
+          return;
+        }
+        // Clear the banner when the check passes so a previously-shown
+        // warning does not linger after the customer fixes their cart.
+        setUnavailableItems([]);
+      } catch (stockErr) {
+        // A network error on the pre-check is not enough to block the
+        // order — the placement service does its own transactional stock
+        // reservation. Log and continue.
+        console.error("Stock pre-check failed", stockErr);
+      }
+
       const taxAmount = pricingPreview?.taxTotal || 0;
       const orderData = {
         address: buildAddressForOrder(),
@@ -1525,8 +1615,25 @@ const CheckoutPage = () => {
               </label>
             </div>
 
+            {/* Product disclaimers — last block before the pay action */}
+            <CheckoutProductDisclaimers cart={cart} />
+
             {/* Desktop Slide to Pay */}
             <div className="hidden lg:block">
+              {unavailableItems.length > 0 && (
+                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-red-700 mb-1">
+                    These items cannot be ordered right now
+                  </p>
+                  <ul className="space-y-0.5">
+                    {unavailableItems.map((row) => (
+                      <li key={row.productId} className="text-sm text-red-700 font-semibold">
+                        {row.name}: {row.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <SlideToPay
                 amount={finalAmountToPay}
                 onSuccess={handlePlaceOrder}
@@ -1544,6 +1651,15 @@ const CheckoutPage = () => {
       {/* Sticky Footer — Mobile Only */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-4 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 rounded-t-3xl">
         <div className="max-w-4xl mx-auto">
+          {unavailableItems.length > 0 && (
+            <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+              {unavailableItems.map((row) => (
+                <p key={row.productId} className="text-xs text-red-700 font-semibold leading-snug">
+                  {row.name}: {row.label}
+                </p>
+              ))}
+            </div>
+          )}
           <SlideToPay
             amount={finalAmountToPay}
             onSuccess={handlePlaceOrder}

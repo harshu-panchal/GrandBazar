@@ -19,6 +19,18 @@ function makeProductSku(name, index = 1) {
   return `${prefix}-${String(index).padStart(3, "0")}`;
 }
 
+const PRODUCT_DISCLAIMER_MAX_LENGTH = 1000;
+
+function normalizeProductDisclaimer(value) {
+  return String(value ?? "").trim();
+}
+
+function productDisclaimerTooLong(value) {
+  return normalizeProductDisclaimer(value).length > PRODUCT_DISCLAIMER_MAX_LENGTH;
+}
+
+const PRODUCT_DISCLAIMER_TOO_LONG_MESSAGE = `Product disclaimer must be ${PRODUCT_DISCLAIMER_MAX_LENGTH} characters or fewer`;
+
 function normalizeCatalogCommissionFields(data = {}) {
   const apply =
     data.applyCommission === true || data.applyCommission === "true";
@@ -224,6 +236,10 @@ export const createCatalogProduct = async (req, res) => {
     if (!productData.mainImage) {
       return handleResponse(res, 400, "Catalog main image is required");
     }
+    if (productDisclaimerTooLong(productData.productDisclaimer)) {
+      return handleResponse(res, 400, PRODUCT_DISCLAIMER_TOO_LONG_MESSAGE);
+    }
+    productData.productDisclaimer = normalizeProductDisclaimer(productData.productDisclaimer);
 
     // Auto-generate slug
     productData.slug = slugify(productData.name);
@@ -265,6 +281,9 @@ export const createCatalogProductsBulk = async (req, res) => {
           `Validation failed for item: ${item.name || "Unnamed"}. Missing name, description, mainImage, or category fields.`
         );
       }
+      if (productDisclaimerTooLong(item.productDisclaimer)) {
+        return handleResponse(res, 400, `${PRODUCT_DISCLAIMER_TOO_LONG_MESSAGE} (item: ${item.name})`);
+      }
 
       let slug = slugify(item.name);
       // We check uniqueness within current iteration and DB
@@ -280,6 +299,7 @@ export const createCatalogProductsBulk = async (req, res) => {
         description: item.description.trim(),
         brand: item.brand ? item.brand.trim() : "",
         weight: item.weight ? item.weight.trim() : "",
+        productDisclaimer: normalizeProductDisclaimer(item.productDisclaimer),
         tags: Array.isArray(item.tags) ? item.tags : [],
         alternativeNames: Array.isArray(item.alternativeNames) ? item.alternativeNames : [],
         mainImage: item.mainImage,
@@ -489,6 +509,13 @@ export const updateCatalogProduct = async (req, res) => {
         }));
     }
 
+    if (updateData.productDisclaimer !== undefined) {
+      if (productDisclaimerTooLong(updateData.productDisclaimer)) {
+        return handleResponse(res, 400, PRODUCT_DISCLAIMER_TOO_LONG_MESSAGE);
+      }
+      updateData.productDisclaimer = normalizeProductDisclaimer(updateData.productDisclaimer);
+    }
+
     // Update slug if name is changing
     if (updateData.name && updateData.name !== catalogProduct.name) {
       updateData.slug = slugify(updateData.name);
@@ -561,6 +588,7 @@ export const updateCatalogProduct = async (req, res) => {
         description: updated.description,
         brand: updated.brand,
         weight: updated.weight,
+        productDisclaimer: updated.productDisclaimer || "",
         tags: updated.tags,
         mainImage: updated.mainImage,
         galleryImages: updated.galleryImages,
@@ -834,6 +862,7 @@ export const claimCatalogProduct = async (req, res) => {
       stock: Number(stock),
       brand: catalogProduct.brand || "",
       weight: catalogProduct.weight || "",
+      productDisclaimer: catalogProduct.productDisclaimer || "",
       tags: catalogProduct.tags || [],
       mainImage: mainImage && String(mainImage).trim() ? String(mainImage).trim() : catalogProduct.mainImage,
       galleryImages: Array.isArray(galleryImages) && galleryImages.length > 0 ? galleryImages : (catalogProduct.galleryImages || []),
@@ -960,6 +989,7 @@ export const bulkClaimCatalogProducts = async (req, res) => {
         stock: Number(stock) || 0,
         brand: catalogProduct.brand || "",
         weight: catalogProduct.weight || "",
+        productDisclaimer: catalogProduct.productDisclaimer || "",
         tags: catalogProduct.tags || [],
         mainImage: mainImage && String(mainImage).trim() ? String(mainImage).trim() : catalogProduct.mainImage,
         galleryImages: catalogProduct.galleryImages || [],

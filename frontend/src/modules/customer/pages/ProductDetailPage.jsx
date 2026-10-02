@@ -14,6 +14,7 @@ import Lottie from 'lottie-react';
 import { buildProductPath, extractObjectIdFromSlugAndId } from '@core/seo/url';
 import { useSeoMeta } from '@core/seo/useSeoMeta';
 import SimilarProductsSection from '../components/product/SimilarProductsSection';
+import OtherSellersSection from '../components/product/OtherSellersSection';
 
 const ProductDetailPage = () => {
     const { slugAndId } = useParams();
@@ -582,6 +583,13 @@ const ProductDetailPage = () => {
                     </div>
                 </div>
             </div>
+
+            <OtherSellersSection
+                productId={productId}
+                currentPrice={product?.customerSalePrice ?? product?.customerPrice ?? product?.salePrice ?? product?.price}
+                lat={currentLocation?.latitude}
+                lng={currentLocation?.longitude}
+            />
 
             <SimilarProductsSection
                 productId={productId}

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useSettings } from "@core/context/SettingsContext";
 import { motion, AnimatePresence } from "framer-motion";
 import InvoiceModal from "../components/order/InvoiceModal";
+import { TaxesAndChargesDropdown } from "./checkout/components/CheckoutPricingBreakdown";
 import HelpModal from "../components/order/HelpModal";
 import LiveTrackingMap from "../components/order/LiveTrackingMap";
 import PickupRouteMap from "../components/order/PickupRouteMap";
@@ -13,6 +14,7 @@ import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
 import RateOrderItems from "../components/order/RateOrderItems";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
 import OrderProgressTracker from "../components/order/OrderProgressTracker";
+import CancelOrderModal from "../components/order/CancelOrderModal";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import {
   ChevronLeft,
@@ -174,6 +176,7 @@ const OrderDetailPage = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [requestingReturn, setRequestingReturn] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedReturnItems, setSelectedReturnItems] = useState({});
   const [returnReason, setReturnReason] = useState("");
   const [returnReasonDetail, setReturnReasonDetail] = useState("");
@@ -888,7 +891,14 @@ const OrderDetailPage = () => {
     }
   };
 
-  const handleCancelOrder = async () => {
+  const handleCancelOrder = () => {
+    if (!order || !canCustomerCancelOrder(order) || isCancellingOrder) {
+      return;
+    }
+    setShowCancelModal(true);
+  };
+
+  const handleConfirmCancelOrder = async (reason) => {
     if (!order || !canCustomerCancelOrder(order) || isCancellingOrder) {
       return;
     }
@@ -896,25 +906,19 @@ const OrderDetailPage = () => {
     const cancellationState = getCustomerCancellationState(order);
     const isApprovalFlow =
       cancellationState === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED;
-    const confirmed = window.confirm(
-      isApprovalFlow
-        ? "Since a delivery partner hasn't been assigned yet, your cancellation request will be sent to admin for approval. The order will only be cancelled once approved. Send the request?"
-        : "You can cancel directly only before the seller accepts this order. Cancel now?",
-    );
-    if (!confirmed) return;
 
     try {
       setIsCancellingOrder(true);
       const cancelResponse = await customerApi.cancelOrder(resolveOrderLookupId(order), {
-        reason: isApprovalFlow
-          ? "Customer requested cancellation before delivery partner assignment"
-          : "Cancelled by customer before seller acceptance",
+        reason,
       });
 
       const updatedOrder = cancelResponse?.data?.result;
       if (updatedOrder) {
         setOrder(updatedOrder);
       }
+
+      setShowCancelModal(false);
 
       if (cancelResponse?.status === 202 || isApprovalFlow) {
         toast.success("Cancellation request sent to admin for approval");
@@ -1307,57 +1311,26 @@ const OrderDetailPage = () => {
                   : `₹${order.pricing.deliveryFee}`}
               </span>
             </div>
-            {Number(order.paymentBreakdown?.handlingFeeCharged || 0) > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Handling Fee</span>
-                <span className="font-semibold">₹{order.paymentBreakdown.handlingFeeCharged}</span>
-              </div>
-            )}
-            {Number(order.paymentBreakdown?.packingFeeCharged || 0) > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Packing Charge</span>
-                <span className="font-semibold">₹{order.paymentBreakdown.packingFeeCharged}</span>
-              </div>
-            )}
-            {Number(order.paymentBreakdown?.packagingChargeAmount || 0) > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Packaging Charge</span>
-                <span className="font-semibold">₹{order.paymentBreakdown.packagingChargeAmount}</span>
-              </div>
-            )}
-            {(Number(order.paymentBreakdown?.oddHourSurchargeAmount || 0) +
-              Number(order.paymentBreakdown?.weatherSurchargeAmount || 0) +
-              Number(order.paymentBreakdown?.customerSurchargeAmount || 0)) > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Additional Charges</span>
-                <span className="font-semibold">
-                  ₹{
-                    Number(order.paymentBreakdown?.oddHourSurchargeAmount || 0) +
-                    Number(order.paymentBreakdown?.weatherSurchargeAmount || 0) +
-                    Number(order.paymentBreakdown?.customerSurchargeAmount || 0)
-                  }
-                </span>
-              </div>
-            )}
-            {order.paymentBreakdown?.taxJurisdiction === "inter_state"
-              ? Number(order.paymentBreakdown?.igstTotal || 0) > 0 && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>IGST</span>
-                    <span className="font-semibold">₹{order.paymentBreakdown.igstTotal}</span>
-                  </div>
-                )
-              : (Number(order.paymentBreakdown?.cgstTotal || 0) > 0 || Number(order.paymentBreakdown?.sgstTotal || 0) > 0) && (
-                  <>
-                    <div className="flex justify-between text-slate-600">
-                      <span>CGST</span>
-                      <span className="font-semibold">₹{order.paymentBreakdown.cgstTotal}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>SGST</span>
-                      <span className="font-semibold">₹{order.paymentBreakdown.sgstTotal}</span>
-                    </div>
-                  </>
-                )}
+            {/* Collapsed dropdown for ancillary fees, surcharges and taxes —
+                same component used on the checkout page so both bill views
+                stay visually and structurally consistent. */}
+            <TaxesAndChargesDropdown
+              handlingFee={order.paymentBreakdown?.handlingFeeCharged}
+              packingFee={order.paymentBreakdown?.packingFeeCharged}
+              packagingChargeAmount={order.paymentBreakdown?.packagingChargeAmount}
+              customerSurchargeAmount={order.paymentBreakdown?.customerSurchargeAmount}
+              customerSurchargeReason={
+                order.paymentBreakdown?.customerSurchargeReason ||
+                order.paymentBreakdown?.snapshots?.customerSurcharge?.reason
+              }
+              oddHourSurchargeAmount={order.paymentBreakdown?.oddHourSurchargeAmount}
+              weatherSurchargeAmount={order.paymentBreakdown?.weatherSurchargeAmount}
+              taxAmount={order.paymentBreakdown?.taxTotal}
+              cgstAmount={order.paymentBreakdown?.cgstTotal}
+              sgstAmount={order.paymentBreakdown?.sgstTotal}
+              igstAmount={order.paymentBreakdown?.igstTotal}
+              isInterState={order.paymentBreakdown?.taxJurisdiction === "inter_state"}
+            />
             {Number(order.paymentBreakdown?.discountTotal || 0) > 0 && (
               <div className="flex justify-between text-brand-600">
                 <span>Coupon Discount</span>
@@ -1717,6 +1690,14 @@ const OrderDetailPage = () => {
         order={order}
       />
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} orderId={order?.orderId} />
+
+      <CancelOrderModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleConfirmCancelOrder}
+        isSubmitting={isCancellingOrder}
+        isApprovalFlow={cancellationState === CUSTOMER_CANCELLATION_STATE.APPROVAL_REQUIRED}
+      />
 
       {/* Return Request Modal */}
       {showReturnModal && (

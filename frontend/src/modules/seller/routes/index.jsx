@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import ScrollToTop from "@shared/components/ScrollToTop";
 import { StoreProvider } from "../context/StoreContext";
+import QuickControlsFab from "../components/QuickControlsFab";
 import { useAuth } from "@core/context/AuthContext";
 import { hasSellerModuleAccess } from "../constants/sellerPermissions";
 import {
@@ -217,6 +218,7 @@ const SellerRoutes = () => {
         <Route path="*" element={<Navigate to="/seller" replace />} />
       </Routes>
       </Suspense>
+      <QuickControlsFab />
     </DashboardLayout>
     </StoreProvider>
   );

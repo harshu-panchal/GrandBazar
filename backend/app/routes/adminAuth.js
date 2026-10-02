@@ -111,6 +111,20 @@ import {
     updateStoreCommission,
 } from "../controller/admin/commissionHierarchyController.js";
 import { getAuditLogsController } from "../controller/admin/auditLogController.js";
+import {
+    listCityBillingConfigsController,
+    getCityBillingConfigController,
+    upsertCityBillingConfigController,
+    patchCityBillingStatusController,
+    deleteCityBillingConfigController,
+    duplicateCityBillingConfigController,
+    activateWeatherChargeController,
+    deactivateWeatherChargeController,
+    addExtraChargeController,
+    updateExtraChargeController,
+    deleteExtraChargeController,
+    previewCityBillingController,
+} from "../controller/admin/cityBillingController.js";
 
 import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
 import {
@@ -336,6 +350,22 @@ router.get("/commissions/cities/options", verifyToken, allowRoles("admin"), list
 router.get("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), getCityCommission);
 router.delete("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), deleteCityCommission);
 router.put("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityCommissionController);
+
+// City-wise billing (delivery / weather / extra charges). Separate from
+// city commission above — commission affects seller payout, billing here
+// affects customer-facing charges. Both models share cityKey identity.
+router.get("/billing/cities", verifyToken, allowRoles("admin"), listCityBillingConfigsController);
+router.get("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), getCityBillingConfigController);
+router.put("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityBillingConfigController);
+router.patch("/billing/cities/:cityKey/status", verifyToken, allowRoles("admin"), patchCityBillingStatusController);
+router.delete("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), deleteCityBillingConfigController);
+router.post("/billing/cities/:cityKey/duplicate", verifyToken, allowRoles("admin"), duplicateCityBillingConfigController);
+router.post("/billing/cities/:cityKey/weather/activate", verifyToken, allowRoles("admin"), activateWeatherChargeController);
+router.post("/billing/cities/:cityKey/weather/deactivate", verifyToken, allowRoles("admin"), deactivateWeatherChargeController);
+router.post("/billing/cities/:cityKey/extra-charges", verifyToken, allowRoles("admin"), addExtraChargeController);
+router.put("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), updateExtraChargeController);
+router.delete("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), deleteExtraChargeController);
+router.post("/billing/preview", verifyToken, allowRoles("admin"), previewCityBillingController);
 router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), listModelSwitchRequests);
 router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), approveModelSwitchRequest);
 router.patch("/sellers/:id/model-switch/reject", verifyToken, allowRoles("admin"), rejectModelSwitchRequest);

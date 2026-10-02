@@ -10,7 +10,7 @@ const fmt = (amount) => {
 };
 
 /** Collapsible row for ancillary fees, surcharges and taxes to keep the bill compact */
-function TaxesAndChargesDropdown({
+export function TaxesAndChargesDropdown({
   handlingFee,
   packingFee,
   packagingChargeAmount,
@@ -187,6 +187,11 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
   const isInterState = pricingPreview?.taxJurisdiction === "inter_state";
   const oddHourSurchargeAmount = pricingPreview?.oddHourSurchargeAmount || 0;
   const weatherSurchargeAmount = pricingPreview?.weatherSurchargeAmount || 0;
+  // Expose to child rows so subtitles can distinguish city weather from
+  // the global fallback the customer would otherwise assume "came from
+  // Indore" simply because Indore happens to have the same amount.
+  const billingSource = pricingPreview?.billingSource || null;
+  const billingCityName = pricingPreview?.billingCityName || "";
 
   return (
     <>
@@ -201,6 +206,12 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
           <h3 className="font-[1000] text-slate-800 text-xl tracking-tight uppercase">
             Order Summary
           </h3>
+          {isPreviewLoading && (
+            <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-brand-600 bg-brand-50 border border-brand-100 rounded-full px-2 py-0.5">
+              <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse" />
+              Recalculating…
+            </span>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -235,6 +246,16 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
                 </span>
               </div>
             )}
+          {pricingPreview?.billingSource && (
+            <div className="px-2 -mt-3 text-[11px] font-semibold text-slate-400">
+              Billing rules:{" "}
+              <span className="uppercase tracking-wider text-slate-500">
+                {pricingPreview.billingSource === "CITY"
+                  ? `${pricingPreview.billingCityName || pricingPreview.billingCityKey || "city"} (city override)`
+                  : "Default (global)"}
+              </span>
+            </div>
+          )}
           <TaxesAndChargesDropdown
             handlingFee={handlingFee}
             packingFee={packingFee}

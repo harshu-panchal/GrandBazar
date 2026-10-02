@@ -135,6 +135,16 @@ export function freezeFinancialSnapshot(order, breakdown) {
     handlingCategoryUsed: sanitized?.snapshots?.handlingCategoryUsed || {},
   };
 
+  // Persist city-billing snapshot alongside the existing frozen finance
+  // snapshot so a later change to CityBillingConfig cannot retroactively
+  // reprice this order.
+  if (sanitized?.snapshots?.cityBillingConfig) {
+    order.paymentBreakdown.snapshots = {
+      ...(order.paymentBreakdown.snapshots || {}),
+      cityBillingConfig: sanitized.snapshots.cityBillingConfig,
+    };
+  }
+
   syncLegacyPricing(order);
   return order;
 }

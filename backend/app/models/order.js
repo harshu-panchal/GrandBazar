@@ -231,6 +231,29 @@ const orderSchema = new mongoose.Schema(
       customerSurchargeReason: { type: String, default: "" },
       oddHourSurchargeAmount: { type: Number, default: 0 },
       weatherSurchargeAmount: { type: Number, default: 0 },
+      // City-wise billing (Slice 1 — populated once checkout wires the
+      // resolver in Slice 2). All fields are additive; existing consumers
+      // remain unaffected.
+      billingSource: { type: String, enum: ["CITY", "GLOBAL", null], default: null },
+      billingCityKey: { type: String, default: "" },
+      billingCityName: { type: String, default: "" },
+      extraChargesTotal: { type: Number, default: 0 },
+      extraCharges: {
+        type: [
+          {
+            _id: false,
+            name: { type: String, default: "" },
+            type: { type: String, default: "flat" },
+            amount: { type: Number, default: 0 },
+            appliesTo: { type: String, default: "all_orders" },
+            revenueType: { type: String, default: "platform" },
+            platformShare: { type: Number, default: 0 },
+            sellerShare: { type: Number, default: 0 },
+            riderShare: { type: Number, default: 0 },
+          },
+        ],
+        default: [],
+      },
       isBulkOrder: { type: Boolean, default: false },
       bulkOrderReason: { type: String, enum: ["value_threshold", "qty_threshold", null], default: null },
       bulkOrderLineIndexes: { type: [Number], default: [] },
@@ -259,6 +282,10 @@ const orderSchema = new mongoose.Schema(
         handlingCategoryUsed: { type: Object, default: {} },
         packingFeeStrategy: { type: String, default: null },
         packingCategoryUsed: { type: Object, default: {} },
+        // Frozen city billing config used to price this order. Once set,
+        // never mutated — historical orders remain immutable even after
+        // the live CityBillingConfig doc changes.
+        cityBillingConfig: { type: Object, default: null },
       },
       lineItems: {
         type: Array,
@@ -342,7 +369,13 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    // Absolute cutoff for the seller to accept: 24 h after placement by
+    // default. The reminder job pings the seller every N minutes until
+    // this deadline is reached; on hit the order is auto-cancelled.
     sellerPendingExpiresAt: Date,
+    sellerAcceptDeadline: Date,
+    sellerReminderCount: { type: Number, default: 0 },
+    lastSellerReminderAt: Date,
     deliverySearchExpiresAt: Date,
     sellerAcceptedAt: Date,
     assignedAt: Date,
@@ -940,12 +973,21 @@ orderSchema.index(
 orderSchema.index({ "stockReservation.status": 1, "stockReservation.expiresAt": 1 });
 orderSchema.index({ checkoutGroupId: 1, createdAt: -1 });
 orderSchema.index({ checkoutGroupId: 1, checkoutGroupIndex: 1 });
+// DANGER — DO NOT reintroduce a TTL (expireAfterSeconds) index on Order.
+// A previous version of this file declared `{ expireAfterSeconds: 0 }`
+// on `placement.idempotencyKeyExpiry`, which caused MongoDB's TTL
+// monitor to physically DELETE every order document 24 hours after
+// placement (TTL indexes delete the whole document, not a field).
+// The idempotency key only needs to live long enough to dedupe a
+// retried checkout request; it does not need to control the order's
+// lifetime. We keep a plain index for the cleanup job (see
+// scripts/cleanupExpiredIdempotencyKeys.js) which nulls the two
+// fields after their TTL, without touching the order itself.
 orderSchema.index(
   { "placement.idempotencyKeyExpiry": 1 },
-  { 
-    expireAfterSeconds: 0,
-    partialFilterExpression: { "placement.idempotencyKeyExpiry": { $type: "date" } }
-  }
+  {
+    partialFilterExpression: { "placement.idempotencyKeyExpiry": { $type: "date" } },
+  },
 );
 
 orderSchema.pre('save', function() {

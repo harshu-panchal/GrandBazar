@@ -237,6 +237,7 @@ const ProductManagement = () => {
     tags: "",
     weight: "",
     brand: "",
+    productDisclaimer: "",
     packagingCharge: "",
     mainImage: null,
     galleryImages: [],
@@ -429,6 +430,7 @@ const ProductManagement = () => {
       if (formData.subcategory) data.append("subcategoryId", formData.subcategory);
       data.append("status", formData.status);
       data.append("brand", formData.brand);
+      data.append("productDisclaimer", formData.productDisclaimer || "");
       data.append("weight", formData.weight);
       data.append("packagingCharge", formData.packagingCharge);
       data.append("tags", formData.tags);
@@ -629,6 +631,7 @@ const ProductManagement = () => {
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : item.tags || "",
         weight: item.weight || "",
         brand: item.brand || "",
+        productDisclaimer: item.productDisclaimer || "",
         packagingCharge: item.packagingCharge ?? "",
         mainImage: item.mainImage || catalogObj?.mainImage || null,
         galleryImages: finalGallery,
@@ -671,6 +674,7 @@ const ProductManagement = () => {
         tags: "",
         weight: "",
         brand: "",
+        productDisclaimer: "",
         packagingCharge: "",
         mainImage: null,
         galleryImages: [],
@@ -1689,6 +1693,25 @@ const ProductManagement = () => {
                           <span className="text-[10px] text-slate-500 font-medium ml-1">
                             Only for this product. Leave blank to use your store's normal packaging charge.
                           </span>
+                        </div>
+                        <div className="space-y-1.5 flex flex-col sm:col-span-2">
+                          <div className="flex items-baseline justify-between">
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-widest ml-1">
+                              Product Disclaimer (optional)
+                            </label>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {(formData.productDisclaimer || "").length}/1000
+                            </span>
+                          </div>
+                          <textarea
+                            value={formData.productDisclaimer || ""}
+                            maxLength={1000}
+                            onChange={(e) =>
+                              setFormData({ ...formData, productDisclaimer: e.target.value })
+                            }
+                            className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-sm font-semibold min-h-[80px] outline-none ring-primary/5 focus:ring-2"
+                            placeholder="Shown to customers at the end of checkout when this product is in their cart."
+                          />
                         </div>
                       </div>
                       <div className="flex items-center space-x-3 pt-4 border-t border-slate-100 mt-4">

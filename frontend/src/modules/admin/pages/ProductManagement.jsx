@@ -97,6 +97,7 @@ const ProductManagement = () => {
         tags: '',
         weight: '',
         brand: '',
+        productDisclaimer: '',
         packagingCharge: '',
         mainImage: null,
         galleryImages: [],
@@ -308,6 +309,7 @@ const ProductManagement = () => {
             data.append('status', formData.status);
             data.append('isFeatured', formData.isFeatured);
             data.append('brand', formData.brand);
+            data.append('productDisclaimer', formData.productDisclaimer || '');
             data.append('weight', formData.weight);
             data.append('packagingCharge', formData.packagingCharge);
             data.append('tags', formData.tags);
@@ -494,6 +496,7 @@ const ProductManagement = () => {
                 tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '',
                 weight: item.weight || '',
                 brand: item.brand || '',
+                productDisclaimer: item.productDisclaimer || '',
                 packagingCharge: item.packagingCharge ?? '',
                 mainImage: item.mainImage || null,
                 galleryImages: item.galleryImages || item.images || [],
@@ -526,7 +529,7 @@ const ProductManagement = () => {
                 name: '', slug: '', sku: '', description: '', price: '',
                 salePrice: '', stock: '', lowStockAlert: 5, unit: 'packet',
                 header: '', categoryId: '', subcategoryId: '', status: 'active',
-                isFeatured: false, tags: '', weight: '', brand: '', packagingCharge: '',
+                isFeatured: false, tags: '', weight: '', brand: '', productDisclaimer: '', packagingCharge: '',
                 mainImage: null, galleryImages: [],
                 applyCommission: false,
                 adminCommission: '',
@@ -1414,6 +1417,20 @@ const ProductManagement = () => {
                                                     />
                                                     <span className="text-[10px] text-slate-400 font-medium ml-1">Overrides the seller's store/category packaging charge for this product only.</span>
                                                 </div>
+                                            </div>
+
+                                            <div className="space-y-1.5 flex flex-col">
+                                                <div className="flex items-baseline justify-between">
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Product Disclaimer (optional)</label>
+                                                    <span className="text-[10px] font-bold text-slate-400">{(formData.productDisclaimer || '').length}/1000</span>
+                                                </div>
+                                                <textarea
+                                                    value={formData.productDisclaimer || ''}
+                                                    maxLength={1000}
+                                                    onChange={(e) => setFormData({ ...formData, productDisclaimer: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-sm font-semibold min-h-[80px] outline-none ring-primary/5 focus:ring-2"
+                                                    placeholder="Shown to customers at the end of checkout when this product is in their cart."
+                                                />
                                             </div>
 
                                             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">

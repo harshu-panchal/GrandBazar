@@ -11,7 +11,7 @@ import {
 } from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
-  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight isCurrentlyAvailable isPublished isHidden";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight productDisclaimer isCurrentlyAvailable isPublished isHidden";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",

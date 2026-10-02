@@ -545,7 +545,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -743,6 +743,191 @@ export const getSimilarProductsController = async (req, res) => {
   }
 };
 
+/**
+ * Other sellers offering the same product (by shared catalogProductId).
+ * Powers the "Compare prices" section on the customer product page.
+ * A product without a catalogProductId (seller-original, never sourced
+ * from the shared catalog) is unique by definition — returns an empty
+ * list rather than guessing by name / slug (which would surface false
+ * matches).
+ */
+export const getOtherSellersForProductController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const enforceRadius = isCustomerVisibilityRequest(req);
+
+    const current = await Product.findById(id)
+      .select("catalogProductId sellerId name subcategoryId categoryId")
+      .lean();
+    if (!current) return handleResponse(res, 404, "Product not found");
+
+    let sellerFilter = null;
+    if (enforceRadius) {
+      const coords = parseCustomerCoordinates(req.query || {});
+      if (!coords.valid) {
+        return handleResponse(res, 400, "lat and lng are required for customer product visibility");
+      }
+      const nearbySellerIds = await getNearbySellerIdsForCustomer(coords.lat, coords.lng);
+      if (!nearbySellerIds.length) {
+        return handleResponse(res, 200, "Other sellers fetched", { items: [] });
+      }
+      sellerFilter = { $in: nearbySellerIds };
+    }
+
+    const baseVisibility = {
+      _id: { $ne: id },
+      status: "active",
+      isPublished: { $ne: false },
+      stock: { $gt: 0 },
+      ...getApprovedOrLegacyFilter(),
+      ...(sellerFilter ? { sellerId: sellerFilter } : {}),
+    };
+
+    // Primary match: shared catalogProductId — canonical "same product"
+    // identity when sellers onboard from the shared catalog.
+    let items = [];
+    if (current.catalogProductId) {
+      items = await Product.find({
+        ...baseVisibility,
+        catalogProductId: current.catalogProductId,
+      })
+        .select(SIMILAR_PRODUCT_FIELDS)
+        .populate("sellerId", "shopName city avgRating location")
+        .sort({ customerSalePrice: 1, salePrice: 1 })
+        .limit(limit)
+        .lean();
+    }
+
+    // Fallback for products created independently by sellers (never
+    // sourced from the shared catalog and thus no catalogProductId):
+    // match by identical name (case-insensitive, trimmed) within the
+    // same subcategory to avoid false positives across unrelated
+    // categories. Excludes items already matched above.
+    if (items.length < limit && current.name) {
+      const alreadyMatched = new Set(items.map((p) => String(p._id)));
+      const escapedName = String(current.name)
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const nameMatchQuery = {
+        ...baseVisibility,
+        _id: { $nin: [id, ...alreadyMatched].map((v) => v) },
+        name: { $regex: `^${escapedName}$`, $options: "i" },
+      };
+      if (current.subcategoryId) {
+        nameMatchQuery.subcategoryId = current.subcategoryId;
+      } else if (current.categoryId) {
+        nameMatchQuery.categoryId = current.categoryId;
+      }
+      const more = await Product.find(nameMatchQuery)
+        .select(SIMILAR_PRODUCT_FIELDS)
+        .populate("sellerId", "shopName city avgRating location")
+        .sort({ customerSalePrice: 1, salePrice: 1 })
+        .limit(limit - items.length)
+        .lean();
+      items = items.concat(more);
+    }
+
+    return handleResponse(res, 200, "Other sellers fetched", { items });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/**
+ * Bulk stock-availability probe. Takes a list of cart lines and returns
+ * which ones cannot currently be fulfilled — cheap enough (single Product
+ * query) to run right before the customer confirms placing an order,
+ * so we surface stock issues in the client toast instead of letting the
+ * placement service throw mid-transaction.
+ *
+ * Body: { items: [{ productId, variantSku, quantity }] }
+ * Response: { ok, unavailable: [{ productId, name, requested, available, reason }] }
+ */
+export const checkProductStockController = async (req, res) => {
+  try {
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const normalized = rawItems
+      .map((it) => ({
+        productId: String(it?.productId || it?.product || it?.id || "").trim(),
+        variantSku: String(it?.variantSku || it?.variantSlot || "").trim(),
+        quantity: Math.max(1, Number(it?.quantity || 1)),
+      }))
+      .filter((it) => it.productId);
+
+    if (normalized.length === 0) {
+      return handleResponse(res, 400, "items array is required");
+    }
+
+    const productIds = Array.from(new Set(normalized.map((it) => it.productId)));
+    const products = await Product.find({ _id: { $in: productIds } })
+      .select("name stock status isPublished variants")
+      .lean();
+    const byId = new Map(products.map((p) => [String(p._id), p]));
+
+    const unavailable = [];
+    for (const item of normalized) {
+      const product = byId.get(item.productId);
+      if (!product) {
+        unavailable.push({
+          productId: item.productId,
+          name: "Unknown product",
+          requested: item.quantity,
+          available: 0,
+          reason: "not_found",
+        });
+        continue;
+      }
+      if (product.status !== "active" || product.isPublished === false) {
+        unavailable.push({
+          productId: item.productId,
+          name: product.name,
+          requested: item.quantity,
+          available: 0,
+          reason: "inactive",
+        });
+        continue;
+      }
+
+      let available = Number(product.stock || 0);
+      if (item.variantSku && Array.isArray(product.variants)) {
+        const variant = product.variants.find(
+          (v) => String(v.sku || "").trim() === item.variantSku ||
+            String(v.name || "").trim() === item.variantSku,
+        );
+        if (!variant) {
+          unavailable.push({
+            productId: item.productId,
+            name: product.name,
+            requested: item.quantity,
+            available: 0,
+            reason: "variant_not_found",
+          });
+          continue;
+        }
+        available = Number(variant.stock || 0);
+      }
+
+      if (available < item.quantity) {
+        unavailable.push({
+          productId: item.productId,
+          name: product.name,
+          requested: item.quantity,
+          available,
+          reason: available <= 0 ? "out_of_stock" : "insufficient_stock",
+        });
+      }
+    }
+
+    return handleResponse(res, 200, "Stock checked", {
+      ok: unavailable.length === 0,
+      unavailable,
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 /* ===============================
    GET SELLER PRODUCTS
 ================================ */
@@ -803,7 +988,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -1092,6 +1277,12 @@ export const createProduct = async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(productData, "packagingCharge")) {
       productData.packagingCharge = normalizeOptionalNonNegativeNumber(productData.packagingCharge);
     }
+    if (Object.prototype.hasOwnProperty.call(productData, "productDisclaimer")) {
+      productData.productDisclaimer = String(productData.productDisclaimer ?? "").trim();
+      if (productData.productDisclaimer.length > 1000) {
+        return handleResponse(res, 400, "Product disclaimer must be 1000 characters or fewer");
+      }
+    }
 
     if (role === "admin" || role === "superadmin") {
       Object.assign(productData, normalizeProductCommissionFields(productData));
@@ -1351,6 +1542,12 @@ export const updateProduct = async (req, res) => {
     }
     if (Object.prototype.hasOwnProperty.call(productData, "packagingCharge")) {
       productData.packagingCharge = normalizeOptionalNonNegativeNumber(productData.packagingCharge);
+    }
+    if (Object.prototype.hasOwnProperty.call(productData, "productDisclaimer")) {
+      productData.productDisclaimer = String(productData.productDisclaimer ?? "").trim();
+      if (productData.productDisclaimer.length > 1000) {
+        return handleResponse(res, 400, "Product disclaimer must be 1000 characters or fewer");
+      }
     }
 
     if (role === "admin" || role === "superadmin") {
@@ -1688,7 +1885,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

@@ -11,7 +11,13 @@ import { consumeCouponUsageAtomic } from "./couponUsageService.js";
 import { markGrantRedeemedForCoupon } from "../modules/rewards/services/couponService.js";
 import { applyWalletSpendToGrants } from "../modules/rewards/services/cashbackService.js";
 import { DEFAULT_WALLET_REDEMPTION } from "../modules/rewards/reward.constants.js";
-import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS, FULFILLMENT_TYPE } from "../constants/orderWorkflow.js";
+import {
+  WORKFLOW_STATUS,
+  DEFAULT_SELLER_TIMEOUT_MS,
+  FULFILLMENT_TYPE,
+  SELLER_ACCEPT_DEADLINE_MS,
+  SELLER_REMINDER_INTERVAL_MS,
+} from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
 import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
 import {
@@ -627,6 +633,7 @@ function httpError(message, statusCode = 400) {
       discountTotal: resolvedDiscountTotal,
       freeDelivery: resolvedFreeDelivery,
       session,
+      paymentMethod: paymentMode,
       fulfillmentMethod: normalizedPayload.fulfillmentMethod || null,
       fulfillmentMethodBySeller: await resolveFulfillmentMethodsForCheckout({
         orderItems: orderItemsInput,
@@ -739,13 +746,25 @@ function httpError(message, statusCode = 400) {
       const sellerPendingUntil =
         initialWorkflow === WORKFLOW_STATUS.SELLER_PENDING
           ? fulfillmentType === FULFILLMENT_TYPE.INSTANT
-            ? new Date(Date.now() + sellerTimeoutMs)
+            ? new Date(Date.now() + SELLER_REMINDER_INTERVAL_MS())
             : computeSellerPendingExpiry(
                 { fulfillmentType, schedule: scheduleFields },
                 new Date(),
               )
           : null;
-      const orderExpiresAt = orderReservation.expiresAt || sellerPendingUntil || null;
+      // Absolute cutoff, 24 h after placement (configurable). The
+      // reminder loop reads this to know when to stop pinging the
+      // seller and auto-cancel.
+      const sellerAcceptDeadline =
+        initialWorkflow === WORKFLOW_STATUS.SELLER_PENDING
+          ? new Date(Date.now() + SELLER_ACCEPT_DEADLINE_MS())
+          : null;
+      // NOTE: we deliberately do NOT combine sellerPendingUntil into
+      // `expiresAt` any more. That top-level field previously had a
+      // TTL index that physically deleted the order once it passed —
+      // exactly what broke past customer orders. Stick to the stock
+      // reservation window only.
+      const orderExpiresAt = orderReservation.expiresAt || null;
 
       const sellerLowStockAlerts = await reserveStockForItems({
         items: entry.items,
@@ -811,6 +830,7 @@ function httpError(message, statusCode = 400) {
         workflowVersion: 2,
         workflowStatus: initialWorkflow,
         sellerPendingExpiresAt: sellerPendingUntil,
+        sellerAcceptDeadline,
         expiresAt: orderExpiresAt,
         stockReservation: orderReservation,
         checkoutGroupId,

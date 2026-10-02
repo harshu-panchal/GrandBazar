@@ -37,6 +37,31 @@ export const adminApi = {
     getCityCommission: (cityKey) => axiosInstance.get(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`),
     upsertCityCommission: (cityKey, data) =>
         axiosInstance.put(`/admin/commissions/cities/${encodeURIComponent(cityKey)}`, data),
+
+    // City-wise billing (delivery / weather / extra charges) — separate
+    // from the city-commission endpoints above; both share cityKey identity.
+    listCityBillingConfigs: (params) => axiosInstance.get('/admin/billing/cities', { params }),
+    getCityBillingConfig: (cityKey) =>
+        axiosInstance.get(`/admin/billing/cities/${encodeURIComponent(cityKey)}`),
+    upsertCityBillingConfig: (cityKey, data) =>
+        axiosInstance.put(`/admin/billing/cities/${encodeURIComponent(cityKey)}`, data),
+    setCityBillingStatus: (cityKey, data) =>
+        axiosInstance.patch(`/admin/billing/cities/${encodeURIComponent(cityKey)}/status`, data),
+    deleteCityBillingConfig: (cityKey) =>
+        axiosInstance.delete(`/admin/billing/cities/${encodeURIComponent(cityKey)}`),
+    duplicateCityBillingConfig: (cityKey, data) =>
+        axiosInstance.post(`/admin/billing/cities/${encodeURIComponent(cityKey)}/duplicate`, data),
+    activateCityWeatherCharge: (cityKey, data) =>
+        axiosInstance.post(`/admin/billing/cities/${encodeURIComponent(cityKey)}/weather/activate`, data),
+    deactivateCityWeatherCharge: (cityKey) =>
+        axiosInstance.post(`/admin/billing/cities/${encodeURIComponent(cityKey)}/weather/deactivate`),
+    addCityExtraCharge: (cityKey, data) =>
+        axiosInstance.post(`/admin/billing/cities/${encodeURIComponent(cityKey)}/extra-charges`, data),
+    updateCityExtraCharge: (cityKey, chargeId, data) =>
+        axiosInstance.put(`/admin/billing/cities/${encodeURIComponent(cityKey)}/extra-charges/${chargeId}`, data),
+    deleteCityExtraCharge: (cityKey, chargeId) =>
+        axiosInstance.delete(`/admin/billing/cities/${encodeURIComponent(cityKey)}/extra-charges/${chargeId}`),
+    previewCityBilling: (data) => axiosInstance.post('/admin/billing/preview', data),
     getModelSwitchRequests: (params) => axiosInstance.get('/admin/sellers/model-switch-requests', { params }),
     approveModelSwitch: (id) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/approve`),
     rejectModelSwitch: (id, data) => axiosInstance.patch(`/admin/sellers/${id}/model-switch/reject`, data),

@@ -33,6 +33,16 @@ export const DEFAULT_SELLER_TIMEOUT_MS = () =>
 export const DEFAULT_SCHEDULED_SELLER_TIMEOUT_MS = () =>
   parseInt(process.env.SCHEDULED_SELLER_TIMEOUT_MS || String(24 * 60 * 60 * 1000), 10);
 
+// Reminder cadence + absolute deadline for the seller-accept loop.
+// Every SELLER_REMINDER_INTERVAL_MS the timeout job re-fires: while
+// the order is still pending it sends a fresh notification/socket
+// popup; once the absolute deadline is reached it auto-cancels.
+export const SELLER_REMINDER_INTERVAL_MS = () =>
+  parseInt(process.env.SELLER_REMINDER_INTERVAL_MS || String(5 * 60 * 1000), 10);
+
+export const SELLER_ACCEPT_DEADLINE_MS = () =>
+  parseInt(process.env.SELLER_ACCEPT_DEADLINE_MS || String(24 * 60 * 60 * 1000), 10);
+
 export const DEFAULT_DELIVERY_TIMEOUT_MS = () =>
   parseInt(process.env.DELIVERY_TIMEOUT_MS || "60000", 10);
 

@@ -28,6 +28,7 @@ import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUt
 import { BulkRatesModal, EditableCell, parsePercent } from "../components/RateControls";
 
 const WEIGHT_UNITS = ["kg", "gm", "pack", "lit", "ml", "box"];
+const PRODUCT_DISCLAIMER_MAX = 1000;
 
 const parseWeightField = (raw = "") => {
   const text = String(raw || "").trim();
@@ -94,6 +95,7 @@ const CatalogManagement = () => {
     name: "",
     description: "",
     brand: "",
+    productDisclaimer: "",
     weightValue: "",
     weightUnit: "kg",
     tags: "",
@@ -414,6 +416,7 @@ const CatalogManagement = () => {
           name: r.name.trim(),
           description: r.description.trim(),
           brand: r.brand.trim(),
+          productDisclaimer: (r.productDisclaimer || "").trim(),
           weight: formatWeightField(r.weightValue, r.weightUnit),
           tags: r.tags.split(",").map(t => t.trim()).filter(Boolean),
           mainImage: r.mainImage,
@@ -451,6 +454,7 @@ const CatalogManagement = () => {
         name: item.name || "",
         description: item.description || "",
         brand: item.brand || "",
+        productDisclaimer: item.productDisclaimer || "",
         weightValue: parsedWeight.weightValue,
         weightUnit: parsedWeight.weightUnit,
         tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
@@ -472,6 +476,7 @@ const CatalogManagement = () => {
         name: "",
         description: "",
         brand: "",
+        productDisclaimer: "",
         weightValue: "",
         weightUnit: "kg",
         tags: "",
@@ -875,6 +880,20 @@ const CatalogManagement = () => {
                       />
                     </div>
 
+                    <div className="space-y-2 flex flex-col">
+                      <div className="flex items-baseline justify-between">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Product Disclaimer (optional)</label>
+                        <span className="text-[10px] font-bold text-slate-400">{formData.productDisclaimer.length}/{PRODUCT_DISCLAIMER_MAX}</span>
+                      </div>
+                      <textarea
+                        value={formData.productDisclaimer}
+                        maxLength={PRODUCT_DISCLAIMER_MAX}
+                        onChange={(e) => setFormData({ ...formData, productDisclaimer: e.target.value })}
+                        className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-sm font-semibold min-h-[80px] outline-none focus:ring-2 focus:ring-black/5"
+                        placeholder="Shown to customers at the end of checkout when this product is in their cart."
+                      />
+                    </div>
+
                     {/* Categories dropdowns */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-2 flex flex-col">
@@ -1091,7 +1110,7 @@ const CatalogManagement = () => {
                           className="h-4 w-4 rounded border-brand-300 text-black focus:ring-black"
                         />
                         <label htmlFor="syncToSellers" className="text-xs font-bold text-brand-700 cursor-pointer">
-                          Sync catalog/display updates (name, images, category, etc.) to all active seller product listings linked to this catalog item.
+                          Sync catalog/display updates (name, images, category, product disclaimer, etc.) to all active seller product listings linked to this catalog item.
                           <span className="block font-normal text-brand-500 mt-1">Commission changes always sync automatically, regardless of this checkbox.</span>
                         </label>
                       </div>
@@ -1155,6 +1174,17 @@ const CatalogManagement = () => {
                                 onChange={(e) => updateBulkRowField(row.id, "description", e.target.value)}
                                 className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold min-h-[60px] max-h-[120px] outline-none resize-y"
                                 placeholder="Write description..."
+                              />
+                            </div>
+
+                            <div className="flex flex-col space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Disclaimer (optional)</label>
+                              <textarea
+                                value={row.productDisclaimer || ""}
+                                maxLength={PRODUCT_DISCLAIMER_MAX}
+                                onChange={(e) => updateBulkRowField(row.id, "productDisclaimer", e.target.value)}
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold min-h-[48px] max-h-[100px] outline-none resize-y"
+                                placeholder="Shown at the end of checkout when this product is in the cart"
                               />
                             </div>
 

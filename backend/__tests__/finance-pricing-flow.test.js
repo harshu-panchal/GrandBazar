@@ -273,7 +273,11 @@ describe("finance pricing flow", () => {
     expect(breakdown.lineItems[0].appliedCommissionValue).toBe(20);
   });
 
-  it("resolves effective commission with bottom-up fallback order", () => {
+  it("shop-level commission is a hard override when applyCommission is on", () => {
+    // Admin behavior: activating commission on a shop means that shop's
+    // rate wins for every product from it, no matter what product /
+    // addon / subcategory / city / category / header are set to. See
+    // shop-commission-hard-override.test.js for the full matrix.
     const result = resolveEffectiveCommissionForLineItem({
       addonProduct: {
         _id: "addon-1",
@@ -306,8 +310,8 @@ describe("finance pricing flow", () => {
         adminCommissionValue: 4,
       },
     });
-    expect(result.level).toBe("addon");
-    expect(result.categoryId).toBe("addon-1");
+    expect(result.level).toBe("shop");
+    expect(result.categoryId).toBe("shop-1");
   });
 
   it("falls back to city when deeper levels are disabled or zero", () => {

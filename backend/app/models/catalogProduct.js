@@ -29,6 +29,15 @@ const catalogProductSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    // Optional admin-authored notice shown at the end of checkout when a product
+    // claimed from this catalogue item is in the cart. Copied onto the seller's
+    // Product at claim time.
+    productDisclaimer: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 1000,
+    },
     tags: [{
       type: String,
       trim: true,

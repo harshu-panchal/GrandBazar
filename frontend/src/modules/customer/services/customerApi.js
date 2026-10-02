@@ -27,6 +27,8 @@ export const customerApi = {
   getTrendingProducts: (limit = 10) => getWithDedupe("/products/trending", { limit }),
   getProductById: (id, params) => getWithDedupe(`/products/${id}`, params),
   getSimilarProducts: (id, params) => getWithDedupe(`/products/${id}/similar`, params),
+  getOtherSellersForProduct: (id, params) => getWithDedupe(`/products/${id}/other-sellers`, params),
+  checkProductStock: (items) => axiosInstance.post(`/products/check-stock`, { items }),
 
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),

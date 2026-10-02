@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
-import { getOrderSocket, onSellerOrderNew, onReturnDropOtp, onOrderStatusUpdate, onSellerReturnRequested } from '@/core/services/orderSocket';
+import { getOrderSocket, onSellerOrderNew, onSellerOrderReminder, onReturnDropOtp, onOrderStatusUpdate, onSellerReturnRequested } from '@/core/services/orderSocket';
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 import orderAlertSound from '@/assets/sounds/order_alert.mp3';
 
@@ -453,6 +453,14 @@ const DashboardLayout = ({ children, navItems, title }) => {
             if (fetchOrdersRef.current) fetchOrdersRef.current();
         });
 
+        // Reminder loop: while an order stays in SELLER_PENDING the backend
+        // re-emits every ~5 min. Re-open the accept popup (unless it is
+        // already open for the same order) and re-trigger the ringtone.
+        const unsubscribeSellerReminder = onSellerOrderReminder(getToken, (payload) => {
+            console.log("[DashboardLayout] Received order:reminder:", payload);
+            handleIncomingOrder(payload);
+        });
+
         const unsubscribeOrderStatus = onOrderStatusUpdate(getToken, (payload) => {
             if (payload?.orderId && (payload?.itemAdditionRequested || payload?.workflowStatus === 'SELLER_PENDING')) {
                 handleIncomingOrder(payload);
@@ -485,6 +493,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
         return () => {
             unsubscribeSellerNew();
+            unsubscribeSellerReminder();
             unsubscribeOrderStatus();
             unsubscribeDrop();
             unsubscribeReturn();

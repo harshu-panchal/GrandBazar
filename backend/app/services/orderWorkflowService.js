@@ -11,6 +11,8 @@ import {
   DEFAULT_SELLER_TIMEOUT_MS,
   DEFAULT_DELIVERY_TIMEOUT_MS,
   FULFILLMENT_TYPE,
+  SELLER_REMINDER_INTERVAL_MS,
+  SELLER_ACCEPT_DEADLINE_MS,
 } from "../constants/orderWorkflow.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
 import {
@@ -46,6 +48,25 @@ import { markOrderReadyForCustomerPickup } from "./customerPickupService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
+
+/**
+ * True when the absolute 24 h seller-accept cutoff has passed. Reads
+ * `sellerAcceptDeadline` first; falls back to `createdAt +
+ * SELLER_ACCEPT_DEADLINE_MS` for orders that predate the field.
+ *
+ * IMPORTANT — do NOT use `sellerPendingExpiresAt` for this check; that
+ * field is now the rolling reminder timestamp (~5 min in the future)
+ * and would auto-cancel between reminders.
+ */
+function sellerAcceptDeadlinePassed(order, now = new Date()) {
+  const deadline = order?.sellerAcceptDeadline
+    ? new Date(order.sellerAcceptDeadline)
+    : new Date(
+        (order?.createdAt ? new Date(order.createdAt).getTime() : Date.now()) +
+          SELLER_ACCEPT_DEADLINE_MS(),
+      );
+  return deadline <= now;
+}
 
 const DELIVERY_RADIUS_MULTIPLIER = () =>
   parseFloat(process.env.DELIVERY_RADIUS_MULTIPLIER || "1.5");
@@ -339,15 +360,25 @@ export async function afterPlaceOrderV2(orderDoc) {
 const BULL_ADD_TIMEOUT_MS = () =>
   parseInt(process.env.BULL_ADD_TIMEOUT_MS || "10000", 10);
 
-export async function scheduleSellerTimeoutJob(orderId) {
-  const delay = DEFAULT_SELLER_TIMEOUT_MS();
+export async function scheduleSellerTimeoutJob(orderId, delayOverrideMs = null) {
+  // First scheduling uses the reminder cadence (5 min default) so the
+  // first ping to the seller fires 5 min after placement. Subsequent
+  // reprises pass their own delay. Callers keep passing no args for
+  // backward-compat.
+  const delay =
+    Number.isFinite(delayOverrideMs) && delayOverrideMs > 0
+      ? delayOverrideMs
+      : SELLER_REMINDER_INTERVAL_MS();
+  // Unique per-attempt job id so a reminder scheduled from within a job
+  // handler does not collide with the just-completing job id in Bull.
+  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const addPromise = sellerTimeoutQueue
     .add(
       JOB_NAMES.SELLER_TIMEOUT,
       { orderId },
       {
         delay,
-        jobId: `order:${orderId}:seller`,
+        jobId: `order:${orderId}:seller:${uniqueSuffix}`,
         removeOnComplete: true,
       },
     )
@@ -373,8 +404,22 @@ export async function scheduleSellerTimeoutJob(orderId) {
 export async function removeSellerTimeoutJob(orderId) {
   const timeoutMs = BULL_ADD_TIMEOUT_MS();
   const work = (async () => {
-    const job = await sellerTimeoutQueue.getJob(`order:${orderId}:seller`);
-    if (job) await job.remove();
+    // Legacy id (still used by older orders queued before the reminder
+    // loop) plus any new per-attempt ids for this order.
+    const legacy = await sellerTimeoutQueue.getJob(`order:${orderId}:seller`);
+    if (legacy) await legacy.remove();
+
+    // Bull doesn't expose a prefix-lookup, so iterate the delayed set.
+    const delayed = await sellerTimeoutQueue.getDelayed(0, 5000);
+    for (const job of delayed) {
+      if (job?.data?.orderId === orderId) {
+        try {
+          await job.remove();
+        } catch (e) {
+          console.warn("[removeSellerTimeoutJob] one job remove failed", orderId, e.message);
+        }
+      }
+    }
   })().catch((err) => {
     console.warn("[removeSellerTimeoutJob] get/remove failed", orderId, err.message);
   });
@@ -515,8 +560,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
       if (
         rawOrder &&
         rawOrder.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING &&
-        rawOrder.sellerPendingExpiresAt &&
-        rawOrder.sellerPendingExpiresAt <= now
+        sellerAcceptDeadlinePassed(rawOrder, now)
       ) {
         const cancelled = await Order.findOneAndUpdate(
           {
@@ -660,8 +704,7 @@ export async function sellerAcceptAtomic(sellerId, orderId) {
     if (
       rawOrder &&
       rawOrder.workflowStatus === WORKFLOW_STATUS.SELLER_PENDING &&
-      rawOrder.sellerPendingExpiresAt &&
-      rawOrder.sellerPendingExpiresAt <= now
+      sellerAcceptDeadlinePassed(rawOrder, now)
     ) {
       const cancelled = await Order.findOneAndUpdate(
         {
@@ -1455,58 +1498,82 @@ export async function processSellerTimeoutJob({ orderId }) {
     orderId,
     workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
   });
+  // Order was accepted, cancelled by the seller, or manually cancelled
+  // by the customer since the job was scheduled — loop ends here.
   if (!order) return;
 
-  if (order.sellerPendingExpiresAt && order.sellerPendingExpiresAt > now) {
-    return; // Not expired yet — scheduler fired early
-  }
+  // Resolve the absolute cutoff. Older orders placed before this field
+  // existed default to 24 h after their creation.
+  const acceptDeadline =
+    order.sellerAcceptDeadline ||
+    new Date(
+      (order.createdAt?.getTime?.() ?? Date.now()) +
+        SELLER_ACCEPT_DEADLINE_MS(),
+    );
 
-  // --- Bug #276 two-phase timeout ---
-  // Phase 1: First timeout fires → warn seller, extend deadline by 10 minutes.
-  //          Customer sees "Waiting for seller" — NOT "Order Not Found".
-  // Phase 2: Second timeout fires (after grace) → cancel with user-friendly message.
+  // Still within the acceptance window → send a reminder and requeue
+  // another reminder N minutes out. This is the loop the customer asked
+  // for: every 5 min the seller gets pinged again until they act or the
+  // 24 h absolute deadline is reached.
+  if (now < acceptDeadline) {
+    const nextInterval = SELLER_REMINDER_INTERVAL_MS();
+    const msLeft = acceptDeadline.getTime() - now.getTime();
+    const delayMs = Math.min(nextInterval, Math.max(1000, msLeft));
 
-  const GRACE_MS = parseInt(process.env.SELLER_GRACE_MS || "600000", 10); // 10 min default
-
-  if (!order.sellerTimeoutWarningSent) {
-    // Phase 1 — extend and notify
-    const graceExpiry = new Date(now.getTime() + GRACE_MS);
-    const warned = await Order.findOneAndUpdate(
+    const bumped = await Order.findOneAndUpdate(
       {
         orderId,
         workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
-        sellerTimeoutWarningSent: { $ne: true },
       },
       {
         $set: {
-          sellerPendingExpiresAt: graceExpiry,
-          sellerTimeoutWarningSent: true,
+          lastSellerReminderAt: now,
+          sellerPendingExpiresAt: new Date(now.getTime() + delayMs),
         },
+        $inc: { sellerReminderCount: 1 },
       },
       { new: true },
     );
-    if (!warned) return; // another instance already handled this
+    if (!bumped) return; // state changed under us (accept/cancel raced)
 
-    // Re-schedule a new timeout job for the grace period
     try {
-      await scheduleSellerTimeoutJob(orderId, GRACE_MS);
+      await scheduleSellerTimeoutJob(orderId, delayMs);
     } catch (e) {
-      console.warn("[processSellerTimeoutJob] re-schedule grace failed", orderId, e.message);
+      console.warn(
+        "[processSellerTimeoutJob] reminder reschedule failed",
+        orderId,
+        e.message,
+      );
     }
 
-    // Notify seller with urgency
+    const minutesLeft = Math.max(1, Math.round(msLeft / 60000));
     emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
-      orderId: warned.orderId,
-      customerId: warned.customer,
-      userId: warned.customer,
-      sellerId: warned.seller,
+      orderId: bumped.orderId,
+      customerId: bumped.customer,
+      userId: bumped.customer,
+      sellerId: bumped.seller,
       customerMessage: "Your seller is reviewing the order. Please wait a moment.",
-      sellerMessage: `⚠️ Order #${warned.orderId} needs your attention — accept within 10 minutes or it will be auto-cancelled.`,
+      sellerMessage: `⚠️ Order #${bumped.orderId} still needs your attention — accept within ${minutesLeft} min or it will be auto-cancelled.`,
     });
+    // Also emit a socket event so the seller's dashboard can re-open
+    // the accept-order popup even if a notification was dismissed.
+    try {
+      emitToSeller(bumped.seller, {
+        event: "order:reminder",
+        payload: {
+          orderId: bumped.orderId,
+          reminderCount: bumped.sellerReminderCount,
+          minutesLeft,
+          acceptDeadline,
+        },
+      });
+    } catch (e) {
+      console.warn("[processSellerTimeoutJob] emitToSeller failed", orderId, e.message);
+    }
     return;
   }
 
-  // Phase 2 — grace period also expired, cancel for real
+  // Absolute deadline reached — cancel the order for real.
   const updated = await Order.findOneAndUpdate(
     {
       orderId,

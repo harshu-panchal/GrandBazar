@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { adminApi } from '../services/adminApi';
+import CityBillingSection from '../components/CityBillingSection';
 
 const SURCHARGE_REASON_PRESETS = [
     'Weather conditions',
@@ -350,6 +351,11 @@ const BillingCharges = () => {
             <div className="max-w-4xl mx-auto text-left">
                 {/* Main Configuration Core */}
                 <div className="space-y-8">
+                    {/* City-wise billing overrides (delivery / weather / extras).
+                        Applies on top of the global sections below; cities without
+                        a config fall back to the global defaults. */}
+                    <CityBillingSection />
+
                     {/* General Financial Thresholds */}
                     <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-[32px] overflow-hidden">
                         <div className="p-6 border-b border-slate-50 bg-slate-50/30">

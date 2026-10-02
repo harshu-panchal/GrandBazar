@@ -157,11 +157,33 @@ export function resolveEffectiveCommissionForLineItem({
   level2Category = null,
   headerCategory = null,
 } = {}) {
+  // Shop-level hard override: when the admin has explicitly turned
+  // `applyCommission` on for a store with a non-zero rate, that rate
+  // wins for every product from that store — regardless of what the
+  // product, subcategory, city, category or header have configured.
+  // This matches the admin expectation "if I set a rate on the shop,
+  // that IS the rate for that shop's products."
+  const normalizedShop = normalizeCommissionEntity(shopCommission);
+  if (
+    normalizedShop &&
+    normalizedShop.enabled !== false &&
+    normalizedShop.applyCommission === true &&
+    Number(normalizedShop.adminCommissionValue) > 0
+  ) {
+    return {
+      category: normalizedShop,
+      level: "shop",
+      categoryId: normalizedShop._id ? String(normalizedShop._id) : null,
+      cityKey: null,
+      fallbackTrail: [{ level: "shop", reason: "hard_override" }],
+    };
+  }
+
   const chain = [
     { level: "addon", category: normalizeCommissionEntity(addonProduct) },
     { level: "product", category: normalizeCommissionEntity(productCategory) },
     { level: "subcategory", category: normalizeCommissionEntity(subcategory) },
-    { level: "shop", category: normalizeCommissionEntity(shopCommission) },
+    { level: "shop", category: normalizedShop },
     { level: "city", category: normalizeCommissionEntity(cityCommission) },
     // Admin-configured category defaults — last resort, after every
     // seller/product/city-specific override, so a header/category-level

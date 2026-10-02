@@ -119,6 +119,11 @@ const AddressesPage = () => {
         setPinnedLocation({ lat: loc.lat, lng: loc.lng });
         setAddForm((f) => ({
             ...f,
+            // MapPicker returns the reverse-geocoded formatted address; use it
+            // to populate the Address line whenever the customer hasn't typed
+            // one yet, so a map-only flow doesn't fail the "Please enter the
+            // address" validation on save.
+            address: f.address?.trim() ? f.address : loc.address || '',
             city: f.city || loc.city || loc.locality || '',
             state: f.state || loc.state || '',
             pincode: f.pincode || loc.pincode || '',
