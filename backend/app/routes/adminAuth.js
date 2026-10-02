@@ -82,6 +82,12 @@ import {
      terminateSession
  } from "../controller/adminController.js";
 import {
+    listAdminRoles,
+    createAdminRole,
+    updateAdminRole,
+    deleteAdminRole,
+} from "../controller/admin/roleController.js";
+import {
     adjustPayoutController,
     exportAdminFinanceStatementController,
     getAdminBulkSettlementsController,
@@ -318,6 +324,13 @@ router.get("/staff", verifyToken, allowSuperAdminOnly, getStaff);
 router.post("/staff", verifyToken, allowSuperAdminOnly, createStaff);
 router.put("/staff/:id", verifyToken, allowSuperAdminOnly, updateStaff);
 router.delete("/staff/:id", verifyToken, allowSuperAdminOnly, deleteStaff);
+
+// Custom Role Management (admin can define multiple roles with their own
+// permission matrices; staff accounts are then assigned to one of them).
+router.get("/roles", verifyToken, allowSuperAdminOnly, listAdminRoles);
+router.post("/roles", verifyToken, allowSuperAdminOnly, createAdminRole);
+router.put("/roles/:id", verifyToken, allowSuperAdminOnly, updateAdminRole);
+router.delete("/roles/:id", verifyToken, allowSuperAdminOnly, deleteAdminRole);
 
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);

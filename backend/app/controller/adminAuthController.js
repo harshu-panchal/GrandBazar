@@ -28,7 +28,10 @@ function sanitizeAdmin(adminDoc) {
 
 const generateToken = (admin) =>
   jwt.sign(
-    { id: admin._id, role: admin.role || "admin" },
+    // `scope: "admin"` identifies this JWT as issued by the admin portal
+    // regardless of the (now dynamic) role name. Middleware uses it to grant
+    // admin-area access to any custom role we haven't seen before.
+    { id: admin._id, role: admin.role || "admin", scope: "admin" },
     process.env.JWT_SECRET,
     { expiresIn: "7d" },
   );

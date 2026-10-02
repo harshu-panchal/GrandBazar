@@ -30,10 +30,21 @@ const adminSchema = new mongoose.Schema(
       select: false,
     },
 
+    // Role is a free-form string so admins can define custom staff roles at
+    // runtime. "admin" and "superadmin" remain reserved for root-level
+    // accounts; anything else is a custom staff role whose capabilities are
+    // governed by allowedPermissions (optionally inherited from customRoleId).
     role: {
       type: String,
-      enum: ["admin", "superadmin", "accountant", "assistant"],
+      required: true,
+      trim: true,
+      lowercase: true,
       default: "admin",
+    },
+    customRoleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AdminRole",
+      default: null,
     },
     allowedPermissions: {
       type: [String],

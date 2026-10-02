@@ -268,6 +268,12 @@ export const adminApi = {
     updateStaff: (id, data) => axiosInstance.put(`/admin/staff/${id}`, data),
     deleteStaff: (id) => axiosInstance.delete(`/admin/staff/${id}`),
 
+    // Custom Admin Roles
+    getAdminRoles: () => axiosInstance.get('/admin/roles'),
+    createAdminRole: (data) => axiosInstance.post('/admin/roles', data),
+    updateAdminRole: (id, data) => axiosInstance.put(`/admin/roles/${id}`, data),
+    deleteAdminRole: (id) => axiosInstance.delete(`/admin/roles/${id}`),
+
     // Active Sessions & Login Activity
     getLoginActivities: (params) => axiosInstance.get('/admin/login-activities', { params }),
     terminateSession: (id) => axiosInstance.delete(`/admin/login-activities/${id}`),

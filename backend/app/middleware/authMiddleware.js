@@ -160,6 +160,12 @@ export const allowRoles = (...roles) => {
     let authorizedRoles = [...roles];
     if (roles.includes("admin")) {
       authorizedRoles = [...authorizedRoles, "superadmin", "accountant", "assistant"];
+      // Any token minted by the admin login carries scope: "admin". That
+      // means custom staff roles added at runtime are accepted here without
+      // having to extend this list every time a new one is created.
+      if (req.user?.scope === "admin") {
+        return next();
+      }
     }
     if (!authorizedRoles.includes(req.user.role)) {
       return handleResponse(res, 403, "Access denied");
@@ -401,7 +407,9 @@ export const checkAdminPermission = (permission) => {
     if (req.user?.role === "admin" || req.user?.role === "superadmin") {
       return next();
     }
-    if (req.user?.role === "assistant") {
+    // Any admin-scoped token (custom staff roles included) must carry the
+    // requested permission on its allowedPermissions list.
+    if (req.user?.scope === "admin") {
       const allowed = req.user.allowedPermissions || [];
       if (allowed.includes(permission)) return next();
     }
