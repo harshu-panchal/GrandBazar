@@ -17,31 +17,177 @@ import {
   HiOutlinePlus,
   HiOutlineUserGroup,
   HiOutlineShieldCheck,
+  HiOutlineChevronDown,
+  HiOutlineChevronRight,
 } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  PERMISSION_TREE,
+  ALL_PERMISSION_KEYS,
+  getChildKeys,
+  normalizePermissions,
+} from '../constants/permissions';
 
-const PERMISSIONS_LIST = [
-  { key: 'dashboard', label: 'Dashboard', desc: 'Overview of platform statistics' },
-  { key: 'categories', label: 'Categories', desc: 'Create, update & structure categories' },
-  { key: 'products', label: 'Products', desc: 'Manage catalogue products & pricing' },
-  { key: 'marketing', label: 'Marketing Tools', desc: 'Banners, coupons, and push campaigns' },
-  { key: 'support', label: 'Customer Support', desc: 'Help tickets & review moderation' },
-  { key: 'sellers', label: 'Sellers', desc: 'Approve, reject & manage vendor store files' },
-  { key: 'delivery', label: 'Delivery Drivers', desc: 'Onboard riders, tracking, and cash collection' },
-  { key: 'wallet', label: 'Wallet', desc: 'Platform balances & commission ledgers' },
-  { key: 'withdrawals', label: 'Money Requests', desc: 'Approve seller/rider payouts' },
-  { key: 'seller_payments', label: 'Seller Payments', desc: 'Settle merchant accounts' },
-  { key: 'bulk_settlements', label: 'Bulk Settlements', desc: 'View wholesale/bulk-order settlement breakdowns' },
-  { key: 'cash_collection', label: 'Collect Cash', desc: 'Receive cash-on-delivery dues' },
-  { key: 'customers', label: 'Customers', desc: 'View end-user registry & logs' },
-  { key: 'faqs', label: 'FAQs', desc: 'Publish static FAQ lists' },
-  { key: 'orders', label: 'Orders', desc: 'Process live deliveries & return queues' },
-  { key: 'billing', label: 'Fees & Charges', desc: 'Define commissions & platform costs' },
-  { key: 'settings', label: 'Settings', desc: 'Global platform configuration' },
-  { key: 'system', label: 'System Settings', desc: 'Developer environment keys & config' },
-];
+// Shared tree picker rendered inside both the role modal (for a role's
+// default permissions) and the staff modal (per-staff overrides).
+const PermissionTreePicker = ({ selected, onChange }) => {
+  const [expanded, setExpanded] = React.useState(() => new Set());
+  const selectedSet = React.useMemo(() => new Set(selected || []), [selected]);
 
-const PERMISSION_KEYS = PERMISSIONS_LIST.map((p) => p.key);
+  const toggleExpand = (key) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const applyChange = (nextSet) => {
+    onChange(normalizePermissions(Array.from(nextSet)));
+  };
+
+  const toggleKey = (key) => {
+    const next = new Set(selectedSet);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    applyChange(next);
+  };
+
+  const toggleParentWithChildren = (node) => {
+    const next = new Set(selectedSet);
+    const childKeys = getChildKeys(node.key);
+    const parentOn = next.has(node.key);
+    const allChildrenOn = childKeys.every((k) => next.has(k));
+    const fullyOn = parentOn && (childKeys.length === 0 || allChildrenOn);
+    if (fullyOn) {
+      next.delete(node.key);
+      childKeys.forEach((k) => next.delete(k));
+    } else {
+      next.add(node.key);
+      childKeys.forEach((k) => next.add(k));
+    }
+    applyChange(next);
+  };
+
+  const nodeState = (node) => {
+    const childKeys = getChildKeys(node.key);
+    const parentOn = selectedSet.has(node.key);
+    const checkedChildren = childKeys.filter((k) => selectedSet.has(k)).length;
+    if (!childKeys.length) {
+      return { checked: parentOn, indeterminate: false };
+    }
+    if (parentOn && checkedChildren === childKeys.length) {
+      return { checked: true, indeterminate: false };
+    }
+    if (parentOn || checkedChildren > 0) {
+      return { checked: false, indeterminate: true };
+    }
+    return { checked: false, indeterminate: false };
+  };
+
+  return (
+    <div className="space-y-2">
+      {PERMISSION_TREE.map((node) => {
+        const hasChildren = (node.children?.length || 0) > 0;
+        const isOpen = expanded.has(node.key);
+        const { checked, indeterminate } = nodeState(node);
+        return (
+          <div
+            key={node.key}
+            className={`rounded-2xl border-2 transition-all ${
+              checked || indeterminate
+                ? 'border-indigo-500 bg-indigo-50/40'
+                : 'border-slate-100 bg-white'
+            }`}
+          >
+            <div className="flex items-start gap-3 p-3.5">
+              <button
+                type="button"
+                onClick={() => toggleParentWithChildren(node)}
+                className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ${
+                  checked
+                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                    : indeterminate
+                    ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
+                    : 'border-slate-300 bg-white'
+                }`}
+                title={checked ? 'Deselect all' : 'Select all'}
+              >
+                {checked && <HiOutlineCheck className="w-3.5 h-3.5 stroke-[3]" />}
+                {!checked && indeterminate && (
+                  <span className="block w-2.5 h-0.5 bg-indigo-700 rounded" />
+                )}
+              </button>
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => toggleParentWithChildren(node)}
+              >
+                <span className="text-xs font-black uppercase tracking-wider block text-slate-800">
+                  {node.label}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium block mt-0.5 leading-tight">
+                  {node.desc}
+                </span>
+              </div>
+              {hasChildren && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(node.key)}
+                  className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg shrink-0"
+                  title={isOpen ? 'Collapse' : 'Expand sub-items'}
+                >
+                  {isOpen ? (
+                    <HiOutlineChevronDown className="h-4 w-4" />
+                  ) : (
+                    <HiOutlineChevronRight className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">{isOpen ? 'Collapse' : 'Expand'}</span>
+                </button>
+              )}
+            </div>
+            {hasChildren && isOpen && (
+              <div className="pl-9 pr-3.5 pb-3 space-y-1.5">
+                {node.children.map((child) => {
+                  const isChecked = selectedSet.has(child.key);
+                  return (
+                    <div
+                      key={child.key}
+                      onClick={() => toggleKey(child.key)}
+                      className={`flex items-start gap-3 p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                        isChecked
+                          ? 'border-indigo-400 bg-white text-indigo-900'
+                          : 'border-slate-100 bg-slate-50/40 hover:border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
+                          isChecked
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'border-slate-300 bg-white'
+                        }`}
+                      >
+                        {isChecked && <HiOutlineCheck className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-black uppercase tracking-wider block">
+                          {child.label}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium block mt-0.5 leading-tight">
+                          {child.desc}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const formatRoleLabel = (role, rolesLookup) => {
   if (!role) return 'Staff';
@@ -182,15 +328,6 @@ const UserManagement = () => {
     }));
   };
 
-  const toggleStaffPermission = (key) => {
-    setStaffForm((prev) => {
-      const current = new Set(prev.allowedPermissions);
-      if (current.has(key)) current.delete(key);
-      else current.add(key);
-      return { ...prev, allowedPermissions: Array.from(current) };
-    });
-  };
-
   const handleStaffSubmit = async (e) => {
     e.preventDefault();
     if (!staffForm.name.trim() || !staffForm.email.trim() || !staffForm.customRoleId) {
@@ -258,15 +395,6 @@ const UserManagement = () => {
       permissions: role.permissions || [],
     });
     setIsRoleOpen(true);
-  };
-
-  const toggleRolePermission = (key) => {
-    setRoleForm((prev) => {
-      const current = new Set(prev.permissions);
-      if (current.has(key)) current.delete(key);
-      else current.add(key);
-      return { ...prev, permissions: Array.from(current) };
-    });
   };
 
   const handleRoleSubmit = async (e) => {
@@ -609,31 +737,18 @@ const UserManagement = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Module Permissions</h4>
-                      <p className="text-slate-400 text-[11px] mt-0.5">Inherited from the selected role — customize per staff if needed.</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">Inherited from the selected role — expand any section to allow or deny individual sub-pages.</p>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setStaffForm((p) => ({ ...p, allowedPermissions: [...PERMISSION_KEYS] }))} className="text-xs text-indigo-600 hover:text-indigo-800 font-black uppercase tracking-wider">Select All</button>
+                      <button type="button" onClick={() => setStaffForm((p) => ({ ...p, allowedPermissions: [...ALL_PERMISSION_KEYS] }))} className="text-xs text-indigo-600 hover:text-indigo-800 font-black uppercase tracking-wider">Select All</button>
                       <span className="text-slate-200 text-xs">|</span>
                       <button type="button" onClick={() => setStaffForm((p) => ({ ...p, allowedPermissions: [] }))} className="text-xs text-slate-400 hover:text-slate-600 font-black uppercase tracking-wider">Clear</button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {PERMISSIONS_LIST.map((perm) => {
-                      const isChecked = staffForm.allowedPermissions.includes(perm.key);
-                      return (
-                        <div key={perm.key} onClick={() => toggleStaffPermission(perm.key)}
-                          className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer select-none transition-all ${isChecked ? 'border-indigo-500 bg-indigo-50/40 text-indigo-900 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-white text-slate-700'}`}>
-                          <div className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'}`}>
-                            {isChecked && <HiOutlineCheck className="w-3.5 h-3.5 stroke-[3]" />}
-                          </div>
-                          <div>
-                            <span className="text-xs font-black uppercase tracking-wider block">{perm.label}</span>
-                            <span className="text-[10px] text-slate-400 font-medium block mt-0.5 leading-tight">{perm.desc}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <PermissionTreePicker
+                    selected={staffForm.allowedPermissions}
+                    onChange={(next) => setStaffForm((p) => ({ ...p, allowedPermissions: next }))}
+                  />
                 </div>
 
                 <div className="border-t border-slate-100 pt-6 flex items-center justify-end gap-3 shrink-0">
@@ -702,31 +817,18 @@ const UserManagement = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Default Permissions</h4>
-                      <p className="text-slate-400 text-[11px] mt-0.5">Staff created with this role start with these modules allowed.</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">Expand a section to allow specific sub-pages, or tick the parent to grant the whole module.</p>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setRoleForm((p) => ({ ...p, permissions: [...PERMISSION_KEYS] }))} className="text-xs text-indigo-600 hover:text-indigo-800 font-black uppercase tracking-wider">Select All</button>
+                      <button type="button" onClick={() => setRoleForm((p) => ({ ...p, permissions: [...ALL_PERMISSION_KEYS] }))} className="text-xs text-indigo-600 hover:text-indigo-800 font-black uppercase tracking-wider">Select All</button>
                       <span className="text-slate-200 text-xs">|</span>
                       <button type="button" onClick={() => setRoleForm((p) => ({ ...p, permissions: [] }))} className="text-xs text-slate-400 hover:text-slate-600 font-black uppercase tracking-wider">Clear</button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {PERMISSIONS_LIST.map((perm) => {
-                      const isChecked = roleForm.permissions.includes(perm.key);
-                      return (
-                        <div key={perm.key} onClick={() => toggleRolePermission(perm.key)}
-                          className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer select-none transition-all ${isChecked ? 'border-indigo-500 bg-indigo-50/40 text-indigo-900 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-white text-slate-700'}`}>
-                          <div className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'}`}>
-                            {isChecked && <HiOutlineCheck className="w-3.5 h-3.5 stroke-[3]" />}
-                          </div>
-                          <div>
-                            <span className="text-xs font-black uppercase tracking-wider block">{perm.label}</span>
-                            <span className="text-[10px] text-slate-400 font-medium block mt-0.5 leading-tight">{perm.desc}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <PermissionTreePicker
+                    selected={roleForm.permissions}
+                    onChange={(next) => setRoleForm((p) => ({ ...p, permissions: next }))}
+                  />
                 </div>
 
                 <div className="border-t border-slate-100 pt-6 flex items-center justify-end gap-3 shrink-0">

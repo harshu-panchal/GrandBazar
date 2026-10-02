@@ -123,18 +123,18 @@ const navItems = [
     color: "rose",
     permission: "categories",
     children: [
-      { label: "All Categories", path: "/admin/categories/hierarchy" },
-      { label: "Header Categories", path: "/admin/categories/header" },
-      { label: "Main Categories", path: "/admin/categories/level2" },
-      { label: "Sub-Categories", path: "/admin/categories/sub" },
+      { label: "All Categories", path: "/admin/categories/hierarchy", permission: "categories.all" },
+      { label: "Header Categories", path: "/admin/categories/header", permission: "categories.header" },
+      { label: "Main Categories", path: "/admin/categories/level2", permission: "categories.level2" },
+      { label: "Sub-Categories", path: "/admin/categories/sub", permission: "categories.sub" },
     ],
   },
-  { 
-    label: "Products", 
-    path: "/admin/products", 
-    icon: Box, 
+  {
+    label: "Products",
+    path: "/admin/products",
+    icon: Box,
     color: "amber",
-    permission: "products",
+    permission: "products.list",
   },
   {
     label: "Master Catalog",
@@ -142,14 +142,14 @@ const navItems = [
     end: true,
     icon: Library,
     color: "violet",
-    permission: "products",
+    permission: "products.catalog",
   },
   {
     label: "Catalog Bundles",
     path: "/admin/catalog/bundles",
     icon: Library,
     color: "violet",
-    permission: "products",
+    permission: "products.bundles",
   },
   {
     label: "Marketing Tools",
@@ -157,15 +157,15 @@ const navItems = [
     color: "amber",
     permission: "marketing",
     children: [
-      { label: "Create Sections", path: "/admin/experience-studio" },
-      { label: "Hero & categories per page", path: "/admin/hero-categories" },
-      { label: "Send Notifications", path: "/admin/notifications" },
-      { label: "Coupons & Promos", path: "/admin/coupons" },
-      { label: "Reward Campaigns", path: "/admin/reward-campaigns" },
-      { label: "Advance Booking", path: "/admin/advance-bookings" },
-      { label: "Reward Analytics", path: "/admin/reward-analytics" },
-      { label: "Offer Sections", path: "/admin/offer-sections" },
-      { label: "Shop by Store", path: "/admin/shop-by-store" },
+      { label: "Create Sections", path: "/admin/experience-studio", permission: "marketing.sections" },
+      { label: "Hero & categories per page", path: "/admin/hero-categories", permission: "marketing.hero" },
+      { label: "Send Notifications", path: "/admin/notifications", permission: "marketing.notifications" },
+      { label: "Coupons & Promos", path: "/admin/coupons", permission: "marketing.coupons" },
+      { label: "Reward Campaigns", path: "/admin/reward-campaigns", permission: "marketing.reward_campaigns" },
+      { label: "Advance Booking", path: "/admin/advance-bookings", permission: "marketing.advance_booking" },
+      { label: "Reward Analytics", path: "/admin/reward-analytics", permission: "marketing.reward_analytics" },
+      { label: "Offer Sections", path: "/admin/offer-sections", permission: "marketing.offer_sections" },
+      { label: "Shop by Store", path: "/admin/shop-by-store", permission: "marketing.shop_by_store" },
     ],
   },
   {
@@ -174,8 +174,8 @@ const navItems = [
     color: "emerald",
     permission: "support",
     children: [
-      { label: "Help Tickets", path: "/admin/support-tickets" },
-      { label: "Review Content", path: "/admin/moderation" },
+      { label: "Help Tickets", path: "/admin/support-tickets", permission: "support.tickets" },
+      { label: "Review Content", path: "/admin/moderation", permission: "support.moderation" },
     ],
   },
   {
@@ -184,10 +184,10 @@ const navItems = [
     color: "blue",
     permission: "sellers",
     children: [
-      { label: "Active Sellers", path: "/admin/sellers/active" },
-      { label: "Seller Applications", path: "/admin/sellers/pending" },
-      { label: "Subscriptions", path: "/admin/subscriptions" },
-      { label: "Seller Locations", path: "/admin/seller-locations" },
+      { label: "Active Sellers", path: "/admin/sellers/active", permission: "sellers.active" },
+      { label: "Seller Applications", path: "/admin/sellers/pending", permission: "sellers.pending" },
+      { label: "Subscriptions", path: "/admin/subscriptions", permission: "sellers.subscriptions" },
+      { label: "Seller Locations", path: "/admin/seller-locations", permission: "sellers.locations" },
     ],
   },
   {
@@ -196,10 +196,10 @@ const navItems = [
     color: "emerald",
     permission: "delivery",
     children: [
-      { label: "Active Drivers", path: "/admin/delivery-boys/active" },
-      { label: "Waiting for Review", path: "/admin/delivery-boys/pending" },
-      { label: "Track Drivers", path: "/admin/tracking" },
-      { label: "Send Money", path: "/admin/delivery-funds" },
+      { label: "Active Drivers", path: "/admin/delivery-boys/active", permission: "delivery.active" },
+      { label: "Waiting for Review", path: "/admin/delivery-boys/pending", permission: "delivery.pending" },
+      { label: "Track Drivers", path: "/admin/tracking", permission: "delivery.tracking" },
+      { label: "Send Money", path: "/admin/delivery-funds", permission: "delivery.funds" },
     ],
   },
   { 
@@ -257,15 +257,15 @@ const navItems = [
     color: "fuchsia",
     permission: "orders",
     children: [
-      { label: "All Orders", path: "/admin/orders/all" },
-      { label: "New Orders", path: "/admin/orders/pending" },
-      { label: "Being Prepared", path: "/admin/orders/processed" },
-      { label: "On the Way", path: "/admin/orders/out-for-delivery" },
-      { label: "Delivered", path: "/admin/orders/delivered" },
-      { label: "Cancelled", path: "/admin/orders/cancelled" },
-      { label: "Returned", path: "/admin/orders/returned" },
-      { label: "Return Requests", path: "/admin/returns" },
-      { label: "Refund Ledger", path: "/admin/refunds" },
+      { label: "All Orders", path: "/admin/orders/all", permission: "orders.all" },
+      { label: "New Orders", path: "/admin/orders/pending", permission: "orders.pending" },
+      { label: "Being Prepared", path: "/admin/orders/processed", permission: "orders.processed" },
+      { label: "On the Way", path: "/admin/orders/out-for-delivery", permission: "orders.out_for_delivery" },
+      { label: "Delivered", path: "/admin/orders/delivered", permission: "orders.delivered" },
+      { label: "Cancelled", path: "/admin/orders/cancelled", permission: "orders.cancelled" },
+      { label: "Returned", path: "/admin/orders/returned", permission: "orders.returned" },
+      { label: "Return Requests", path: "/admin/returns", permission: "orders.returns" },
+      { label: "Refund Ledger", path: "/admin/refunds", permission: "orders.refunds" },
     ],
   },
   {
@@ -273,14 +273,14 @@ const navItems = [
     path: "/admin/billing",
     icon: RotateCcw,
     color: "red",
-    permission: "billing",
+    permission: "billing.fees",
   },
   {
     label: "City Commissions",
     path: "/admin/city-commissions",
     icon: RotateCcw,
     color: "red",
-    permission: "billing",
+    permission: "billing.city_commissions",
   },
   {
     label: "Settings",
@@ -335,7 +335,14 @@ const AdminRoutes = () => {
 
   const hasPermission = React.useCallback((permissionKey) => {
     if (isSuperAdminOrAdmin) return true;
-    return user?.allowedPermissions?.includes(permissionKey);
+    if (!permissionKey) return true;
+    const allowed = user?.allowedPermissions || [];
+    if (allowed.includes(permissionKey)) return true;
+    // A child key implicitly matches a parent grant — if the admin granted
+    // the whole module (e.g. "orders") the staff gets every sub-page too.
+    const parent = permissionKey.includes('.') ? permissionKey.split('.')[0] : null;
+    if (parent && allowed.includes(parent)) return true;
+    return false;
   }, [isSuperAdminOrAdmin, user]);
 
   React.useEffect(() => {
@@ -408,12 +415,32 @@ const AdminRoutes = () => {
   }, [isSuperAdminOrAdmin]);
 
   const navItemsWithBadges = React.useMemo(() => {
-    const filteredItems = navItems.filter((item) => {
-      if (item.label === "My Profile") return true;
-      if (item.permission === "staff") return isSuperAdminOrAdmin;
-      if (isSuperAdminOrAdmin) return true;
-      return user?.allowedPermissions?.includes(item.permission);
-    });
+    const allowed = user?.allowedPermissions || [];
+    const permitted = (key) => {
+      if (!key) return true;
+      if (allowed.includes(key)) return true;
+      const parent = key.includes('.') ? key.split('.')[0] : null;
+      return !!(parent && allowed.includes(parent));
+    };
+
+    const filteredItems = navItems
+      .filter((item) => {
+        if (item.label === "My Profile") return true;
+        if (item.permission === "staff") return isSuperAdminOrAdmin;
+        if (isSuperAdminOrAdmin) return true;
+        return permitted(item.permission);
+      })
+      .map((item) => {
+        // Hide sidebar children the staff isn't allowed to see so the group
+        // doesn't advertise sections they can't open.
+        if (!isSuperAdminOrAdmin && Array.isArray(item.children)) {
+          const visibleChildren = item.children.filter((c) => permitted(c.permission));
+          if (visibleChildren.length === 0) return null;
+          return { ...item, children: visibleChildren };
+        }
+        return item;
+      })
+      .filter(Boolean);
 
     const supportCount = Number.isFinite(totalUnread) ? totalUnread : 0;
     const deliveryCount = Number.isFinite(pendingDeliveryCount) ? pendingDeliveryCount : 0;
