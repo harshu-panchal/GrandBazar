@@ -21,6 +21,7 @@ import {
     CheckCircle2,
     XCircle,
     ArrowRightLeft,
+    Phone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
@@ -327,6 +328,13 @@ const OrdersList = () => {
                     <p className="ds-description mt-1">View and manage all orders.</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/admin/orders/create-phone-order')}
+                        className="flex items-center gap-2 px-5 py-3 bg-fuchsia-600 text-white rounded-2xl text-xs font-bold hover:bg-fuchsia-700 transition-all shadow-sm"
+                    >
+                        <Phone className="h-4 w-4" />
+                        CREATE PHONE ORDER
+                    </button>
                     <button
                         onClick={handleExport}
                         className="flex items-center gap-2 px-5 py-3 bg-white ring-1 ring-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all shadow-sm"

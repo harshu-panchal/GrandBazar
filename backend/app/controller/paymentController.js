@@ -3,6 +3,7 @@ import {
   createPaymentOrderForOrderRef,
   verifyPhonePePaymentStatus,
   processPhonePeWebhook,
+  resolvePhoneOrderPayLink,
 } from "../services/paymentService.js";
 import {
   createPaymentOrderSchema,
@@ -110,6 +111,24 @@ export const handlePhonePeWebhook = async (req, res) => {
   } catch (error) {
     console.error("[PhonePeWebhook] Error processing webhook:", error.message);
     return res.status(500).send("Internal Server Error");
+  }
+};
+
+// Public resolver for the admin-phone-order pay link (no verifyToken — the
+// customer who receives this via SMS/email has no session on this device).
+// The token itself carries and verifies the customer's identity.
+export const resolvePhoneOrderPayLinkController = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const result = await resolvePhoneOrderPayLink(token);
+    return handleResponse(
+      res,
+      result.duplicate ? 200 : 201,
+      result.duplicate ? "Re-using existing payment" : "Payment initiated",
+      { redirectUrl: result.redirectUrl },
+    );
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

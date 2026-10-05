@@ -31,7 +31,16 @@ const generateToken = (admin) =>
     // `scope: "admin"` identifies this JWT as issued by the admin portal
     // regardless of the (now dynamic) role name. Middleware uses it to grant
     // admin-area access to any custom role we haven't seen before.
-    { id: admin._id, role: admin.role || "admin", scope: "admin" },
+    // `allowedPermissions`/`customRoleId` must travel in the token itself —
+    // verifyToken never re-fetches the Admin doc, so checkAdminPermission()
+    // can only see what was signed in here.
+    {
+      id: admin._id,
+      role: admin.role || "admin",
+      scope: "admin",
+      allowedPermissions: admin.allowedPermissions || [],
+      customRoleId: admin.customRoleId || null,
+    },
     process.env.JWT_SECRET,
     { expiresIn: "7d" },
   );

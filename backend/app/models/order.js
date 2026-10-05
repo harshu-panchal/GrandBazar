@@ -388,6 +388,34 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Set when an admin/operator places this order for a customer over the
+    // phone, distinct from assignedByAdmin (reassignment of an existing
+    // order to a different store) to keep the two audit trails separate.
+    placedByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    placementChannel: {
+      type: String,
+      enum: ["CUSTOMER_APP", "ADMIN_PHONE_ORDER"],
+      default: "CUSTOMER_APP",
+    },
+    // Record of the pay-by-link sent for an admin phone order. The signed
+    // token itself (not this record) is the source of truth for validity;
+    // this is just a support/audit trail of what was sent and when.
+    paymentLink: {
+      token: String,
+      url: String,
+      sentVia: [String],
+      sentAt: Date,
+      expiresAt: Date,
+      createdByAdmin: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Admin",
+        default: null,
+      },
+    },
     deliverySearchMeta: {
       radiusMeters: { type: Number, default: 5000 },
       attempt: { type: Number, default: 1 },

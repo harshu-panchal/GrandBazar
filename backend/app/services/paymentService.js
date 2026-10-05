@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 
 import Order from "../models/order.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
@@ -23,6 +24,7 @@ import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from
 import { processCodRemittancePhonePeWebhook, isCodRemittanceMerchantOrderId } from "./codRemittanceService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { buildKey, invalidate } from "./cacheService.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 
@@ -342,6 +344,11 @@ async function moveOrderToSellerPendingAfterPayment(orderId) {
     { new: true },
   );
   if (updatedOrder) {
+    // Without this, a customer's own "My Orders" list (cached for
+    // CACHE_ORDERS_TTL) can lag up to a minute behind a payment that just
+    // unlocked the order — same invalidation call orderController.js makes
+    // after its own order-mutating actions.
+    await invalidate(buildKey("orders", "customer", `${updatedOrder.customer.toString()}:*`));
     void afterPlaceOrderV2(updatedOrder).catch((error) => {
       console.warn("[moveOrderToSellerPendingAfterPayment] afterPlaceOrderV2:", error.message);
     });
@@ -656,6 +663,52 @@ export async function createPaymentOrderForOrderRef({
   );
 
   return { payment, redirectUrl: redirectUrlResult, duplicate: false };
+}
+
+const PHONE_ORDER_PAY_LINK_PURPOSE = "phone_order_pay_link";
+
+// Short-lived signed token embedded in the pay-by-link sent to a phone-order
+// customer over SMS/email. Same convention as passwordResetService's
+// signResetToken / sellerVerificationService's signVerificationToken: a
+// purpose-tagged JWT off the existing JWT_SECRET, no new signing utility or
+// secret needed.
+export function signPhoneOrderPayLinkToken({ orderRef, customerId }) {
+  return jwt.sign(
+    {
+      orderRef: String(orderRef),
+      customerId: String(customerId),
+      purpose: PHONE_ORDER_PAY_LINK_PURPOSE,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.PHONE_ORDER_PAY_LINK_EXPIRY || "30m" },
+  );
+}
+
+// Resolves an anonymous pay-link click (no session) into the same PhonePe
+// checkout an authenticated customer would get. The token's own customerId
+// (verified, never taken from the request) stands in for req.user.id so
+// createPaymentOrderForOrderRef's existing ownership check keeps working
+// unmodified.
+export async function resolvePhoneOrderPayLink(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    const err = new Error("This payment link is invalid or has expired");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (decoded.purpose !== PHONE_ORDER_PAY_LINK_PURPOSE) {
+    const err = new Error("This payment link is invalid");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return createPaymentOrderForOrderRef({
+    orderRef: decoded.orderRef,
+    userId: decoded.customerId,
+    idempotencyKey: `phonelink:${decoded.orderRef}`,
+  });
 }
 
 export async function verifyPhonePePaymentStatus({

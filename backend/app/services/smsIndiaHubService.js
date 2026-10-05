@@ -163,6 +163,17 @@ export async function sendSmsIndiaHubOtp({ phone, otp, message }) {
   };
 }
 
+// Phone-order pay-link SMS. Reuses sendSmsIndiaHubOtp's free-text `message`
+// override — this is not an OTP, just the same provider/transport.
+// NOTE: production India SMS with new wording like this likely needs its
+// own DLT-registered template (SMS_INDIA_HUB_DLT_TEMPLATE_ID) — operational
+// follow-up, not a code change.
+export async function sendPhoneOrderPayLinkSms({ phone, payLinkUrl, amount }) {
+  const amountText = amount != null ? ` of Rs.${amount}` : "";
+  const message = `Your order payment${amountText} is ready. Pay securely here: ${payLinkUrl}`;
+  return sendSmsIndiaHubOtp({ phone, message });
+}
+
 export const __testables = {
   getSmsIndiaConfig,
   mapSmsIndiaError,

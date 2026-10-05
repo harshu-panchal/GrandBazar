@@ -168,6 +168,8 @@ export const customerApi = {
   createPaymentOrder: (data) =>
     axiosInstance.post("/payments/create-order", data),
   verifyPaymentStatus: (id) => axiosInstance.get(`/payments/status/${id}`),
+  resolvePhoneOrderPayLink: (token) =>
+    axiosInstance.get(`/payments/pay-link/${encodeURIComponent(token)}`),
 
   // Support & Reviews
   getProductReviews: (productId) =>

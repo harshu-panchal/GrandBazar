@@ -3,6 +3,7 @@ import {
   createPaymentOrder,
   verifyPaymentStatus,
   handlePhonePeWebhook,
+  resolvePhoneOrderPayLinkController,
 } from "../controller/paymentController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { paymentRouteRateLimiter } from "../middleware/securityMiddlewares.js";
@@ -29,6 +30,17 @@ paymentRoute.get(
   verifyToken,
   paymentRouteRateLimiter,
   verifyPaymentStatus,
+);
+
+/**
+ * Resolve an admin-phone-order pay-by-link token into a PhonePe checkout.
+ * Auth: None (anonymous recipient of an SMS/email link) — identity comes
+ * from the signed token itself.
+ */
+paymentRoute.get(
+  "/pay-link/:token",
+  paymentRouteRateLimiter,
+  resolvePhoneOrderPayLinkController,
 );
 
 /**

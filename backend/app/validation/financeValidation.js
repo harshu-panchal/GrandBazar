@@ -56,6 +56,15 @@ export const createFinanceOrderSchema = checkoutPreviewSchema.keys({
   walletAmount: Joi.number().min(0).default(0),
 });
 
+// Admin/operator "phone order" placed on behalf of a customer. paymentMode
+// is intentionally NOT accepted here — it's forced to ONLINE in the
+// controller, since the whole point of this flow is confirm-after-payment.
+export const adminPhoneOrderSchema = checkoutPreviewSchema.keys({
+  items: Joi.array().items(orderItemSchema).min(1).required(),
+  customerPhone: Joi.string().required(),
+  notifyVia: Joi.array().items(Joi.string().valid("sms", "email")).min(1).required(),
+}).fork(["paymentMode"], (schema) => schema.forbidden());
+
 export const verifyOnlinePaymentSchema = Joi.object({
   merchantOrderId: Joi.string().trim().required(),
   transactionId: Joi.string().trim().optional(),

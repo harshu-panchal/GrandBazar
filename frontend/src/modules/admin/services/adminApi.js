@@ -288,6 +288,11 @@ export const adminApi = {
     updateStoreDeliveryPolicy: (storeId, data) =>
         axiosInstance.put(`/orders/stores/${storeId}/delivery-policy`, data),
 
+    // Admin/operator phone orders (create on behalf of a customer, pay-by-link)
+    lookupCustomerByPhone: (phone) =>
+        axiosInstance.get('/orders/admin/phone-order/lookup-customer', { params: { phone } }),
+    createPhoneOrder: (data) => axiosInstance.post('/orders/admin/phone-order', data),
+
     // Advance order booking (admin-curated preorders)
     listAdvanceBookings: (params) =>
         axiosInstance.get("/orders/admin/advance-bookings", { params }),

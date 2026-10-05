@@ -43,7 +43,6 @@
     "@googlemaps/google-maps-services-js": "latest",
     "@mapbox/polyline": "latest",
     "@phonepe-pg/pg-sdk-node": "latest",
-    "@swc/helpers": "latest",
     "axios": "latest",
     "bcrypt": "latest",
     "bull": "latest",
@@ -75,7 +74,6 @@
     "supertest": "latest"
   },
   "overrides": {
-    "@swc/helpers": "0.3.17",
     "minimatch": "^10.2.1"
   }
 }

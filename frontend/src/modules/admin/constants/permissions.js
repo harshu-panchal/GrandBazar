@@ -100,6 +100,7 @@ export const PERMISSION_TREE = [
       { key: 'orders.returned', label: 'Returned', desc: 'Returned orders' },
       { key: 'orders.returns', label: 'Return Requests', desc: 'Return approvals' },
       { key: 'orders.refunds', label: 'Refund Ledger', desc: 'Refund records' },
+      { key: 'orders.create_phone_order', label: 'Create Phone Order', desc: 'Place orders on behalf of a customer by phone' },
     ],
   },
   {

@@ -78,6 +78,7 @@ const Profile = React.lazy(() => import("@/pages/Profile"));
 const FAQManagement = React.lazy(() => import("../pages/FAQManagement"));
 const OrdersList = React.lazy(() => import("../pages/OrdersList"));
 const OrderDetail = React.lazy(() => import("../pages/OrderDetail"));
+const CreatePhoneOrder = React.lazy(() => import("../pages/CreatePhoneOrder"));
 const DisputeConsolePage = React.lazy(() => import("../pages/DisputeConsolePage"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const Refunds = React.lazy(() => import("../pages/Refunds"));
@@ -562,7 +563,10 @@ const AdminRoutes = () => {
             <Route path="/refunds" element={<Refunds />} />
           </>
         )}
-        
+        {hasPermission("orders.create_phone_order") && (
+          <Route path="/orders/create-phone-order" element={<CreatePhoneOrder />} />
+        )}
+
         {hasPermission("billing") && <Route path="/billing" element={<BillingCharges />} />}
         {hasPermission("billing") && <Route path="/city-commissions" element={<CityCommissions />} />}
         {hasPermission("settings") && <Route path="/settings" element={<AdminSettings />} />}

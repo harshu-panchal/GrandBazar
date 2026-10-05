@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import User from "../../models/customer.js";
 import Order from "../../models/order.js";
+import { normalizePhoneNumber } from "../../utils/phone.js";
 
 export async function getUsersData({ page, limit, skip }) {
   const pipeline = [
@@ -125,6 +126,15 @@ export async function getUserByIdData(id) {
       status: order.status,
     })),
   };
+}
+
+// Exact-match lookup by phone for flows that need an authoritative
+// yes/no answer (e.g. admin phone orders) rather than the paginated,
+// client-side-filtered list getUsersData returns.
+export async function findCustomerByPhone(rawPhone) {
+  const phone = normalizePhoneNumber(rawPhone);
+  if (!phone) return null;
+  return User.findOne({ phone, role: "user" }).lean();
 }
 
 export async function updateUserData(id, { name, email, phone }) {

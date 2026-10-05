@@ -40,6 +40,10 @@ import {
   verifyOnlineOrderPayment,
 } from "../controller/orderFinanceController.js";
 import {
+  lookupCustomerByPhone,
+  createPhoneOrderForCustomer,
+} from "../controller/adminPhoneOrderController.js";
+import {
   confirmPickup,
   markArrivedAtStore,
   advanceDeliveryRiderUi,
@@ -153,6 +157,24 @@ router.post(
   verifyToken,
   allowRoles("customer", "user", "admin"),
   verifyOnlineOrderPayment,
+);
+
+// Admin/operator "create order on behalf of a customer during a phone call"
+// flow. Gated by a permission key (not hardcoded to admin/superadmin) so it
+// can be granted to a custom staff role via the existing AdminRole system.
+router.get(
+  "/admin/phone-order/lookup-customer",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("orders.create_phone_order"),
+  lookupCustomerByPhone,
+);
+router.post(
+  "/admin/phone-order",
+  verifyToken,
+  allowRoles("admin"),
+  checkAdminPermission("orders.create_phone_order"),
+  createPhoneOrderForCustomer,
 );
 router.post(
   "/:id/cod/mark-collected",

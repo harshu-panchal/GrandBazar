@@ -211,6 +211,50 @@ export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMin
 }
 
 /**
+ * Sends a pay-by-link email for an admin-placed phone order.
+ */
+export async function sendOrderPaymentLinkEmail({ email, name, orderId, amount, payLinkUrl, expiresAt }) {
+  const appName = await getAppName();
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const expiresText = expiresAt
+    ? new Date(expiresAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+    : null;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Complete Your Order Payment</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>Your order${orderId ? ` <strong>${orderId}</strong>` : ''} placed with ${appName} is ready for payment${amount != null ? ` of <strong>Rs.${amount}</strong>` : ''}.</p>
+      <p style="margin-top: 25px;">
+        <a href="${payLinkUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Pay Now
+        </a>
+      </p>
+      ${expiresText ? `<p style="color: #64748b; font-size: 13px;">This link expires on ${expiresText}.</p>` : ''}
+    </div>
+  `;
+
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking order payment link email for ${email}: ${payLinkUrl}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `${appName} Platform <${fromEmail}>`,
+      to: email,
+      subject: `Complete your ${appName} order payment`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send order payment link email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Sends welcome email to newly created admin staff member (accountant/assistant).
  */
 export async function sendStaffWelcomeEmail({ email, name, password, role }) {
