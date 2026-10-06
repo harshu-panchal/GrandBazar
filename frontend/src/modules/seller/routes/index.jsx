@@ -24,10 +24,12 @@ import {
   HiOutlineGift,
   HiOutlineSquare3Stack3D,
   HiOutlineChatBubbleLeftRight,
+  HiOutlinePhone,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
 const Orders = React.lazy(() => import("../pages/Orders"));
+const CreatePhoneOrder = React.lazy(() => import("../pages/CreatePhoneOrder"));
 const ProductManagement = React.lazy(
   () => import("../pages/ProductManagement"),
 );
@@ -66,6 +68,7 @@ const navItems = [
   { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
   { label: "Stock", path: "/seller/inventory", icon: HiOutlineArchiveBox, permission: "inventory" },
   { label: "Orders", path: "/seller/orders", icon: HiOutlineTruck, permission: "orders" },
+  { label: "Create Phone Order", path: "/seller/orders/phone", icon: HiOutlinePhone, permission: "orders" },
   { label: "Delivery Policy", path: "/seller/scheduling", icon: HiOutlineMapPin, permission: "scheduling" },
   { label: "Pre-Order Campaigns", path: "/seller/campaigns", icon: HiOutlineMegaphone, permission: "campaigns" },
   { label: "Returns", path: "/seller/returns", icon: HiOutlineArchiveBox, permission: "returns" },
@@ -193,6 +196,9 @@ const SellerRoutes = () => {
         )}
         {hasPermission("inventory") && <Route path="inventory" element={<StockManagement />} />}
         {hasPermission("orders") && <Route path="orders" element={<Orders />} />}
+        {hasPermission("orders", "write") && (
+          <Route path="orders/phone" element={<CreatePhoneOrder />} />
+        )}
         {hasPermission("scheduling") && <Route path="scheduling" element={<DeliveryPolicyPage />} />}
         {hasPermission("campaigns") && <Route path="campaigns" element={<PreOrderCampaigns />} />}
         {hasPermission("returns") && <Route path="returns" element={<Returns />} />}

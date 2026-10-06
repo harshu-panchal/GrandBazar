@@ -43,6 +43,7 @@ import {
   lookupCustomerByPhone,
   createPhoneOrderForCustomer,
 } from "../controller/adminPhoneOrderController.js";
+import { createPhoneOrderForCustomerBySeller } from "../controller/sellerPhoneOrderController.js";
 import {
   confirmPickup,
   markArrivedAtStore,
@@ -66,6 +67,7 @@ import {
   resolveActiveStore,
   checkSubSellerPermission,
   checkAdminPermission,
+  checkAdminPermissionIfAdminCaller,
   allowSuperAdminOnly,
 } from "../middleware/authMiddleware.js";
 import {
@@ -138,6 +140,22 @@ const sellerCampaignReadChain = [...sellerOrderChain, checkSubSellerPermission("
 const sellerCampaignWriteChain = [...sellerOrderChain, checkSubSellerPermission("campaigns", "write")];
 const sellerAdjustWriteChain = [...sellerOrderChain, checkSubSellerPermission("adjustments", "write")];
 const sellerTrackingWriteChain = [...sellerOrderChain, checkSubSellerPermission("tracking", "write")];
+
+// Seller/operator "create order on behalf of a customer during a phone
+// call" flow, scoped to the acting store's own catalog. Owner accounts
+// bypass checkSubSellerPermission automatically (no subSellerId on their
+// token); sub-staff need orders:write — same gate as every other seller
+// order-mutating route, no new permission key.
+router.get(
+  "/seller/phone-order/lookup-customer",
+  ...sellerOrdersWriteChain,
+  lookupCustomerByPhone,
+);
+router.post(
+  "/seller/phone-order",
+  ...sellerOrdersWriteChain,
+  createPhoneOrderForCustomerBySeller,
+);
 
 // Finance-aware checkout/order flow
 router.post(
@@ -458,7 +476,7 @@ router.put(
   "/reschedule/:orderId/admin",
   verifyToken,
   allowRoles("admin"),
-  checkAdminPermission("scheduling:write"),
+  checkAdminPermission("orders.reschedule"),
   adminRescheduleOrder,
 );
 router.put(
@@ -473,6 +491,7 @@ router.put(
   verifyToken,
   allowRoles("seller", "admin"),
   requireApprovedSeller,
+  checkAdminPermissionIfAdminCaller("orders.adjust_price"),
   checkSubSellerPermission("adjustments", "write"),
   adjustOrder,
 );
@@ -481,6 +500,7 @@ router.post(
   verifyToken,
   allowRoles("seller", "admin"),
   requireApprovedSeller,
+  checkAdminPermissionIfAdminCaller("orders.adjust_price"),
   checkSubSellerPermission("adjustments", "write"),
   previewAdjustOrder,
 );
@@ -531,6 +551,7 @@ router.post(
   verifyToken,
   allowRoles("seller", "admin"),
   requireApprovedSeller,
+  checkAdminPermissionIfAdminCaller("orders.replacement"),
   checkSubSellerPermission("adjustments", "write"),
   requestProductReplacement,
 );
@@ -545,6 +566,7 @@ router.post(
   verifyToken,
   allowRoles("seller", "admin"),
   requireApprovedSeller,
+  checkAdminPermissionIfAdminCaller("orders.split_delivery"),
   checkSubSellerPermission("adjustments", "write"),
   splitOrderDelivery,
 );
@@ -553,6 +575,7 @@ router.put(
   verifyToken,
   allowRoles("seller", "admin"),
   requireApprovedSeller,
+  checkAdminPermissionIfAdminCaller("orders.split_delivery"),
   checkSubSellerPermission("adjustments", "write"),
   updateSplitDeliveryStatus,
 );

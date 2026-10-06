@@ -282,6 +282,12 @@ export const adminApi = {
     listDisputes: (params) => axiosInstance.get('/orders/disputes', { params }),
     resolveDispute: (disputeId, data) => axiosInstance.put(`/orders/disputes/${disputeId}/resolve`, data),
     adminRescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/admin`, data),
+    adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
+    previewAdjustOrder: (orderId, data) => axiosInstance.post(`/orders/${orderId}/adjust-preview`, data),
+    requestProductReplacement: (orderId, data) => axiosInstance.post(`/orders/${orderId}/replacements`, data),
+    splitOrderDelivery: (orderId, data) => axiosInstance.post(`/orders/${orderId}/split-delivery`, data),
+    updateSplitDeliveryStatus: (orderId, splitId, data) =>
+        axiosInstance.put(`/orders/${orderId}/split-delivery/${splitId}/status`, data),
     logisticsOverride: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/override`, data),
     getStoreDeliveryPolicy: (storeId) =>
         axiosInstance.get(`/orders/stores/${storeId}/delivery-policy`),
@@ -292,6 +298,7 @@ export const adminApi = {
     lookupCustomerByPhone: (phone) =>
         axiosInstance.get('/orders/admin/phone-order/lookup-customer', { params: { phone } }),
     createPhoneOrder: (data) => axiosInstance.post('/orders/admin/phone-order', data),
+    getDeliverySlots: (params) => axiosInstance.get('/orders/scheduling/slots', { params }),
 
     // Advance order booking (admin-curated preorders)
     listAdvanceBookings: (params) =>

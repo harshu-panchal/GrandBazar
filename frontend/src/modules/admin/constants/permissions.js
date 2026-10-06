@@ -101,6 +101,10 @@ export const PERMISSION_TREE = [
       { key: 'orders.returns', label: 'Return Requests', desc: 'Return approvals' },
       { key: 'orders.refunds', label: 'Refund Ledger', desc: 'Refund records' },
       { key: 'orders.create_phone_order', label: 'Create Phone Order', desc: 'Place orders on behalf of a customer by phone' },
+      { key: 'orders.reschedule', label: 'Reschedule Orders', desc: 'Change delivery date/window on behalf of a seller' },
+      { key: 'orders.adjust_price', label: 'Adjust Price', desc: 'Modify item prices/quantities on an order' },
+      { key: 'orders.replacement', label: 'Product Replacement', desc: 'Propose a substitute item to the customer' },
+      { key: 'orders.split_delivery', label: 'Split Delivery', desc: 'Split an order into two deliveries' },
     ],
   },
   {

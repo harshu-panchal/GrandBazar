@@ -664,10 +664,19 @@ function eventDefinition(eventType) {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
         title: () => "Order Store Updated",
-        body: (payload) =>
-          payload.orderId
+        body: (payload) => {
+          const base = payload.orderId
             ? `Order #${payload.orderId} was moved to ${payload.shopName || "another store"} so it can be fulfilled.`
-            : "Your order was moved to another store so it can be fulfilled.",
+            : "Your order was moved to another store so it can be fulfilled.";
+          const amount = Number(payload.priceDeltaAmount || 0);
+          if (payload.priceDirection === "decrease" && amount > 0) {
+            return `${base} ₹${amount} has been credited to your wallet for the price difference.`;
+          }
+          if (payload.priceDirection === "increase" && payload.priceDifferenceHandling === "customer_pays" && amount > 0) {
+            return `${base} The new price is ₹${amount} higher — this has been added to your payment at delivery (your wallet balance was applied first, if any).`;
+          }
+          return base;
+        },
       };
     case NOTIFICATION_EVENTS.DISPUTE_RAISED:
       return {

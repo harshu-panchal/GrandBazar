@@ -396,6 +396,16 @@ const orderSchema = new mongoose.Schema(
       ref: "Admin",
       default: null,
     },
+    // Set when a seller (or their sub-staff) places this order for a
+    // customer who called their shop directly — same ADMIN_PHONE_ORDER
+    // placementChannel as the admin flow (it denotes "operator phone order",
+    // not literally admin), but a distinct actor field so attribution
+    // doesn't collide with placedByAdmin.
+    placedBySeller: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      default: null,
+    },
     placementChannel: {
       type: String,
       enum: ["CUSTOMER_APP", "ADMIN_PHONE_ORDER"],
@@ -413,6 +423,11 @@ const orderSchema = new mongoose.Schema(
       createdByAdmin: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Admin",
+        default: null,
+      },
+      createdBySeller: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Store",
         default: null,
       },
     },
@@ -631,6 +646,15 @@ const orderSchema = new mongoose.Schema(
       reassignedAt: { type: Date, default: null },
       reassignedBy: { type: String, default: "" },
       previousWorkflowStatus: { type: String, default: "" },
+      // Price-difference settlement between the old and new store's catalog
+      // prices for the same items — see orderReassignService.js.
+      priceDirection: { type: String, enum: ["increase", "decrease", "none"], default: "none" },
+      priceDeltaAmount: { type: Number, default: 0 },
+      priceDifferenceHandling: { type: String, enum: ["customer_pays", "platform_absorbs", null], default: null },
+      walletCreditedToCustomer: { type: Number, default: 0 },
+      walletDebitedFromCustomer: { type: Number, default: 0 },
+      codPendingAdded: { type: Number, default: 0 },
+      platformAbsorbedAmount: { type: Number, default: 0 },
     },
     replacementRequests: {
       type: [

@@ -2,11 +2,15 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { useSettings } from '@core/context/SettingsContext';
+import { useAuth } from '@core/context/AuthContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '@shared/components/ui/Card';
 import Badge from '@shared/components/ui/Badge';
+import Modal from '@shared/components/ui/Modal';
+import Input from '@shared/components/ui/Input';
 import { adminApi } from '../services/adminApi';
 import LiveTrackingMap from '@/modules/customer/components/order/LiveTrackingMap';
+import DeliverySlotPicker from '@/modules/customer/components/checkout/DeliverySlotPicker';
 import {
     ChevronLeft,
     Box,
@@ -34,11 +38,20 @@ import {
     XCircle,
     ArrowRightLeft,
     RefreshCw,
+    CalendarClock,
+    Repeat,
+    GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
-import { getOrderStoreReassignment, getLegacyStatusFromOrder, getOrderStatusLabel } from '@/shared/utils/orderStatus';
+import {
+    getOrderStoreReassignment,
+    getLegacyStatusFromOrder,
+    getOrderStatusLabel,
+    canSellerManuallyUpdateStatus,
+    canSellerSplitOrReplace,
+} from '@/shared/utils/orderStatus';
 import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/services/orderSocket';
 import OrderMoneyBreakdown from '../components/orders/OrderMoneyBreakdown';
 
@@ -55,6 +68,18 @@ const OrderDetail = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
     const { settings } = useSettings();
+    const { user } = useAuth();
+    // Same logic as the permission check in admin/routes/index.jsx: super
+    // admin/admin always pass; otherwise a custom staff role needs the
+    // exact key, or its parent "orders" grant, on allowedPermissions.
+    const isSuperAdminOrAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+    const hasPermission = (permissionKey) => {
+        if (isSuperAdminOrAdmin) return true;
+        const allowed = user?.allowedPermissions || [];
+        if (allowed.includes(permissionKey)) return true;
+        const parent = permissionKey.includes('.') ? permissionKey.split('.')[0] : null;
+        return Boolean(parent && allowed.includes(parent));
+    };
     const [order, setOrder] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [externalProvider, setExternalProvider] = useState("");
@@ -67,12 +92,42 @@ const OrderDetail = () => {
     const [selectedStoreId, setSelectedStoreId] = useState("");
     const [reassignNote, setReassignNote] = useState("");
     const [isReassigning, setIsReassigning] = useState(false);
+    // Admin's choice when the target store's price is higher — required
+    // before reassigning, never assumed.
+    const [priceDifferenceHandling, setPriceDifferenceHandling] = useState(null);
     // Admin-side "item unavailable" partial cancellation — same endpoint the
     // seller uses, so an admin can act on a seller's behalf without waiting.
     const [cancelItemsMode, setCancelItemsMode] = useState(false);
     const [cancelItemIndexes, setCancelItemIndexes] = useState([]);
     const [cancelItemsReason, setCancelItemsReason] = useState("");
     const [cancelItemsSaving, setCancelItemsSaving] = useState(false);
+    // Adjust price — inline editor, same shape as the seller panel's.
+    const [adjustMode, setAdjustMode] = useState(false);
+    const [adjustItems, setAdjustItems] = useState([]);
+    const [adjustReason, setAdjustReason] = useState("");
+    const [adjustSaving, setAdjustSaving] = useState(false);
+    const [adjustPreview, setAdjustPreview] = useState(null);
+    const [adjustPreviewLoading, setAdjustPreviewLoading] = useState(false);
+    // Reschedule
+    const [rescheduleOpen, setRescheduleOpen] = useState(false);
+    const [rescheduleSelection, setRescheduleSelection] = useState({ deliveryDate: null, windowLabel: null });
+    const [rescheduleNote, setRescheduleNote] = useState("");
+    const [rescheduleSaving, setRescheduleSaving] = useState(false);
+    // Replacement
+    const [replacementOpen, setReplacementOpen] = useState(false);
+    const [replacementItemIndex, setReplacementItemIndex] = useState(0);
+    const [replacementProducts, setReplacementProducts] = useState([]);
+    const [replacementProductsLoading, setReplacementProductsLoading] = useState(false);
+    const [replacementProductId, setReplacementProductId] = useState("");
+    const [replacementPrice, setReplacementPrice] = useState("");
+    const [replacementReason, setReplacementReason] = useState("Item unavailable");
+    const [replacementSaving, setReplacementSaving] = useState(false);
+    // Split delivery
+    const [splitOpen, setSplitOpen] = useState(false);
+    const [splitFirstLegIndexes, setSplitFirstLegIndexes] = useState([0]);
+    const [splitExtraFee, setSplitExtraFee] = useState("20");
+    const [splitSelection, setSplitSelection] = useState({ deliveryDate: null, windowLabel: null });
+    const [splitSaving, setSplitSaving] = useState(false);
     const [availableRiders, setAvailableRiders] = useState([]);
     const [selectedRiderId, setSelectedRiderId] = useState("");
     const [isAssigningRider, setIsAssigningRider] = useState(false);
@@ -239,6 +294,256 @@ const OrderDetail = () => {
         }
     };
 
+    // --- Adjust Price ---
+    const openAdjustEditor = () => {
+        setAdjustItems((order.items || []).map((it) => ({ ...it })));
+        setAdjustReason('');
+        setAdjustPreview(null);
+        setAdjustMode(true);
+    };
+
+    const closeAdjustEditor = () => {
+        setAdjustMode(false);
+        setAdjustItems([]);
+        setAdjustReason('');
+        setAdjustPreview(null);
+    };
+
+    const updateAdjustQty = (idx, qty) => {
+        setAdjustItems((prev) => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], quantity: Math.max(0, Number(qty) || 0) };
+            return next;
+        });
+    };
+
+    const updateAdjustPrice = (idx, price) => {
+        setAdjustItems((prev) => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], price };
+            return next;
+        });
+    };
+
+    // A product's raw price can carry its own commission/GST markup, so a
+    // raw sum of price*qty isn't what the customer actually sees — fetch
+    // the real recomputed customer-facing preview, same as the seller panel.
+    useEffect(() => {
+        if (!adjustMode) {
+            setAdjustPreview(null);
+            return undefined;
+        }
+        const kept = adjustItems.filter((it) => Number(it.quantity) > 0 && Number(it.price) > 0);
+        if (!kept.length) {
+            setAdjustPreview(null);
+            return undefined;
+        }
+        const timer = setTimeout(async () => {
+            setAdjustPreviewLoading(true);
+            try {
+                const res = await adminApi.previewAdjustOrder(order.orderId, {
+                    items: kept.map((it) => ({
+                        product: it.product?._id || it.product,
+                        variantSlot: it.variantSlot,
+                        quantity: Number(it.quantity),
+                        price: Number(it.price),
+                    })),
+                });
+                setAdjustPreview(res?.data?.result || null);
+            } catch {
+                setAdjustPreview(null);
+            } finally {
+                setAdjustPreviewLoading(false);
+            }
+        }, 400);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [adjustItems, adjustMode]);
+
+    const handleApplyAdjustment = async () => {
+        const kept = adjustItems.filter((it) => Number(it.quantity) > 0);
+        if (!kept.length) {
+            showToast("At least one item must remain. Use Item Unavailable for a full cancellation.", "error");
+            return;
+        }
+        if (!adjustReason.trim()) {
+            showToast("Please provide a reason for the adjustment", "error");
+            return;
+        }
+        setAdjustSaving(true);
+        try {
+            await adminApi.adjustOrder(order.orderId, {
+                items: kept.map((it) => ({
+                    product: it.product?._id || it.product,
+                    variantSlot: it.variantSlot,
+                    quantity: Number(it.quantity),
+                    price: Number(it.price),
+                })),
+                reason: adjustReason.trim(),
+            });
+            showToast("Order adjusted", "success");
+            closeAdjustEditor();
+            fetchDetail();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to adjust order", "error");
+        } finally {
+            setAdjustSaving(false);
+        }
+    };
+
+    // --- Reschedule ---
+    const openRescheduleModal = () => {
+        setRescheduleSelection({ deliveryDate: null, windowLabel: null });
+        setRescheduleNote('');
+        setRescheduleOpen(true);
+    };
+
+    const handleSubmitReschedule = async () => {
+        if (!rescheduleSelection.deliveryDate || !rescheduleSelection.windowLabel) {
+            showToast("Please select a delivery date and window", "error");
+            return;
+        }
+        setRescheduleSaving(true);
+        try {
+            await adminApi.adminRescheduleOrder(order.orderId, {
+                deliveryDate: rescheduleSelection.deliveryDate,
+                windowLabel: rescheduleSelection.windowLabel,
+                note: rescheduleNote,
+            });
+            showToast("Order rescheduled", "success");
+            setRescheduleOpen(false);
+            fetchDetail();
+        } catch (error) {
+            showToast(error?.response?.data?.message || "Failed to reschedule order", "error");
+        } finally {
+            setRescheduleSaving(false);
+        }
+    };
+
+    // --- Replacement ---
+    const openReplacementModal = async () => {
+        setReplacementItemIndex(0);
+        setReplacementProductId('');
+        setReplacementPrice('');
+        setReplacementReason('Item unavailable');
+        setReplacementOpen(true);
+        setReplacementProductsLoading(true);
+        try {
+            const res = await adminApi.getProducts({ sellerId: order.seller?._id, status: 'active', limit: 100 });
+            const items = res?.data?.result?.items || [];
+            setReplacementProducts(Array.isArray(items) ? items : []);
+        } catch {
+            setReplacementProducts([]);
+        } finally {
+            setReplacementProductsLoading(false);
+        }
+    };
+
+    const handleReplacementProductChange = (productId) => {
+        setReplacementProductId(productId);
+        const product = replacementProducts.find((p) => String(p._id) === String(productId));
+        if (product) {
+            setReplacementPrice(String(Number(product.customerSalePrice ?? product.customerPrice ?? product.salePrice ?? product.price ?? 0)));
+        }
+    };
+
+    const handleSubmitReplacement = async () => {
+        const chosenProduct = replacementProducts.find((p) => String(p._id) === String(replacementProductId));
+        if (!chosenProduct) {
+            showToast('Select a replacement product', 'error');
+            return;
+        }
+        const priceNum = Number(replacementPrice);
+        if (!Number.isFinite(priceNum) || priceNum <= 0) {
+            showToast('Enter a valid replacement price', 'error');
+            return;
+        }
+        if (!replacementReason.trim()) {
+            showToast('Please provide a reason for the replacement', 'error');
+            return;
+        }
+        setReplacementSaving(true);
+        try {
+            await adminApi.requestProductReplacement(order.orderId, {
+                itemIndex: replacementItemIndex,
+                reason: replacementReason.trim(),
+                alternatives: [
+                    {
+                        product: chosenProduct._id,
+                        name: chosenProduct.name,
+                        price: priceNum,
+                        quantity: Number(order.items?.[replacementItemIndex]?.quantity || 1),
+                        variantSlot: chosenProduct.variants?.[0]?.sku || '',
+                    },
+                ],
+            });
+            showToast('Replacement request sent to customer', 'success');
+            setReplacementOpen(false);
+            fetchDetail();
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to create replacement request', 'error');
+        } finally {
+            setReplacementSaving(false);
+        }
+    };
+
+    // --- Split delivery ---
+    const openSplitModal = () => {
+        if (!order.items || order.items.length < 2) {
+            showToast('At least 2 items required for split delivery', 'error');
+            return;
+        }
+        setSplitFirstLegIndexes([0]);
+        setSplitExtraFee('20');
+        setSplitSelection({ deliveryDate: null, windowLabel: null });
+        setSplitOpen(true);
+    };
+
+    const toggleSplitFirstLegIndex = (idx) => {
+        setSplitFirstLegIndexes((prev) =>
+            prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+        );
+    };
+
+    const handleSubmitSplitDelivery = async () => {
+        const totalItems = order.items.length;
+        if (!splitFirstLegIndexes.length || splitFirstLegIndexes.length >= totalItems) {
+            showToast('Select at least one item for the first delivery, leaving at least one for the second', 'error');
+            return;
+        }
+        if (!splitSelection.deliveryDate || !splitSelection.windowLabel) {
+            showToast('Select a delivery date and window for the second delivery', 'error');
+            return;
+        }
+        const secondLegIndexes = order.items
+            .map((_, idx) => idx)
+            .filter((idx) => !splitFirstLegIndexes.includes(idx));
+        const feeNum = Number(splitExtraFee) || 0;
+
+        setSplitSaving(true);
+        try {
+            await adminApi.splitOrderDelivery(order.orderId, {
+                splits: [
+                    { label: 'Part 1 - Immediate', itemIndexes: splitFirstLegIndexes, additionalDeliveryFee: 0 },
+                    {
+                        label: 'Part 2 - Next delivery',
+                        itemIndexes: secondLegIndexes,
+                        additionalDeliveryFee: feeNum,
+                        deliveryDate: splitSelection.deliveryDate,
+                        windowLabel: splitSelection.windowLabel,
+                    },
+                ],
+            });
+            showToast('Split delivery plan saved', 'success');
+            setSplitOpen(false);
+            fetchDetail();
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to save split delivery plan', 'error');
+        } finally {
+            setSplitSaving(false);
+        }
+    };
+
     const handleApproveCancellationRequest = async () => {
         if (!order?.cancellationRequest || order.cancellationRequest.status !== 'pending') return;
         const note = window.prompt('Optional admin note for approval:', order.cancellationRequest.reason || '');
@@ -279,6 +584,7 @@ const OrderDetail = () => {
         if (!order?.orderId) return;
         setReassignLoading(true);
         setSelectedStoreId("");
+        setPriceDifferenceHandling(null);
         try {
             const res = await adminApi.getOrderReassignCandidates(order.orderId);
             const payload = res.data?.result || {};
@@ -303,6 +609,10 @@ const OrderDetail = () => {
             return;
         }
         const target = reassignCandidates.find((c) => c.storeId === selectedStoreId);
+        if (target?.priceDirection === 'increase' && !priceDifferenceHandling) {
+            showToast('Choose how to handle the price increase before reassigning', 'error');
+            return;
+        }
         if (!window.confirm(
             `Move this order to "${target?.shopName || 'selected store'}"? Original store will lose the order and the new store must accept it.`,
         )) {
@@ -314,10 +624,12 @@ const OrderDetail = () => {
                 targetStoreId: selectedStoreId,
                 note: reassignNote.trim(),
                 reason: 'seller_unavailable',
+                ...(target?.priceDirection === 'increase' ? { priceDifferenceHandling } : {}),
             });
             showToast('Order moved to the new store successfully', 'success');
             setReassignOpen(false);
             setReassignNote('');
+            setPriceDifferenceHandling(null);
             fetchDetail();
         } catch (error) {
             const missing = error?.response?.data?.result?.missing;
@@ -461,6 +773,21 @@ const OrderDetail = () => {
     // of independently re-deriving (and drifting from) its own answer.
     const legacyStatus = getLegacyStatusFromOrder(order);
     const statusLabel = getOrderStatusLabel(order);
+    const isOrderReturn = Boolean(order.returnStatus && order.returnStatus !== 'none') || Boolean(order.isReturn);
+    const canAdjustPrice =
+        !isOrderReturn
+        && !['delivered', 'cancelled', 'out_for_delivery', 'returned', 'scheduled'].includes(legacyStatus)
+        && canSellerManuallyUpdateStatus(order)
+        && order.priceAdjustment?.status !== 'pending'
+        && hasPermission('orders.adjust_price');
+    const canSplitOrReplace = !isOrderReturn && canSellerSplitOrReplace(order);
+    const canShowReplacement = canSplitOrReplace && hasPermission('orders.replacement');
+    const canShowSplitDelivery = canSplitOrReplace && order.items.length >= 2 && hasPermission('orders.split_delivery');
+    const canShowReschedule =
+        !['delivered', 'cancelled', 'returned'].includes(legacyStatus)
+        && !isOrderReturn
+        && order.reschedule?.status !== 'requested'
+        && hasPermission('orders.reschedule');
 
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -651,14 +978,47 @@ const OrderDetail = () => {
                                 <Box className="h-4 w-4 text-brand-500" />
                                 Items in Order
                             </h3>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
                                 <Badge className="bg-brand-50 text-brand-700 border-none text-[9px] font-black">{order.items.length} ITEMS</Badge>
+                                {!adjustMode && !cancelItemsMode && canShowReschedule && (
+                                    <button
+                                        onClick={openRescheduleModal}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5"
+                                    >
+                                        <CalendarClock className="h-3.5 w-3.5" /> Reschedule
+                                    </button>
+                                )}
+                                {!adjustMode && !cancelItemsMode && canAdjustPrice && (
+                                    <button
+                                        onClick={openAdjustEditor}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-brand-600 text-white hover:bg-brand-700 transition-all"
+                                    >
+                                        Adjust Price
+                                    </button>
+                                )}
+                                {!adjustMode && !cancelItemsMode && canShowReplacement && (
+                                    <button
+                                        onClick={openReplacementModal}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-600 text-white hover:bg-amber-700 transition-all flex items-center gap-1.5"
+                                    >
+                                        <Repeat className="h-3.5 w-3.5" /> Replacement
+                                    </button>
+                                )}
+                                {!adjustMode && !cancelItemsMode && canShowSplitDelivery && (
+                                    <button
+                                        onClick={openSplitModal}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700 transition-all flex items-center gap-1.5"
+                                    >
+                                        <GitBranch className="h-3.5 w-3.5" /> Split Delivery
+                                    </button>
+                                )}
                                 {(() => {
                                     const canCancelItems =
                                         !['delivered', 'cancelled', 'out_for_delivery', 'returned'].includes(legacyStatus)
                                         && !order.deliveryBoy
                                         && order.items.length > 1;
                                     if (!canCancelItems) return null;
+                                    if (adjustMode) return null;
                                     return cancelItemsMode ? (
                                         <button
                                             onClick={closeCancelItemsEditor}
@@ -675,8 +1035,46 @@ const OrderDetail = () => {
                                         </button>
                                     );
                                 })()}
+                                {adjustMode && (
+                                    <button
+                                        onClick={closeAdjustEditor}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-all"
+                                    >
+                                        Cancel Edit
+                                    </button>
+                                )}
                             </div>
                         </div>
+                        {adjustMode && (
+                            <div className="px-6 py-4 bg-brand-50/50 border-b border-brand-100 space-y-3">
+                                <p className="text-[11px] text-slate-700 leading-relaxed">
+                                    Change item prices and/or quantities. Set a quantity to 0 to drop an item entirely (at least one item must remain).
+                                </p>
+                                <textarea
+                                    value={adjustReason}
+                                    onChange={(e) => setAdjustReason(e.target.value)}
+                                    placeholder="Reason for this price adjustment (shared with customer)"
+                                    rows={2}
+                                    className="w-full text-xs border border-brand-200 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-brand-200"
+                                />
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <p className="text-[10px] font-bold text-slate-500">
+                                        {adjustPreviewLoading
+                                            ? 'Recalculating customer total…'
+                                            : adjustPreview
+                                              ? `Customer will now pay ₹${adjustPreview.total ?? adjustPreview.grandTotal ?? ''}`
+                                              : 'Enter valid prices to preview the customer-facing total'}
+                                    </p>
+                                    <button
+                                        onClick={handleApplyAdjustment}
+                                        disabled={adjustSaving || !adjustReason.trim()}
+                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-brand-600 text-white hover:bg-brand-700 transition-all disabled:opacity-50"
+                                    >
+                                        {adjustSaving ? "Saving..." : "Apply Adjustment"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         {cancelItemsMode && (
                             <div className="px-6 py-4 bg-rose-50/50 border-b border-rose-100 space-y-3">
                                 <p className="text-[11px] text-rose-900 leading-relaxed">
@@ -715,7 +1113,7 @@ const OrderDetail = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
-                                    {order.items.map((item, idx) => (
+                                    {(adjustMode ? adjustItems : order.items).map((item, idx) => (
                                         <tr key={item._id || idx} className="group hover:bg-slate-50/30 transition-all">
                                             {cancelItemsMode && (
                                                 <td className="px-4 py-5">
@@ -742,11 +1140,37 @@ const OrderDetail = () => {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-5 text-center text-sm font-bold text-slate-600">₹{item.price}</td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className="bg-slate-100 px-3 py-1 rounded-lg text-xs font-black text-slate-700">x{item.quantity}</span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right text-sm font-black text-slate-900">₹{item.price * item.quantity}</td>
+                                            {adjustMode ? (
+                                                <>
+                                                    <td className="px-6 py-5 text-center">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={item.price}
+                                                            onChange={(e) => updateAdjustPrice(idx, e.target.value)}
+                                                            className="w-24 text-center text-sm font-bold border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={item.quantity}
+                                                            onChange={(e) => updateAdjustQty(idx, e.target.value)}
+                                                            className="w-16 text-center text-xs font-black border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                                                        />
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="px-6 py-5 text-center text-sm font-bold text-slate-600">₹{item.price}</td>
+                                                    <td className="px-6 py-5 text-center">
+                                                        <span className="bg-slate-100 px-3 py-1 rounded-lg text-xs font-black text-slate-700">x{item.quantity}</span>
+                                                    </td>
+                                                </>
+                                            )}
+                                            <td className="px-6 py-5 text-right text-sm font-black text-slate-900">₹{(Number(item.price) || 0) * (Number(item.quantity) || 0)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -819,7 +1243,10 @@ const OrderDetail = () => {
                                         </label>
                                         <select
                                             value={selectedStoreId}
-                                            onChange={(e) => setSelectedStoreId(e.target.value)}
+                                            onChange={(e) => {
+                                                setSelectedStoreId(e.target.value);
+                                                setPriceDifferenceHandling(null);
+                                            }}
                                             className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold outline-none"
                                         >
                                             <option value="">Select store…</option>
@@ -839,6 +1266,12 @@ const OrderDetail = () => {
                                                     c.distanceKm != null
                                                         ? ` · ${c.distanceKm} km`
                                                         : '';
+                                                const priceLabel =
+                                                    c.priceDirection === 'increase'
+                                                        ? ` · +₹${c.priceDelta} vs. current`
+                                                        : c.priceDirection === 'decrease'
+                                                          ? ` · -₹${c.priceDelta} vs. current`
+                                                          : '';
                                                 return (
                                                 <option
                                                     key={c.storeId}
@@ -849,6 +1282,7 @@ const OrderDetail = () => {
                                                     {c.locality ? ` · ${c.locality}` : ''}
                                                     {distanceLabel}
                                                     {` · ${c.coveragePct}% match`}
+                                                    {priceLabel}
                                                     {c.canReassign
                                                         ? ''
                                                         : blockers.length
@@ -859,6 +1293,50 @@ const OrderDetail = () => {
                                                 );
                                             })}
                                         </select>
+                                        {(() => {
+                                            const selected = reassignCandidates.find((c) => c.storeId === selectedStoreId);
+                                            if (!selected || !selected.priceDirection || selected.priceDirection === 'none') return null;
+                                            if (selected.priceDirection === 'decrease') {
+                                                return (
+                                                    <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
+                                                        This store's price is ₹{selected.priceDelta} lower — the customer will be credited ₹{selected.priceDelta} to their wallet automatically.
+                                                    </p>
+                                                );
+                                            }
+                                            return (
+                                                <div className="space-y-2 bg-amber-50 border border-amber-100 rounded-xl p-2.5">
+                                                    <p className="text-[11px] text-amber-900">
+                                                        This store's price is ₹{selected.priceDelta} higher. Choose how to handle it:
+                                                    </p>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPriceDifferenceHandling('customer_pays')}
+                                                            className={cn(
+                                                                'flex-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider border',
+                                                                priceDifferenceHandling === 'customer_pays'
+                                                                    ? 'bg-amber-600 text-white border-amber-600'
+                                                                    : 'bg-white text-amber-700 border-amber-200',
+                                                            )}
+                                                        >
+                                                            Customer pays
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPriceDifferenceHandling('platform_absorbs')}
+                                                            className={cn(
+                                                                'flex-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider border',
+                                                                priceDifferenceHandling === 'platform_absorbs'
+                                                                    ? 'bg-amber-600 text-white border-amber-600'
+                                                                    : 'bg-white text-amber-700 border-amber-200',
+                                                            )}
+                                                        >
+                                                            Platform absorbs
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                         <textarea
                                             value={reassignNote}
                                             onChange={(e) => setReassignNote(e.target.value)}
@@ -877,7 +1355,12 @@ const OrderDetail = () => {
                                             <button
                                                 type="button"
                                                 onClick={handleReassignStore}
-                                                disabled={isReassigning || !selectedStoreId}
+                                                disabled={
+                                                    isReassigning ||
+                                                    !selectedStoreId ||
+                                                    (reassignCandidates.find((c) => c.storeId === selectedStoreId)?.priceDirection === 'increase' &&
+                                                        !priceDifferenceHandling)
+                                                }
                                                 className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-black disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed"
                                             >
                                                 {isReassigning ? 'Moving…' : 'Confirm shift'}
@@ -1595,6 +2078,185 @@ const OrderDetail = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Reschedule modal */}
+            <Modal
+                isOpen={rescheduleOpen}
+                onClose={() => !rescheduleSaving && setRescheduleOpen(false)}
+                title="Reschedule Delivery"
+                size="md"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setRescheduleOpen(false)}
+                            disabled={rescheduleSaving}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitReschedule}
+                            disabled={rescheduleSaving || !rescheduleSelection.deliveryDate || !rescheduleSelection.windowLabel}
+                            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800 transition-all disabled:opacity-50"
+                        >
+                            {rescheduleSaving ? "Saving..." : "Confirm Reschedule"}
+                        </button>
+                    </>
+                }
+            >
+                {order.seller?._id && (
+                    <DeliverySlotPicker
+                        sellerId={order.seller._id}
+                        fulfillmentType="scheduled"
+                        apiFn={adminApi.getDeliverySlots}
+                        onChange={(windowLabel, deliveryDate) => setRescheduleSelection({ deliveryDate, windowLabel })}
+                    />
+                )}
+                <textarea
+                    value={rescheduleNote}
+                    onChange={(e) => setRescheduleNote(e.target.value)}
+                    placeholder="Note (optional, shared with seller/customer)"
+                    rows={2}
+                    className="w-full text-xs border border-slate-200 rounded-xl p-3 mt-4 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+            </Modal>
+
+            {/* Replacement modal */}
+            <Modal
+                isOpen={replacementOpen}
+                onClose={() => !replacementSaving && setReplacementOpen(false)}
+                title="Propose Replacement"
+                size="md"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setReplacementOpen(false)}
+                            disabled={replacementSaving}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitReplacement}
+                            disabled={replacementSaving || !replacementProductId}
+                            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-amber-600 text-white hover:bg-amber-700 transition-all disabled:opacity-50"
+                        >
+                            {replacementSaving ? "Sending..." : "Send to Customer"}
+                        </button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Item to replace</label>
+                        <select
+                            value={replacementItemIndex}
+                            onChange={(e) => setReplacementItemIndex(Number(e.target.value))}
+                            className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-amber-500"
+                        >
+                            {order.items.map((it, idx) => (
+                                <option key={it._id || idx} value={idx}>{it.name} (x{it.quantity})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Replacement product</label>
+                        {replacementProductsLoading ? (
+                            <p className="text-xs text-slate-400 mt-1">Loading products…</p>
+                        ) : (
+                            <select
+                                value={replacementProductId}
+                                onChange={(e) => handleReplacementProductChange(e.target.value)}
+                                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-amber-500"
+                            >
+                                <option value="">Select a product</option>
+                                {replacementProducts.map((p) => (
+                                    <option key={p._id} value={p._id}>{p.name}</option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                    <Input
+                        label="Replacement price"
+                        type="number"
+                        min="0"
+                        value={replacementPrice}
+                        onChange={(e) => setReplacementPrice(e.target.value)}
+                    />
+                    <textarea
+                        value={replacementReason}
+                        onChange={(e) => setReplacementReason(e.target.value)}
+                        placeholder="Reason (shared with customer)"
+                        rows={2}
+                        className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                    />
+                </div>
+            </Modal>
+
+            {/* Split delivery modal */}
+            <Modal
+                isOpen={splitOpen}
+                onClose={() => !splitSaving && setSplitOpen(false)}
+                title="Split Delivery"
+                size="lg"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setSplitOpen(false)}
+                            disabled={splitSaving}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSubmitSplitDelivery}
+                            disabled={splitSaving || !splitSelection.deliveryDate || !splitSelection.windowLabel}
+                            className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-50"
+                        >
+                            {splitSaving ? "Saving..." : "Save Split Plan"}
+                        </button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                            Deliver now (Part 1) — everything else moves to Part 2
+                        </p>
+                        <div className="space-y-1.5">
+                            {order.items.map((it, idx) => (
+                                <label key={it._id || idx} className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={splitFirstLegIndexes.includes(idx)}
+                                        onChange={() => toggleSplitFirstLegIndex(idx)}
+                                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+                                    />
+                                    {it.name} (x{it.quantity})
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <Input
+                        label="Additional delivery fee for Part 2"
+                        type="number"
+                        min="0"
+                        value={splitExtraFee}
+                        onChange={(e) => setSplitExtraFee(e.target.value)}
+                    />
+                    <div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Part 2 delivery window</p>
+                        {order.seller?._id && (
+                            <DeliverySlotPicker
+                                sellerId={order.seller._id}
+                                fulfillmentType="scheduled"
+                                apiFn={adminApi.getDeliverySlots}
+                                onChange={(windowLabel, deliveryDate) => setSplitSelection({ deliveryDate, windowLabel })}
+                            />
+                        )}
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

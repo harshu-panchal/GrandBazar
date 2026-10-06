@@ -17,6 +17,12 @@ export default function DeliverySlotPicker({
   initialTimeSlot = null,
   initialDeliveryDate = null,
   initialWindowLabel = null,
+  // Lets non-customer callers (admin/seller phone-order screens) reuse this
+  // component against their own axios instance/auth instead of the
+  // customer one — same /orders/scheduling/slots endpoint and response
+  // shape either way. Defaults to the customer call so existing usage is
+  // unchanged.
+  apiFn = customerApi.getDeliverySlots,
 }) {
   const [initDate, initLabel] = useMemo(() => {
     let date = initialDeliveryDate;
@@ -157,7 +163,7 @@ export default function DeliverySlotPicker({
       }
 
       try {
-        const res = await customerApi.getDeliverySlots({
+        const res = await apiFn({
           sellerId,
           deliveryDate,
           fulfillmentType,

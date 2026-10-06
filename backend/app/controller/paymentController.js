@@ -4,6 +4,7 @@ import {
   verifyPhonePePaymentStatus,
   processPhonePeWebhook,
   resolvePhoneOrderPayLink,
+  verifyPhoneOrderPayLinkToken,
 } from "../services/paymentService.js";
 import {
   createPaymentOrderSchema,
@@ -63,20 +64,51 @@ export const createPaymentOrder = async (req, res) => {
   }
 };
 
+// Route uses optionalVerifyToken (not verifyToken) so an anonymous
+// phone-order customer redirected back from PhonePe can still reach this
+// handler. For a logged-in customer, req.user is set exactly as before and
+// behavior is unchanged. For an anonymous caller, a payLinkToken query
+// param (threaded through the redirect URL by createPaymentOrderForOrderRef
+// — see resolvePhoneOrderPayLink) stands in for the bearer identity.
 export const verifyPaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const merchantOrderId = id || req.query.merchantOrderId;
-    
+
     if (!merchantOrderId) {
         return handleResponse(res, 400, "merchantOrderId is required");
     }
 
+    let effectiveUserId = req.user?.id || null;
+    let payLinkOrderRef = null;
+
+    if (!effectiveUserId) {
+      const payLinkToken = req.query.payLinkToken;
+      if (!payLinkToken) {
+        return handleResponse(res, 401, "Unauthorized, token missing");
+      }
+      const decoded = verifyPhoneOrderPayLinkToken(payLinkToken);
+      effectiveUserId = decoded.customerId;
+      payLinkOrderRef = decoded.orderRef;
+    }
+
     const verification = await verifyPhonePePaymentStatus({
       merchantOrderId,
-      userId: req.user?.id,
+      userId: effectiveUserId,
       correlationId: req.correlationId || null,
     });
+
+    // A pay-link token is scoped to the order it was issued for — without
+    // this check, a customer with two separate phone orders could reuse
+    // order A's link token to probe order B's status (both belong to the
+    // same customer, so the plain ownership check above wouldn't catch it).
+    if (payLinkOrderRef) {
+      const paymentOrderRef =
+        verification.payment.checkoutGroupId || verification.payment.publicOrderId;
+      if (String(paymentOrderRef) !== String(payLinkOrderRef)) {
+        return handleResponse(res, 403, "This payment link is not valid for this order");
+      }
+    }
 
     return handleResponse(res, 200, "Payment status verified", {
       status: verification.status,

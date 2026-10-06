@@ -530,6 +530,13 @@ export async function createPaymentOrderForOrderRef({
   userId,
   idempotencyKey = null,
   correlationId = null,
+  // Only ever passed by resolvePhoneOrderPayLink. Threaded into the PhonePe
+  // return URL so the customer's still-anonymous browser can authenticate
+  // the fast client-side verify call on redirect-back (see verifyPaymentStatus
+  // in paymentController.js) instead of relying solely on the async webhook.
+  // A normal logged-in customer's checkout never passes this, so their
+  // redirect URL is unchanged.
+  payLinkToken = null,
 }) {
   const target = await resolvePaymentTarget(orderRef);
   validatePaymentEligibility(target, userId);
@@ -576,7 +583,9 @@ export async function createPaymentOrderForOrderRef({
   );
 
   const config = getPhonePeConfig();
-  const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
+  const redirectUrl = payLinkToken
+    ? `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}&payLinkToken=${encodeURIComponent(payLinkToken)}`
+    : `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
 
   const payload = {
     merchantId: config.merchantId,
@@ -684,12 +693,10 @@ export function signPhoneOrderPayLinkToken({ orderRef, customerId }) {
   );
 }
 
-// Resolves an anonymous pay-link click (no session) into the same PhonePe
-// checkout an authenticated customer would get. The token's own customerId
-// (verified, never taken from the request) stands in for req.user.id so
-// createPaymentOrderForOrderRef's existing ownership check keeps working
-// unmodified.
-export async function resolvePhoneOrderPayLink(token) {
+// Shared by resolvePhoneOrderPayLink (initial checkout creation) and
+// verifyPaymentStatus (the post-payment redirect-back verify call) — both
+// need to turn the same raw token into { orderRef, customerId }.
+export function verifyPhoneOrderPayLinkToken(token) {
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -703,11 +710,25 @@ export async function resolvePhoneOrderPayLink(token) {
     err.statusCode = 400;
     throw err;
   }
+  return { orderRef: decoded.orderRef, customerId: decoded.customerId };
+}
+
+// Resolves an anonymous pay-link click (no session) into the same PhonePe
+// checkout an authenticated customer would get. The token's own customerId
+// (verified, never taken from the request) stands in for req.user.id so
+// createPaymentOrderForOrderRef's existing ownership check keeps working
+// unmodified.
+export async function resolvePhoneOrderPayLink(token) {
+  const { orderRef, customerId } = verifyPhoneOrderPayLinkToken(token);
 
   return createPaymentOrderForOrderRef({
-    orderRef: decoded.orderRef,
-    userId: decoded.customerId,
-    idempotencyKey: `phonelink:${decoded.orderRef}`,
+    orderRef,
+    userId: customerId,
+    idempotencyKey: `phonelink:${orderRef}`,
+    // Threaded into the PhonePe return URL so the redirect-back verify call
+    // (still from this same anonymous browser) can authenticate itself the
+    // same way — see verifyPaymentStatus in paymentController.js.
+    payLinkToken: token,
   });
 }
 

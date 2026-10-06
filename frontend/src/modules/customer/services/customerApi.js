@@ -167,7 +167,10 @@ export const customerApi = {
   // Payments
   createPaymentOrder: (data) =>
     axiosInstance.post("/payments/create-order", data),
-  verifyPaymentStatus: (id) => axiosInstance.get(`/payments/status/${id}`),
+  verifyPaymentStatus: (id, { payLinkToken } = {}) =>
+    axiosInstance.get(`/payments/status/${id}`, {
+      params: payLinkToken ? { payLinkToken } : undefined,
+    }),
   resolvePhoneOrderPayLink: (token) =>
     axiosInstance.get(`/payments/pay-link/${encodeURIComponent(token)}`),
 

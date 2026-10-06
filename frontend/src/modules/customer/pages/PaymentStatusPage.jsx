@@ -12,6 +12,11 @@ const PaymentStatusPage = () => {
     const { showToast } = useToast();
     
     const merchantOrderId = searchParams.get("merchantOrderId");
+    // Present only when PhonePe redirects back an anonymous phone-order
+    // customer (see resolvePhoneOrderPayLink/createPaymentOrderForOrderRef
+    // on the backend) — lets this still-logged-out browser authenticate the
+    // verify call below instead of falling back to the slower async webhook.
+    const payLinkToken = searchParams.get("payLinkToken");
     const [status, setStatus] = useState("verifying"); // verifying, success, failure, timeout
     const [orderDetails, setOrderDetails] = useState(null);
     const [error, setError] = useState("");
@@ -27,7 +32,7 @@ const PaymentStatusPage = () => {
         }
 
         try {
-            const response = await customerApi.verifyPaymentStatus(merchantOrderId);
+            const response = await customerApi.verifyPaymentStatus(merchantOrderId, { payLinkToken });
             if (response.data.success) {
                 const paymentStatus = response.data.result.status;
                 const payment = response.data.result.payment;
@@ -62,9 +67,19 @@ const PaymentStatusPage = () => {
                 return;
             }
 
-            if (statusCode === 401) {
+            if (statusCode === 401 && !payLinkToken) {
                 setStatus("failure");
                 setError("Your session is missing or expired. Please log in again and check the order from My Orders.");
+                if (pollInterval.current) clearInterval(pollInterval.current);
+                return;
+            }
+
+            if (payLinkToken && (statusCode === 400 || statusCode === 403)) {
+                setStatus("failure");
+                setError(
+                    err?.response?.data?.message ||
+                        "This payment link is no longer valid. Please contact support.",
+                );
                 if (pollInterval.current) clearInterval(pollInterval.current);
                 return;
             }

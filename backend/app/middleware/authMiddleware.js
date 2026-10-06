@@ -416,3 +416,25 @@ export const checkAdminPermission = (permission) => {
     return handleResponse(res, 403, `Access denied. Missing permission: ${permission}`);
   };
 };
+
+// Like checkAdminPermission, but only enforces the gate when the caller is
+// actually admin-scoped. A seller/sub-staff caller on the same shared route
+// passes through untouched, leaving checkSubSellerPermission further down
+// the chain as their sole gate — for routes shared between the seller and
+// admin panels (allowRoles("seller", "admin")) where checkAdminPermission
+// itself would incorrectly reject every seller request.
+export const checkAdminPermissionIfAdminCaller = (permission) => {
+  return (req, res, next) => {
+    const isAdminScoped =
+      req.user?.role === "admin" ||
+      req.user?.role === "superadmin" ||
+      req.user?.scope === "admin";
+    if (!isAdminScoped) return next();
+    if (req.user?.role === "admin" || req.user?.role === "superadmin") {
+      return next();
+    }
+    const allowed = req.user?.allowedPermissions || [];
+    if (allowed.includes(permission)) return next();
+    return handleResponse(res, 403, `Access denied. Missing permission: ${permission}`);
+  };
+};

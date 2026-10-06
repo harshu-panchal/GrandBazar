@@ -101,7 +101,7 @@ export async function processExtraPaymentDeadlineJob({ orderId }) {
   });
 }
 
-async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) {
+export async function issueCreditNoteAndRefund(order, deltaAmount, reason, actorLabel) {
   const creditNoteId = generateCreditNoteId();
   const creditNote = await CreditNote.create({
     creditNoteId,

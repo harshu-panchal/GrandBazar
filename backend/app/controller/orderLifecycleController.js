@@ -732,13 +732,14 @@ export const getReassignCandidates = async (req, res) => {
 
 export const adminReassignOrder = async (req, res) => {
   try {
-    const { targetStoreId, note, reason } = req.body || {};
+    const { targetStoreId, note, reason, priceDifferenceHandling } = req.body || {};
     const order = await adminReassignOrderToStore({
       orderId: req.params.orderId,
       targetStoreId,
       adminId: req.user?.id,
       note,
       reason: reason || "seller_unavailable",
+      priceDifferenceHandling: priceDifferenceHandling || null,
     });
     return handleResponse(res, 200, "Order reassigned to another store", order);
   } catch (error) {

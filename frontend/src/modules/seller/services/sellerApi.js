@@ -159,6 +159,16 @@ export const sellerApi = {
     approveItemAddition: (orderId, data) => axiosInstance.post(`/orders/${orderId}/item-addition/approve`, data),
     rejectItemAddition: (orderId, data) => axiosInstance.post(`/orders/${orderId}/item-addition/reject`, data),
     getAvailableDeliverySlots: (params) => axiosInstance.get(`/orders/scheduling/slots`, { params }),
+    // Phone orders (create on behalf of a customer, pay-by-link). Distinct
+    // from getProducts above (-> /products/seller/me, the full catalog-
+    // management endpoint, gated by products:read): this hits plain
+    // /products with a text search + sellerId scope, gated only by
+    // orders:write, so sub-staff with order permissions but not product
+    // permissions can still use the phone-order picker.
+    searchOwnProducts: (params) => axiosInstance.get('/products', { params }),
+    lookupCustomerByPhone: (phone) =>
+        axiosInstance.get('/orders/seller/phone-order/lookup-customer', { params: { phone } }),
+    createPhoneOrder: (data) => axiosInstance.post('/orders/seller/phone-order', data),
     adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
     previewAdjustOrder: (orderId, data) => axiosInstance.post(`/orders/${orderId}/adjust-preview`, data),
     partialCancelOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/partial-cancel`, data),

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Order from "../models/order.js";
 import Product from "../models/product.js";
 import Store from "../models/store.js";
+import User from "../models/customer.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
 import {
   WORKFLOW_STATUS,
@@ -27,6 +28,13 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { isStoreOperationallyOpen } from "./deliveryOptionResolver.js";
 import { calculateDistance } from "../utils/helper.js";
+import { buildCheckoutPricingSnapshot } from "./checkoutPricingService.js";
+import { freezeFinancialSnapshot } from "./finance/orderFinanceService.js";
+import { debitWallet, creditWallet } from "./finance/walletService.js";
+import { createLedgerEntry } from "./finance/ledgerService.js";
+import { issueCreditNoteAndRefund } from "./orderPriceAdjustmentService.js";
+import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } from "../constants/finance.js";
+import { roundCurrency } from "../utils/money.js";
 
 const REASSIGNABLE_STATUSES = new Set([
   WORKFLOW_STATUS.SELLER_PENDING,
@@ -150,10 +158,14 @@ async function assertTargetStoreInCustomerRange(order, targetStore) {
 }
 
 /**
- * Resolve each order line to a product on the target store via catalogProductId.
- * Keeps customer-facing price/name from the original line.
+ * Resolve each order line to a product on the target store via catalogProductId,
+ * then re-price the whole set against the target store's OWN live catalog
+ * prices (not the original store's) via buildCheckoutPricingSnapshot —
+ * different stores can price the same catalog product differently, and the
+ * customer should end up paying/owing what the NEW store actually charges,
+ * with the difference settled explicitly rather than silently carried over.
  */
-async function mapItemsToTargetStore(order, targetStoreId, { session = null } = {}) {
+async function resolveAndRepriceForTargetStore(order, targetStoreId, { session = null } = {}) {
   const sourceProductIds = order.items
     .map((item) => item.product)
     .filter(Boolean);
@@ -196,7 +208,7 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
     ]),
   );
 
-  const remappedItems = [];
+  const pricingInputItems = [];
   const reservePayload = [];
   const missing = [];
 
@@ -252,14 +264,13 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
       continue;
     }
 
-    remappedItems.push({
+    // No price here — pricingInputItems below is built with no price
+    // override, so buildCheckoutPricingSnapshot falls back to the target
+    // product's own live price instead of carrying over the old store's.
+    pricingInputItems.push({
       product: target._id,
-      name: item.name || target.name,
+      variantSku: variantSku || "",
       quantity: item.quantity,
-      price: item.price,
-      variantSlot: item.variantSlot || variantSku || "",
-      variantSku: variantSku || undefined,
-      image: item.image || target.mainImage || "",
     });
 
     reservePayload.push({
@@ -279,7 +290,44 @@ async function mapItemsToTargetStore(order, targetStoreId, { session = null } = 
     throw err;
   }
 
-  return { remappedItems, reservePayload };
+  const pricingSnapshot = await buildCheckoutPricingSnapshot({
+    orderItems: pricingInputItems,
+    address: order.address,
+    tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
+    discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
+    session,
+  });
+
+  const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(
+    (e) => String(e.sellerId) === String(targetStoreId),
+  );
+  if (!sellerEntry) {
+    throw httpError("Unable to price this order against the target store", 400);
+  }
+
+  const remappedItems = sellerEntry.items.map((item) => ({
+    product: item.productId,
+    name: item.productName,
+    quantity: item.quantity,
+    price: item.price,
+    variantSlot: item.variantSku || undefined,
+    image: item.image || "",
+  }));
+
+  const previousGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
+  const newGrandTotal = Number(sellerEntry.breakdown?.grandTotal || 0);
+  const delta = roundCurrency(newGrandTotal - previousGrandTotal);
+  const direction = delta > 0.005 ? "increase" : delta < -0.005 ? "decrease" : "none";
+
+  return {
+    remappedItems,
+    reservePayload,
+    breakdown: sellerEntry.breakdown,
+    previousGrandTotal,
+    newGrandTotal,
+    delta: Math.abs(delta),
+    direction,
+  };
 }
 
 async function clearDeliveryState(order, { session = null } = {}) {
@@ -464,6 +512,26 @@ export async function getOrderReassignCandidates(orderId) {
     });
   }
 
+  // Price each eligible candidate against its own catalog so the admin can
+  // see the difference before choosing — read-only, nothing saved here.
+  // Never lets a pricing hiccup for one candidate break the whole list.
+  await Promise.all(
+    candidates
+      .filter((c) => c.canReassign)
+      .map(async (candidate) => {
+        try {
+          const priced = await resolveAndRepriceForTargetStore(order, candidate.storeId);
+          candidate.repricedTotal = priced.newGrandTotal;
+          candidate.priceDelta = priced.delta;
+          candidate.priceDirection = priced.direction;
+        } catch {
+          candidate.repricedTotal = null;
+          candidate.priceDelta = null;
+          candidate.priceDirection = null;
+        }
+      }),
+  );
+
   candidates.sort((a, b) => {
     if (a.canReassign !== b.canReassign) return a.canReassign ? -1 : 1;
     if (a.inCustomerRange !== b.inCustomerRange) {
@@ -500,6 +568,10 @@ export async function adminReassignOrderToStore({
   adminId,
   note = "",
   reason = "seller_unavailable",
+  // Required only when the target store's live prices total more than what
+  // the customer already paid/owes — admin's choice at confirmation time,
+  // per the product decision this was built against (never assumed).
+  priceDifferenceHandling = null,
 }) {
   if (!targetStoreId || !mongoose.Types.ObjectId.isValid(String(targetStoreId))) {
     throw httpError("Valid targetStoreId is required", 400);
@@ -558,11 +630,128 @@ export async function adminReassignOrderToStore({
       throw httpError("Order seller changed concurrently. Refresh and retry.", 409);
     }
 
-    const { remappedItems, reservePayload } = await mapItemsToTargetStore(
-      locked,
-      toStoreId,
-      { session },
-    );
+    const {
+      remappedItems,
+      reservePayload,
+      breakdown: newBreakdown,
+      newGrandTotal,
+      delta,
+      direction,
+    } = await resolveAndRepriceForTargetStore(locked, toStoreId, { session });
+
+    if (direction === "increase" && !priceDifferenceHandling) {
+      throw httpError(
+        "Choose how to handle the price increase (customer pays or platform absorbs) before reassigning this order.",
+        400,
+      );
+    }
+
+    // Settle the price difference BEFORE locked.items/pricing are overwritten
+    // below — issueCreditNoteAndRefund and the wallet-funded-portion credit
+    // both need to read the order's still-original payment figures, same
+    // ordering orderPriceAdjustmentService.js's finalizePendingAdjustment uses.
+    let walletCreditedToCustomer = 0;
+    let walletDebitedFromCustomer = 0;
+    let codPendingAdded = 0;
+    let platformAbsorbedAmount = 0;
+    let pendingCodDue = null;
+    const reassignmentNote = note || `Reassigned from ${fromShopName} to ${toShopName} (${reason})`;
+
+    if (direction === "decrease") {
+      await issueCreditNoteAndRefund(locked, delta, reassignmentNote, "admin");
+      walletCreditedToCustomer = delta;
+    } else if (direction === "increase" && priceDifferenceHandling === "platform_absorbs") {
+      await debitWallet({
+        ownerType: OWNER_TYPE.ADMIN,
+        ownerId: null,
+        amount: delta,
+        bucket: "available",
+        session,
+      });
+      await createLedgerEntry(
+        {
+          orderId: locked._id,
+          actorType: OWNER_TYPE.ADMIN,
+          actorId: adminId || null,
+          type: LEDGER_TRANSACTION_TYPE.ADJUSTMENT,
+          direction: LEDGER_DIRECTION.DEBIT,
+          amount: delta,
+          description: "Platform absorbed store-reassignment price increase",
+          reference: `REASSIGN-${locked.orderId}-${Date.now()}`,
+        },
+        { session },
+      );
+      platformAbsorbedAmount = delta;
+    } else if (direction === "increase" && priceDifferenceHandling === "customer_pays") {
+      const customerDoc = await User.findById(locked.customer).select("walletBalance").session(session);
+      const customerWalletBalance = Number(customerDoc?.walletBalance || 0);
+      const walletUse = roundCurrency(Math.min(delta, customerWalletBalance));
+      const remainder = roundCurrency(delta - walletUse);
+      pendingCodDue = { walletUse, remainder };
+
+      if (walletUse > 0) {
+        await User.findByIdAndUpdate(
+          locked.customer,
+          { $inc: { walletBalance: -walletUse } },
+          { session },
+        );
+        walletDebitedFromCustomer = walletUse;
+        if (locked.paymentMode === "ONLINE" && locked.financeFlags?.onlinePaymentCaptured) {
+          // Mirrors approveItemAddition: the wallet-funded portion is money
+          // the customer already had captured online, so credit the admin
+          // platform wallet for it the same way a normal online payment would be.
+          await creditWallet({
+            ownerType: OWNER_TYPE.ADMIN,
+            ownerId: null,
+            amount: walletUse,
+            bucket: "available",
+            session,
+          });
+          await createLedgerEntry(
+            {
+              orderId: locked._id,
+              actorType: OWNER_TYPE.ADMIN,
+              actorId: null,
+              type: LEDGER_TRANSACTION_TYPE.ORDER_ONLINE_PAYMENT_CAPTURED,
+              amount: walletUse,
+              description: "Wallet-funded delta captured for store-reassignment price increase",
+              reference: `REASSIGN-${locked.orderId}-${Date.now()}`,
+            },
+            { session },
+          );
+        }
+      }
+
+      codPendingAdded = remainder;
+    }
+
+    // freezeFinancialSnapshot REPLACES order.paymentBreakdown wholesale with
+    // the new store's freshly computed breakdown — it must run before any
+    // codPendingAmount/walletAmount adjustment below, or those would be
+    // silently wiped out.
+    if (newBreakdown) {
+      freezeFinancialSnapshot(locked, newBreakdown);
+    }
+
+    if (pendingCodDue && pendingCodDue.remainder > 0) {
+      const { walletUse, remainder } = pendingCodDue;
+      const isCodOrder = locked.paymentMode !== "ONLINE";
+      if (!isCodOrder) {
+        locked.paymentBreakdown.codPendingAmount = roundCurrency(
+          (locked.paymentBreakdown.codPendingAmount || 0) + remainder,
+        );
+      } else {
+        const cumulativeWalletAmount = roundCurrency(
+          Number(locked.paymentBreakdown?.walletAmount || 0) + walletUse,
+        );
+        locked.paymentBreakdown.walletAmount = cumulativeWalletAmount;
+        locked.paymentBreakdown.codPendingAmount = roundCurrency(
+          Math.max(0, newGrandTotal - cumulativeWalletAmount),
+        );
+      }
+      if (!locked.financeFlags) locked.financeFlags = {};
+      locked.financeFlags.hasExtraCashDue = true;
+    }
 
     // Restore stock on original store products, then reserve on target.
     if (locked.stockReservation?.status !== "RELEASED") {
@@ -588,9 +777,6 @@ export async function adminReassignOrderToStore({
     const nextVersion = Number(locked.modificationVersion || 0) + 1;
     const reservation = computeStockReservationWindow(paymentMode);
     const reassignedAt = new Date();
-    const reassignmentNote =
-      note ||
-      `Reassigned from ${fromShopName} to ${toShopName} (${reason})`;
 
     locked.seller = toStoreId;
     locked.items = remappedItems;
@@ -621,6 +807,13 @@ export async function adminReassignOrderToStore({
       reassignedAt,
       reassignedBy: String(adminId || ""),
       previousWorkflowStatus: workflowStatus,
+      priceDirection: direction,
+      priceDeltaAmount: delta,
+      priceDifferenceHandling: direction === "increase" ? priceDifferenceHandling : null,
+      walletCreditedToCustomer,
+      walletDebitedFromCustomer,
+      codPendingAdded,
+      platformAbsorbedAmount,
     };
     locked.modificationTimeline = [
       ...(Array.isArray(locked.modificationTimeline)
@@ -639,6 +832,13 @@ export async function adminReassignOrderToStore({
           toShopName,
           reason,
           previousWorkflowStatus: workflowStatus,
+          priceDirection: direction,
+          priceDeltaAmount: delta,
+          priceDifferenceHandling: direction === "increase" ? priceDifferenceHandling : null,
+          walletCreditedToCustomer,
+          walletDebitedFromCustomer,
+          codPendingAdded,
+          platformAbsorbedAmount,
         },
         createdAt: reassignedAt,
       },
@@ -719,6 +919,9 @@ export async function adminReassignOrderToStore({
     fromStoreId,
     toStoreId,
     shopName: targetStore.shopName || targetStore.name,
+    priceDirection: updatedOrder.storeReassignment?.priceDirection,
+    priceDeltaAmount: updatedOrder.storeReassignment?.priceDeltaAmount,
+    priceDifferenceHandling: updatedOrder.storeReassignment?.priceDifferenceHandling,
   });
 
   const populated = await Order.findOne({ orderId: updatedOrder.orderId })

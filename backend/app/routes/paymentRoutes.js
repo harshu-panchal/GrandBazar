@@ -5,7 +5,7 @@ import {
   handlePhonePeWebhook,
   resolvePhoneOrderPayLinkController,
 } from "../controller/paymentController.js";
-import { verifyToken } from "../middleware/authMiddleware.js";
+import { verifyToken, optionalVerifyToken } from "../middleware/authMiddleware.js";
 import { paymentRouteRateLimiter } from "../middleware/securityMiddlewares.js";
 
 const paymentRoute = express.Router();
@@ -23,11 +23,13 @@ paymentRoute.post(
 
 /**
  * Verify payment status from client side (after redirect back from PhonePe).
- * Auth: Required
+ * Auth: a bearer token for a normal logged-in customer, OR a payLinkToken
+ * query param for an anonymous phone-order customer (see verifyPaymentStatus
+ * for the fallback logic — optionalVerifyToken itself never 401s).
  */
 paymentRoute.get(
   "/status/:id",
-  verifyToken,
+  optionalVerifyToken,
   paymentRouteRateLimiter,
   verifyPaymentStatus,
 );
