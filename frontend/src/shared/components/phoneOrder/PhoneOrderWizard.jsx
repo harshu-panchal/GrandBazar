@@ -437,7 +437,11 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                     </Card>
 
                     {cart.length > 0 && (
-                        <Card title="Cart" className="lg:col-span-3">
+                        <Card
+                            title="Cart"
+                            subtitle={lockedStore?.shopName ? `From ${lockedStore.shopName}` : undefined}
+                            className="lg:col-span-3"
+                        >
                             <div className="space-y-2">
                                 {cart.map((i) => (
                                     <div key={i.product} className="flex items-center justify-between gap-3">
@@ -561,7 +565,9 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                             )}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase text-slate-500 mb-2">Items</p>
+                            <p className="text-xs font-black uppercase text-slate-500 mb-2">
+                                Items{lockedStore?.shopName ? ` · ${lockedStore.shopName}` : ''}
+                            </p>
                             <div className="space-y-1.5">
                                 {cart.map((i) => (
                                     <div key={i.product} className="flex justify-between text-xs">
