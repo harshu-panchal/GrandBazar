@@ -1,4 +1,5 @@
 import Customer from "../models/customer.js";
+import Seller from "../models/seller.js";
 import Transaction from "../models/transaction.js";
 import jwt from "jsonwebtoken";
 import handleResponse from "../utils/helper.js";
@@ -358,7 +359,29 @@ export const requestBecomeSeller = async (req, res) => {
         if (!email) {
             return handleResponse(res, 400, "Email is required");
         }
-        
+
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const normalizedPhone = String(phone || "").trim();
+        // Same check/message convention as the real signup flow
+        // (sellerAuthController.js's signupSeller) — this is just a friendlier,
+        // earlier catch for someone re-submitting the lead form with an
+        // email/phone that's already a registered seller account.
+        const existingAccount = await Seller.findOne({
+            $or: [
+                { email: normalizedEmail },
+                ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+            ],
+        });
+        if (existingAccount) {
+            const matchedField =
+                existingAccount.email === normalizedEmail ? "email" : "phone";
+            return handleResponse(
+                res,
+                400,
+                `A seller account already exists with this ${matchedField}. Please register with a new email or phone number.`,
+            );
+        }
+
         const result = await sendBecomeSellerLinksEmail({ email: String(email).trim(), name });
         if (!result.success && !result.mocked) {
              return handleResponse(res, 500, "Failed to send email");
