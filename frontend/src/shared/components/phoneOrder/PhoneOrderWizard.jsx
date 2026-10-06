@@ -259,13 +259,16 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                     state: effectiveAddress.state,
                     phone: customer.phone,
                     landmark: effectiveAddress.landmark,
-                    location: effectiveAddress.location,
+                    // Joi's .optional() tolerates an omitted key but not an
+                    // explicit null — only include location when we actually
+                    // have one (manually-entered addresses never do).
+                    ...(effectiveAddress.location ? { location: effectiveAddress.location } : {}),
                 },
                 notifyVia,
                 fulfillmentType: scheduleSelection.fulfillmentType,
                 timeSlot: scheduleSelection.timeSlot,
-                deliveryDate: scheduleSelection.deliveryDate,
-                windowLabel: scheduleSelection.windowLabel,
+                ...(scheduleSelection.deliveryDate ? { deliveryDate: scheduleSelection.deliveryDate } : {}),
+                ...(scheduleSelection.windowLabel ? { windowLabel: scheduleSelection.windowLabel } : {}),
             };
             const res = await createOrder(payload);
             setResult(res?.data?.result);
