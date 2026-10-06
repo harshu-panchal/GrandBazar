@@ -2109,7 +2109,7 @@ const OrderDetail = () => {
                         sellerId={order.seller._id}
                         fulfillmentType="scheduled"
                         apiFn={adminApi.getDeliverySlots}
-                        onChange={(windowLabel, deliveryDate) => setRescheduleSelection({ deliveryDate, windowLabel })}
+                        onChange={({ deliveryDate, windowLabel }) => setRescheduleSelection({ deliveryDate, windowLabel })}
                     />
                 )}
                 <textarea
@@ -2251,7 +2251,7 @@ const OrderDetail = () => {
                                 sellerId={order.seller._id}
                                 fulfillmentType="scheduled"
                                 apiFn={adminApi.getDeliverySlots}
-                                onChange={(windowLabel, deliveryDate) => setSplitSelection({ deliveryDate, windowLabel })}
+                                onChange={({ deliveryDate, windowLabel }) => setSplitSelection({ deliveryDate, windowLabel })}
                             />
                         )}
                     </div>

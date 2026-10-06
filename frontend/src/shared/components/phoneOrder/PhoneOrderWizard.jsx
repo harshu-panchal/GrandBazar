@@ -603,14 +603,11 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                                     sellerId={lockedStore.id}
                                     fulfillmentType="scheduled"
                                     apiFn={getDeliverySlots}
-                                    onChange={(windowLabel, deliveryDate) =>
-                                        setScheduleSelection({
-                                            fulfillmentType: 'scheduled',
-                                            timeSlot: deliveryDate && windowLabel ? `${deliveryDate}|${windowLabel}` : null,
-                                            deliveryDate,
-                                            windowLabel,
-                                        })
-                                    }
+                                    // DeliverySlotPicker calls onChange with a single object
+                                    // ({ fulfillmentType, deliveryDate, windowLabel, timeSlot,
+                                    // campaignId }), not positional args — same as how
+                                    // CheckoutPage.jsx consumes it (onChange={setSchedule}).
+                                    onChange={setScheduleSelection}
                                 />
                             </div>
                         )}
