@@ -152,10 +152,13 @@ const relTimeSort = (a, b) => new Date(b.at || 0) - new Date(a.at || 0);
 async function fetchOrderFacets(cityMatch, windows) {
   const {
     todayStart,
-    yesterdayStart,
     weekAgo,
     twoWeeksAgo,
     monthStart,
+    periodCurrentStart,
+    periodPrevStart,
+    periodPrevEnd,
+    trendStart,
   } = windows;
 
   const [result] = await Order.aggregate([
@@ -163,7 +166,7 @@ async function fetchOrderFacets(cityMatch, windows) {
     {
       $facet: {
         todayMoney: [
-          { $match: { ...NON_CANCELLED, createdAt: { $gte: todayStart } } },
+          { $match: { ...NON_CANCELLED, createdAt: { $gte: periodCurrentStart } } },
           {
             $group: {
               _id: null,
@@ -174,7 +177,7 @@ async function fetchOrderFacets(cityMatch, windows) {
           },
         ],
         yesterdayMoney: [
-          { $match: { ...NON_CANCELLED, createdAt: { $gte: yesterdayStart, $lt: todayStart } } },
+          { $match: { ...NON_CANCELLED, createdAt: { $gte: periodPrevStart, $lt: periodPrevEnd } } },
           {
             $group: {
               _id: null,
@@ -185,7 +188,7 @@ async function fetchOrderFacets(cityMatch, windows) {
           },
         ],
         cityToday: [
-          { $match: { ...NON_CANCELLED, createdAt: { $gte: todayStart } } },
+          { $match: { ...NON_CANCELLED, createdAt: { $gte: periodCurrentStart } } },
           {
             $group: {
               _id: CITY_KEY,
@@ -213,7 +216,7 @@ async function fetchOrderFacets(cityMatch, windows) {
           { $group: { _id: CITY_KEY, sales: { $sum: PRICING_TOTAL } } },
         ],
         growthTrend: [
-          { $match: { ...NON_CANCELLED, createdAt: { $gte: weekAgo } } },
+          { $match: { ...NON_CANCELLED, createdAt: { $gte: trendStart } } },
           {
             $group: {
               _id: DAY_KEY,
@@ -863,7 +866,8 @@ async function fetchActivityFeed() {
    Main entry
 ---------------------------------------------------------------- */
 
-export async function getAdminDashboardOverview({ city = "" } = {}) {
+export async function getAdminDashboardOverview({ city = "", period = "daily" } = {}) {
+  const normalizedPeriod = ["daily", "weekly", "monthly"].includes(period) ? period : "daily";
   const now = new Date();
   const todayStart = startOfDay(now);
   const yesterdayStart = addDays(todayStart, -1);
@@ -871,8 +875,29 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
   const twoWeeksAgo = addDays(todayStart, -13);
   const monthStart = startOfMonth(now);
   const prevMonthStart = startOfMonth(addDays(monthStart, -1));
+  // Trailing window for the KPI strip + city-wise sales table — "today" for
+  // daily, the same trailing 7/30-day windows the rest of the dashboard
+  // already computes for weekly/monthly, so no new date math is introduced.
+  const periodCurrentStart =
+    normalizedPeriod === "monthly" ? monthStart : normalizedPeriod === "weekly" ? weekAgo : todayStart;
+  const periodPrevStart =
+    normalizedPeriod === "monthly" ? prevMonthStart : normalizedPeriod === "weekly" ? twoWeeksAgo : yesterdayStart;
+  const periodPrevEnd = periodCurrentStart;
+  const trendStart = normalizedPeriod === "monthly" ? addDays(todayStart, -29) : weekAgo;
 
-  const windows = { now, todayStart, yesterdayStart, weekAgo, twoWeeksAgo, monthStart, prevMonthStart };
+  const windows = {
+    now,
+    todayStart,
+    yesterdayStart,
+    weekAgo,
+    twoWeeksAgo,
+    monthStart,
+    prevMonthStart,
+    periodCurrentStart,
+    periodPrevStart,
+    periodPrevEnd,
+    trendStart,
+  };
 
   const normalizedCity = String(city || "").trim();
   const cityMatch = normalizedCity
@@ -945,7 +970,7 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
   const week = facets.weekMoney[0] || { gmv: 0, orders: 0 };
   const prevWeek = facets.prevWeekMoney[0] || { gmv: 0, orders: 0 };
   const businessGrowth = {
-    series: buildDailySeries(weekAgo, todayStart, facets.growthTrend || [], ["gmv", "orders", "revenue"]),
+    series: buildDailySeries(trendStart, todayStart, facets.growthTrend || [], ["gmv", "orders", "revenue"]),
     summary: {
       gmvGrowthPct: pctChange(week.gmv, prevWeek.gmv),
       orderGrowthPct: pctChange(week.orders, prevWeek.orders),
@@ -1141,13 +1166,29 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
   });
 
   /* ---------- KPI strip ---------- */
+  // "New customers" already has today/week/month variants computed above for
+  // other sections — just pick the pair matching the selected period instead
+  // of running a new query.
+  const periodNewCustomers =
+    normalizedPeriod === "monthly"
+      ? counts.newCustomersMonth
+      : normalizedPeriod === "weekly"
+        ? counts.newCustomersWeek
+        : counts.newCustomersToday;
+  const periodPrevNewCustomers =
+    normalizedPeriod === "monthly"
+      ? counts.newCustomersPrevMonth
+      : normalizedPeriod === "weekly"
+        ? counts.newCustomersPrevWeek
+        : counts.newCustomersYesterday;
+
   const kpis = {
     gmvToday: { value: Math.round(today.gmv), trendPct: pctChange(today.gmv, yesterday.gmv) },
     revenueToday: { value: Math.round(today.revenue), trendPct: pctChange(today.revenue, yesterday.revenue) },
     ordersToday: { value: today.orders, trendPct: pctChange(today.orders, yesterday.orders) },
     activeSellers: { value: counts.activeSellers },
     activeShops: { value: counts.activeShops },
-    newCustomersToday: { value: counts.newCustomersToday, trendPct: pctChange(counts.newCustomersToday, counts.newCustomersYesterday) },
+    newCustomersToday: { value: periodNewCustomers, trendPct: pctChange(periodNewCustomers, periodPrevNewCustomers) },
     deliveryPartners: { value: counts.deliveryPartners, online: counts.onlineRiders },
     pendingApprovals: { value: pendingApprovals },
     openDisputes: { value: counts.openDisputes },
@@ -1166,6 +1207,7 @@ export async function getAdminDashboardOverview({ city = "" } = {}) {
 
   return {
     city: normalizedCity || null,
+    period: normalizedPeriod,
     cities,
     kpis,
     cityWiseSales,

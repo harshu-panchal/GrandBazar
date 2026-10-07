@@ -27,12 +27,13 @@ const Chip = ({ label, pct }) => (
   </div>
 );
 
-const BusinessGrowthChart = ({ businessGrowth }) => {
+const BusinessGrowthChart = ({ businessGrowth, period = "daily" }) => {
   const series = businessGrowth?.series || [];
   const summary = businessGrowth?.summary || {};
+  const subtitle = period === "monthly" ? "Last 30 days" : "Last 7 days";
 
   return (
-    <Card title="Business Growth" subtitle="Last 7 days" contentClassName="p-4" className="h-full">
+    <Card title="Business Growth" subtitle={subtitle} contentClassName="p-4" className="h-full">
       <div className="grid grid-cols-2 gap-2 mb-4">
         <Chip label="GMV Growth" pct={summary.gmvGrowthPct} />
         <Chip label="Order Growth" pct={summary.orderGrowthPct} />

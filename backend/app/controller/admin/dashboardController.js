@@ -25,6 +25,7 @@ export const getAdminDashboard = async (req, res) => {
   try {
     const overview = await getAdminDashboardOverview({
       city: req.query.city || "",
+      period: req.query.period || "daily",
     });
     return handleResponse(res, 200, "Dashboard fetched successfully", overview);
   } catch (error) {

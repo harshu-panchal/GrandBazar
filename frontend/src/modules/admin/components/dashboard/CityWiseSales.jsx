@@ -93,7 +93,9 @@ const CityMapPanel = ({ rows, mapUnlocked, onUnlock }) => {
   );
 };
 
-const CityWiseSales = ({ cityWiseSales }) => {
+const PERIOD_LABEL = { daily: "Today", weekly: "This week", monthly: "This month" };
+
+const CityWiseSales = ({ cityWiseSales, period = "daily" }) => {
   const [showAll, setShowAll] = useState(false);
   const [mapUnlocked, setMapUnlocked] = useState(false);
 
@@ -104,7 +106,7 @@ const CityWiseSales = ({ cityWiseSales }) => {
   return (
     <Card
       title="Sales Overview (City Wise)"
-      subtitle="Today · circle size reflects weekly sales"
+      subtitle={`${PERIOD_LABEL[period] || "Today"} · circle size reflects weekly sales`}
       headerAction={
         rows.length > 6 ? (
           <button

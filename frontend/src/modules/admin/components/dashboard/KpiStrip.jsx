@@ -17,16 +17,23 @@ import { cn } from "@/lib/utils";
 import { inr, TrendChip, IconChip } from "@shared/components/dashboard/common";
 import { useAuth } from "@core/context/AuthContext";
 
+// Labels/footnotes for the period-sensitive cards flip between these —
+// "Today"/"vs yesterday" for the default daily view, "This Week"/"vs last
+// week" etc. once the Daily/Weekly/Monthly dropdown changes the underlying
+// window the backend aggregates over.
+const PERIOD_SUFFIX = { daily: "Today", weekly: "This Week", monthly: "This Month" };
+const PERIOD_COMPARE = { daily: "vs yesterday", weekly: "vs last week", monthly: "vs last month" };
+
 const CARDS = [
   {
     key: "gmvToday",
-    label: "GMV (Today)",
+    label: (period) => `GMV (${PERIOD_SUFFIX[period] || "Today"})`,
     money: true,
     icon: BadgeIndianRupee,
     chip: "bg-emerald-50 text-emerald-600",
     path: "/admin/billing",
     permission: "billing",
-    footnote: "vs yesterday",
+    footnote: (period) => PERIOD_COMPARE[period] || "vs yesterday",
   },
   {
     key: "revenueToday",
@@ -36,17 +43,17 @@ const CARDS = [
     chip: "bg-blue-50 text-blue-600",
     path: "/admin/billing",
     permission: "billing",
-    footnote: "vs yesterday",
+    footnote: (period) => PERIOD_COMPARE[period] || "vs yesterday",
   },
   {
     key: "ordersToday",
-    label: "Total Orders (Today)",
+    label: (period) => `Total Orders (${PERIOD_SUFFIX[period] || "Today"})`,
     money: false,
     icon: ShoppingBag,
     chip: "bg-purple-50 text-purple-600",
     path: "/admin/orders/all",
     permission: "orders",
-    footnote: "vs yesterday",
+    footnote: (period) => PERIOD_COMPARE[period] || "vs yesterday",
   },
   {
     key: "activeSellers",
@@ -76,7 +83,7 @@ const CARDS = [
     chip: "bg-teal-50 text-teal-600",
     path: "/admin/customers",
     permission: "customers",
-    footnote: "vs yesterday",
+    footnote: (period) => PERIOD_COMPARE[period] || "vs yesterday",
   },
   {
     key: "deliveryPartners",
@@ -121,7 +128,7 @@ const CARDS = [
   },
 ];
 
-const KpiStrip = ({ kpis }) => {
+const KpiStrip = ({ kpis, period = "daily" }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   if (!kpis) return null;
@@ -146,7 +153,8 @@ const KpiStrip = ({ kpis }) => {
           value = Number(kpi.value || 0).toLocaleString("en-IN");
         }
 
-        let footnote = card.footnote;
+        const label = typeof card.label === "function" ? card.label(period) : card.label;
+        let footnote = typeof card.footnote === "function" ? card.footnote(period) : card.footnote;
         if (card.key === "deliveryPartners") {
           footnote = `${Number(kpi.online || 0).toLocaleString("en-IN")} online now`;
         }
@@ -180,7 +188,7 @@ const KpiStrip = ({ kpis }) => {
             )}
           >
             <IconChip icon={card.icon} className={card.chip} />
-            <p className="text-xs font-medium text-slate-500 mt-3">{card.label}</p>
+            <p className="text-xs font-medium text-slate-500 mt-3">{label}</p>
             <p className="text-xl font-bold text-slate-900 mt-0.5">{value}</p>
             <div className="flex items-center gap-1.5 mt-1.5 min-h-4 flex-wrap">
               <TrendChip pct={kpi.trendPct} />

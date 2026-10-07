@@ -91,6 +91,7 @@ const AdminDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [city, setCity] = useState("");
+  const [period, setPeriod] = useState("daily");
 
   const fetchDashboard = useCallback(async (params = {}, { silent = false } = {}) => {
     try {
@@ -106,12 +107,20 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetchDashboard({});
+    fetchDashboard({ period });
+    // Only on mount — city/period changes are refetched explicitly by their
+    // own handlers below (silent, so the whole page doesn't flash a skeleton).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchDashboard]);
 
   const handleCityChange = (value) => {
     setCity(value);
-    fetchDashboard(value ? { city: value } : {}, { silent: true });
+    fetchDashboard({ ...(value ? { city: value } : {}), period }, { silent: true });
+  };
+
+  const handlePeriodChange = (value) => {
+    setPeriod(value);
+    fetchDashboard({ ...(city ? { city } : {}), period: value }, { silent: true });
   };
 
   const handleDownloadReport = () => {
@@ -154,6 +163,15 @@ const AdminDashboard = () => {
                 </option>
               ))}
             </select>
+            <select
+              value={period}
+              onChange={(e) => handlePeriodChange(e.target.value)}
+              className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-slate-300 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
             <button
               type="button"
               onClick={handleDownloadReport}
@@ -166,11 +184,11 @@ const AdminDashboard = () => {
         }
       />
 
-      <KpiStrip kpis={data?.kpis} />
+      <KpiStrip kpis={data?.kpis} period={period} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-6">
-        <CityWiseSales cityWiseSales={data?.cityWiseSales} />
-        <BusinessGrowthChart businessGrowth={data?.businessGrowth} />
+        <CityWiseSales cityWiseSales={data?.cityWiseSales} period={period} />
+        <BusinessGrowthChart businessGrowth={data?.businessGrowth} period={period} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
