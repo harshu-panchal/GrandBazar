@@ -65,18 +65,25 @@ export async function computeTrendingProductsSnapshot() {
 const PRODUCT_CARD_FIELDS =
   "name slug price salePrice customerPrice customerSalePrice mainImage stock avgRating reviewCount headerId categoryId subcategoryId sellerId";
 
-export async function getTrendingProducts({ limit = 10 } = {}) {
+export async function getTrendingProducts({ limit = 10, nearbySellerIds, sellerDistanceMap } = {}) {
   const snapshot = await TrendingProductSnapshot.findById("latest").lean();
   const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
   if (!items.length) return [];
 
   const ids = items.slice(0, limit).map((i) => i.productId);
-  const products = await Product.find({
+  const query = {
     _id: { $in: ids },
     status: "active",
     isPublished: { $ne: false },
     stock: { $gt: 0 },
-  })
+  };
+  // When the caller supplied the customer's location, only surface sellers
+  // within their delivery range — same rule the regular product grid enforces.
+  if (nearbySellerIds) {
+    query.sellerId = { $in: nearbySellerIds };
+  }
+
+  const products = await Product.find(query)
     .select(PRODUCT_CARD_FIELDS)
     .populate("sellerId", "shopName")
     .lean();
@@ -85,7 +92,12 @@ export async function getTrendingProducts({ limit = 10 } = {}) {
   // Preserve the trending rank order, not whatever order Mongo returned them in.
   return ids
     .map((id) => productById.get(String(id)))
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((product) => {
+      if (!sellerDistanceMap) return product;
+      const distanceKm = sellerDistanceMap.get(String(product.sellerId?._id || product.sellerId));
+      return distanceKm == null ? product : { ...product, distanceKm };
+    });
 }
 
 export async function refreshTrendingProductsSnapshot() {

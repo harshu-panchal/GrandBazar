@@ -658,7 +658,34 @@ export const getTrendingSearchesController = async (req, res) => {
 export const getTrendingProductsController = async (req, res) => {
   try {
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
-    const items = await getTrendingProducts({ limit });
+    const enforceRadius = isCustomerVisibilityRequest(req);
+    const coords = parseCustomerCoordinates(req.query || {});
+
+    if (enforceRadius && !coords.valid) {
+      return handleResponse(
+        res,
+        400,
+        "lat and lng are required for customer product visibility",
+      );
+    }
+
+    let nearbySellerIds;
+    let sellerDistanceMap;
+    if (coords.valid) {
+      const nearbySellers = await getNearbySellersWithDistanceForCustomer(
+        coords.lat,
+        coords.lng,
+      );
+      nearbySellerIds = nearbySellers.map((entry) => entry.id);
+      sellerDistanceMap = new Map(
+        nearbySellers.map((entry) => [entry.id, entry.distanceKm]),
+      );
+      if (!nearbySellerIds.length) {
+        return handleResponse(res, 200, "No sellers found in your area", { items: [] });
+      }
+    }
+
+    const items = await getTrendingProducts({ limit, nearbySellerIds, sellerDistanceMap });
     return handleResponse(res, 200, "Trending products fetched", { items });
   } catch (error) {
     return handleResponse(res, 500, error.message);

@@ -264,6 +264,11 @@ const CheckoutPage = () => {
   const [orderId, setOrderId] = useState(null);
   const [pricingPreview, setPricingPreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  // Set when checkoutPreview fails — most commonly the seller is outside the
+  // customer's delivery address (serviceRadius check in checkoutPricingService).
+  // Blocks slide-to-pay with the server's own message instead of leaving the
+  // button silently stuck in a loading state.
+  const [previewError, setPreviewError] = useState(null);
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const postOrderNavigateRef = useRef(null);
   const previewDebounceRef = useRef(null);
@@ -896,6 +901,7 @@ const CheckoutPage = () => {
   useEffect(() => {
     if (!isAuthenticated || cart.length === 0) {
       setPricingPreview(null);
+      setPreviewError(null);
       return;
     }
 
@@ -929,9 +935,15 @@ const CheckoutPage = () => {
         const res = await customerApi.checkoutPreview(buildPreviewPayload());
         if (res.data?.success) {
           setPricingPreview(res.data.result?.breakdown ?? null);
+          setPreviewError(null);
         }
       } catch (error) {
         console.error("Checkout preview failed", error);
+        setPricingPreview(null);
+        setPreviewError(
+          error.response?.data?.message ||
+            "This store does not deliver to your selected address.",
+        );
       } finally {
         setIsPreviewLoading(false);
       }
@@ -953,6 +965,7 @@ const CheckoutPage = () => {
     clearTimeout(previewDebounceRef.current);
     if (addressChanged) {
       setPricingPreview(null);
+      setPreviewError(null);
       setIsPreviewLoading(true);
       previewDebounceRef.current = setTimeout(fetchPreview, 0);
     } else {
@@ -1121,6 +1134,10 @@ const CheckoutPage = () => {
     }
     if (!policyAccepted) {
       showToast("Please accept the Return and Exchange Policy to proceed.", "error");
+      return;
+    }
+    if (previewError) {
+      showToast(previewError, "error");
       return;
     }
     setIsPlacingOrder(true);
@@ -1634,11 +1651,27 @@ const CheckoutPage = () => {
                   </ul>
                 </div>
               )}
+              {previewError && (
+                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-red-700 mb-1">
+                    Out of delivery range
+                  </p>
+                  <p className="text-sm text-red-700 font-semibold">{previewError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddressModalOpen(true)}
+                    className="mt-2 text-xs font-black uppercase tracking-wider text-red-700 underline"
+                  >
+                    Change address
+                  </button>
+                </div>
+              )}
               <SlideToPay
                 amount={finalAmountToPay}
                 onSuccess={handlePlaceOrder}
-                isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
-                text={slideCtaText}
+                isLoading={isPlacingOrder || isPreviewLoading || (!pricingPreview && !previewError)}
+                disabled={Boolean(previewError)}
+                text={previewError ? "Out of range" : slideCtaText}
               />
               <p className="text-center text-[10px] text-slate-400 font-bold mt-4 uppercase tracking-[0.1em]">
                 🔒 SSL encrypted secure checkout
@@ -1660,11 +1693,24 @@ const CheckoutPage = () => {
               ))}
             </div>
           )}
+          {previewError && (
+            <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+              <p className="text-xs text-red-700 font-semibold leading-snug">{previewError}</p>
+              <button
+                type="button"
+                onClick={() => setIsAddressModalOpen(true)}
+                className="text-[11px] font-black uppercase tracking-wider text-red-700 underline"
+              >
+                Change address
+              </button>
+            </div>
+          )}
           <SlideToPay
             amount={finalAmountToPay}
             onSuccess={handlePlaceOrder}
-            isLoading={isPlacingOrder || isPreviewLoading || !pricingPreview}
-            text={slideCtaText}
+            isLoading={isPlacingOrder || isPreviewLoading || (!pricingPreview && !previewError)}
+            disabled={Boolean(previewError)}
+            text={previewError ? "Out of range" : slideCtaText}
           />
         </div>
       </div>

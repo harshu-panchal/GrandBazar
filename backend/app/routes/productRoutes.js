@@ -46,7 +46,7 @@ const router = express.Router();
 // Public routes with optional auth (to detect admin/seller vs customer)
 router.get("/", optionalVerifyToken, getProducts);
 router.get("/search/trending", getTrendingSearchesController);
-router.get("/trending", getTrendingProductsController);
+router.get("/trending", optionalVerifyToken, getTrendingProductsController);
 
 const sellerChain = [verifyToken, allowRoles("seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
 

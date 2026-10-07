@@ -3,6 +3,7 @@ import { ChevronRight, Flame } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ProductCard from "../shared/ProductCard";
 import { customerApi } from "../../services/customerApi";
+import { useLocation } from "../../context/LocationContext";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400";
 
@@ -24,11 +25,19 @@ const normalizeProduct = (p) => ({
 const TrendingProductsSection = () => {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
+  const { currentLocation, hasValidLocation } = useLocation();
 
   useEffect(() => {
+    if (!hasValidLocation) {
+      setProducts([]);
+      return;
+    }
     let cancelled = false;
     customerApi
-      .getTrendingProducts(12)
+      .getTrendingProducts(12, {
+        lat: currentLocation.latitude,
+        lng: currentLocation.longitude,
+      })
       .then((res) => {
         if (cancelled) return;
         const items = res?.data?.result?.items || [];
@@ -40,7 +49,7 @@ const TrendingProductsSection = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasValidLocation, currentLocation.latitude, currentLocation.longitude]);
 
   if (!products.length) return null;
 
