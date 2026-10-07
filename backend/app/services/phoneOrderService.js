@@ -106,6 +106,26 @@ export async function placePhoneOrderForCustomer({
     await assertItemsBelongToSeller(items, restrictToSellerId);
   }
 
+  // placeOrderAtomic's pricing step (checkoutPricingService.computeDistanceKmForSeller)
+  // only enforces the seller's serviceRadius when address.location has real
+  // lat/lng on it — a missing location is treated as "can't verify" and the
+  // check is silently skipped. The customer checkout page always supplies
+  // coordinates (geocoded on save), but this phone-order flow lets an
+  // operator type a manual address with no location at all, which would
+  // otherwise sail through with zero radius enforcement. Require it here so
+  // a phone order can never bypass the same delivery-range rule customers
+  // are held to.
+  const hasUsableLocation =
+    Number.isFinite(Number(address?.location?.lat)) &&
+    Number.isFinite(Number(address?.location?.lng));
+  if (!hasUsableLocation) {
+    const err = new Error(
+      "Select the delivery address from the suggested results so we can verify it's within the seller's delivery area.",
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
   const payload = {
     items,
     address: {

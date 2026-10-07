@@ -4,6 +4,7 @@ import Card from '@shared/components/ui/Card';
 import Button from '@shared/components/ui/Button';
 import Input from '@shared/components/ui/Input';
 import { useToast } from '@shared/components/ui/Toast';
+import AddressAutocompleteInput from '@shared/components/AddressAutocompleteInput';
 import DeliverySlotPicker from '@/modules/customer/components/checkout/DeliverySlotPicker';
 import {
     Phone,
@@ -79,6 +80,7 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
         city: '',
         state: '',
         landmark: '',
+        location: null,
     });
     const [fulfillmentType, setFulfillmentType] = useState('instant');
     const [scheduleSelection, setScheduleSelection] = useState({
@@ -99,7 +101,7 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
         setCart([]);
         setSelectedAddressIdx(0);
         setUseManualAddress(false);
-        setManualAddress({ label: 'other', address: '', city: '', state: '', landmark: '' });
+        setManualAddress({ label: 'other', address: '', city: '', state: '', landmark: '', location: null });
         setFulfillmentType('instant');
         setScheduleSelection({ fulfillmentType: 'instant', timeSlot: 'now', deliveryDate: null, windowLabel: null });
     };
@@ -219,10 +221,21 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
               city: manualAddress.city,
               state: manualAddress.state,
               landmark: manualAddress.landmark,
-              location: null,
+              location: manualAddress.location,
           }
         : selectedAddress;
-    const isManualAddressValid = !useManualAddress || manualAddress.address.trim().length > 0;
+    // A phone order is only placed once the backend can verify the delivery
+    // address against the seller's service radius, which requires real
+    // lat/lng — so a manual entry must be picked from the address
+    // suggestions (not just typed free text), and a saved address without a
+    // location on file can't be used either.
+    const hasUsableLocation = (addr) =>
+        Number.isFinite(Number(addr?.location?.lat)) && Number.isFinite(Number(addr?.location?.lng));
+    const isManualAddressValid =
+        !useManualAddress || (manualAddress.address.trim().length > 0 && hasUsableLocation(manualAddress));
+    const isAddressVerified = useManualAddress
+        ? isManualAddressValid
+        : hasUsableLocation(selectedAddress);
 
     const toggleNotifyVia = (channel) => {
         setNotifyVia((prev) =>
@@ -239,6 +252,13 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
 
     const handleSubmit = async () => {
         if (!customer || !effectiveAddress || !isManualAddressValid || cart.length === 0 || notifyVia.length === 0) return;
+        if (!isAddressVerified) {
+            showToast(
+                "Select the delivery address from the suggestions so we can verify it's within the seller's delivery area.",
+                'error',
+            );
+            return;
+        }
         if (fulfillmentType === 'scheduled' && (!scheduleSelection.deliveryDate || !scheduleSelection.windowLabel)) {
             showToast('Pick a delivery date and window before continuing', 'error');
             return;
@@ -494,11 +514,30 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
 
                             {useManualAddress ? (
                                 <div className="space-y-2">
-                                    <Input
-                                        placeholder="Full address (house no, street, area) *"
+                                    <AddressAutocompleteInput
+                                        placeholder="Search full address (house no, street, area) *"
                                         value={manualAddress.address}
-                                        onChange={(e) => setManualAddress((prev) => ({ ...prev, address: e.target.value }))}
+                                        onChange={(text) =>
+                                            setManualAddress((prev) => ({ ...prev, address: text, location: null }))
+                                        }
+                                        onSelect={(picked) =>
+                                            setManualAddress((prev) => ({
+                                                ...prev,
+                                                address: picked.formattedAddress,
+                                                city: picked.city || prev.city,
+                                                state: picked.state || prev.state,
+                                                location:
+                                                    picked.lat != null && picked.lng != null
+                                                        ? { lat: picked.lat, lng: picked.lng }
+                                                        : null,
+                                            }))
+                                        }
                                     />
+                                    {manualAddress.address.trim() && !manualAddress.location && (
+                                        <p className="text-[11px] text-amber-600 font-semibold">
+                                            Pick a suggestion from the list to confirm this address is deliverable.
+                                        </p>
+                                    )}
                                     <div className="grid grid-cols-2 gap-2">
                                         <Input
                                             placeholder="City"
@@ -531,7 +570,7 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                                             </button>
                                         ))}
                                     </div>
-                                    {!isManualAddressValid && (
+                                    {!isManualAddressValid && manualAddress.address.trim().length === 0 && (
                                         <p className="text-[11px] text-red-600 font-semibold">Enter the full address.</p>
                                     )}
                                 </div>
@@ -557,10 +596,21 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                                                 <div>
                                                     <p className="text-xs font-bold text-slate-800 capitalize">{addr.label}</p>
                                                     <p className="text-[11px] text-slate-500">{addr.fullAddress}</p>
+                                                    {!hasUsableLocation(addr) && (
+                                                        <p className="text-[11px] text-amber-600 font-semibold mt-0.5">
+                                                            No location on file — can't verify delivery range.
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </button>
                                         ))}
                                     </div>
+                                    {selectedAddress && !hasUsableLocation(selectedAddress) && (
+                                        <p className="text-[11px] text-red-600 font-semibold mt-2">
+                                            This address has no location on file. Enter it manually instead so we
+                                            can verify it's within the seller's delivery area.
+                                        </p>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -649,7 +699,13 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                         <Button
                             onClick={handleSubmit}
                             isLoading={submitting}
-                            disabled={!effectiveAddress || !isManualAddressValid || cart.length === 0 || notifyVia.length === 0}
+                            disabled={
+                                !effectiveAddress ||
+                                !isManualAddressValid ||
+                                !isAddressVerified ||
+                                cart.length === 0 ||
+                                notifyVia.length === 0
+                            }
                         >
                             Create order & send link
                         </Button>
