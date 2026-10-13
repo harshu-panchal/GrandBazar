@@ -267,8 +267,11 @@ export const assignOrderToRider = async (req, res) => {
       return handleResponse(res, 400, "riderId is required");
     }
 
+    // requireCanonicalOrderId resolves to the human-readable orderId (e.g.
+    // "ORD-...") string, not the Mongo _id — findById() on that value threw
+    // a CastError and blocked every manual rider assignment from the admin panel.
     const canonicalOrderId = await requireCanonicalOrderId(orderId);
-    const previousRiderId = await Order.findById(canonicalOrderId)
+    const previousRiderId = await Order.findOne({ orderId: canonicalOrderId })
       .select("deliveryBoy")
       .lean()
       .then((doc) => doc?.deliveryBoy || null);
