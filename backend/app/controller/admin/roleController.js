@@ -1,6 +1,7 @@
 import AdminRole from "../../models/adminRole.js";
 import Admin from "../../models/admin.js";
 import handleResponse from "../../utils/helper.js";
+import { recordAuditLog } from "../../services/auditTrailService.js";
 
 const RESERVED_ROLE_NAMES = new Set(["admin", "superadmin"]);
 
@@ -47,6 +48,22 @@ export const createAdminRole = async (req, res) => {
       createdBy: req.user?.id,
     });
 
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: "role.created",
+      targetType: "AdminRole",
+      targetId: role._id,
+      before: null,
+      after: {
+        name: role.name,
+        label: role.label,
+        permissions: role.permissions,
+        moneyLimit: role.moneyLimit,
+        requiresTwoFactor: role.requiresTwoFactor,
+      },
+    });
+
     return handleResponse(res, 201, "Role created successfully", role);
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -62,6 +79,14 @@ export const updateAdminRole = async (req, res) => {
     if (!role) return handleResponse(res, 404, "Role not found");
 
     const previousName = role.name;
+    const before = {
+      name: role.name,
+      label: role.label,
+      description: role.description,
+      permissions: [...(role.permissions || [])],
+      moneyLimit: role.moneyLimit,
+      requiresTwoFactor: role.requiresTwoFactor,
+    };
 
     if (name !== undefined) {
       const normalized = normalizeName(name);
@@ -101,6 +126,23 @@ export const updateAdminRole = async (req, res) => {
       await Admin.updateMany({ customRoleId: role._id }, { $set: update });
     }
 
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: "role.updated",
+      targetType: "AdminRole",
+      targetId: role._id,
+      before,
+      after: {
+        name: role.name,
+        label: role.label,
+        description: role.description,
+        permissions: role.permissions,
+        moneyLimit: role.moneyLimit,
+        requiresTwoFactor: role.requiresTwoFactor,
+      },
+    });
+
     return handleResponse(res, 200, "Role updated successfully", role);
   } catch (error) {
     return handleResponse(res, 500, error.message);
@@ -125,7 +167,25 @@ export const deleteAdminRole = async (req, res) => {
       );
     }
 
+    const before = {
+      name: role.name,
+      label: role.label,
+      permissions: role.permissions,
+      moneyLimit: role.moneyLimit,
+      requiresTwoFactor: role.requiresTwoFactor,
+    };
     await role.deleteOne();
+
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: "role.deleted",
+      targetType: "AdminRole",
+      targetId: role._id,
+      before,
+      after: null,
+    });
+
     return handleResponse(res, 200, "Role deleted successfully");
   } catch (error) {
     return handleResponse(res, 500, error.message);

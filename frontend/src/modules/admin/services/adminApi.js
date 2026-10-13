@@ -100,6 +100,7 @@ export const adminApi = {
     getSellerEarningsSummary: (params) => axiosInstance.get('/admin/finance/seller-earnings-summary', { params }),
     getRefunds: (params) => axiosInstance.get('/admin/finance/refunds', { params }),
     getAuditLogs: (params) => axiosInstance.get('/admin/audit-logs', { params }),
+    getRoleAccessAuditLogs: (params) => axiosInstance.get('/admin/roles/access-logs', { params }),
     processFinancePayouts: (data) => axiosInstance.post('/admin/finance/payouts/process', data),
     adjustPayout: (payoutId, data) => axiosInstance.post(`/admin/finance/payouts/${payoutId}/adjust`, data),
     holdSellerPayout: (orderId, data) => axiosInstance.post(`/admin/finance/orders/${orderId}/hold`, data),

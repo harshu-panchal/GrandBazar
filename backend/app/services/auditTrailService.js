@@ -55,7 +55,7 @@ export async function getRecentAuditLogs({
   const query = {};
   if (actorRole) query.actorRole = actorRole;
   if (action) query.action = action;
-  if (targetType) query.targetType = targetType;
+  if (targetType) query.targetType = Array.isArray(targetType) ? { $in: targetType } : targetType;
   if (targetId) query.targetId = targetId;
 
   const safePage = Math.max(parseInt(page, 10) || 1, 1);

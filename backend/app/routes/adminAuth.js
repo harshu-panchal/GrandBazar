@@ -117,7 +117,7 @@ import {
     upsertCityCommissionController,
     updateStoreCommission,
 } from "../controller/admin/commissionHierarchyController.js";
-import { getAuditLogsController } from "../controller/admin/auditLogController.js";
+import { getAuditLogsController, getRoleAccessAuditLogsController } from "../controller/admin/auditLogController.js";
 import {
     getAccountantOverviewController,
     getOrdersGmvController,
@@ -387,6 +387,7 @@ router.get("/roles", verifyToken, allowSuperAdminOnly, listAdminRoles);
 router.post("/roles", verifyToken, allowSuperAdminOnly, createAdminRole);
 router.put("/roles/:id", verifyToken, allowSuperAdminOnly, updateAdminRole);
 router.delete("/roles/:id", verifyToken, allowSuperAdminOnly, deleteAdminRole);
+router.get("/roles/access-logs", verifyToken, allowSuperAdminOnly, getRoleAccessAuditLogsController);
 
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Card from '@shared/components/ui/Card';
 import Button from '@shared/components/ui/Button';
 import Badge from '@shared/components/ui/Badge';
+import Pagination from '@shared/components/ui/Pagination';
 import { adminApi } from '../services/adminApi';
 import { useAuth } from '@core/context/AuthContext';
 import { toast } from 'sonner';
@@ -19,6 +20,8 @@ import {
   HiOutlineShieldCheck,
   HiOutlineChevronDown,
   HiOutlineChevronRight,
+  HiOutlineClock,
+  HiOutlineArrowRight,
 } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -196,6 +199,78 @@ const formatRoleLabel = (role, rolesLookup) => {
   return role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+const AUDIT_ACTION_LABELS = {
+  'staff.created': 'Staff member added',
+  'staff.updated': 'Staff details updated',
+  'staff.access_changed': 'Staff role/permissions changed',
+  'staff.deleted': 'Staff member removed',
+  'role.created': 'Custom role created',
+  'role.updated': 'Custom role updated',
+  'role.deleted': 'Custom role deleted',
+};
+
+const formatAuditAction = (action) =>
+  AUDIT_ACTION_LABELS[action] || String(action || '').replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const formatAuditDate = (value) => {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+};
+
+const permKey = (p) => String(p || '').replace(/_/g, ' ');
+
+// Turns one audit entry's before/after snapshots into a short, readable list
+// of what actually changed — "role changed", added/removed permission chips —
+// rather than dumping raw JSON at the admin reading the log.
+const describeAuditChanges = (entry) => {
+  const before = entry.before || {};
+  const after = entry.after || {};
+  const lines = [];
+
+  if (!entry.before && entry.after) {
+    return { lines, isCreate: true };
+  }
+  if (entry.before && !entry.after) {
+    return { lines, isDelete: true };
+  }
+
+  if (before.role !== undefined && after.role !== undefined && before.role !== after.role) {
+    lines.push({ label: 'Role', from: formatRoleLabel(before.role), to: formatRoleLabel(after.role) });
+  }
+  if (before.name !== undefined && after.name !== undefined && before.name !== after.name) {
+    lines.push({ label: 'Name', from: before.name, to: after.name });
+  }
+  if (before.email !== undefined && after.email !== undefined && before.email !== after.email) {
+    lines.push({ label: 'Email', from: before.email, to: after.email });
+  }
+  if (before.label !== undefined && after.label !== undefined && before.label !== after.label) {
+    lines.push({ label: 'Label', from: before.label, to: after.label });
+  }
+  if (
+    before.moneyLimit !== undefined && after.moneyLimit !== undefined &&
+    Number(before.moneyLimit) !== Number(after.moneyLimit)
+  ) {
+    lines.push({
+      label: 'Money Limit',
+      from: before.moneyLimit == null ? 'Unlimited' : `₹${before.moneyLimit}`,
+      to: after.moneyLimit == null ? 'Unlimited' : `₹${after.moneyLimit}`,
+    });
+  }
+
+  const beforePerms = new Set(before.permissions || before.allowedPermissions || []);
+  const afterPerms = new Set(after.permissions || after.allowedPermissions || []);
+  const added = [...afterPerms].filter((p) => !beforePerms.has(p));
+  const removed = [...beforePerms].filter((p) => !afterPerms.has(p));
+
+  return { lines, added, removed };
+};
+
 const emptyStaffForm = {
   name: '',
   email: '',
@@ -231,6 +306,14 @@ const UserManagement = () => {
   const [isRoleOpen, setIsRoleOpen] = useState(false);
   const [editRoleId, setEditRoleId] = useState(null);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
+
+  // --- Access log state ---
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
+  const [hasLoadedAuditLogs, setHasLoadedAuditLogs] = useState(false);
 
   const rolesLookup = useMemo(() => {
     const map = {};
@@ -270,10 +353,36 @@ const UserManagement = () => {
     }
   };
 
+  const fetchAuditLogs = async (page = 1) => {
+    setLoadingAuditLogs(true);
+    try {
+      const res = await adminApi.getRoleAccessAuditLogs({ page, limit: 20 });
+      const payload = res?.data?.result || {};
+      setAuditLogs(Array.isArray(payload.items) ? payload.items : []);
+      setAuditPage(payload.page || page);
+      setAuditTotal(payload.total || 0);
+      setAuditTotalPages(payload.totalPages || 1);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to fetch access logs');
+    } finally {
+      setLoadingAuditLogs(false);
+      setHasLoadedAuditLogs(true);
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
     fetchRoles();
   }, []);
+
+  // Lazy-load the access log the first time that tab is opened, not on
+  // every page mount — it's the least-used tab of the three.
+  useEffect(() => {
+    if (activeTab === 'access_logs' && !hasLoadedAuditLogs) {
+      fetchAuditLogs(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     document.body.style.overflow = isStaffOpen || isRoleOpen ? 'hidden' : '';
@@ -470,12 +579,20 @@ const UserManagement = () => {
           >
             <HiOutlineUserAdd className="h-5 w-5" /> Add Staff Member
           </Button>
-        ) : (
+        ) : activeTab === 'roles' ? (
           <Button
             onClick={openCreateRole}
             className="w-fit flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 px-5 text-sm font-black shadow-lg shadow-indigo-100"
           >
             <HiOutlinePlus className="h-5 w-5" /> Create Custom Role
+          </Button>
+        ) : (
+          <Button
+            onClick={() => fetchAuditLogs(auditPage)}
+            disabled={loadingAuditLogs}
+            className="w-fit flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3 px-5 text-sm font-black shadow-lg shadow-slate-100 disabled:opacity-60"
+          >
+            <HiOutlineClock className="h-5 w-5" /> Refresh
           </Button>
         )}
       </div>
@@ -485,6 +602,7 @@ const UserManagement = () => {
         {[
           { key: 'staff', label: 'Staff Members', icon: HiOutlineUserGroup, count: staffList.length },
           { key: 'roles', label: 'Custom Roles', icon: HiOutlineShieldCheck, count: roles.length },
+          { key: 'access_logs', label: 'Access Logs', icon: HiOutlineClock, count: hasLoadedAuditLogs ? auditTotal : null },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.key;
@@ -500,13 +618,15 @@ const UserManagement = () => {
             >
               <Icon className="h-4 w-4" />
               {tab.label}
-              <span
-                className={`ml-1 text-[10px] px-2 py-0.5 rounded-full ${
-                  active ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {tab.count}
-              </span>
+              {tab.count != null && (
+                <span
+                  className={`ml-1 text-[10px] px-2 py-0.5 rounded-full ${
+                    active ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
           );
         })}
@@ -666,6 +786,106 @@ const UserManagement = () => {
               ))}
             </div>
           )}
+        </Card>
+      )}
+
+      {/* ======= Access Logs Tab ======= */}
+      {activeTab === 'access_logs' && (
+        <Card className="overflow-hidden border border-slate-100 shadow-sm rounded-3xl">
+          <div className="px-6 pt-5 pb-1">
+            <p className="text-xs text-slate-500">
+              Every time a staff account or custom role's access was created, changed, or removed — who did it, to whom, and exactly what changed.
+            </p>
+          </div>
+          {loadingAuditLogs && auditLogs.length === 0 ? (
+            <div className="p-12 text-center text-slate-500 font-medium">Loading access logs...</div>
+          ) : auditLogs.length === 0 ? (
+            <div className="p-16 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <HiOutlineClock className="h-8 w-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-black text-slate-800">No access changes logged yet</h3>
+              <p className="text-slate-500 text-sm max-w-sm mx-auto mt-1">
+                Staff/role creations, edits, and deletions will appear here as they happen.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 mt-3">
+              {auditLogs.map((entry) => {
+                const { lines, added, removed, isCreate, isDelete } = describeAuditChanges(entry);
+                const snapshot = entry.after || entry.before || {};
+                const targetLabel =
+                  entry.targetType === 'AdminRole'
+                    ? (snapshot.label || snapshot.name || 'Custom role')
+                    : (snapshot.name || snapshot.email || 'Staff account');
+                const actorLabel = entry.actorId?.name || entry.actorId?.email || 'Admin';
+
+                return (
+                  <div key={entry._id} className="p-5 hover:bg-slate-50/60 transition-colors">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant={entry.action?.includes('deleted') ? 'danger' : entry.action?.includes('created') ? 'success' : 'warning'}
+                          className="text-[9px] font-black uppercase tracking-wider"
+                        >
+                          {formatAuditAction(entry.action)}
+                        </Badge>
+                        <span className="text-sm font-black text-slate-900">{targetLabel}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          ({entry.targetType === 'AdminRole' ? 'Role' : 'Staff'})
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        {formatAuditDate(entry.createdAt)}
+                      </p>
+                    </div>
+
+                    <p className="text-[11px] font-bold text-slate-500 mt-1.5">
+                      By <span className="text-slate-700">{actorLabel}</span>
+                    </p>
+
+                    {!isCreate && !isDelete && (lines.length > 0 || added.length > 0 || removed.length > 0) && (
+                      <div className="mt-3 space-y-1.5 bg-slate-50 rounded-xl p-3">
+                        {lines.map((line) => (
+                          <div key={line.label} className="flex items-center gap-2 text-xs font-semibold text-slate-600 flex-wrap">
+                            <span className="text-slate-400 font-black uppercase text-[10px] tracking-wider w-24 shrink-0">{line.label}</span>
+                            <span className="text-rose-600">{line.from || '—'}</span>
+                            <HiOutlineArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
+                            <span className="text-emerald-700">{line.to || '—'}</span>
+                          </div>
+                        ))}
+                        {(added.length > 0 || removed.length > 0) && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {added.map((p) => (
+                              <span key={`add-${p}`} className="text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
+                                + {permKey(p)}
+                              </span>
+                            ))}
+                            {removed.map((p) => (
+                              <span key={`rem-${p}`} className="text-[10px] font-black uppercase bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200 line-through decoration-rose-400">
+                                {permKey(p)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="px-6 py-4 border-t border-slate-100">
+            <Pagination
+              page={auditPage}
+              totalPages={auditTotalPages}
+              total={auditTotal}
+              pageSize={20}
+              onPageChange={(p) => fetchAuditLogs(p)}
+              loading={loadingAuditLogs}
+            />
+          </div>
         </Card>
       )}
 

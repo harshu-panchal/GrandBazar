@@ -2,6 +2,7 @@ import Admin from "../../models/admin.js";
 import AdminRole from "../../models/adminRole.js";
 import handleResponse from "../../utils/helper.js";
 import { sendStaffWelcomeEmail } from "../../services/emailService.js";
+import { recordAuditLog } from "../../services/auditTrailService.js";
 
 const RESERVED_ROLE_NAMES = new Set(["admin", "superadmin"]);
 
@@ -86,6 +87,22 @@ export const createStaff = async (req, res) => {
     const result = staff.toObject();
     delete result.password;
 
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: "staff.created",
+      targetType: "Admin",
+      targetId: staff._id,
+      before: null,
+      after: {
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        customRoleId: staff.customRoleId,
+        allowedPermissions: staff.allowedPermissions,
+      },
+    });
+
     try {
       await sendStaffWelcomeEmail({
         email: staff.email,
@@ -115,6 +132,14 @@ export const updateStaff = async (req, res) => {
       return handleResponse(res, 400, "Root admin accounts cannot be edited here");
     }
 
+    const before = {
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+      customRoleId: staff.customRoleId,
+      allowedPermissions: [...(staff.allowedPermissions || [])],
+    };
+
     if (email && email.toLowerCase() !== staff.email.toLowerCase()) {
       const duplicate = await Admin.findOne({ email: email.toLowerCase() });
       if (duplicate) return handleResponse(res, 409, "Email is already in use");
@@ -141,6 +166,28 @@ export const updateStaff = async (req, res) => {
 
     await staff.save();
 
+    const after = {
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+      customRoleId: staff.customRoleId,
+      allowedPermissions: staff.allowedPermissions,
+    };
+    const roleOrPermissionsChanged =
+      before.role !== after.role ||
+      String(before.customRoleId || "") !== String(after.customRoleId || "") ||
+      JSON.stringify([...before.allowedPermissions].sort()) !== JSON.stringify([...after.allowedPermissions].sort());
+
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: roleOrPermissionsChanged ? "staff.access_changed" : "staff.updated",
+      targetType: "Admin",
+      targetId: staff._id,
+      before,
+      after,
+    });
+
     const result = staff.toObject();
     delete result.password;
     return handleResponse(res, 200, "Staff member updated successfully", result);
@@ -163,7 +210,25 @@ export const deleteStaff = async (req, res) => {
       return handleResponse(res, 400, "Root admin accounts cannot be deleted here");
     }
 
+    const before = {
+      name: target.name,
+      email: target.email,
+      role: target.role,
+      customRoleId: target.customRoleId,
+      allowedPermissions: target.allowedPermissions,
+    };
     await target.deleteOne();
+
+    recordAuditLog({
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      action: "staff.deleted",
+      targetType: "Admin",
+      targetId: target._id,
+      before,
+      after: null,
+    });
+
     return handleResponse(res, 200, "Staff member deleted successfully");
   } catch (error) {
     return handleResponse(res, 500, error.message);
