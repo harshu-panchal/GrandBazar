@@ -12,6 +12,29 @@ export const PERMISSION_TREE = [
     desc: 'Overview of platform statistics',
   },
   {
+    key: 'accountant',
+    label: 'Accountant',
+    desc: 'Reconciliation, GMV, settlement, GST/TCS & audit pack',
+    children: [
+      { key: 'accountant.expenses', label: 'Expenses', desc: 'View & export platform expenses' },
+      { key: 'accountant.expenses_write', label: 'Record Expenses', desc: 'Add/edit expenses & attach bills' },
+      { key: 'accountant.gst_tcs', label: 'GST / TCS', desc: 'Tax summary & filing tracker' },
+      { key: 'accountant.gst_tcs_write', label: 'Record Filings', desc: 'Mark GST/TCS returns as filed' },
+      { key: 'accountant.audit_pack', label: 'Audit Pack', desc: 'Generate the CA export bundle' },
+    ],
+  },
+  {
+    key: 'operations',
+    label: 'Operations Console',
+    desc: 'Tiered order-ops access for Operator roles (L1-L4 style)',
+    children: [
+      { key: 'operations.monitor', label: 'Monitor', desc: 'View live orders, fleet & own audit log (L1 baseline)' },
+      { key: 'operations.intervene', label: 'Intervene', desc: 'Reroute, reschedule, edit items, assign rider, issue credit within limit (L2)' },
+      { key: 'operations.manage_shops', label: 'Manage Shops', desc: 'Shop controls, reassign to another shop, approve L2 requests (L3)' },
+      { key: 'operations.payments', label: 'Payments & Approvals', desc: 'Payment/settlement status, Maker-Checker approvals (L4)' },
+    ],
+  },
+  {
     key: 'categories',
     label: 'Categories',
     desc: 'Create, update & structure categories',
@@ -64,8 +87,10 @@ export const PERMISSION_TREE = [
     children: [
       { key: 'sellers.active', label: 'Active Sellers', desc: 'Approved sellers directory' },
       { key: 'sellers.pending', label: 'Seller Applications', desc: 'Pending approvals' },
-      { key: 'sellers.subscriptions', label: 'Subscriptions', desc: 'Seller subscription plans' },
+      { key: 'sellers.subscriptions', label: 'Subscriptions', desc: 'Seller subscription plans (view)' },
+      { key: 'sellers.subscriptions_write', label: 'Manage Subscriptions', desc: 'Create/edit plans, approve payment requests' },
       { key: 'sellers.locations', label: 'Seller Locations', desc: 'Geo distribution of stores' },
+      { key: 'sellers.write', label: 'Manage Sellers', desc: 'Approve/reject, edit store setup & commission' },
     ],
   },
   {
@@ -77,13 +102,36 @@ export const PERMISSION_TREE = [
       { key: 'delivery.pending', label: 'Waiting for Review', desc: 'Rider applications' },
       { key: 'delivery.tracking', label: 'Track Drivers', desc: 'Live fleet map' },
       { key: 'delivery.funds', label: 'Send Money', desc: 'Payouts to riders' },
+      { key: 'delivery.write', label: 'Manage Drivers', desc: 'Approve/reject riders, assign orders, settle transactions' },
     ],
   },
-  { key: 'wallet', label: 'Wallet', desc: 'Platform balances & commission ledgers' },
-  { key: 'withdrawals', label: 'Money Requests', desc: 'Approve seller/rider payouts' },
+  {
+    key: 'wallet',
+    label: 'Wallet',
+    desc: 'Platform balances & commission ledgers',
+    children: [
+      { key: 'wallet.write', label: 'Process Payouts', desc: 'Run payouts, adjust, hold/release, reconcile COD' },
+    ],
+  },
+  {
+    key: 'withdrawals',
+    label: 'Money Requests',
+    desc: 'Approve seller/rider payouts',
+    children: [
+      { key: 'withdrawals.write', label: 'Approve/Reject', desc: 'Change withdrawal request status' },
+    ],
+  },
   { key: 'seller_payments', label: 'Seller Payments', desc: 'Settle merchant accounts' },
   { key: 'bulk_settlements', label: 'Bulk Settlements', desc: 'Wholesale/bulk settlements' },
-  { key: 'cash_collection', label: 'Collect Cash', desc: 'Receive COD dues' },
+  {
+    key: 'cash_collection',
+    label: 'Collect Cash',
+    desc: 'Receive COD dues',
+    children: [
+      { key: 'cash_collection.write', label: 'Settle Cash', desc: 'Record rider cash settlements' },
+    ],
+  },
+  { key: 'audit_logs', label: 'Audit Logs', desc: 'Finance action audit trail' },
   { key: 'customers', label: 'Customers', desc: 'End-user registry & logs' },
   { key: 'faqs', label: 'FAQs', desc: 'Publish static FAQ lists' },
   {
@@ -114,6 +162,7 @@ export const PERMISSION_TREE = [
     children: [
       { key: 'billing.fees', label: 'Fees & Charges', desc: 'Base billing config' },
       { key: 'billing.city_commissions', label: 'City Commissions', desc: 'City-wise commission tables' },
+      { key: 'billing.write', label: 'Edit Fees & Commissions', desc: 'Change platform/delivery settings, city billing & commission rates' },
     ],
   },
   { key: 'settings', label: 'Settings', desc: 'Global platform configuration' },

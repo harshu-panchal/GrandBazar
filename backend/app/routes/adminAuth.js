@@ -26,6 +26,7 @@ import {
     bootstrapAdmin,
     signupAdmin,
     loginAdmin,
+    verifyAdminLoginOtp,
     sendAdminForgotPasswordOtp,
     verifyAdminForgotPasswordOtp,
     resetAdminPassword,
@@ -118,6 +119,34 @@ import {
 } from "../controller/admin/commissionHierarchyController.js";
 import { getAuditLogsController } from "../controller/admin/auditLogController.js";
 import {
+    getAccountantOverviewController,
+    getOrdersGmvController,
+    exportOrdersGmvController,
+} from "../controller/admin/accountantController.js";
+import {
+    getExpensesController,
+    createExpenseController,
+    updateExpenseController,
+    deleteExpenseController,
+    exportExpensesExcelController,
+    exportExpensesZipController,
+} from "../controller/admin/expenseController.js";
+import {
+    getGstTcsSummaryController,
+    getTaxFilingRecordsController,
+    upsertTaxFilingRecordController,
+    deleteTaxFilingRecordController,
+} from "../controller/admin/gstTcsController.js";
+import { generateAuditPackController } from "../controller/admin/auditPackController.js";
+import { requireReason } from "../middleware/requireReasonMiddleware.js";
+import {
+    createCreditController,
+    getApprovalsController,
+    approveApprovalController,
+    rejectApprovalController,
+    getOperatorAuditLogController,
+} from "../controller/admin/operationsController.js";
+import {
     listCityBillingConfigsController,
     getCityBillingConfigController,
     upsertCityBillingConfigController,
@@ -132,7 +161,13 @@ import {
     previewCityBillingController,
 } from "../controller/admin/cityBillingController.js";
 
-import { verifyToken, allowRoles, allowSuperAdminOnly } from "../middleware/authMiddleware.js";
+import {
+    verifyToken,
+    allowRoles,
+    allowSuperAdminOnly,
+    checkAdminPermission,
+    checkAnyAdminPermission,
+} from "../middleware/authMiddleware.js";
 import {
     adminBootstrapRateLimiter,
     authRouteRateLimiter,
@@ -149,6 +184,7 @@ const smallAdminPayload = createContentLengthGuard(
 router.post("/bootstrap", adminBootstrapRateLimiter, smallAdminPayload, bootstrapAdmin);
 router.post("/signup", adminBootstrapRateLimiter, smallAdminPayload, signupAdmin);
 router.post("/login", authRouteRateLimiter, smallAdminPayload, loginAdmin);
+router.post("/login/verify-2fa", authRouteRateLimiter, smallAdminPayload, verifyAdminLoginOtp);
 
 router.post(
     "/forgot-password/send-otp",
@@ -203,120 +239,140 @@ router.get(
     "/finance/summary",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getAdminFinanceSummaryController,
 );
 router.get(
     "/finance/ledger",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getAdminFinanceLedgerController,
 );
 router.get(
     "/finance/payouts",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getAdminFinancePayoutsController,
 );
 router.get(
     "/finance/bulk-settlements",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("bulk_settlements"),
     getAdminBulkSettlementsController,
 );
 router.get(
     "/finance/earnings-breakdown",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getEarningsBreakdownController,
 );
 router.get(
     "/finance/delivery-earnings-summary",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getDeliveryEarningsSummaryController,
 );
 router.get(
     "/finance/seller-earnings-summary",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getSellerEarningsSummaryController,
 );
 router.get(
     "/finance/refunds",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getAdminRefundsController,
 );
 router.get(
     "/audit-logs",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("audit_logs"),
     getAuditLogsController,
 );
 router.post(
     "/finance/payouts/process",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     processAdminFinancePayoutsController,
 );
 router.post(
     "/finance/settlement/manual",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     settleSellerPayoutManualController,
 );
 router.post(
     "/finance/reconcile-seller-cod",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     adminReconcileSellerCommissionController,
 );
 router.post(
     "/finance/payouts/:payoutId/adjust",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     adjustPayoutController,
 );
 router.post(
     "/finance/orders/:orderId/hold",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     holdSellerPayoutController,
 );
 router.post(
     "/finance/orders/:orderId/release",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet.write"),
     releaseSellerPayoutController,
 );
 router.get(
     "/finance/export-statement",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     exportAdminFinanceStatementController,
 );
 router.get(
     "/settings/platform",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("billing"),
     getPlatformSettings
 );
 router.get(
     "/settings/delivery",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("billing"),
     getDeliverySettingsController,
 );
 router.put(
     "/settings/delivery",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("billing.write"),
     updateDeliverySettingsController,
 );
 router.put(
     "/settings/platform",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("billing.write"),
     updatePlatformSettings
 );
 // Staff/Sub-admin Management Routes
@@ -339,68 +395,69 @@ router.patch("/users/:id/status", verifyToken, allowRoles("admin"), updateUserSt
 router.post("/users/:id/notify", verifyToken, allowRoles("admin"), sendCustomerNotification);
 router.get("/login-activities", verifyToken, allowRoles("admin"), getLoginActivities);
 router.delete("/login-activities/:id", verifyToken, allowRoles("admin"), terminateSession);
-router.get("/sellers", verifyToken, allowRoles("admin"), getSellers);
-router.get("/sellers/locations", verifyToken, allowRoles("admin"), getSellerLocations);
-router.get("/sellers/active", verifyToken, allowRoles("admin"), getActiveSellers);
-router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), getActiveSellerById);
-router.get("/sellers/pending", verifyToken, allowRoles("admin"), getPendingSellers);
-router.post("/sellers/create", verifyToken, allowRoles("admin"), createVendorAccount);
-router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), updateSellerStoreSetup);
-router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), resendSellerCredentials);
-router.post("/sellers/:id/message", verifyToken, allowRoles("admin"), sendMessageToSeller);
-router.post("/sellers/invite", verifyToken, allowRoles("admin"), inviteSeller);
-router.get("/sellers/invites", verifyToken, allowRoles("admin"), listSellerInvites);
-router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), approveSellerApplication);
-router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), rejectSellerApplication);
-router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), getAdminSellerBusinessModel);
-router.put("/sellers/:id/business-model", verifyToken, allowRoles("admin"), updateAdminSellerBusinessModel);
-router.put("/sellers/:id/commission", verifyToken, allowRoles("admin"), updateAdminSellerCommission);
-router.get("/stores/:id/commission", verifyToken, allowRoles("admin"), getStoreCommission);
-router.put("/stores/:id/commission", verifyToken, allowRoles("admin"), updateStoreCommission);
-router.get("/commissions/cities", verifyToken, allowRoles("admin"), listCityCommissions);
+router.get("/sellers", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getSellers);
+router.get("/sellers/locations", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getSellerLocations);
+router.get("/sellers/active", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getActiveSellers);
+router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getActiveSellerById);
+router.get("/sellers/pending", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getPendingSellers);
+router.post("/sellers/create", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), createVendorAccount);
+router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), updateSellerStoreSetup);
+router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), resendSellerCredentials);
+router.post("/sellers/:id/message", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), sendMessageToSeller);
+router.post("/sellers/invite", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), inviteSeller);
+router.get("/sellers/invites", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), listSellerInvites);
+router.patch("/sellers/approve/:id", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), approveSellerApplication);
+router.delete("/sellers/reject/:id", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), rejectSellerApplication);
+router.get("/sellers/:id/business-model", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getAdminSellerBusinessModel);
+router.put("/sellers/:id/business-model", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), updateAdminSellerBusinessModel);
+router.put("/sellers/:id/commission", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), updateAdminSellerCommission);
+router.get("/stores/:id/commission", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), getStoreCommission);
+router.put("/stores/:id/commission", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), updateStoreCommission);
+router.get("/commissions/cities", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), listCityCommissions);
 // Static path must be registered before the ":cityKey" routes.
-router.get("/commissions/cities/options", verifyToken, allowRoles("admin"), listCityCommissionOptions);
-router.get("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), getCityCommission);
-router.delete("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), deleteCityCommission);
-router.put("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityCommissionController);
+router.get("/commissions/cities/options", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), listCityCommissionOptions);
+router.get("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), getCityCommission);
+router.delete("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), deleteCityCommission);
+router.put("/commissions/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), upsertCityCommissionController);
 
 // City-wise billing (delivery / weather / extra charges). Separate from
 // city commission above — commission affects seller payout, billing here
 // affects customer-facing charges. Both models share cityKey identity.
-router.get("/billing/cities", verifyToken, allowRoles("admin"), listCityBillingConfigsController);
-router.get("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), getCityBillingConfigController);
-router.put("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), upsertCityBillingConfigController);
-router.patch("/billing/cities/:cityKey/status", verifyToken, allowRoles("admin"), patchCityBillingStatusController);
-router.delete("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), deleteCityBillingConfigController);
-router.post("/billing/cities/:cityKey/duplicate", verifyToken, allowRoles("admin"), duplicateCityBillingConfigController);
-router.post("/billing/cities/:cityKey/weather/activate", verifyToken, allowRoles("admin"), activateWeatherChargeController);
-router.post("/billing/cities/:cityKey/weather/deactivate", verifyToken, allowRoles("admin"), deactivateWeatherChargeController);
-router.post("/billing/cities/:cityKey/extra-charges", verifyToken, allowRoles("admin"), addExtraChargeController);
-router.put("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), updateExtraChargeController);
-router.delete("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), deleteExtraChargeController);
-router.post("/billing/preview", verifyToken, allowRoles("admin"), previewCityBillingController);
-router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), listModelSwitchRequests);
-router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), approveModelSwitchRequest);
-router.patch("/sellers/:id/model-switch/reject", verifyToken, allowRoles("admin"), rejectModelSwitchRequest);
+router.get("/billing/cities", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), listCityBillingConfigsController);
+router.get("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), getCityBillingConfigController);
+router.put("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), upsertCityBillingConfigController);
+router.patch("/billing/cities/:cityKey/status", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), patchCityBillingStatusController);
+router.delete("/billing/cities/:cityKey", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), deleteCityBillingConfigController);
+router.post("/billing/cities/:cityKey/duplicate", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), duplicateCityBillingConfigController);
+router.post("/billing/cities/:cityKey/weather/activate", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), activateWeatherChargeController);
+router.post("/billing/cities/:cityKey/weather/deactivate", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), deactivateWeatherChargeController);
+router.post("/billing/cities/:cityKey/extra-charges", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), addExtraChargeController);
+router.put("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), updateExtraChargeController);
+router.delete("/billing/cities/:cityKey/extra-charges/:chargeId", verifyToken, allowRoles("admin"), checkAdminPermission("billing.write"), deleteExtraChargeController);
+router.post("/billing/preview", verifyToken, allowRoles("admin"), checkAdminPermission("billing"), previewCityBillingController);
+router.get("/sellers/model-switch-requests", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), listModelSwitchRequests);
+router.patch("/sellers/:id/model-switch/approve", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), approveModelSwitchRequest);
+router.patch("/sellers/:id/model-switch/reject", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), rejectModelSwitchRequest);
 
-router.get("/subscription/plans", verifyToken, allowRoles("admin"), listSubscriptionPlans);
-router.post("/subscription/plans", verifyToken, allowRoles("admin"), createSubscriptionPlan);
-router.put("/subscription/plans/:id", verifyToken, allowRoles("admin"), updateSubscriptionPlan);
-router.delete("/subscription/plans/:id", verifyToken, allowRoles("admin"), deleteSubscriptionPlan);
-router.get("/subscription/payment-requests", verifyToken, allowRoles("admin"), listPaymentRequests);
-router.patch("/subscription/payment-requests/:id/approve", verifyToken, allowRoles("admin"), approveSubscriptionPaymentRequest);
-router.patch("/subscription/payment-requests/:id/reject", verifyToken, allowRoles("admin"), rejectSubscriptionPaymentRequest);
-router.get("/subscription/payment-settings", verifyToken, allowRoles("admin"), getSubscriptionPaymentSettingsAdmin);
-router.put("/subscription/payment-settings", verifyToken, allowRoles("admin"), updateSubscriptionPaymentSettings);
-router.get("/subscription/overview", verifyToken, allowRoles("admin"), getSubscriptionOverview);
-router.get("/subscription/payments", verifyToken, allowRoles("admin"), listSubscriptionPayments);
-router.get("/subscription/complimentary", verifyToken, allowRoles("admin"), getComplimentarySubscriptions);
-router.post("/subscription/complimentary", verifyToken, allowRoles("admin"), assignComplimentarySubscriptionAdmin);
+router.get("/subscription/plans", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), listSubscriptionPlans);
+router.post("/subscription/plans", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), createSubscriptionPlan);
+router.put("/subscription/plans/:id", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), updateSubscriptionPlan);
+router.delete("/subscription/plans/:id", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), deleteSubscriptionPlan);
+router.get("/subscription/payment-requests", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), listPaymentRequests);
+router.patch("/subscription/payment-requests/:id/approve", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), approveSubscriptionPaymentRequest);
+router.patch("/subscription/payment-requests/:id/reject", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), rejectSubscriptionPaymentRequest);
+router.get("/subscription/payment-settings", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), getSubscriptionPaymentSettingsAdmin);
+router.put("/subscription/payment-settings", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), updateSubscriptionPaymentSettings);
+router.get("/subscription/overview", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), getSubscriptionOverview);
+router.get("/subscription/payments", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), listSubscriptionPayments);
+router.get("/subscription/complimentary", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions"), getComplimentarySubscriptions);
+router.post("/subscription/complimentary", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.subscriptions_write"), assignComplimentarySubscriptionAdmin);
 
 router.get(
     "/delivery-partners",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("delivery"),
     getDeliveryPartners
 );
 
@@ -408,6 +465,7 @@ router.patch(
     "/delivery-partners/approve/:id",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("delivery.write"),
     approveDeliveryPartner
 );
 
@@ -415,6 +473,7 @@ router.delete(
     "/delivery-partners/reject/:id",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("delivery.write"),
     rejectDeliveryPartner
 );
 
@@ -422,37 +481,77 @@ router.put(
     "/delivery-partners/:id",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("delivery.write"),
     updateDeliveryPartner
 );
 
-router.get("/active-fleet", verifyToken, allowRoles("admin"), getActiveFleet);
-router.get("/unassigned-orders", verifyToken, allowRoles("admin"), getUnassignedOrders);
-router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), assignOrderToRider);
-router.get("/wallet-data", verifyToken, allowRoles("admin"), getAdminWalletData);
+router.get("/active-fleet", verifyToken, allowRoles("admin"), checkAdminPermission("delivery"), getActiveFleet);
+router.get("/unassigned-orders", verifyToken, allowRoles("admin"), checkAdminPermission("delivery"), getUnassignedOrders);
+router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignOrderToRider);
+router.get("/wallet-data", verifyToken, allowRoles("admin"), checkAdminPermission("wallet"), getAdminWalletData);
 
 // Delivery Payouts / Funds
-router.get("/delivery-transactions", verifyToken, allowRoles('admin'), getDeliveryTransactions);
-router.put("/transactions/:id/settle", verifyToken, allowRoles("admin"), settleTransaction);
-router.put("/transactions/bulk-settle-delivery", verifyToken, allowRoles("admin"), bulkSettleDelivery);
+router.get("/delivery-transactions", verifyToken, allowRoles('admin'), checkAdminPermission("delivery"), getDeliveryTransactions);
+router.put("/transactions/:id/settle", verifyToken, allowRoles("admin"), checkAdminPermission("delivery.write"), settleTransaction);
+router.put("/transactions/bulk-settle-delivery", verifyToken, allowRoles("admin"), checkAdminPermission("delivery.write"), bulkSettleDelivery);
 
 // Cash Collection Hub
-router.get("/delivery-cash", verifyToken, allowRoles("admin"), getDeliveryCashBalances);
-router.get("/rider-cash-details/:id", verifyToken, allowRoles("admin"), getRiderCashDetails);
-router.post("/settle-cash", verifyToken, allowRoles("admin"), settleRiderCash);
-router.get("/cash-history", verifyToken, allowRoles("admin"), getCashSettlementHistory);
+router.get("/delivery-cash", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), getDeliveryCashBalances);
+router.get("/rider-cash-details/:id", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), getRiderCashDetails);
+router.post("/settle-cash", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection.write"), settleRiderCash);
+router.get("/cash-history", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), getCashSettlementHistory);
 
 // Seller Withdrawal Management
-router.get("/seller-withdrawals", verifyToken, allowRoles("admin"), getSellerWithdrawals);
-router.get("/delivery-withdrawals", verifyToken, allowRoles("admin"), getDeliveryWithdrawals);
-router.get("/seller-transactions", verifyToken, allowRoles("admin"), getSellerTransactions);
-router.put("/withdrawals/:id", verifyToken, allowRoles("admin"), updateWithdrawalStatus);
+router.get("/seller-withdrawals", verifyToken, allowRoles("admin"), checkAdminPermission("withdrawals"), getSellerWithdrawals);
+router.get("/delivery-withdrawals", verifyToken, allowRoles("admin"), checkAdminPermission("withdrawals"), getDeliveryWithdrawals);
+router.get("/seller-transactions", verifyToken, allowRoles("admin"), checkAdminPermission("seller_payments"), getSellerTransactions);
+router.put("/withdrawals/:id", verifyToken, allowRoles("admin"), checkAdminPermission("withdrawals.write"), updateWithdrawalStatus);
 
 // Platform overview dashboard
 router.get(
     "/dashboard",
     verifyToken,
     allowRoles("admin"),
+    checkAdminPermission("wallet"),
     getAdminDashboard
 );
+
+// Accountant dashboard — reconciliation overview + Orders/GMV report.
+// Gated by its own "accountant" permission since it's a bespoke aggregate
+// view spanning orders/payments/refunds/payouts, not a thin wrapper over
+// one existing resource's permission.
+router.get("/accountant/overview", verifyToken, allowRoles("admin"), checkAdminPermission("accountant"), getAccountantOverviewController);
+router.get("/accountant/orders-gmv", verifyToken, allowRoles("admin"), checkAdminPermission("accountant"), getOrdersGmvController);
+router.get("/accountant/orders-gmv/export", verifyToken, allowRoles("admin"), checkAdminPermission("accountant"), exportOrdersGmvController);
+
+// Expenses — platform costs the accountant records and reconciles against
+// the bank-balance equation on the Accountant Home screen. Bills are
+// uploaded via the existing generic POST /media/upload endpoint; this API
+// only ever receives the resulting URL string.
+router.get("/expenses", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses"), getExpensesController);
+router.post("/expenses", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses_write"), createExpenseController);
+router.put("/expenses/:id", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses_write"), updateExpenseController);
+router.delete("/expenses/:id", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses_write"), deleteExpenseController);
+router.get("/expenses/export/excel", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses"), exportExpensesExcelController);
+router.get("/expenses/export/zip", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.expenses"), exportExpensesZipController);
+
+// GST / TCS — estimated output GST on commission/subscription + TCS
+// liability, and a manual filing tracker (no GSTN e-filing API exists in
+// this codebase; the accountant records what was actually filed).
+router.get("/gst-tcs/summary", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.gst_tcs"), getGstTcsSummaryController);
+router.get("/gst-tcs/filings", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.gst_tcs"), getTaxFilingRecordsController);
+router.post("/gst-tcs/filings", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.gst_tcs_write"), upsertTaxFilingRecordController);
+router.delete("/gst-tcs/filings/:id", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.gst_tcs_write"), deleteTaxFilingRecordController);
+
+// Audit Pack — bundles every report above into one ZIP for the CA.
+router.get("/accountant/audit-pack", verifyToken, allowRoles("admin"), checkAdminPermission("accountant.audit_pack"), generateAuditPackController);
+
+// Operations Console — Operator-tier credit/refund with Maker-Checker
+// escalation, and the unified operator audit log.
+router.post("/operations/credits", verifyToken, allowRoles("admin"), checkAdminPermission("operations.intervene"), createCreditController);
+router.get("/operations/approvals", verifyToken, allowRoles("admin"), checkAnyAdminPermission("operations.manage_shops", "operations.payments"), getApprovalsController);
+router.patch("/operations/approvals/:id/approve", verifyToken, allowRoles("admin"), checkAnyAdminPermission("operations.manage_shops", "operations.payments"), approveApprovalController);
+router.patch("/operations/approvals/:id/reject", verifyToken, allowRoles("admin"), checkAnyAdminPermission("operations.manage_shops", "operations.payments"), rejectApprovalController);
+router.get("/operations/audit-log", verifyToken, allowRoles("admin"), checkAdminPermission("operations.monitor"), getOperatorAuditLogController);
 
 export default router;

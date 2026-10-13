@@ -11,7 +11,8 @@ import Admin from "../models/admin.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
 import Payout from "../models/payout.js";
 import OrderOtp from "../models/orderOtp.js";
-import handleResponse from "../utils/helper.js";
+import handleResponse, { isAdminScopedUser } from "../utils/helper.js";
+import { maskOrderForViewer, maskOrdersForViewer } from "../services/orderMaskingService.js";
 import getPagination from "../utils/pagination.js";
 import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
@@ -668,7 +669,7 @@ export const getOrderDetails = async (req, res) => {
       ((!order.deliveryBoy && order.workflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH) || 
        (!order.returnDeliveryBoy && ["return_approved", "return_pickup_assigned"].includes(order.returnStatus)));
 
-    const isAdmin = role === "admin";
+    const isAdmin = isAdminScopedUser(req.user);
 
     if (
       !isOwnerCustomer &&
@@ -697,7 +698,7 @@ export const getOrderDetails = async (req, res) => {
       order = sanitizeCommissionFieldsForSeller(order);
     }
 
-    return handleResponse(res, 200, "Order details fetched", attachDisplayStatus(order));
+    return handleResponse(res, 200, "Order details fetched", maskOrderForViewer(attachDisplayStatus(order), req.user));
   } catch (error) {
     console.error(`[ORDER_ERROR] Error fetching order details:`, error);
     return handleResponse(res, 500, error.message);
@@ -2503,6 +2504,12 @@ export const getSellerOrders = async (req, res) => {
   try {
     const { id: userId, role } = req.user;
     const { startDate, endDate, status: statusParam } = req.query;
+    // Any AdminRole-based staff (Accountant, Assistant, Operator L1-L4, ...)
+    // carries scope:"admin" but role is their custom role name, not the
+    // literal string "admin" — treat them as admin-scoped here too, or this
+    // query collapses to `{ seller: <their own Admin _id> }` and returns zero
+    // orders for every custom role.
+    const isAdminScope = isAdminScopedUser(req.user);
 
     const { page, limit, skip } = getPagination(req, {
       defaultLimit: 25,
@@ -2510,7 +2517,7 @@ export const getSellerOrders = async (req, res) => {
     });
 
     const { orders, total, summary } = await fetchSellerOrdersPage({
-      role,
+      role: isAdminScope ? "admin" : role,
       userId,
       user: req.user,
       statusParam,
@@ -2521,15 +2528,15 @@ export const getSellerOrders = async (req, res) => {
     });
 
 
-    const sanitizedOrders =
-      role === "admin"
-        ? orders
-        : orders.map((o) => sanitizeCommissionFieldsForSeller(o));
+    const sanitizedOrders = maskOrdersForViewer(
+      isAdminScope ? orders : orders.map((o) => sanitizeCommissionFieldsForSeller(o)),
+      req.user,
+    );
 
     return handleResponse(
       res,
       200,
-      role === "admin" ? "All orders fetched" : "Seller orders fetched",
+      isAdminScope ? "All orders fetched" : "Seller orders fetched",
       {
         items: sanitizedOrders,
         page,

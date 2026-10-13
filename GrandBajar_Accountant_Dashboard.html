@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GrandBajar · Accountant Dashboard (sample)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#f3f5f7;--card:#fff;--ink:#14202b;--mute:#5d6b78;--line:#dde3e8;--side:#102a3d;--sidei:#c7d6e2;--ok:#0f7b5f;--okb:#dff3ec;--warn:#9a6200;--warnb:#fdf0d5;--bad:#b3261e;--badb:#fbe3e1;--acc:#1561a8;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d151c;--card:#16212b;--ink:#e6edf3;--mute:#93a3b1;--line:#2a3845;--side:#08121a;--okb:#0f3b30;--warnb:#3d2f0c;--badb:#44201d;--ok:#4fcfa6;--warn:#f0b64a;--bad:#ff8a80;--acc:#6db3f2}}
+:root[data-theme="dark"]{--bg:#0d151c;--card:#16212b;--ink:#e6edf3;--mute:#93a3b1;--line:#2a3845;--side:#08121a;--okb:#0f3b30;--warnb:#3d2f0c;--badb:#44201d;--ok:#4fcfa6;--warn:#f0b64a;--bad:#ff8a80;--acc:#6db3f2}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.app{display:flex;min-height:100vh}
+nav{width:232px;background:var(--side);color:var(--sidei);padding:18px 12px;flex-shrink:0}
+nav h1{font-size:16px;color:#fff;margin:0 8px 2px;font-weight:600}
+nav small{display:block;margin:0 8px 16px;opacity:.7}
+nav button{display:flex;width:100%;gap:10px;align-items:center;background:none;border:0;color:inherit;text-align:left;padding:9px 10px;border-radius:6px;font:inherit;cursor:pointer}
+nav button:hover{background:#ffffff14}
+nav button[aria-current="true"]{background:#ffffff24;color:#fff;font-weight:500}
+nav .grp{margin:16px 10px 4px;font-size:12px;opacity:.6}
+main{flex:1;min-width:0;padding:20px 24px 40px}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.top h2{margin:0;font-size:20px;font-weight:600}
+.top .who{color:var(--mute);font-size:13px}
+.seg{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select,input,button.b{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+button.b{cursor:pointer}button.b.p{background:var(--acc);border-color:var(--acc);color:#fff}
+button.b:focus-visible,select:focus-visible,input:focus-visible,nav button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.banner{border-radius:10px;padding:16px 18px;margin-bottom:16px;border:1px solid;cursor:pointer;background:var(--badb);border-color:var(--bad)}
+.banner.ready{background:var(--okb);border-color:var(--ok);cursor:default}
+.banner .t{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+.banner .t b{font-size:18px;color:var(--bad)}.banner.ready .t b{color:var(--ok)}
+.eq{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:12px}
+.eq div{background:var(--card);border-radius:8px;padding:10px 12px;border:1px solid var(--line)}
+.eq span{display:block;color:var(--mute);font-size:12px}
+.chip{display:inline-block;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:500}
+.g{background:var(--okb);color:var(--ok)}.a{background:var(--warnb);color:var(--warn)}.r{background:var(--badb);color:var(--bad)}
+.sec{margin:20px 0 8px;font-size:13px;font-weight:600;color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px}
+.k{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;border-left:4px solid var(--line)}
+.k.g{border-left-color:var(--ok)}.k.a{border-left-color:var(--warn)}.k.r{border-left-color:var(--bad)}
+.k span{font-size:12px;color:var(--mute);display:block}.k b{font-size:19px;font-weight:600;color:var(--ink)}
+.k.g,.k.a,.k.r{background:var(--card);color:var(--ink)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.panel h3{margin:0 0 8px;font-size:14px}
+.tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--mute);font-weight:500;background:color-mix(in srgb,var(--bg) 60%,var(--card))}
+td.n,th.n{text-align:right}tr:last-child td{border-bottom:0}tfoot td{font-weight:600}
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+.chain div{flex:1 1 130px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.chain span{display:block;font-size:12px;color:var(--mute)}.chain b{font-size:17px}
+.chain .neg b{color:var(--bad)}.chain .fin{border-color:var(--ok);background:var(--okb)}
+.note{font-size:12px;color:var(--mute);margin:6px 0 0}
+ul.l{margin:0;padding:0;list-style:none}ul.l li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}ul.l li:last-child{border:0}
+.mod{display:none}.mod.on{display:block}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);max-width:380px;width:92%;padding:18px}
+dialog::backdrop{background:#0008}dialog label{display:block;margin:10px 0 4px;font-size:13px}dialog input{width:100%}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+.bills li{align-items:center}
+@media (max-width:760px){.app{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;gap:4px;padding:10px}nav h1,nav small,nav .grp{display:none}nav button{width:auto;white-space:nowrap}main{padding:14px}}
+</style>
+</head>
+<body>
+<div class="app">
+<nav aria-label="Modules">
+  <h1>GrandBajar</h1><small>Accountant login · Prepare only</small>
+  <button data-m="home" aria-current="true">Home</button>
+  <div class="grp">Modules</div>
+  <button data-m="orders">Orders / GMV</button>
+  <button data-m="razor">Razorpay</button>
+  <button data-m="sellers">Sellers</button>
+  <button data-m="settle">Seller Settlement</button>
+  <button data-m="rev">Commission &amp; Subscription</button>
+  <button data-m="exp">Expenses</button>
+  <button data-m="gst">GST / TCS</button>
+  <button data-m="audit">Audit Pack</button>
+</nav>
+<main>
+<div class="top">
+  <h2 id="title">Home</h2>
+  <div class="seg"><span class="who">Signed in as Accountant · period not locked</span>
+  <select id="period" aria-label="Period"><option>Oct 2026</option><option>Sep 2026</option><option>FY 2025–26</option></select></div>
+</div>
+
+<!-- HOME -->
+<section class="mod on" id="home">
+  <div class="banner" id="banner" tabindex="0" role="button">
+    <div class="t"><b id="bt">NOT READY FOR CA REVIEW</b><span id="bd">Difference ₹18,450 · click to see where</span></div>
+    <div class="eq">
+      <div><span>1 · Orders = Razorpay = Sellers + Revenue + Refunds</span>₹12,40,000 vs ₹12,21,550 <span class="chip r">₹18,450 off</span></div>
+      <div><span>2 · Bank = Settlements − Payouts − Expenses</span>₹4,10,200 <span class="chip g">Matches</span></div>
+      <div><span>3 · GST / TCS reports = Transactions</span>₹61,330 <span class="chip a">1 pending return</span></div>
+    </div>
+  </div>
+  <div class="sec">Seller money (GMV) — not GrandBajar revenue</div>
+  <div class="kpis">
+    <div class="k g"><span>Total GMV</span><b>₹12,40,000</b></div>
+    <div class="k g"><span>Total orders</span><b>1,284</b></div>
+    <div class="k g"><span>Seller payable</span><b>₹11,16,000</b></div>
+    <div class="k g"><span>Seller paid</span><b>₹9,98,500</b></div>
+    <div class="k a"><span>Seller pending</span><b>₹1,17,500</b></div>
+    <div class="k a"><span>Additional charges · seller / platform</span><b>₹21,400 / ₹33,900</b></div>
+  </div>
+  <div class="sec">GrandBajar's own revenue</div>
+  <div class="kpis">
+    <div class="k g"><span>Commission</span><b>₹62,000</b></div>
+    <div class="k g"><span>Subscription income</span><b>₹18,000</b></div>
+    <div class="k g"><span>Razorpay charges</span><b>₹31,000</b></div>
+    <div class="k a"><span>Refunds</span><b>₹27,600</b></div>
+    <div class="k g"><span>Net revenue</span><b>₹49,000</b></div>
+    <div class="k g"><span>GST collected</span><b>₹14,400</b></div>
+    <div class="k a"><span>TCS liability</span><b>₹12,400</b></div>
+    <div class="k r"><span>Bank reconciliation difference</span><b>₹18,450</b></div>
+  </div>
+  <div class="two" style="margin-top:16px">
+    <div class="panel" id="drill"><h3>Where the ₹18,450 comes from</h3>
+      <ul class="l"><li><span>12 payments with no matching order</span><b>₹11,200</b></li><li><span>3 refunds missing a Razorpay refund ID</span><b>₹5,250</b></li><li><span>Packing charge ≠ ledger on 4 orders</span><b>₹2,000</b></li></ul>
+      <p class="note">Each line opens the exact orders and payments.</p></div>
+    <div class="panel"><h3>Exceptions and due dates</h3>
+      <ul class="l"><li><span>Failed ledger posting · order #GB-10442</span><span class="chip r">Exception</span></li>
+      <li><span>GSTR-3B · due 20 Oct</span><span class="chip a">Due soon</span></li>
+      <li><span>TCS / ECO return · due 10 Oct</span><span class="chip r">Overdue</span></li>
+      <li><span>GSTR-3B · Sep 2026</span><span class="chip g">Filed</span></li></ul></div>
+  </div>
+</section>
+
+<!-- ORDERS -->
+<section class="mod" id="orders">
+  <div class="seg" style="margin-bottom:10px">
+    <select aria-label="Seller"><option>All sellers</option><option>Vendor A</option><option>Vendor B</option></select>
+    <select aria-label="Status"><option>All status</option><option>Delivered</option><option>Refunded</option></select>
+    <select aria-label="GST"><option>GST / non-GST</option><option>GST</option><option>Non-GST</option></select>
+    <select aria-label="Charge type"><option>Any charge type</option><option>Delivery</option><option>Weather</option><option>Packing</option></select>
+    <button class="b">Excel</button><button class="b">CSV</button><button class="b">PDF</button>
+  </div>
+  <div class="tw"><table><thead><tr><th>Order ID</th><th>Date</th><th>Seller</th><th>Customer</th><th>Product</th><th class="n">Taxable</th><th class="n">GST</th><th class="n">Delivery</th><th class="n">Weather</th><th class="n">Packing</th><th class="n">Gross</th><th class="n">Refund</th><th class="n">Net</th></tr></thead><tbody>
+  <tr><td>GB-10441</td><td>06-Oct</td><td>Vendor B</td><td>R. Nair</td><td>Spinach 2 kg</td><td class="n">₹400</td><td class="n">₹0</td><td class="n">₹30</td><td class="n">₹0</td><td class="n">₹10</td><td class="n">₹440</td><td class="n">₹0</td><td class="n">₹440</td></tr>
+  <tr><td>GB-10442</td><td>06-Oct</td><td>Vendor A</td><td>S. Iyer</td><td>Cake 1 kg</td><td class="n">₹900</td><td class="n">₹162</td><td class="n">₹40</td><td class="n">₹20</td><td class="n">₹10</td><td class="n">₹1,132</td><td class="n">₹0</td><td class="n">₹1,132</td></tr>
+  <tr><td>GB-10443</td><td>07-Oct</td><td>Vendor B</td><td>A. Khan</td><td>Tomato 5 kg</td><td class="n">₹350</td><td class="n">₹0</td><td class="n">₹30</td><td class="n">₹0</td><td class="n">₹10</td><td class="n">₹390</td><td class="n">₹390</td><td class="n">₹0</td></tr>
+  </tbody></table></div>
+  <p class="note">Each charge line stores who raised it and who receives it. Click any row to see the city rule applied.</p>
+</section>
+
+<!-- RAZORPAY -->
+<section class="mod" id="razor">
+  <div class="chain">
+    <div><span>Customer collection</span><b>₹1,00,000</b></div>
+    <div><span>Razorpay gross</span><b>₹1,00,000</b></div>
+    <div class="neg"><span>Razorpay fee</span><b>− ₹2,500</b></div>
+    <div class="neg"><span>GST on fee</span><b>− ₹450</b></div>
+    <div class="fin"><span>Net settlement to bank</span><b>₹97,050</b></div>
+  </div>
+  <div class="seg" style="margin:12px 0"><button class="b p">Download Razorpay settlement report</button><button class="b">Download internal reconciliation</button></div>
+  <div class="tw"><table><thead><tr><th>Settlement ID</th><th>Date</th><th class="n">Gross</th><th class="n">Fee</th><th class="n">GST on fee</th><th class="n">Net</th><th>Bank credit (UTR)</th><th>Status</th></tr></thead><tbody>
+  <tr><td>setl_Qa81x</td><td>05-Oct</td><td class="n">₹1,00,000</td><td class="n">₹2,500</td><td class="n">₹450</td><td class="n">₹97,050</td><td>HDFC2610050881</td><td><span class="chip g">Matched</span></td></tr>
+  <tr><td>setl_Qb92y</td><td>06-Oct</td><td class="n">₹64,200</td><td class="n">₹1,605</td><td class="n">₹289</td><td class="n">₹62,306</td><td>Not found</td><td><span class="chip r">Unmatched</span></td></tr>
+  </tbody></table></div>
+</section>
+
+<!-- SELLERS -->
+<section class="mod" id="sellers">
+  <p class="note" style="margin:0 0 8px">GST status is never assumed. Unregistered sellers (for example small vegetable vendors) are valid.</p>
+  <div class="tw"><table><thead><tr><th>Seller</th><th>PAN</th><th>GSTIN</th><th>GST status</th><th>KYC</th><th>Bank verified</th><th>Agreement</th></tr></thead><tbody>
+  <tr><td>Vendor A</td><td>ABCPK1234F</td><td>29ABCPK1234F1Z5</td><td>Registered</td><td><span class="chip g">Done</span></td><td><span class="chip g">Yes</span></td><td><span class="chip g">Signed</span></td></tr>
+  <tr><td>Vendor B</td><td>BCDPR2345G</td><td>None</td><td>Unregistered</td><td><span class="chip g">Done</span></td><td><span class="chip g">Yes</span></td><td><span class="chip g">Signed</span></td></tr>
+  <tr><td>Vendor C</td><td>CDEPS3456H</td><td>29CDEPS3456H1Z2</td><td>Composition</td><td><span class="chip a">Pending</span></td><td><span class="chip r">No</span></td><td><span class="chip a">Sent</span></td></tr>
+  </tbody></table></div>
+</section>
+
+<!-- SETTLEMENT -->
+<section class="mod" id="settle">
+  <div class="tw"><table id="stbl"><thead><tr><th>Seller</th><th class="n">Gross sales</th><th class="n">Commission</th><th class="n">Other deductions</th><th class="n">Payable</th><th class="n">Paid</th><th class="n">Balance</th><th>Action</th></tr></thead><tbody>
+  <tr data-s="Vendor A" data-bal="0"><td>Vendor A</td><td class="n">₹82,000</td><td class="n">₹4,100</td><td class="n">₹0</td><td class="n">₹77,900</td><td class="n">₹77,900</td><td class="n"><span class="chip g">₹0</span></td><td><button class="b">View details</button></td></tr>
+  <tr data-s="Vendor B" data-bal="3250"><td>Vendor B</td><td class="n">₹35,000</td><td class="n">₹1,750</td><td class="n">₹0</td><td class="n">₹33,250</td><td class="n">₹30,000</td><td class="n"><span class="chip a">₹3,250</span></td><td><button class="b p pay">Record payment</button></td></tr>
+  <tr data-s="Vendor C" data-bal="14800"><td>Vendor C</td><td class="n">₹61,000</td><td class="n">₹3,050</td><td class="n">₹400</td><td class="n">₹57,550</td><td class="n">₹42,750</td><td class="n"><span class="chip r">₹14,800</span></td><td><button class="b p pay">Record payment</button></td></tr>
+  </tbody></table></div>
+  <p class="note">Rule: Payable = gross sales − commission − other deductions. Paid counts only payouts that have a UTR. A seller cannot be marked paid without one.</p>
+  <div class="panel" style="margin-top:12px"><h3>Settlement details · Vendor B</h3>
+    <ul class="l"><li><span>Orders in period</span><b>212</b></li><li><span>Refunds / adjustments</span><b>− ₹390</b></li><li><span>Bank transfer 02-Oct · UTR HDFC2610020417</span><b>₹30,000</b></li></ul></div>
+</section>
+
+<!-- REVENUE -->
+<section class="mod" id="rev">
+  <div class="two">
+    <div class="panel"><h3>Commission (rate 5%, configurable, saved on each order)</h3>
+      <div class="tw" style="border:0"><table style="min-width:360px"><thead><tr><th>Seller</th><th class="n">Sales</th><th class="n">%</th><th class="n">Commission</th></tr></thead><tbody>
+      <tr><td>Vendor A</td><td class="n">₹82,000</td><td class="n">5%</td><td class="n">₹4,100</td></tr>
+      <tr><td>Vendor B</td><td class="n">₹35,000</td><td class="n">5%</td><td class="n">₹1,750</td></tr></tbody></table></div></div>
+    <div class="panel"><h3>Subscription</h3>
+      <div class="tw" style="border:0"><table style="min-width:360px"><thead><tr><th>Seller</th><th>Plan</th><th>Period</th><th class="n">Amount</th><th class="n">GST</th></tr></thead><tbody>
+      <tr><td>Vendor A</td><td>Pro</td><td>Oct</td><td class="n">₹999</td><td class="n">₹180</td></tr>
+      <tr><td>Vendor C</td><td>Basic</td><td>Oct</td><td class="n">₹499</td><td class="n">₹90</td></tr></tbody></table></div></div>
+  </div>
+  <p class="note">This ledger is always shown apart from seller GMV.</p>
+</section>
+
+<!-- EXPENSES -->
+<section class="mod" id="exp">
+  <div class="two">
+    <div class="panel"><h3>Add expense</h3>
+      <div class="seg"><select aria-label="Category"><option>Hosting</option><option>Marketing</option><option>Office</option></select><input type="date" aria-label="Date"><input placeholder="Amount ₹" aria-label="Amount" size="9"><input placeholder="GST ₹" aria-label="GST" size="7"><input placeholder="Vendor" aria-label="Vendor"></div>
+      <div class="seg" style="margin-top:8px"><button class="b">Attach bill</button><button class="b p">Save expense</button></div></div>
+    <div class="panel"><h3>This month</h3>
+      <ul class="l bills"><li><span>Cloud hosting · 03-Oct · bill.pdf</span><b>₹8,500</b></li><li><span>Ad campaign · 04-Oct · inv-221.pdf</span><b>₹12,000</b></li><li><span>Co-working · 05-Oct · no bill</span><span class="chip a">Bill missing</span></li></ul>
+      <div class="seg" style="margin-top:8px"><button class="b">Expense report + bills (ZIP)</button></div></div>
+  </div>
+</section>
+
+<!-- GST -->
+<section class="mod" id="gst">
+  <div class="two">
+    <div class="panel"><h3>GST summary</h3>
+      <ul class="l"><li><span>Output GST on commission</span><b>₹11,160</b></li><li><span>Output GST on subscription</span><b>₹3,240</b></li><li><span>Input GST (incl. Razorpay fee GST)</span><b>− ₹5,580</b></li><li><span><b>Net GST payable</b></span><b>₹8,820</b></li><li><span>Returns filed / pending</span><span>11 / 1</span></li></ul>
+      <p class="note">Formula to be confirmed by the CA before release.</p></div>
+    <div class="panel"><h3>ECO / TCS</h3>
+      <ul class="l"><li><span>GMV subject to ECO / TCS</span><b>₹9,20,000</b></li><li><span>TCS collected</span><b>₹12,400</b></li><li><span>GSTR-8 reported</span><b>₹11,900</b></li><li><span>Difference</span><span class="chip r">₹500</span></li></ul>
+      <p class="note">Seller-wise view opens from the difference. Rates come from CA-confirmed rules.</p></div>
+  </div>
+</section>
+
+<!-- AUDIT -->
+<section class="mod" id="audit">
+  <div class="panel">
+    <h3>Generate Audit Pack</h3>
+    <div class="seg"><select id="fy" aria-label="Financial year"><option>FY 2025–26 (Apr 2025 – Mar 2026)</option><option>FY 2024–25</option></select><button class="b p" id="gen">Generate Audit Pack</button></div>
+    <p class="note" id="genmsg">The pack is blocked from "ready" until the reconciliation summary shows READY.</p>
+  </div>
+  <div class="sec">Package contents</div>
+  <div class="tw"><table><thead><tr><th>Report</th><th>Format</th><th>Status</th></tr></thead><tbody id="packrows"></tbody></table></div>
+</section>
+</main>
+</div>
+
+<dialog id="dlg"><h3 style="margin:0 0 4px">Record seller payment</h3><div id="dsel" style="color:var(--mute)"></div>
+  <label for="amt">Amount paid (₹)</label><input id="amt" inputmode="numeric">
+  <label for="utr">Bank transaction UTR</label><input id="utr" placeholder="e.g. HDFC2610070552" autocomplete="off">
+  <div class="err" id="derr" role="alert"></div>
+  <div class="seg" style="margin-top:8px;justify-content:flex-end"><button class="b" id="dc">Cancel</button><button class="b p" id="ds">Save payment</button></div></dialog>
+
+<script>
+var titles={home:"Home",orders:"Orders / GMV",razor:"Razorpay reconciliation",sellers:"Sellers · GST / KYC master",settle:"Seller Settlement",rev:"Commission & Subscription",exp:"Expenses & bills",gst:"GST / TCS control center",audit:"Audit Pack"};
+function show(id){document.querySelectorAll(".mod").forEach(function(e){e.classList.toggle("on",e.id===id)});
+ document.querySelectorAll("nav button").forEach(function(b){b.setAttribute("aria-current",b.dataset.m===id)});
+ document.getElementById("title").textContent=titles[id];window.scrollTo(0,0)}
+document.querySelectorAll("nav button").forEach(function(b){b.onclick=function(){show(b.dataset.m)}});
+var bn=document.getElementById("banner");
+bn.onclick=bn.onkeydown=function(e){if(e.type==="keydown"&&e.key!=="Enter")return;var d=document.getElementById("drill");d.scrollIntoView({behavior:"smooth",block:"center"})};
+// record payment: UTR is mandatory
+var row=null,dlg=document.getElementById("dlg");
+document.querySelectorAll(".pay").forEach(function(b){b.onclick=function(){row=b.closest("tr");
+ document.getElementById("dsel").textContent=row.dataset.s+" · balance ₹"+Number(row.dataset.bal).toLocaleString("en-IN");
+ document.getElementById("amt").value=row.dataset.bal;document.getElementById("utr").value="";document.getElementById("derr").textContent="";dlg.showModal()}});
+document.getElementById("dc").onclick=function(){dlg.close()};
+document.getElementById("ds").onclick=function(){
+ var u=document.getElementById("utr").value.trim(),a=Number(document.getElementById("amt").value),er=document.getElementById("derr");
+ if(!/^[A-Za-z0-9]{12,22}$/.test(u)){er.textContent="Enter the bank UTR (12–22 letters and numbers). A seller cannot be marked paid without it.";return}
+ if(!(a>0)||a>Number(row.dataset.bal)){er.textContent="Amount must be above 0 and not more than the balance.";return}
+ var nb=Number(row.dataset.bal)-a;row.dataset.bal=nb;var c=row.children;
+ c[6].innerHTML='<span class="chip '+(nb?"a":"g")+'">₹'+nb.toLocaleString("en-IN")+'</span>';
+ if(!nb)c[7].innerHTML='<button class="b">View details</button>';dlg.close()};
+// audit pack
+var reps=[["Sales / GMV report","Excel, PDF"],["Order report","Excel, CSV"],["Seller-wise sales","Excel"],["Seller settlement report","Excel, PDF"],["Seller pending payable","Excel"],["Commission report","Excel"],["Subscription report","Excel"],["Razorpay settlement and fee reports","CSV, Excel"],["Bank reconciliation","Excel"],["Refund report","Excel"],["GST report","Excel, PDF"],["TCS / ECO report","Excel"],["Charge-wise report","Excel"],["Seller GST / KYC master","Excel"],["Journal / ledger export","Excel, CSV"],["Expense report + bills","Excel, ZIP"],["Fixed asset report","Excel"],["P&L and balance-sheet schedules","Excel"],["Audit reconciliation summary","PDF"]];
+document.getElementById("packrows").innerHTML=reps.map(function(r){return"<tr><td>"+r[0]+"</td><td>"+r[1]+"</td><td><span class='chip a'>Not generated</span></td></tr>"}).join("");
+document.getElementById("gen").onclick=function(){
+ document.querySelectorAll("#packrows .chip").forEach(function(c,i){c.className="chip g";c.textContent="Included"});
+ var last=document.querySelector("#packrows tr:last-child .chip");last.className="chip r";last.textContent="NOT READY · ₹18,450 difference";
+ document.getElementById("genmsg").textContent="Pack generated for "+document.getElementById("fy").value+". The summary shows NOT READY, so it should not go to the CA yet."};
+</script>
+</body>
+</html>

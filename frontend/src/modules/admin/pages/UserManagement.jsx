@@ -209,6 +209,8 @@ const emptyRoleForm = {
   label: '',
   description: '',
   permissions: [],
+  moneyLimit: '',
+  requiresTwoFactor: false,
 };
 
 const UserManagement = () => {
@@ -393,6 +395,8 @@ const UserManagement = () => {
       label: role.label || '',
       description: role.description || '',
       permissions: role.permissions || [],
+      moneyLimit: role.moneyLimit === null || role.moneyLimit === undefined ? '' : String(role.moneyLimit),
+      requiresTwoFactor: Boolean(role.requiresTwoFactor),
     });
     setIsRoleOpen(true);
   };
@@ -404,7 +408,10 @@ const UserManagement = () => {
       return;
     }
     try {
-      const payload = { ...roleForm };
+      const payload = {
+        ...roleForm,
+        moneyLimit: roleForm.moneyLimit === '' ? null : Number(roleForm.moneyLimit),
+      };
       const res = editRoleId
         ? await adminApi.updateAdminRole(editRoleId, payload)
         : await adminApi.createAdminRole(payload);
@@ -810,6 +817,23 @@ const UserManagement = () => {
                       value={roleForm.description}
                       onChange={(e) => setRoleForm((p) => ({ ...p, description: e.target.value }))}
                       className={inputBase} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-400">Money Limit (₹)</label>
+                    <input type="number" min="0" placeholder="Leave blank for unlimited"
+                      value={roleForm.moneyLimit}
+                      onChange={(e) => setRoleForm((p) => ({ ...p, moneyLimit: e.target.value }))}
+                      className={inputBase} />
+                    <p className="text-[10px] text-slate-400">Max credit/refund this role can issue without escalating to the next tier.</p>
+                  </div>
+                  <div className="space-y-1.5 flex items-end">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                      <input type="checkbox"
+                        checked={roleForm.requiresTwoFactor}
+                        onChange={(e) => setRoleForm((p) => ({ ...p, requiresTwoFactor: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                      Require 2FA at login
+                    </label>
                   </div>
                 </div>
 

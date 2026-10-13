@@ -30,6 +30,8 @@ const AdminAuth = () => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [maskedForgotEmail, setMaskedForgotEmail] = useState('');
+    const [twoFAPendingToken, setTwoFAPendingToken] = useState('');
+    const [twoFAOtp, setTwoFAOtp] = useState('');
     const { login } = useAuth();
     const { settings } = useSettings();
     const navigate = useNavigate();
@@ -185,14 +187,17 @@ const AdminAuth = () => {
                 ? await adminApi.login({ email: formData.email, password: formData.password })
                 : await adminApi.signup({ name: formData.name, email: formData.email, password: formData.password });
 
-            const { token, admin } = response.data.result;
+            const result = response.data.result;
 
-            const authData = {
-                ...admin,
-                token,
-                role: 'admin'
-            };
+            if (result?.twoFactorRequired) {
+                setTwoFAPendingToken(result.pendingToken);
+                setTwoFAOtp('');
+                toast.success(response.data?.message || 'Verification code sent to your email');
+                return;
+            }
 
+            const { token, admin } = result;
+            const authData = { ...admin, token, role: 'admin' };
             login(authData);
 
             toast.success(isLogin ? 'Welcome back, Administrator.' : 'Administrator Account Created.');
@@ -204,8 +209,34 @@ const AdminAuth = () => {
         }
     };
 
-    const authKey = forgotStep || (isLogin ? 'login' : 'signup');
-    const title = forgotStep === 'email'
+    const handleVerifyTwoFactor = async (e) => {
+        e.preventDefault();
+        if (twoFAOtp.length !== 4) {
+            toast.error('Please enter the 4-digit code.');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const response = await adminApi.verifyAdminLoginOtp({
+                pendingToken: twoFAPendingToken,
+                otp: twoFAOtp,
+            });
+            const { token, admin } = response.data.result;
+            const authData = { ...admin, token, role: 'admin' };
+            login(authData);
+            toast.success('Welcome back, Administrator.');
+            navigate('/admin');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Invalid or expired code');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const authKey = twoFAPendingToken ? 'two-fa' : (forgotStep || (isLogin ? 'login' : 'signup'));
+    const title = twoFAPendingToken
+        ? 'Verify It\'s You'
+        : forgotStep === 'email'
         ? 'Forgot Password'
         : forgotStep === 'otp'
             ? 'Verify OTP'
@@ -214,7 +245,9 @@ const AdminAuth = () => {
                 : isLogin
                     ? 'Login'
                     : 'Sign Up';
-    const subtitle = forgotStep === 'email'
+    const subtitle = twoFAPendingToken
+        ? 'Enter the 4-digit code sent to your email'
+        : forgotStep === 'email'
         ? 'Enter your admin email to receive a reset code'
         : forgotStep === 'otp'
             ? `Enter the 4-digit code sent to ${maskedForgotEmail || 'your email'}`
@@ -407,7 +440,43 @@ const AdminAuth = () => {
                                 </form>
                             )}
 
-                            {!forgotStep && (
+                            {twoFAPendingToken && (
+                                <form onSubmit={handleVerifyTwoFactor} className="space-y-5">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={4}
+                                        required
+                                        autoFocus
+                                        value={twoFAOtp}
+                                        onChange={(e) => setTwoFAOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                        placeholder="4-digit code"
+                                        className="w-full px-5 py-5 bg-[#f8f9ff] border-2 border-transparent rounded-[24px] text-sm font-medium text-gray-700 outline-none focus:bg-white focus:border-brand-100 focus:ring-4 focus:ring-brand-50/50 transition-all placeholder:text-gray-300 tracking-[0.4em] text-center"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading || twoFAOtp.length !== 4}
+                                        className="w-full bg-black text-primary-foreground rounded-[24px] py-5 text-base font-black shadow-2xl shadow-brand-200 hover:bg-brand-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                                    >
+                                        {isLoading ? 'Verifying...' : (
+                                            <>
+                                                <span>Verify &amp; Continue</span>
+                                                <ArrowRight size={20} />
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTwoFAPendingToken(''); setTwoFAOtp(''); }}
+                                        className="w-full flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-brand-700 transition-colors"
+                                    >
+                                        <ArrowLeft size={16} />
+                                        Back to login
+                                    </button>
+                                </form>
+                            )}
+
+                            {!forgotStep && !twoFAPendingToken && (
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 <AnimatePresence mode="popLayout">
                                     {!isLogin && (

@@ -68,8 +68,10 @@ import {
   checkSubSellerPermission,
   checkAdminPermission,
   checkAdminPermissionIfAdminCaller,
+  checkAnyAdminPermission,
   allowSuperAdminOnly,
 } from "../middleware/authMiddleware.js";
+import { requireReason } from "../middleware/requireReasonMiddleware.js";
 import {
   getSellerSchedulingSettings,
   updateSellerSchedulingSettings,
@@ -680,7 +682,8 @@ router.put(
   "/:orderId/logistics/override",
   verifyToken,
   allowRoles("admin"),
-  checkAdminPermission("logistics:override"),
+  checkAnyAdminPermission("logistics:override", "operations.manage_shops"),
+  requireReason,
   adminLogisticsOverride,
 );
 
@@ -688,6 +691,7 @@ router.get(
   "/:orderId/reassign-candidates",
   verifyToken,
   allowRoles("admin"),
+  checkAdminPermission("operations.manage_shops"),
   getReassignCandidates,
 );
 
@@ -695,6 +699,8 @@ router.put(
   "/:orderId/reassign-store",
   verifyToken,
   allowRoles("admin"),
+  checkAdminPermission("operations.manage_shops"),
+  requireReason,
   adminReassignOrder,
 );
 

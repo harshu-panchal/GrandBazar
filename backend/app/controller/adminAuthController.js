@@ -15,6 +15,11 @@ import {
   verifyPasswordResetOtp,
   resetPasswordWithToken,
 } from "../services/passwordResetService.js";
+import {
+  adminRequiresTwoFactor,
+  sendLoginOtp,
+  verifyLoginOtp,
+} from "../services/adminLoginTwoFactorService.js";
 
 const PUBLIC_ADMIN_SIGNUP_ENABLED = () =>
   process.env.ENABLE_PUBLIC_ADMIN_SIGNUP === "true";
@@ -148,10 +153,39 @@ export const loginAdmin = async (req, res) => {
       return handleResponse(res, 401, "Invalid credentials");
     }
 
+    if (await adminRequiresTwoFactor(admin)) {
+      const { pendingToken, expiresInSeconds } = await sendLoginOtp(admin);
+      return handleResponse(res, 200, "Verification code sent to your email", {
+        twoFactorRequired: true,
+        pendingToken,
+        expiresInSeconds,
+      });
+    }
+
     admin.lastLogin = new Date();
     await admin.save();
 
     // Record active login session
+    await recordLogin(admin, "Admin", req.ip, req.headers["user-agent"]);
+
+    const token = generateToken(admin);
+    return handleResponse(res, 200, "Login successful", {
+      token,
+      admin: sanitizeAdmin(admin),
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const verifyAdminLoginOtp = async (req, res) => {
+  try {
+    const { pendingToken, otp } = req.body || {};
+    const admin = await verifyLoginOtp(pendingToken, otp);
+
+    admin.lastLogin = new Date();
+    await admin.save();
+
     await recordLogin(admin, "Admin", req.ip, req.headers["user-agent"]);
 
     const token = generateToken(admin);

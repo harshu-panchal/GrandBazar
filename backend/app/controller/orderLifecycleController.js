@@ -61,6 +61,7 @@ import { emitOrderStatusUpdate } from "../services/orderSocketEmitter.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
+import { createOperatorAuditLog } from "../services/operatorAuditLogService.js";
 import {
   getOrderReassignCandidates,
   adminReassignOrderToStore,
@@ -230,7 +231,21 @@ export const rejectReschedule = async (req, res) => {
 
 export const adminRescheduleOrder = async (req, res) => {
   try {
+    const canonicalOrderId = await requireCanonicalOrderId(req.params.orderId);
+    const previous = await Order.findOne({ orderId: canonicalOrderId }).select("schedule").lean();
+
     const order = await adminRescheduleOnBehalf(req.user.id, req.params.orderId, req.body);
+
+    await createOperatorAuditLog({
+      action: "order_rescheduled",
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      orderId: order._id,
+      oldValue: { deliveryDate: previous?.schedule?.deliveryDate },
+      newValue: { deliveryDate: order.schedule?.deliveryDate },
+      reason: req.body?.note || req.body?.reason || "",
+    });
+
     return handleResponse(res, 200, "Order rescheduled on behalf", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -695,6 +710,8 @@ export const adminLogisticsOverride = async (req, res) => {
   try {
     const orderId = await requireCanonicalOrderId(req.params.orderId);
     const { workflowStatus, externalTrackingLink, externalLogisticsProvider } = req.body || {};
+    const reason = req.body?.reason ?? req.body?.note ?? "";
+    const previous = await Order.findOne({ orderId }).select("workflowStatus status").lean();
     const updated = await Order.findOneAndUpdate(
       { orderId },
       {
@@ -710,6 +727,17 @@ export const adminLogisticsOverride = async (req, res) => {
     );
     if (!updated) return handleResponse(res, 404, "Order not found");
     emitOrderStatusUpdate(orderId, { workflowStatus, override: true }, updated.customer);
+
+    await createOperatorAuditLog({
+      action: "logistics_override",
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      orderId: updated._id,
+      oldValue: { workflowStatus: previous?.workflowStatus, status: previous?.status },
+      newValue: { workflowStatus: updated.workflowStatus, status: updated.status },
+      reason,
+    });
+
     return handleResponse(res, 200, "Logistics override applied", updated);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -741,6 +769,21 @@ export const adminReassignOrder = async (req, res) => {
       reason: reason || "seller_unavailable",
       priceDifferenceHandling: priceDifferenceHandling || null,
     });
+
+    // adminReassignOrderToStore already records this on order.storeReassignment
+    // + order.modificationTimeline; mirror it into the unified operator log too.
+    const sr = order.storeReassignment || {};
+    await createOperatorAuditLog({
+      action: "order_reassigned",
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      orderId: order._id,
+      storeId: targetStoreId,
+      oldValue: { storeId: sr.fromStoreId, shopName: sr.fromShopName },
+      newValue: { storeId: sr.toStoreId, shopName: sr.toShopName },
+      reason: note || reason || sr.reason || "",
+    });
+
     return handleResponse(res, 200, "Order reassigned to another store", order);
   } catch (error) {
     return handleResponse(

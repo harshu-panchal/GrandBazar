@@ -106,6 +106,37 @@ export const adminApi = {
     releaseSellerPayout: (orderId) => axiosInstance.post(`/admin/finance/orders/${orderId}/release`),
     exportFinanceStatement: (params) =>
         axiosInstance.get('/admin/finance/export-statement', { params, responseType: 'blob' }),
+    // Accountant dashboard
+    getAccountantOverview: (params) => axiosInstance.get('/admin/accountant/overview', { params }),
+    getOrdersGmv: (params) => axiosInstance.get('/admin/accountant/orders-gmv', { params }),
+    exportOrdersGmv: (params) =>
+        axiosInstance.get('/admin/accountant/orders-gmv/export', { params, responseType: 'blob' }),
+    // Expenses
+    getExpenses: (params) => axiosInstance.get('/admin/expenses', { params }),
+    createExpense: (data) => axiosInstance.post('/admin/expenses', data),
+    updateExpense: (id, data) => axiosInstance.put(`/admin/expenses/${id}`, data),
+    deleteExpense: (id) => axiosInstance.delete(`/admin/expenses/${id}`),
+    exportExpensesExcel: (params) =>
+        axiosInstance.get('/admin/expenses/export/excel', { params, responseType: 'blob' }),
+    exportExpensesZip: (params) =>
+        axiosInstance.get('/admin/expenses/export/zip', { params, responseType: 'blob' }),
+    uploadMedia: (formData) =>
+        axiosInstance.post('/media/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    // GST / TCS
+    getGstTcsSummary: (params) => axiosInstance.get('/admin/gst-tcs/summary', { params }),
+    getTaxFilingRecords: (params) => axiosInstance.get('/admin/gst-tcs/filings', { params }),
+    saveTaxFilingRecord: (data) => axiosInstance.post('/admin/gst-tcs/filings', data),
+    deleteTaxFilingRecord: (id) => axiosInstance.delete(`/admin/gst-tcs/filings/${id}`),
+    // Audit Pack
+    generateAuditPack: (params) =>
+        axiosInstance.get('/admin/accountant/audit-pack', { params, responseType: 'blob' }),
+    // Operations Console (Operator tiers)
+    createOperationsCredit: (data) => axiosInstance.post('/admin/operations/credits', data),
+    getOperationsApprovals: (params) => axiosInstance.get('/admin/operations/approvals', { params }),
+    approveOperationsApproval: (id, note) => axiosInstance.patch(`/admin/operations/approvals/${id}/approve`, { note }),
+    rejectOperationsApproval: (id, note) => axiosInstance.patch(`/admin/operations/approvals/${id}/reject`, { note }),
+    getOperationsAuditLog: (params) => axiosInstance.get('/admin/operations/audit-log', { params }),
+    verifyAdminLoginOtp: (data) => axiosInstance.post('/admin/login/verify-2fa', data),
     // Centralized settings (public GET, admin PUT)
     getSettings: () => axiosInstance.get('/settings'),
     updateSettings: (data) => axiosInstance.put('/settings', data),
@@ -195,7 +226,7 @@ export const adminApi = {
     updateDeliveryPartner: (id, data) => axiosInstance.put(`/admin/delivery-partners/${id}`, data),
     getActiveFleet: (params) => axiosInstance.get('/admin/active-fleet', { params }),
     getUnassignedOrders: (params) => axiosInstance.get('/admin/unassigned-orders', { params }),
-    assignOrderToRider: (orderId, riderId) => axiosInstance.post(`/admin/orders/${orderId}/assign-rider`, { riderId }),
+    assignOrderToRider: (orderId, riderId, reason = '') => axiosInstance.post(`/admin/orders/${orderId}/assign-rider`, { riderId, reason }),
 
     // Delivery Payouts / Funds
     getDeliveryTransactions: (params) => axiosInstance.get('/admin/delivery-transactions', { params }),

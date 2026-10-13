@@ -25,6 +25,8 @@ import {
   User,
   Activity,
   Library,
+  Calculator,
+  Radio,
 } from "lucide-react";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -61,6 +63,14 @@ const PendingDeliveryBoys = React.lazy(
 );
 const DeliveryFunds = React.lazy(() => import("../pages/DeliveryFunds"));
 const AdminWallet = React.lazy(() => import("../pages/AdminWallet"));
+const AccountantHome = React.lazy(() => import("../pages/AccountantHome"));
+const OrdersGmv = React.lazy(() => import("../pages/OrdersGmv"));
+const AccountantSettlement = React.lazy(() => import("../pages/AccountantSettlement"));
+const CommissionSubscription = React.lazy(() => import("../pages/CommissionSubscription"));
+const Expenses = React.lazy(() => import("../pages/Expenses"));
+const GstTcs = React.lazy(() => import("../pages/GstTcs"));
+const AuditPack = React.lazy(() => import("../pages/AuditPack"));
+const OperationsConsole = React.lazy(() => import("../pages/OperationsConsole"));
 const BulkSettlements = React.lazy(() => import("../pages/BulkSettlements"));
 const WithdrawalRequests = React.lazy(
   () => import("../pages/WithdrawalRequests"),
@@ -117,6 +127,28 @@ const navItems = [
     color: "indigo",
     end: true,
     permission: "dashboard",
+  },
+  {
+    label: "Accountant",
+    icon: Calculator,
+    color: "emerald",
+    permission: "accountant",
+    children: [
+      { label: "Home", path: "/admin/accountant", permission: "accountant" },
+      { label: "Orders / GMV", path: "/admin/accountant/orders-gmv", permission: "accountant" },
+      { label: "Settlement", path: "/admin/accountant/settlement", permission: "accountant" },
+      { label: "Commission & Subscription", path: "/admin/accountant/commission-subscription", permission: "accountant" },
+      { label: "Expenses", path: "/admin/accountant/expenses", permission: "accountant.expenses" },
+      { label: "GST / TCS", path: "/admin/accountant/gst-tcs", permission: "accountant.gst_tcs" },
+      { label: "Audit Pack", path: "/admin/accountant/audit-pack", permission: "accountant.audit_pack" },
+    ],
+  },
+  {
+    label: "Operations Console",
+    path: "/admin/operations",
+    icon: Radio,
+    color: "cyan",
+    permission: "operations.monitor",
   },
   {
     label: "Categories",
@@ -541,6 +573,14 @@ const AdminRoutes = () => {
         )}
         
         {hasPermission("wallet") && <Route path="/wallet" element={<AdminWallet />} />}
+        {hasPermission("accountant") && <Route path="/accountant" element={<AccountantHome />} />}
+        {hasPermission("accountant") && <Route path="/accountant/orders-gmv" element={<OrdersGmv />} />}
+        {hasPermission("accountant") && <Route path="/accountant/settlement" element={<AccountantSettlement />} />}
+        {hasPermission("accountant") && <Route path="/accountant/commission-subscription" element={<CommissionSubscription />} />}
+        {hasPermission("accountant.expenses") && <Route path="/accountant/expenses" element={<Expenses />} />}
+        {hasPermission("accountant.gst_tcs") && <Route path="/accountant/gst-tcs" element={<GstTcs />} />}
+        {hasPermission("accountant.audit_pack") && <Route path="/accountant/audit-pack" element={<AuditPack />} />}
+        {hasPermission("operations.monitor") && <Route path="/operations" element={<OperationsConsole />} />}
         {hasPermission("withdrawals") && <Route path="/withdrawals" element={<WithdrawalRequests />} />}
         {hasPermission("seller_payments") && <Route path="/seller-transactions" element={<SellerTransactions />} />}
         {hasPermission("bulk_settlements") && <Route path="/bulk-settlements" element={<BulkSettlements />} />}

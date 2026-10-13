@@ -4,6 +4,8 @@ import handleResponse from "../../utils/helper.js";
 import getPagination from "../../utils/pagination.js";
 import { adminAssignRiderAtomic } from "../../services/orderWorkflowService.js";
 import { resolveOrderStatus } from "../../services/orderStatusResolver.js";
+import { createOperatorAuditLog } from "../../services/operatorAuditLogService.js";
+import { requireCanonicalOrderId } from "../../utils/orderLookup.js";
 
 export const getDeliveryPartners = async (req, res) => {
   try {
@@ -260,14 +262,33 @@ export const assignOrderToRider = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { riderId } = req.body;
+    const reason = req.body?.reason ?? req.body?.note ?? "";
     if (!riderId) {
       return handleResponse(res, 400, "riderId is required");
     }
+
+    const canonicalOrderId = await requireCanonicalOrderId(orderId);
+    const previousRiderId = await Order.findById(canonicalOrderId)
+      .select("deliveryBoy")
+      .lean()
+      .then((doc) => doc?.deliveryBoy || null);
+
     const { order, rider, distanceKm } = await adminAssignRiderAtomic(
       req.user?.id,
       orderId,
       riderId,
     );
+
+    await createOperatorAuditLog({
+      action: "rider_assigned",
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      orderId: canonicalOrderId,
+      oldValue: { deliveryBoy: previousRiderId },
+      newValue: { deliveryBoy: riderId, riderName: rider.name },
+      reason,
+    });
+
     return handleResponse(res, 200, "Delivery partner assigned successfully", {
       order,
       rider: { id: rider._id, name: rider.name },

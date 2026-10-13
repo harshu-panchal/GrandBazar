@@ -49,6 +49,24 @@ const settingSchema = new mongoose.Schema(
         taxId: String,
         address: String,
 
+        // Tax (GST/TCS) — rate the Accountant's GST/TCS module applies to
+        // GMV to compute TCS liability under section 52 for e-commerce
+        // operators. Configurable since it's a government-set rate that can
+        // change.
+        tcsRatePercent: {
+            type: Number,
+            default: 1,
+            min: 0,
+        },
+        // Rate applied to the platform's own commission + subscription
+        // income to estimate output GST liability (see gstTcsService.js).
+        // Defaults to the standard services slab; confirm with your CA.
+        commissionSubscriptionGstRatePercent: {
+            type: Number,
+            default: 18,
+            min: 0,
+        },
+
         // Social
         facebook: String,
         twitter: String,

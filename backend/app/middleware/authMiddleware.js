@@ -417,6 +417,27 @@ export const checkAdminPermission = (permission) => {
   };
 };
 
+// OR-of-permissions gate: passes if the caller holds ANY one of the given
+// keys. Used where a route predates a newer, more specific permission
+// namespace (e.g. the Operator tiers' "operations.*" keys) and existing
+// roles already granted under the older key must keep working.
+export const checkAnyAdminPermission = (...permissions) => {
+  return (req, res, next) => {
+    if (req.user?.role === "admin" || req.user?.role === "superadmin") {
+      return next();
+    }
+    if (req.user?.scope === "admin") {
+      const allowed = req.user.allowedPermissions || [];
+      if (permissions.some((permission) => allowed.includes(permission))) return next();
+    }
+    return handleResponse(
+      res,
+      403,
+      `Access denied. Missing permission: one of [${permissions.join(", ")}]`,
+    );
+  };
+};
+
 // Like checkAdminPermission, but only enforces the gate when the caller is
 // actually admin-scoped. A seller/sub-staff caller on the same shared route
 // passes through untouched, leaving checkSubSellerPermission further down

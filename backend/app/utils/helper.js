@@ -60,4 +60,15 @@ export const calculateDistance = (lat1, lon1, lat2, lon2) => {
     return distance; // Distance in km
 };
 
+// True for root admin/superadmin AND any custom-role staff member (scope
+// "admin" on the JWT — minted for every AdminRole-based account, e.g.
+// Accountant, Assistant, Operator L1-L4). Several order-access checks in
+// orderController.js/orderQueryService.js used to test `role === "admin"`
+// literally, which is only ever true for the root role — every custom
+// admin role failed those checks (403 on order details, an empty order
+// list on /orders/seller-orders). Use this wherever "is this an
+// admin-scoped caller" is the actual intent.
+export const isAdminScopedUser = (user) =>
+    user?.role === "admin" || user?.role === "superadmin" || user?.scope === "admin";
+
 export default handleResponse;

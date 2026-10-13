@@ -173,6 +173,46 @@ export async function sendPasswordResetOtpEmail({ email, otp, name, role = "user
 }
 
 /**
+ * Sends the 2FA OTP required at login for Admin accounts whose role (or
+ * the root superadmin) is flagged `requiresTwoFactor` — see
+ * adminLoginTwoFactorService.js.
+ */
+export async function sendAdminLoginOtpEmail({ email, otp, name }) {
+  const appName = await getAppName();
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">Admin Login Verification Code</h2>
+      <p>Hello ${name ? `<strong>${name}</strong>` : 'there'},</p>
+      <p>Use the following code to finish signing in to ${appName}'s admin panel:</p>
+      <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; color: #1e293b; margin: 20px 0;">
+        ${otp}
+      </div>
+      <p style="color: #64748b; font-size: 13px;">This code will expire in 5 minutes. If you did not attempt to log in, please ignore this email.</p>
+    </div>
+  `;
+
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking Admin Login OTP for ${email}: ${otp}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const mailOptions = {
+      from: `${appName} Platform <${fromEmail}>`,
+      to: email,
+      subject: `Your ${appName} admin login code: ${otp}`,
+      html: htmlContent,
+    };
+    const info = await getTransporter().sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send admin login OTP email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Sends customer login OTP email (email-OTP login, replaces password login).
  */
 export async function sendCustomerLoginOtpEmail({ email, otp, name, expiresInMinutes = 5 }) {

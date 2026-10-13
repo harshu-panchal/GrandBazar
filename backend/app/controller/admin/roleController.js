@@ -21,7 +21,7 @@ export const listAdminRoles = async (_req, res) => {
 
 export const createAdminRole = async (req, res) => {
   try {
-    const { name, label, description, permissions } = req.body || {};
+    const { name, label, description, permissions, moneyLimit, requiresTwoFactor } = req.body || {};
 
     const normalized = normalizeName(name);
     if (!normalized) {
@@ -41,6 +41,8 @@ export const createAdminRole = async (req, res) => {
       label: label?.trim() || normalized,
       description: description?.trim() || "",
       permissions: Array.isArray(permissions) ? permissions : [],
+      moneyLimit: moneyLimit === "" || moneyLimit === undefined ? null : Number(moneyLimit),
+      requiresTwoFactor: Boolean(requiresTwoFactor),
       isSystem: false,
       createdBy: req.user?.id,
     });
@@ -54,7 +56,7 @@ export const createAdminRole = async (req, res) => {
 export const updateAdminRole = async (req, res) => {
   try {
     const { id } = req.params;
-    const { label, description, permissions, name } = req.body || {};
+    const { label, description, permissions, name, moneyLimit, requiresTwoFactor } = req.body || {};
 
     const role = await AdminRole.findById(id);
     if (!role) return handleResponse(res, 404, "Role not found");
@@ -84,6 +86,8 @@ export const updateAdminRole = async (req, res) => {
     if (label !== undefined) role.label = String(label).trim();
     if (description !== undefined) role.description = String(description).trim();
     if (Array.isArray(permissions)) role.permissions = permissions;
+    if (moneyLimit !== undefined) role.moneyLimit = moneyLimit === "" || moneyLimit === null ? null : Number(moneyLimit);
+    if (requiresTwoFactor !== undefined) role.requiresTwoFactor = Boolean(requiresTwoFactor);
 
     await role.save();
 
