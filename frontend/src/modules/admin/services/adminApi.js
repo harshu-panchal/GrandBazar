@@ -302,6 +302,7 @@ export const adminApi = {
 
     // Custom Admin Roles
     getAdminRoles: () => axiosInstance.get('/admin/roles'),
+    ensureSystemRoles: () => axiosInstance.post('/admin/roles/ensure-system'),
     createAdminRole: (data) => axiosInstance.post('/admin/roles', data),
     updateAdminRole: (id, data) => axiosInstance.put(`/admin/roles/${id}`, data),
     deleteAdminRole: (id) => axiosInstance.delete(`/admin/roles/${id}`),

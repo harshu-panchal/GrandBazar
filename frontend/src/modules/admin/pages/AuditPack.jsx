@@ -85,13 +85,15 @@ const AuditPack = () => {
 
       <Card className="border-none shadow-sm">
         <div className="p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-slate-800">Package Contents</h3>
+          <h3 className="font-semibold text-slate-800">Package contents</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Every one of these is bundled into every pack generated above.</p>
         </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-semibold text-slate-500 border-b border-gray-100">
               <th className="px-4 py-3">Report</th>
               <th className="px-4 py-3">Format</th>
+              <th className="px-4 py-3">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -99,6 +101,7 @@ const AuditPack = () => {
               <tr key={row.name}>
                 <td className="px-4 py-3">{row.name}</td>
                 <td className="px-4 py-3 text-slate-500">{row.format}</td>
+                <td className="px-4 py-3"><Badge variant="success">Included</Badge></td>
               </tr>
             ))}
           </tbody>

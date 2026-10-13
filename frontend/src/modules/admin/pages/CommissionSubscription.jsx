@@ -61,65 +61,69 @@ const CommissionSubscription = () => {
         </div>
       )}
 
-      <Card className="border-none shadow-sm">
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-slate-800">City-wise Commission Rates</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs font-semibold text-slate-500 border-b border-gray-100">
-                <th className="px-4 py-3">City</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Commission</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">Loading…</td></tr>
-              ) : cityCommissions.length === 0 ? (
-                <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">No city commission rates configured.</td></tr>
-              ) : (
-                cityCommissions.map((row) => (
-                  <tr key={row._id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-700">{row.cityName || row.cityKey}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={row.applyCommission && row.enabled ? "success" : "default"}>
-                        {row.applyCommission && row.enabled ? "Active" : "Inactive"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {row.adminCommissionType === "percentage"
-                        ? `${row.adminCommissionValue}%`
-                        : formatMoney(row.adminCommissionValue)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="border-none shadow-sm">
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="font-semibold text-slate-800">Commission — city-wise rates</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs font-semibold text-slate-500 border-b border-gray-100">
+                  <th className="px-4 py-3">City</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Commission</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">Loading…</td></tr>
+                ) : cityCommissions.length === 0 ? (
+                  <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">No city commission rates configured.</td></tr>
+                ) : (
+                  cityCommissions.map((row) => (
+                    <tr key={row._id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-700">{row.cityName || row.cityKey}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={row.applyCommission && row.enabled ? "success" : "gray"}>
+                          {row.applyCommission && row.enabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {row.adminCommissionType === "percentage"
+                          ? `${row.adminCommissionValue}%`
+                          : formatMoney(row.adminCommissionValue)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-      <Card className="border-none shadow-sm">
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-slate-800">Recent Subscription Payments</h3>
-        </div>
-        <ul className="divide-y divide-gray-100">
-          {payments.length === 0 ? (
-            <li className="px-4 py-6 text-center text-slate-400 text-sm">No subscription payments yet.</li>
-          ) : (
-            payments.map((p) => (
-              <li key={p._id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span className="text-slate-600">
-                  {p.sellerId?.shopName || p.sellerId?.name || "Seller"} · {p.planSnapshot?.name || "Plan"}
-                </span>
-                <span className="font-semibold">{formatMoney(p.amount)}</span>
-              </li>
-            ))
-          )}
-        </ul>
-      </Card>
+        <Card className="border-none shadow-sm">
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="font-semibold text-slate-800">Subscription — recent captured payments</h3>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {payments.length === 0 ? (
+              <li className="px-4 py-6 text-center text-slate-400 text-sm">No subscription payments yet.</li>
+            ) : (
+              payments.map((p) => (
+                <li key={p._id} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-slate-600">
+                    {p.sellerId?.shopName || p.sellerId?.name || "Seller"} · {p.planSnapshot?.name || "Plan"}
+                  </span>
+                  <span className="font-semibold">{formatMoney(p.amount)}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </Card>
+      </div>
+
+      <p className="text-xs font-bold uppercase text-slate-400">This ledger is always shown apart from seller GMV.</p>
     </div>
   );
 };

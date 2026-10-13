@@ -10,11 +10,51 @@ import {
   HiOutlineArrowTrendingUp,
   HiOutlineExclamationTriangle,
   HiOutlineCheckCircle,
+  HiOutlineClock,
 } from "react-icons/hi2";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
+
+const formatDate = (value) => {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  } catch {
+    return "";
+  }
+};
+
+// Mirrors the reference mock's "Exceptions and due dates" panel: upcoming/
+// overdue filings first, a handful of already-filed ones after — built from
+// the same TaxFilingRecord data the GST/TCS page's "Record a Filing" form
+// already writes to (backend/app/services/finance/gstTcsService.js).
+const buildDueDatesFeed = (records) => {
+  const now = Date.now();
+  const pending = (records || [])
+    .filter((r) => r.status === "pending")
+    .sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate) - new Date(b.dueDate);
+    });
+  const filed = (records || [])
+    .filter((r) => r.status === "filed")
+    .sort((a, b) => new Date(b.filedDate || b.updatedAt || 0) - new Date(a.filedDate || a.updatedAt || 0));
+
+  return [...pending, ...filed].slice(0, 6).map((r) => {
+    const isOverdue = r.status === "pending" && r.dueDate && new Date(r.dueDate).getTime() < now;
+    const isDueSoon =
+      r.status === "pending" && r.dueDate && !isOverdue && new Date(r.dueDate).getTime() - now < 7 * 86400000;
+    return {
+      id: r._id,
+      label: `${r.type} · ${r.period}${r.dueDate ? ` · due ${formatDate(r.dueDate)}` : ""}`,
+      status: r.status === "filed" ? "Filed" : isOverdue ? "Overdue" : isDueSoon ? "Due soon" : "Pending",
+      variant: r.status === "filed" ? "success" : isOverdue ? "error" : isDueSoon ? "warning" : "gray",
+    };
+  });
+};
 
 // Accountant's landing screen: the GMV-vs-gateway-vs-sellers reconciliation
 // check, plus the real revenue/GST KPIs it's built from. Mirrors the
@@ -24,6 +64,7 @@ const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}
 const AccountantHome = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dueDates, setDueDates] = useState([]);
 
   const fetchOverview = useCallback(async () => {
     setLoading(true);
@@ -39,6 +80,14 @@ const AccountantHome = () => {
 
   useEffect(() => {
     fetchOverview();
+    adminApi
+      .getTaxFilingRecords()
+      .then((res) => {
+        if (res?.data?.success) setDueDates(buildDueDatesFeed(res.data.result));
+      })
+      .catch(() => {
+        // Non-critical widget on this page — the GST/TCS tab is the source of truth.
+      });
   }, [fetchOverview]);
 
   if (loading && !data) {
@@ -65,27 +114,40 @@ const AccountantHome = () => {
             <HiOutlineExclamationTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
           )}
           <div className="flex-1">
-            <p className={`font-semibold ${isClean ? "text-emerald-700" : "text-amber-700"}`}>
-              {isClean ? "Reconciliation looks clean" : "Reconciliation differences found"}
-            </p>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className={`text-base font-black uppercase tracking-wide ${isClean ? "text-emerald-700" : "text-amber-700"}`}>
+                {isClean ? "Ready for CA review" : "Not ready for CA review"}
+              </p>
+              {!isClean && (
+                <span className="text-sm font-semibold text-amber-700">
+                  Difference {formatMoney(Math.abs(reconciliation.decompositionDiff) + Math.abs(reconciliation.walletDiff))}
+                </span>
+              )}
+            </div>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div className="bg-white/70 rounded-lg p-3 border border-black/5">
-                <p className="text-slate-500">GMV vs. Seller payable + Revenue + Refunds</p>
-                <p className="font-semibold mt-1">
-                  {formatMoney(gmv.gmv)} vs {formatMoney(gmv.sellerPayable + revenue.commission + revenue.subscriptionIncome + revenue.refunds)}
-                  {" · "}
-                  <span className={reconciliation.isGmvDecompositionClean ? "text-emerald-600" : "text-red-600"}>
-                    {reconciliation.isGmvDecompositionClean ? "Matches" : `${formatMoney(Math.abs(reconciliation.decompositionDiff))} off`}
-                  </span>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wide mb-1">
+                  1 · GMV = Seller payable + Revenue + Refunds
                 </p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {formatMoney(gmv.gmv)} vs {formatMoney(gmv.sellerPayable + revenue.commission + revenue.subscriptionIncome + revenue.refunds)}
+                  </span>
+                  <Badge variant={reconciliation.isGmvDecompositionClean ? "success" : "error"}>
+                    {reconciliation.isGmvDecompositionClean ? "Matches" : `${formatMoney(Math.abs(reconciliation.decompositionDiff))} off`}
+                  </Badge>
+                </div>
               </div>
               <div className="bg-white/70 rounded-lg p-3 border border-black/5">
-                <p className="text-slate-500">Wallet balance vs. Gateway collected − Payouts</p>
-                <p className="font-semibold mt-1">
-                  <span className={reconciliation.isWalletReconciled ? "text-emerald-600" : "text-red-600"}>
-                    {reconciliation.isWalletReconciled ? "Matches" : `${formatMoney(Math.abs(reconciliation.walletDiff))} off`}
-                  </span>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wide mb-1">
+                  2 · Wallet balance = Gateway collected − Payouts
                 </p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">{formatMoney(gmv.gatewayCollected)}</span>
+                  <Badge variant={reconciliation.isWalletReconciled ? "success" : "error"}>
+                    {reconciliation.isWalletReconciled ? "Matches" : `${formatMoney(Math.abs(reconciliation.walletDiff))} off`}
+                  </Badge>
+                </div>
               </div>
             </div>
           </div>
@@ -115,21 +177,43 @@ const AccountantHome = () => {
         </div>
       </div>
 
-      {reconciliation.mismatches.length > 0 && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {reconciliation.mismatches.length > 0 && (
+          <Card className="border-none shadow-sm">
+            <div className="p-4 border-b border-gray-100">
+              <h3 className="font-semibold text-slate-800">Where the difference comes from</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Each line below opens the exact orders and payments it covers.</p>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {reconciliation.mismatches.map((row, idx) => (
+                <li key={idx} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-slate-600">{row.label}</span>
+                  <span className="font-semibold text-red-600">{formatMoney(row.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
         <Card className="border-none shadow-sm">
-          <div className="p-4 border-b border-gray-100">
-            <h3 className="font-semibold text-slate-800">Where the difference comes from</h3>
+          <div className="p-4 border-b border-gray-100 flex items-center gap-2">
+            <HiOutlineClock className="w-4 h-4 text-slate-400" />
+            <h3 className="font-semibold text-slate-800">Exceptions &amp; due dates</h3>
           </div>
-          <ul className="divide-y divide-gray-100">
-            {reconciliation.mismatches.map((row, idx) => (
-              <li key={idx} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span className="text-slate-600">{row.label}</span>
-                <span className="font-semibold text-red-600">{formatMoney(row.amount)}</span>
-              </li>
-            ))}
-          </ul>
+          {dueDates.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-400">No filings recorded yet — add one from the GST/TCS tab.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {dueDates.map((row) => (
+                <li key={row.id} className="flex items-center justify-between px-4 py-3 text-sm gap-3">
+                  <span className="text-slate-600">{row.label}</span>
+                  <Badge variant={row.variant}>{row.status}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
-      )}
+      </div>
     </div>
   );
 };

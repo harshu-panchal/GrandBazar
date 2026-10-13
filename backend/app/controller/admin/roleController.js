@@ -2,6 +2,7 @@ import AdminRole from "../../models/adminRole.js";
 import Admin from "../../models/admin.js";
 import handleResponse from "../../utils/helper.js";
 import { recordAuditLog } from "../../services/auditTrailService.js";
+import { seedSystemAdminRoles } from "../../services/admin/systemRoleSeedService.js";
 
 const RESERVED_ROLE_NAMES = new Set(["admin", "superadmin"]);
 
@@ -15,6 +16,21 @@ export const listAdminRoles = async (_req, res) => {
   try {
     const roles = await AdminRole.find().sort({ isSystem: -1, name: 1 });
     return handleResponse(res, 200, "Roles fetched successfully", roles);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// The boot-time seed (fire-and-forget, dbConfig.js) only ever runs once per
+// process start — an environment that's been running since before a given
+// system role was added (or whose seed attempt failed/was skipped) never
+// gets it without a restart. This lets the admin UI self-heal instead: the
+// "Add Operator" picker calls this first, then re-fetches the role list.
+export const ensureSystemRoles = async (_req, res) => {
+  try {
+    await seedSystemAdminRoles();
+    const roles = await AdminRole.find().sort({ isSystem: -1, name: 1 });
+    return handleResponse(res, 200, "System roles ensured", roles);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

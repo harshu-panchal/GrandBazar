@@ -11,6 +11,24 @@ import useExportBlob from "@shared/hooks/useExportBlob";
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString("en-IN") : "—");
 
+const STATUS_OPTIONS = [
+  { value: "", label: "All status" },
+  { value: "delivered", label: "Delivered" },
+  { value: "out_for_delivery", label: "Out for delivery" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "returned", label: "Returned" },
+];
+
+const STATUS_BADGE_VARIANT = {
+  delivered: "success",
+  out_for_delivery: "info",
+  cancelled: "error",
+  returned: "warning",
+};
+
+const selectCls =
+  "px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-primary-500/30";
+
 // Order-level GMV ledger for the accountant: taxable value, GST and every
 // customer-facing charge broken out per order, with a gross/refund/net
 // column — the "Orders / GMV" module from the reference mock.
@@ -21,12 +39,20 @@ const OrdersGmv = () => {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [sellers, setSellers] = useState([]);
+  const [sellerId, setSellerId] = useState("");
+  const [status, setStatus] = useState("");
   const { exportBlob, isExporting } = useExportBlob();
 
   const fetchData = useCallback(async (requestedPage = 1) => {
     setLoading(true);
     try {
-      const res = await adminApi.getOrdersGmv({ page: requestedPage, limit: pageSize });
+      const res = await adminApi.getOrdersGmv({
+        page: requestedPage,
+        limit: pageSize,
+        sellerId: sellerId || undefined,
+        status: status || undefined,
+      });
       if (res?.data?.success) {
         const result = res.data.result || {};
         setItems(result.items || []);
@@ -39,16 +65,30 @@ const OrdersGmv = () => {
     } finally {
       setLoading(false);
     }
-  }, [pageSize]);
+  }, [pageSize, sellerId, status]);
 
   useEffect(() => {
     fetchData(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageSize]);
+  }, [pageSize, sellerId, status]);
+
+  useEffect(() => {
+    // getSellers() returns every verified/active/approved store, no params needed.
+    adminApi
+      .getSellers()
+      .then((res) => {
+        const list = res?.data?.results || res?.data?.result || [];
+        setSellers(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        // Filter dropdown is a convenience — a failed fetch (e.g. an accountant
+        // role without the "sellers" permission) just leaves "All sellers".
+      });
+  }, []);
 
   const handleExport = () => {
     exportBlob(
-      () => adminApi.exportOrdersGmv(),
+      () => adminApi.exportOrdersGmv({ sellerId: sellerId || undefined, status: status || undefined }),
       `orders-gmv_${new Date().toISOString().slice(0, 10)}.xlsx`,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
@@ -72,6 +112,20 @@ const OrdersGmv = () => {
         }
       />
 
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={sellerId} onChange={(e) => setSellerId(e.target.value)} className={selectCls}>
+          <option value="">All sellers</option>
+          {sellers.map((s) => (
+            <option key={s._id} value={s._id}>{s.shopName}</option>
+          ))}
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
       <Card className="border-none shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -82,6 +136,7 @@ const OrdersGmv = () => {
                 <th className="px-4 py-3">Seller</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Product</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Taxable</th>
                 <th className="px-4 py-3 text-right">GST</th>
                 <th className="px-4 py-3 text-right">Delivery</th>
@@ -94,9 +149,9 @@ const OrdersGmv = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={13} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+                <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={13} className="px-4 py-8 text-center text-slate-400">No orders in this period.</td></tr>
+                <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-400">No orders match these filters.</td></tr>
               ) : (
                 items.map((row) => (
                   <tr key={row.orderId} className="hover:bg-slate-50">
@@ -105,6 +160,11 @@ const OrdersGmv = () => {
                     <td className="px-4 py-3">{row.seller}</td>
                     <td className="px-4 py-3">{row.customer}</td>
                     <td className="px-4 py-3">{row.product}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={STATUS_BADGE_VARIANT[row.status] || "gray"}>
+                        {String(row.status || "—").replace(/_/g, " ")}
+                      </Badge>
+                    </td>
                     <td className="px-4 py-3 text-right">{formatMoney(row.taxable)}</td>
                     <td className="px-4 py-3 text-right">{formatMoney(row.gst)}</td>
                     <td className="px-4 py-3 text-right">{formatMoney(row.delivery)}</td>

@@ -41,6 +41,7 @@ const OperationsConsole = () => {
   const [approvals, setApprovals] = useState({ items: [], total: 0 });
   const [auditLog, setAuditLog] = useState({ items: [] });
   const [roles, setRoles] = useState([]);
+  const [myMoneyLimit, setMyMoneyLimit] = useState(undefined); // undefined = not loaded yet
   const [loading, setLoading] = useState(true);
 
   const [creditForm, setCreditForm] = useState({ orderId: "", amount: "", reason: "", type: "credit" });
@@ -49,26 +50,52 @@ const OperationsConsole = () => {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const calls = [
+      const wantsApprovals = can("operations.manage_shops") || can("operations.payments");
+      // allSettled, not all: a lower tier that's missing one permission (or a
+      // single flaky call) must not blank the entire console for every other
+      // panel it IS allowed to see — Promise.all previously meant one 403
+      // (e.g. operator_l1 lacking a permission some panel needed) failed
+      // everything.
+      const [unassignedRes, fleetRes, auditRes, approvalsRes] = await Promise.allSettled([
         adminApi.getUnassignedOrders({ limit: 10 }),
         adminApi.getActiveFleet({ limit: 10 }),
         adminApi.getOperationsAuditLog({ limit: 10 }),
-      ];
-      if (can("operations.manage_shops") || can("operations.payments")) {
-        calls.push(adminApi.getOperationsApprovals({ status: "pending", limit: 10 }));
-      }
-      const [unassignedRes, fleetRes, auditRes, approvalsRes] = await Promise.all(calls);
+        wantsApprovals ? adminApi.getOperationsApprovals({ status: "pending", limit: 10 }) : Promise.resolve(null),
+      ]);
 
-      if (unassignedRes?.data?.success) setUnassigned(unassignedRes.data.result || { items: [], total: 0 });
-      if (fleetRes?.data?.success) setFleet(fleetRes.data.result || { items: [], total: 0 });
-      if (auditRes?.data?.success) setAuditLog(auditRes.data.result || { items: [] });
-      if (approvalsRes?.data?.success) setApprovals(approvalsRes.data.result || { items: [], total: 0 });
+      if (unassignedRes.status === "fulfilled" && unassignedRes.value?.data?.success) {
+        setUnassigned(unassignedRes.value.data.result || { items: [], total: 0 });
+      }
+      if (fleetRes.status === "fulfilled" && fleetRes.value?.data?.success) {
+        setFleet(fleetRes.value.data.result || { items: [], total: 0 });
+      }
+      if (auditRes.status === "fulfilled" && auditRes.value?.data?.success) {
+        setAuditLog(auditRes.value.data.result || { items: [] });
+      }
+      if (approvalsRes.status === "fulfilled" && approvalsRes.value?.data?.success) {
+        setApprovals(approvalsRes.value.data.result || { items: [], total: 0 });
+      }
+
+      const failed = [unassignedRes, fleetRes, auditRes, approvalsRes].find((r) => r.status === "rejected");
+      if (failed) {
+        toast.error(failed.reason?.response?.data?.message || "Some Operations Console panels failed to load");
+      }
 
       if (isOwner) {
         const rolesRes = await adminApi.getAdminRoles();
         if (rolesRes?.data?.success) {
           const all = rolesRes.data.result || rolesRes.data.results || [];
           setRoles(all.filter((r) => OPERATOR_ROLE_NAMES.includes(r.name)));
+        }
+      } else {
+        // /admin/profile is open to any admin-scoped token (see
+        // allowRoles("admin") — custom staff roles included), unlike
+        // /admin/roles which is superadmin-only, so this is how a non-owner
+        // operator finds out their own tier's actual ₹ limit.
+        const profileRes = await adminApi.getProfile();
+        if (profileRes?.data?.success) {
+          const limit = profileRes.data.result?.customRoleId?.moneyLimit;
+          setMyMoneyLimit(limit === null || limit === undefined ? null : Number(limit));
         }
       }
     } catch (error) {
@@ -129,8 +156,11 @@ const OperationsConsole = () => {
 
   const moneyLimitLabel = useMemo(() => {
     if (isOwner) return "Unlimited";
-    return "Set by your role (see Staff & Roles)";
-  }, [isOwner]);
+    if (myMoneyLimit === undefined) return "Loading…";
+    if (myMoneyLimit === null) return "Unlimited";
+    if (myMoneyLimit === 0) return "No credit/refund access";
+    return formatMoney(myMoneyLimit);
+  }, [isOwner, myMoneyLimit]);
 
   if (loading && !unassigned.items.length && !fleet.items.length) {
     return <div className="p-6 text-sm text-slate-500">Loading Operations Console…</div>;

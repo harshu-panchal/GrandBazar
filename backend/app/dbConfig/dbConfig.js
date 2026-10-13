@@ -1,92 +1,12 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import AdminRole from '../models/adminRole.js';
+import { seedSystemAdminRoles } from '../services/admin/systemRoleSeedService.js';
 
 dotenv.config();
 
-// Seed the two legacy roles ("accountant", "assistant") as immutable system
-// roles the first time this process boots after the custom-roles feature
-// landed. Admins can create more roles via the UI; these two just guarantee
-// pre-existing staff still have a role to appear under.
-async function seedSystemAdminRoles() {
-    const defaults = [
-        {
-            name: 'accountant',
-            label: 'Accountant',
-            description: 'Finance, payouts & settlements',
-            permissions: [
-                'dashboard',
-                'accountant',
-                'accountant.expenses',
-                'accountant.expenses_write',
-                'accountant.gst_tcs',
-                'accountant.gst_tcs_write',
-                'accountant.audit_pack',
-                'wallet',
-                'wallet.write',
-                'bulk_settlements',
-                'seller_payments',
-                'billing',
-                'sellers.subscriptions',
-                'sellers',
-            ],
-        },
-        { name: 'assistant', label: 'Assistant', description: 'General admin support', permissions: ['dashboard', 'support', 'customers', 'orders', 'faqs'] },
-        // Operator tiers — escalating order-ops access, each with a ₹ ceiling
-        // on credits/refunds above which the action is sent for approval to
-        // the next tier (see approvalRequestService.js). Admins can clone or
-        // edit these like any other role.
-        {
-            name: 'operator_l1',
-            label: 'Operations Executive',
-            description: 'Monitor orders, coordinate, escalate. Mostly read-only.',
-            permissions: ['dashboard', 'orders', 'operations.monitor'],
-            moneyLimit: 0,
-            requiresTwoFactor: false,
-        },
-        {
-            name: 'operator_l2',
-            label: 'Senior Operations Executive',
-            description: 'Controlled intervention: reroute, reschedule, partial cancel, refunds within limit.',
-            permissions: [
-                'dashboard', 'orders', 'operations.monitor', 'operations.intervene',
-                'orders.reschedule', 'orders.adjust_price', 'orders.replacement', 'orders.split_delivery',
-            ],
-            moneyLimit: 500,
-            requiresTwoFactor: false,
-        },
-        {
-            name: 'operator_l3',
-            label: 'Operations Manager',
-            description: 'Shop, seller and logistics control. Approves L2 requests within limit.',
-            permissions: [
-                'dashboard', 'orders', 'sellers', 'operations.monitor', 'operations.intervene', 'operations.manage_shops',
-                'orders.reschedule', 'orders.adjust_price', 'orders.replacement', 'orders.split_delivery',
-            ],
-            moneyLimit: 2000,
-            requiresTwoFactor: false,
-        },
-        {
-            name: 'operator_l4',
-            label: 'Operations Controller',
-            description: 'Payment, refund and settlement status with Maker-Checker approval.',
-            permissions: [
-                'dashboard', 'orders', 'sellers', 'wallet', 'withdrawals',
-                'operations.monitor', 'operations.intervene', 'operations.manage_shops', 'operations.payments',
-                'orders.reschedule', 'orders.adjust_price', 'orders.replacement', 'orders.split_delivery',
-            ],
-            moneyLimit: 15000,
-            requiresTwoFactor: true,
-        },
-    ];
-    for (const role of defaults) {
-        await AdminRole.updateOne(
-            { name: role.name },
-            { $setOnInsert: { ...role, isSystem: true } },
-            { upsert: true },
-        );
-    }
-}
+// Role definitions live in services/admin/systemRoleSeedService.js so the
+// same seed list can also be triggered on-demand (see roleController.js'
+// ensureSystemRoles) instead of only ever running once at boot.
 
 const connectDB = async () => {
     try {

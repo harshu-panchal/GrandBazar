@@ -22,6 +22,8 @@ import {
   HiOutlineChevronRight,
   HiOutlineClock,
   HiOutlineArrowRight,
+  HiOutlineBriefcase,
+  HiOutlineCalculator,
 } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -279,6 +281,42 @@ const emptyStaffForm = {
   allowedPermissions: [],
 };
 
+// Mirrors the 4 operator tiers seeded on boot as system AdminRoles
+// (backend/app/dbConfig/dbConfig.js — operator_l1..l4) so "Add Operator"
+// can hand the admin a one-click level picker instead of the generic
+// role dropdown, which is the only thing actually missing for this flow —
+// the roles, permissions and money-limit escalation already exist.
+const OPERATOR_LEVELS = [
+  {
+    level: 1,
+    roleName: 'operator_l1',
+    label: 'L1 · Operations Executive',
+    desc: 'Monitor orders, coordinate, escalate. Mostly read-only, data masked.',
+    limit: 'No credit/refund access',
+  },
+  {
+    level: 2,
+    roleName: 'operator_l2',
+    label: 'L2 · Senior Operations Executive',
+    desc: 'Reroute, reschedule, partial cancel, edit items.',
+    limit: 'Credit/refund up to ₹500',
+  },
+  {
+    level: 3,
+    roleName: 'operator_l3',
+    label: 'L3 · Operations Manager',
+    desc: 'Shop & seller controls, approves L2 requests.',
+    limit: 'Credit/refund up to ₹2,000',
+  },
+  {
+    level: 4,
+    roleName: 'operator_l4',
+    label: 'L4 · Operations Controller',
+    desc: 'Payment/settlement status, Maker-Checker approvals. Requires 2FA.',
+    limit: 'Credit/refund up to ₹15,000',
+  },
+];
+
 const emptyRoleForm = {
   name: '',
   label: '',
@@ -299,6 +337,9 @@ const UserManagement = () => {
   const [editStaffId, setEditStaffId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [staffForm, setStaffForm] = useState(emptyStaffForm);
+  const [isOperatorPickerOpen, setIsOperatorPickerOpen] = useState(false);
+  const [seedingOperatorRoles, setSeedingOperatorRoles] = useState(false);
+  const [isSeedingAccountantRole, setIsSeedingAccountantRole] = useState(false);
 
   // --- Role state ---
   const [roles, setRoles] = useState([]);
@@ -375,6 +416,28 @@ const UserManagement = () => {
     fetchRoles();
   }, []);
 
+  // The operator_l1..l4 system roles are normally seeded once at server
+  // boot (backend/app/services/admin/systemRoleSeedService.js) — an
+  // environment that's been running since before they existed just never
+  // gets them without a restart. Rather than tell the admin to go restart
+  // a server, self-heal: if the picker opens and any tier is missing,
+  // ensure them on demand and refresh the role list.
+  useEffect(() => {
+    if (!isOperatorPickerOpen) return;
+    const missing = OPERATOR_LEVELS.some((o) => !roles.some((r) => r.name === o.roleName));
+    if (!missing) return;
+
+    setSeedingOperatorRoles(true);
+    adminApi
+      .ensureSystemRoles()
+      .then(() => fetchRoles())
+      .catch((error) => {
+        toast.error(error?.response?.data?.message || 'Failed to set up operator roles');
+      })
+      .finally(() => setSeedingOperatorRoles(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOperatorPickerOpen]);
+
   // Lazy-load the access log the first time that tab is opened, not on
   // every page mount — it's the least-used tab of the three.
   useEffect(() => {
@@ -407,6 +470,62 @@ const UserManagement = () => {
       allowedPermissions: [...(defaultRole.permissions || [])],
     });
     setIsStaffOpen(true);
+  };
+
+  // Shared by every "quick add <role>" shortcut below: jump straight to the
+  // staff form with a specific system role pre-selected, instead of making
+  // the admin find it in the generic role dropdown. Returns whether it
+  // actually found the role (so callers can fall back to seeding it).
+  const openCreateStaffForRole = (roleName) => {
+    const role = roles.find((r) => r.name === roleName);
+    if (!role) return false;
+    setEditStaffId(null);
+    setShowPassword(false);
+    setStaffForm({
+      ...emptyStaffForm,
+      customRoleId: role._id,
+      allowedPermissions: [...(role.permissions || [])],
+    });
+    setIsStaffOpen(true);
+    return true;
+  };
+
+  const openCreateOperator = (level) => {
+    const target = OPERATOR_LEVELS.find((o) => o.level === level);
+    if (openCreateStaffForRole(target?.roleName)) {
+      setIsOperatorPickerOpen(false);
+    } else {
+      toast.error(`${target?.label || 'Operator'} role isn't set up yet — reopen "Add Operator" to try again.`);
+    }
+  };
+
+  // Accountant is a single system role (no tiers), so this skips the
+  // level-picker step the operator flow needs and goes straight to the
+  // staff form — self-healing the same way if the role was never seeded
+  // on this environment (see the operator picker's effect for why).
+  const openCreateAccountant = async () => {
+    if (openCreateStaffForRole('accountant')) return;
+
+    setIsSeedingAccountantRole(true);
+    try {
+      await adminApi.ensureSystemRoles();
+      const res = await adminApi.getAdminRoles();
+      const freshRoles = res?.data?.success ? (res.data.results || res.data.result || []) : [];
+      setRoles(freshRoles);
+      const role = freshRoles.find((r) => r.name === 'accountant');
+      if (!role) {
+        toast.error("Couldn't set up the Accountant role — try again.");
+        return;
+      }
+      setEditStaffId(null);
+      setShowPassword(false);
+      setStaffForm({ ...emptyStaffForm, customRoleId: role._id, allowedPermissions: [...(role.permissions || [])] });
+      setIsStaffOpen(true);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Couldn't set up the Accountant role");
+    } finally {
+      setIsSeedingAccountantRole(false);
+    }
   };
 
   const openEditStaff = (staff) => {
@@ -573,12 +692,27 @@ const UserManagement = () => {
           </p>
         </div>
         {activeTab === 'staff' ? (
-          <Button
-            onClick={openCreateStaff}
-            className="w-fit flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 px-5 text-sm font-black shadow-lg shadow-indigo-100"
-          >
-            <HiOutlineUserAdd className="h-5 w-5" /> Add Staff Member
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={openCreateAccountant}
+              disabled={isSeedingAccountantRole}
+              className="w-fit flex items-center gap-2 bg-white border-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl py-3 px-5 text-sm font-black disabled:opacity-60"
+            >
+              <HiOutlineCalculator className="h-5 w-5" /> {isSeedingAccountantRole ? 'Setting up…' : 'Add Accountant'}
+            </Button>
+            <Button
+              onClick={() => setIsOperatorPickerOpen(true)}
+              className="w-fit flex items-center gap-2 bg-white border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-xl py-3 px-5 text-sm font-black"
+            >
+              <HiOutlineBriefcase className="h-5 w-5" /> Add Operator
+            </Button>
+            <Button
+              onClick={openCreateStaff}
+              className="w-fit flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 px-5 text-sm font-black shadow-lg shadow-indigo-100"
+            >
+              <HiOutlineUserAdd className="h-5 w-5" /> Add Staff Member
+            </Button>
+          </div>
         ) : activeTab === 'roles' ? (
           <Button
             onClick={openCreateRole}
@@ -754,10 +888,20 @@ const UserManagement = () => {
                         {role.isSystem && (
                           <span className="text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">System</span>
                         )}
+                        {OPERATOR_LEVELS.some((o) => o.roleName === role.name) && (
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full">
+                            Operator L{OPERATOR_LEVELS.find((o) => o.roleName === role.name).level}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">{role.name}</p>
                       {role.description && (
                         <p className="text-xs text-slate-500 mt-1.5 leading-snug">{role.description}</p>
+                      )}
+                      {role.moneyLimit != null && (
+                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mt-1">
+                          Credit/refund limit ₹{Number(role.moneyLimit).toLocaleString('en-IN')}
+                        </p>
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -825,7 +969,7 @@ const UserManagement = () => {
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge
-                          variant={entry.action?.includes('deleted') ? 'danger' : entry.action?.includes('created') ? 'success' : 'warning'}
+                          variant={entry.action?.includes('deleted') ? 'error' : entry.action?.includes('created') ? 'success' : 'warning'}
                           className="text-[9px] font-black uppercase tracking-wider"
                         >
                           {formatAuditAction(entry.action)}
@@ -888,6 +1032,58 @@ const UserManagement = () => {
           </div>
         </Card>
       )}
+
+      {/* ======= Operator Level Picker ======= */}
+      <AnimatePresence>
+        {isOperatorPickerOpen && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsOperatorPickerOpen(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-100"
+            >
+              <div className="p-6 md:p-8 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">Add an Operator</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    Choose a tier — order-ops access and the credit/refund limit escalate from L1 to L4. Each is a pre-built role; you can still fine-tune permissions after picking one.
+                  </p>
+                </div>
+                <button onClick={() => setIsOperatorPickerOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all shrink-0">
+                  <HiOutlineX className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="p-6 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {OPERATOR_LEVELS.map((o) => {
+                  const roleExists = roles.some((r) => r.name === o.roleName);
+                  const disabled = !roleExists || seedingOperatorRoles;
+                  return (
+                    <button
+                      key={o.level}
+                      type="button"
+                      onClick={() => openCreateOperator(o.level)}
+                      disabled={disabled}
+                      className="text-left border-2 border-slate-100 rounded-2xl p-5 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-slate-100 disabled:hover:bg-transparent"
+                    >
+                      <p className="font-black text-slate-900 text-sm tracking-tight">{o.label}</p>
+                      <p className="text-xs text-slate-500 mt-1.5 leading-snug">{o.desc}</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 mt-3">{o.limit}</p>
+                      {seedingOperatorRoles && !roleExists && (
+                        <p className="text-[10px] font-bold text-slate-400 mt-1.5">Setting up this role…</p>
+                      )}
+                      {!seedingOperatorRoles && !roleExists && (
+                        <p className="text-[10px] font-bold text-red-500 mt-1.5">Couldn't set up this role — try reopening this picker</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ======= Staff Modal ======= */}
       <AnimatePresence>

@@ -87,6 +87,7 @@ import {
     createAdminRole,
     updateAdminRole,
     deleteAdminRole,
+    ensureSystemRoles,
 } from "../controller/admin/roleController.js";
 import {
     adjustPayoutController,
@@ -388,6 +389,7 @@ router.post("/roles", verifyToken, allowSuperAdminOnly, createAdminRole);
 router.put("/roles/:id", verifyToken, allowSuperAdminOnly, updateAdminRole);
 router.delete("/roles/:id", verifyToken, allowSuperAdminOnly, deleteAdminRole);
 router.get("/roles/access-logs", verifyToken, allowSuperAdminOnly, getRoleAccessAuditLogsController);
+router.post("/roles/ensure-system", verifyToken, allowSuperAdminOnly, ensureSystemRoles);
 
 router.get("/users", verifyToken, allowRoles("admin"), getUsers);
 router.get("/users/:id", verifyToken, allowRoles("admin"), getUserById);
@@ -486,8 +488,14 @@ router.put(
     updateDeliveryPartner
 );
 
-router.get("/active-fleet", verifyToken, allowRoles("admin"), checkAdminPermission("delivery"), getActiveFleet);
-router.get("/unassigned-orders", verifyToken, allowRoles("admin"), checkAdminPermission("delivery"), getUnassignedOrders);
+// Both the Delivery-team console and the Operations Console's L1 "monitor"
+// tier read these same two live-orders/fleet panels — operator_l1 only ever
+// carries operations.monitor (seeded with no "delivery" permission at all),
+// so gating on "delivery" alone 403'd these for every L1 operator, which
+// Promise.all in OperationsConsole.jsx turned into the whole console failing
+// to load for them.
+router.get("/active-fleet", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery", "operations.monitor"), getActiveFleet);
+router.get("/unassigned-orders", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery", "operations.monitor"), getUnassignedOrders);
 router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignOrderToRider);
 router.get("/wallet-data", verifyToken, allowRoles("admin"), checkAdminPermission("wallet"), getAdminWalletData);
 

@@ -19,7 +19,7 @@ const GstTcs = () => {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filingForm, setFilingForm] = useState({ type: "GSTR-3B", status: "pending", filedAmount: "", filedDate: "", referenceNumber: "" });
+  const [filingForm, setFilingForm] = useState({ type: "GSTR-3B", status: "pending", dueDate: "", filedAmount: "", filedDate: "", referenceNumber: "" });
   const [saving, setSaving] = useState(false);
 
   const fetchSummary = useCallback(async () => {
@@ -71,11 +71,14 @@ const GstTcs = () => {
       />
 
       {summary && (
-        <>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="border-none shadow-sm">
-            <div className="p-4 border-b border-gray-100 flex items-start gap-2">
-              <HiOutlineInformationCircle className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-slate-500">{summary.gst.note}</p>
+            <div className="p-4 border-b border-gray-100">
+              <h3 className="font-semibold text-slate-800">GST summary</h3>
+              <div className="flex items-start gap-2 mt-1">
+                <HiOutlineInformationCircle className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-500">{summary.gst.note}</p>
+              </div>
             </div>
             <ul className="divide-y divide-gray-100">
               <li className="flex items-center justify-between px-4 py-3 text-sm">
@@ -94,26 +97,35 @@ const GstTcs = () => {
                 <span>Net GST Payable (estimated)</span>
                 <b>{formatMoney(summary.gst.netGstPayable)}</b>
               </li>
+              <li className="flex items-center justify-between px-4 py-3 text-sm">
+                <span>Returns filed / pending</span>
+                <span>
+                  {summary.filingRecords?.filter((r) => r.status === "filed").length || 0}
+                  {" / "}
+                  {summary.filingRecords?.filter((r) => r.status === "pending").length || 0}
+                </span>
+              </li>
             </ul>
           </Card>
 
           <Card className="border-none shadow-sm">
             <div className="p-4 border-b border-gray-100">
               <h3 className="font-semibold text-slate-800">ECO / TCS</h3>
-              <p className="text-sm text-slate-500 mt-1">{summary.tcs.note}</p>
+              <p className="text-xs text-slate-500 mt-1">{summary.tcs.note}</p>
             </div>
             <ul className="divide-y divide-gray-100">
               <li className="flex items-center justify-between px-4 py-3 text-sm">
-                <span>GMV subject to TCS</span>
+                <span>GMV subject to ECO / TCS</span>
                 <b>{formatMoney(summary.tcs.gmv)}</b>
               </li>
-              <li className="flex items-center justify-between px-4 py-3 text-sm">
+              <li className="flex items-center justify-between px-4 py-3 text-sm font-semibold">
                 <span>TCS Liability (at {summary.tcs.tcsRatePercent}%)</span>
                 <b>{formatMoney(summary.tcs.tcsLiability)}</b>
               </li>
             </ul>
+            <p className="text-xs text-slate-400 px-4 pb-4">Rates come from CA-confirmed Settings, not auto-filed anywhere.</p>
           </Card>
-        </>
+        </div>
       )}
 
       <Card className="border-none shadow-sm">
@@ -135,6 +147,10 @@ const GstTcs = () => {
             </select>
           </div>
           <div>
+            <label className="text-xs font-bold text-slate-500 block mb-1">Due Date</label>
+            <input type="date" className={inputCls} value={filingForm.dueDate} onChange={(e) => setFilingForm({ ...filingForm, dueDate: e.target.value })} />
+          </div>
+          <div>
             <label className="text-xs font-bold text-slate-500 block mb-1">Filed Amount ₹</label>
             <input type="number" className={inputCls} value={filingForm.filedAmount} onChange={(e) => setFilingForm({ ...filingForm, filedAmount: e.target.value })} />
           </div>
@@ -153,13 +169,22 @@ const GstTcs = () => {
 
         {summary?.filingRecords?.length > 0 && (
           <ul className="divide-y divide-gray-100 border-t border-gray-100">
-            {summary.filingRecords.map((r) => (
-              <li key={r._id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <span>{r.type}{r.referenceNumber ? ` · ${r.referenceNumber}` : ""}</span>
-                <Badge variant={r.status === "filed" ? "success" : "warning"}>{r.status === "filed" ? "Filed" : "Pending"}</Badge>
-                <span>{formatMoney(r.filedAmount)}</span>
-              </li>
-            ))}
+            {summary.filingRecords.map((r) => {
+              const isOverdue = r.status === "pending" && r.dueDate && new Date(r.dueDate) < new Date();
+              return (
+                <li key={r._id} className="flex items-center justify-between px-4 py-3 text-sm gap-3">
+                  <span>
+                    {r.type}
+                    {r.dueDate ? ` · due ${new Date(r.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}
+                    {r.referenceNumber ? ` · ${r.referenceNumber}` : ""}
+                  </span>
+                  <Badge variant={r.status === "filed" ? "success" : isOverdue ? "error" : "warning"}>
+                    {r.status === "filed" ? "Filed" : isOverdue ? "Overdue" : "Pending"}
+                  </Badge>
+                  <span>{formatMoney(r.filedAmount)}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
