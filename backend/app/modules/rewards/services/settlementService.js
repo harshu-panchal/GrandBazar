@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../../../models/order.js";
 import { FUNDING_SOURCE } from "../reward.constants.js";
 import logger from "../../../services/logger.js";
@@ -46,7 +47,14 @@ export async function getSettlementSummary({ sellerId = null, fromDate, toDate }
     "financeFlags.rewardsApplied": true,
     "pricing.rewardCostToSeller": { $gt: 0 },
   };
-  if (sellerId) match.seller = sellerId;
+  // Order.aggregate() talks to MongoDB directly and does NOT auto-cast like
+  // Order.find() does — a plain id string here would silently match zero
+  // documents against the ObjectId-typed `seller` field.
+  if (sellerId) {
+    match.seller = mongoose.Types.ObjectId.isValid(String(sellerId))
+      ? new mongoose.Types.ObjectId(String(sellerId))
+      : sellerId;
+  }
   if (fromDate || toDate) {
     match.deliveredAt = {};
     if (fromDate) match.deliveredAt.$gte = new Date(fromDate);

@@ -84,6 +84,14 @@ export const CREDIT_TIMINGS = [
   { value: "delayed_days", label: "Delayed (days)" },
 ];
 
+// Referral campaigns don't have a "delivery" to credit on — the registration
+// reward either credits right away, or is held until the referee's first
+// order is delivered (reduces payouts to accounts that sign up but never buy).
+export const REFERRAL_CREDIT_TIMINGS = [
+  { value: "on_delivery", label: "After Registration" },
+  { value: "after_first_order", label: "After First Order" },
+];
+
 export const CAMPAIGN_TYPES = [
   { value: "cashback", label: "Cashback" },
   { value: "reward", label: "Reward" },

@@ -16,6 +16,7 @@ import {
   REWARD_TYPE_FAMILIES,
   REWARD_SUBTYPES,
   CREDIT_TIMINGS,
+  REFERRAL_CREDIT_TIMINGS,
   STATUSES,
   FUNDING_SOURCES,
   CUSTOMER_TYPES,
@@ -951,7 +952,7 @@ const CampaignWizardModal = ({ open, editing, onClose, onSaved }) => {
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-1 block">Credit Timing</label>
                     <select value={form.rewardConfig.creditTiming} onChange={(e) => setRewardConfig({ creditTiming: e.target.value })} className={inputCls}>
-                      {CREDIT_TIMINGS.map((t) => (
+                      {REFERRAL_CREDIT_TIMINGS.map((t) => (
                         <option key={t.value} value={t.value}>
                           {t.label}
                         </option>

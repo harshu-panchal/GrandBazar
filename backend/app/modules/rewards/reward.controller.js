@@ -235,8 +235,14 @@ export const updateSellerCampaign = async (req, res) => {
 export const getSellerAnalytics = async (req, res) => {
   try {
     const sellerId = req.user.activeStoreId || req.user.id || req.user._id;
+    // req.user.* comes off the decoded JWT, i.e. plain strings — RewardGrant.aggregate()
+    // does not auto-cast those against the ObjectId-typed `sellerId` field the way
+    // RewardGrant.find() would, so an uncast string here silently matches nothing.
+    const sellerObjectId = mongoose.Types.ObjectId.isValid(String(sellerId))
+      ? new mongoose.Types.ObjectId(String(sellerId))
+      : sellerId;
     const grants = await RewardGrant.aggregate([
-      { $match: { sellerId } },
+      { $match: { sellerId: sellerObjectId } },
       {
         $group: {
           _id: "$status",
@@ -497,6 +503,29 @@ export const getMyReferralCode = async (req, res) => {
   }
 };
 
+// Public: let signup validate a referral code before it's submitted, since
+// attachReferralOnSignup() itself fails silently (best-effort, never blocks signup).
+export const validateReferralCode = async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim().toUpperCase();
+    if (!code) {
+      return handleResponse(res, 400, "Referral code is required");
+    }
+
+    const referrer = await User.findOne({ referralCode: code }).select("name").lean();
+    if (!referrer) {
+      return handleResponse(res, 404, "Invalid referral code", { valid: false });
+    }
+
+    return handleResponse(res, 200, "Valid referral code", {
+      valid: true,
+      referrerName: referrer.name || "",
+    });
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 export const inviteReferral = async (req, res) => {
   try {
     const customerId = req.user.id || req.user._id;
@@ -534,5 +563,6 @@ export default {
   getCustomerRewardNotifications,
   getMyReferrals,
   getMyReferralCode,
+  validateReferralCode,
   inviteReferral,
 };

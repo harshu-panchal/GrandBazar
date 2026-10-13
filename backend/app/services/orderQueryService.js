@@ -128,6 +128,20 @@ function appendDateRange(query, { startDate, endDate }) {
   };
 }
 
+// Order.find()/.countDocuments() go through Mongoose's query layer, which
+// auto-casts a string id to ObjectId against the schema — but Order.aggregate()
+// talks to the MongoDB driver directly and does NOT cast, so a `$match` built
+// from plain id strings silently matches zero documents against an ObjectId
+// field. This query object is reused by both, so `seller` must already be a
+// real ObjectId by the time it's built, not a string.
+function toObjectId(id) {
+  try {
+    return new mongoose.Types.ObjectId(String(id));
+  } catch {
+    return null;
+  }
+}
+
 export function buildSellerOrdersQuery({
   role,
   userId,
@@ -139,9 +153,10 @@ export function buildSellerOrdersQuery({
   let base = {};
   if (role !== "admin") {
     if (Array.isArray(storeIds) && storeIds.length > 0) {
-      base = { seller: storeIds.length === 1 ? storeIds[0] : { $in: storeIds } };
+      const objectIds = storeIds.map(toObjectId).filter(Boolean);
+      base = { seller: objectIds.length === 1 ? objectIds[0] : { $in: objectIds } };
     } else if (userId) {
-      base = { seller: userId };
+      base = { seller: toObjectId(userId) || userId };
     }
   }
   const withStatus = {

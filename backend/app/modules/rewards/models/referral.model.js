@@ -59,5 +59,12 @@ const referralSchema = new mongoose.Schema(
 
 referralSchema.index({ referrerId: 1, refereeId: 1 });
 referralSchema.index({ referralCode: 1, refereeId: 1 });
+// Guards against a double-submitted/retried signup OTP verify racing
+// attachReferralOnSignup twice and creating two referral records (and two
+// registration-reward grants) for the same referee.
+referralSchema.index(
+  { refereeId: 1, referralType: 1 },
+  { unique: true, partialFilterExpression: { refereeId: { $type: "objectId" } } },
+);
 
 export default mongoose.model("Referral", referralSchema);

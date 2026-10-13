@@ -48,6 +48,15 @@ export const LocationProvider = ({ children }) => {
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState(null);
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+  const [showEnableLocationPrompt, setShowEnableLocationPrompt] = useState(false);
+  // Tracks whether the site previously had geolocation permission, so a later
+  // failure can be told apart from "never asked" (permission denied vs. the
+  // OS-level location toggle being off).
+  const permissionGrantedRef = React.useRef(false);
+
+  const dismissEnableLocationPrompt = useCallback(() => {
+    setShowEnableLocationPrompt(false);
+  }, []);
 
   const openLocationPicker = useCallback(() => {
     setIsLocationPickerOpen(true);
@@ -220,6 +229,7 @@ export const LocationProvider = ({ children }) => {
             };
           }
 
+          setShowEnableLocationPrompt(false);
           updateLocation(liveLocation, {
             persist: true,
             updateSavedHome: false,
@@ -227,6 +237,7 @@ export const LocationProvider = ({ children }) => {
           resolve({ ok: true, location: liveLocation });
         } catch (err) {
           const loc = fallbackFromCoords(latitude, longitude);
+          setShowEnableLocationPrompt(false);
           updateLocation(loc, { persist: true, updateSavedHome: false });
           resolve({
             ok: true,
@@ -245,6 +256,16 @@ export const LocationProvider = ({ children }) => {
             : error.message || "Location permission denied";
         setLocationError(message);
         setIsFetchingLocation(false);
+
+        // code 2 (POSITION_UNAVAILABLE) is the browser/OS signal that device
+        // location services are switched off. code 1 (PERMISSION_DENIED) means
+        // the same thing when we previously had permission granted, since the
+        // only way a granted permission later fails is the OS toggle flipping off.
+        const code = typeof error === "object" ? error.code : null;
+        if (code === 2 || (code === 1 && permissionGrantedRef.current)) {
+          setShowEnableLocationPrompt(true);
+        }
+
         resolve({ ok: false, error: message });
       };
 
@@ -384,10 +405,12 @@ export const LocationProvider = ({ children }) => {
       navigator.permissions
         .query({ name: "geolocation" })
         .then((permissionStatus) => {
+          permissionGrantedRef.current = permissionStatus.state === "granted";
           if (permissionStatus.state === "granted") {
             fetchAndCacheLocation();
           }
           permissionStatus.onchange = () => {
+            permissionGrantedRef.current = permissionStatus.state === "granted";
             if (permissionStatus.state === "granted") {
               fetchAndCacheLocation();
             }
@@ -429,6 +452,8 @@ export const LocationProvider = ({ children }) => {
       isLocationPickerOpen,
       openLocationPicker,
       closeLocationPicker,
+      showEnableLocationPrompt,
+      dismissEnableLocationPrompt,
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }),
     [
@@ -442,6 +467,8 @@ export const LocationProvider = ({ children }) => {
       isLocationPickerOpen,
       openLocationPicker,
       closeLocationPicker,
+      showEnableLocationPrompt,
+      dismissEnableLocationPrompt,
     ],
   );
 

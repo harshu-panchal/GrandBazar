@@ -65,8 +65,9 @@ function formatShortOrderId(orderId) {
     return s.length > 8 ? s.slice(-8).toUpperCase() : s;
 }
 
-function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
+function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDeliveredForSelfDelivery = false }) {
     const { showToast } = useToast();
+    const [resendingDriver, setResendingDriver] = useState(false);
     const method = resolveFulfillmentMethod(order);
     const normalizedStatus = String(order?.status || '').toLowerCase();
     const isPlatform = method === 'platform_logistics';
@@ -89,7 +90,11 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
         { value: 'confirmed', label: 'Confirmed' },
         { value: 'cancelled', label: 'Cancelled' },
     ];
-    const statusOptions = isPlatform && isPending
+    // The order detail modal already shows a dedicated "Verify Customer Delivery
+    // OTP" widget for seller_delivery orders — offering "Delivered" here too
+    // would pop a second, separate OTP modal for the exact same step.
+    const suppressDelivered = hideDeliveredForSelfDelivery && method === 'seller_delivery';
+    const statusOptions = (isPlatform && isPending
         ? pendingOnlyOptions
         : sellerDeliveryOptions.filter((o) => {
             if (isPending) return ['pending', 'confirmed', 'cancelled'].includes(o.value);
@@ -103,7 +108,7 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                 return ['out_for_delivery', 'delivered', 'cancelled'].includes(o.value);
             }
             return o.value === normalizedStatus;
-        });
+        })).filter((o) => !suppressDelivered || o.value !== 'delivered');
 
     const requiresDisplayOnly = !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
 
@@ -161,9 +166,32 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false }) {
                 )}
                 {platformLocked && ['delivery_search', 'delivery_assigned'].includes(String(order.workflowStatus || '').toLowerCase()) && (
                     isPacked ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 mt-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Packed ✓
-                        </span>
+                        <div className="flex flex-col items-start gap-1 mt-1">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Packed ✓
+                            </span>
+                            {String(order.workflowStatus || '').toLowerCase() === 'delivery_search' && (
+                                <button
+                                    type="button"
+                                    disabled={resendingDriver}
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setResendingDriver(true);
+                                        try {
+                                            await sellerApi.resendDeliveryRequest(order.id || order._id || order.orderId);
+                                            showToast('Delivery request resent to nearby riders', 'success');
+                                        } catch (err) {
+                                            showToast(err?.response?.data?.message || 'Failed to resend delivery request', 'error');
+                                        } finally {
+                                            setResendingDriver(false);
+                                        }
+                                    }}
+                                    className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-wait"
+                                >
+                                    {resendingDriver ? 'Resending...' : 'Resend to Riders'}
+                                </button>
+                            )}
+                        </div>
                     ) : (
                         <button
                             type="button"
@@ -3257,21 +3285,15 @@ const Orders = () => {
                                     <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-end shrink-0">
                                         <div className="flex gap-2 items-center flex-wrap justify-end">
                                             <button onClick={() => setIsDetailsModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all">CLOSE</button>
-                                            {resolveFulfillmentMethod(selectedOrder) === 'seller_delivery'
-                                                && ['out_for_delivery', 'in_delivery'].includes(String(selectedOrder.status || selectedOrder.workflowStatus || '').toLowerCase()) && (
-                                                <Button
-                                                    type="button"
-                                                    onClick={() => handleStatusUpdate(selectedOrder.id, 'delivered')}
-                                                    className="px-4 py-2 rounded-xl text-xs font-black bg-purple-600 hover:bg-purple-700 text-white uppercase tracking-wider shadow-xs flex items-center gap-1.5"
-                                                >
-                                                    <HiOutlineShieldCheck className="h-4 w-4" />
-                                                    <span>Enter OTP & Deliver</span>
-                                                </Button>
-                                            )}
+                                            {/* For seller_delivery orders, the "Verify Customer Delivery OTP" widget
+                                                above is the single entry point for completing delivery — a second
+                                                "Enter OTP & Deliver" button here used to open a duplicate OTP modal
+                                                for the same step, so the seller was asked for the OTP twice. */}
                                             {canSellerManuallyUpdateStatus(selectedOrder) && (
                                                 <OrderStatusControl
                                                     order={selectedOrder}
                                                     onStatusUpdate={handleStatusUpdate}
+                                                    hideDeliveredForSelfDelivery
                                                 />
                                             )}
                                         </div>

@@ -13,6 +13,7 @@ import {
   rejectCancelOrderRequest,
   updateOrderStatus,
   markOrderPackedBySeller,
+  resendDeliveryRequestBySeller,
   bulkUpdateOrderStatus,
   getSellerOrders,
   getAvailableOrders,
@@ -264,6 +265,11 @@ router.put(
   "/:orderId/seller-packed",
   ...sellerOrdersWriteChain,
   markOrderPackedBySeller,
+);
+router.put(
+  "/:orderId/resend-delivery-request",
+  ...sellerOrdersWriteChain,
+  resendDeliveryRequestBySeller,
 );
 router.get(
   "/seller-returns",

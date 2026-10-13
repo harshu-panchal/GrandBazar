@@ -46,6 +46,9 @@ export const CREDIT_TIMING = Object.freeze({
   ON_DELIVERY: "on_delivery",
   ON_PAYMENT: "on_payment",
   DELAYED_DAYS: "delayed_days",
+  // Referral-only: holds the registration reward as pending until the
+  // referee's first order is delivered, instead of crediting it immediately.
+  AFTER_FIRST_ORDER: "after_first_order",
 });
 
 export const GRANT_STATUS = Object.freeze({

@@ -20,10 +20,14 @@ import {
   getCustomerRewardNotifications,
   getMyReferrals,
   getMyReferralCode,
+  validateReferralCode,
   inviteReferral,
 } from "./reward.controller.js";
 
 const router = express.Router();
+
+// Public routes (no auth — used during signup, before the user has a token)
+router.get("/public/validate-referral-code", validateReferralCode);
 
 // Admin routes
 router.get("/admin/campaigns", verifyToken, allowRoles("admin", "superadmin"), checkAdminPermission("marketing"), listCampaigns);

@@ -92,7 +92,7 @@ export const getAllTickets = async (req, res) => {
         const { page, limit, skip } = getPagination(req, { defaultLimit: 25, maxLimit: 200 });
 
         const [tickets, total] = await Promise.all([
-            Ticket.find().populate("userId", "name email").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            Ticket.find().populate("userId", "name email phone").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
             Ticket.countDocuments()
         ]);
 

@@ -84,7 +84,9 @@ const SupportTickets = () => {
                     ...t,
                     id: t._id,
                     ticketCode: t._id.slice(-6).toUpperCase(),
-                    user: t.userId?.name || "Unknown",
+                    user: t.userId?.name || t.guestContact?.name || "Unknown",
+                    userPhone: t.userId?.phone || t.guestContact?.phone || "",
+                    userEmail: t.userId?.email || t.guestContact?.email || "",
                     date: new Date(t.createdAt).toLocaleString(),
                     messages: (t.messages || []).map((m, i) => ({
                         ...m,
@@ -409,6 +411,11 @@ const SupportTickets = () => {
                                         {t.user} • {t.userType}
                                     </span>
                                 </div>
+                                {(t.userPhone || t.userEmail) && (
+                                    <div className={cn("text-[9px] font-bold mt-1 truncate", selectedTicket?.id === t.id ? "text-white/60" : "text-slate-400")}>
+                                        {[t.userPhone, t.userEmail].filter(Boolean).join(" • ")}
+                                    </div>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -448,6 +455,11 @@ const SupportTickets = () => {
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
                                         Ticket ID: {selectedTicket.id} • USER: {selectedTicket.user} • STATUS: {selectedTicket.status}
                                     </p>
+                                    {(selectedTicket.userPhone || selectedTicket.userEmail) && (
+                                        <p className="text-[10px] font-bold text-slate-400 tracking-wide leading-none mt-1.5">
+                                            {[selectedTicket.userPhone, selectedTicket.userEmail].filter(Boolean).join("  •  ")}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <div className="relative flex items-center gap-2">
@@ -497,6 +509,24 @@ const SupportTickets = () => {
                                             >
                                                 Copy user name
                                             </button>
+                                            {selectedTicket.userPhone && (
+                                                <button
+                                                    onClick={() => copyToClipboard(selectedTicket.userPhone)}
+                                                    className="w-full text-left px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition-colors"
+                                                    role="menuitem"
+                                                >
+                                                    Copy phone number
+                                                </button>
+                                            )}
+                                            {selectedTicket.userEmail && (
+                                                <button
+                                                    onClick={() => copyToClipboard(selectedTicket.userEmail)}
+                                                    className="w-full text-left px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-50 transition-colors"
+                                                    role="menuitem"
+                                                >
+                                                    Copy email
+                                                </button>
+                                            )}
                                             <div className="h-px bg-slate-100" />
                                             <button
                                                 onClick={() => handleSetStatus(selectedTicket.id, 'open')}

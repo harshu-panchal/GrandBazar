@@ -41,21 +41,43 @@ async function writeTransaction({
   });
 }
 
-async function incrementCampaignUsage(campaignId, amount) {
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const monthStart = new Date(dayStart);
-  monthStart.setDate(1);
+/**
+ * Atomically checks the campaign's budget/daily/monthly caps AND reserves
+ * `amount` against them in one DB round trip. The eligibility engine's
+ * passesBudget() is only a pre-filter on a .lean() snapshot taken earlier in
+ * the request — it reads-then-later-increments with no lock between the two,
+ * so concurrent grants for the same campaign could each pass the check before
+ * either `$inc` lands, blowing through budgetLimit/dailyLimit/monthlyLimit
+ * with no bound. This findOneAndUpdate makes the check part of the same
+ * atomic write: the condition on budgetUsed/dailyUsed/monthlyUsed is
+ * evaluated by MongoDB against the current document right as it increments,
+ * so only one of two racing claims can ever succeed.
+ */
+async function claimCampaignBudget(campaign, amount) {
+  const claimAmount = roundAmount(amount);
+  if (claimAmount <= 0) return true;
 
-  await RewardCampaign.findByIdAndUpdate(campaignId, {
+  const filter = { _id: campaign._id };
+  if (campaign.budgetLimit != null) {
+    filter.budgetUsed = { $lte: roundAmount(campaign.budgetLimit - claimAmount) };
+  }
+  if (campaign.dailyLimit != null) {
+    filter.dailyUsed = { $lte: roundAmount(campaign.dailyLimit - claimAmount) };
+  }
+  if (campaign.monthlyLimit != null) {
+    filter.monthlyUsed = { $lte: roundAmount(campaign.monthlyLimit - claimAmount) };
+  }
+
+  const updated = await RewardCampaign.findOneAndUpdate(filter, {
     $inc: {
-      budgetUsed: amount,
-      dailyUsed: amount,
-      monthlyUsed: amount,
+      budgetUsed: claimAmount,
+      dailyUsed: claimAmount,
+      monthlyUsed: claimAmount,
       "stats.totalGrants": 1,
-      "stats.totalAmount": amount,
+      "stats.totalAmount": claimAmount,
     },
   });
+  return Boolean(updated);
 }
 
 export async function creditCustomerWallet({
@@ -161,9 +183,18 @@ export async function createGrantFromCampaign({ campaign, order, amount, status 
 }
 
 export async function processCashbackGrant({ campaign, order, amount }) {
+  const claimed = await claimCampaignBudget(campaign, amount);
+  if (!claimed) {
+    throw Object.assign(new Error("Campaign budget/usage cap reached"), {
+      code: "CAMPAIGN_BUDGET_EXCEEDED",
+    });
+  }
+
   const creditTiming = campaign.rewardConfig?.creditTiming || CREDIT_TIMING.ON_DELIVERY;
+  const awaitsFirstOrder = creditTiming === CREDIT_TIMING.AFTER_FIRST_ORDER;
   const isDelayed =
     creditTiming === CREDIT_TIMING.DELAYED_DAYS ||
+    awaitsFirstOrder ||
     campaign.rewardConfig?.rewardSubtype === REWARD_SUBTYPE.FUTURE_CASHBACK;
 
   if (isDelayed) {
@@ -173,12 +204,19 @@ export async function processCashbackGrant({ campaign, order, amount }) {
       amount,
       status: GRANT_STATUS.PENDING,
     });
-    const delayedDays = Number(campaign.rewardConfig?.delayedDays || 0);
-    if (delayedDays > 0) {
-      grant.meta = { ...(grant.meta || {}), activateAt: new Date(Date.now() + delayedDays * 86400000) };
+    if (awaitsFirstOrder) {
+      // Event-gated, not time-gated — leave meta.activateAt unset and mark it
+      // so the worker's time-based sweep (activateDuePendingGrants) skips it;
+      // referralService.processReferralRewardsOnDelivery activates it instead.
+      grant.meta = { ...(grant.meta || {}), awaitFirstOrder: true };
       await grant.save();
+    } else {
+      const delayedDays = Number(campaign.rewardConfig?.delayedDays || 0);
+      if (delayedDays > 0) {
+        grant.meta = { ...(grant.meta || {}), activateAt: new Date(Date.now() + delayedDays * 86400000) };
+        await grant.save();
+      }
     }
-    await incrementCampaignUsage(campaign._id, amount);
     return grant;
   }
 
@@ -200,8 +238,6 @@ export async function processCashbackGrant({ campaign, order, amount }) {
     order,
   });
 
-  await incrementCampaignUsage(campaign._id, amount);
-
   emitNotificationEvent(REWARD_NOTIFICATION_EVENTS.REWARD_EARNED, {
     customerId: order.customer,
     userId: order.customer,
@@ -217,6 +253,16 @@ export async function processCashbackGrant({ campaign, order, amount }) {
 export async function activatePendingGrant(grantId) {
   const grant = await RewardGrant.findById(grantId).populate("campaignId");
   if (!grant || grant.status !== GRANT_STATUS.PENDING) return null;
+
+  // A grant held open-ended (e.g. an "after_first_order" referral reward) can
+  // still be sitting PENDING past its own expiresAt if the triggering event
+  // (the referee's first order) lands after validityDays has elapsed — don't
+  // pay out a reward that's already expired.
+  if (grant.expiresAt && grant.expiresAt < new Date()) {
+    grant.status = GRANT_STATUS.EXPIRED;
+    await grant.save();
+    return null;
+  }
 
   const order = grant.orderId
     ? await import("../../../models/order.js").then((m) => m.default.findById(grant.orderId))

@@ -6,6 +6,7 @@ import MiniCart from '../shared/MiniCart';
 import ProductDetailSheet from '../shared/ProductDetailSheet';
 import MobileFooterMessage from './MobileFooterMessage';
 import LocationDrawer from '../shared/LocationDrawer';
+import EnableLocationPopup from '../shared/EnableLocationPopup';
 import { useProductDetail } from '../../context/ProductDetailContext';
 import { useLocation as useAppLocation } from '../../context/LocationContext';
 import { cn } from '@/lib/utils';
@@ -174,6 +175,7 @@ const CustomerLayout = ({ children, showHeader: showHeaderProp, fullHeight = fal
                 isOpen={isLocationPickerOpen}
                 onClose={closeLocationPicker}
             />
+            <EnableLocationPopup />
 
             <div className="hidden [@media(min-width:768px)_and_(min-height:501px)]:block">
                 <Footer />

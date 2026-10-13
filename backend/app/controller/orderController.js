@@ -26,6 +26,7 @@ import {
   rejectCustomerCancellationRequest,
   resolveWorkflowStatus,
   sellerMarkPackedSignalAtomic,
+  sellerResendDeliverySearchAtomic,
 } from "../services/orderWorkflowService.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { attachDisplayStatus, attachDisplayStatusToList } from "../services/orderStatusResolver.js";
@@ -1383,6 +1384,21 @@ export const markOrderPackedBySeller = async (req, res) => {
     const { id: sellerId } = req.user;
     const updated = await sellerMarkPackedSignalAtomic(sellerId, orderId);
     return handleResponse(res, 200, "Order marked as packed", updated);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+/* ===============================
+   SELLER MANUALLY RESENDS THE DELIVERY REQUEST TO NEARBY RIDERS
+   (order is packed/confirmed but still has no rider assigned)
+================================ */
+export const resendDeliveryRequestBySeller = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { id: sellerId } = req.user;
+    const updated = await sellerResendDeliverySearchAtomic(sellerId, orderId);
+    return handleResponse(res, 200, "Delivery request resent to nearby riders", updated);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

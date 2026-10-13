@@ -31,6 +31,11 @@ export async function activateDuePendingGrants() {
   const now = new Date();
   const grants = await RewardGrant.find({
     status: GRANT_STATUS.PENDING,
+    // Referral grants held for "after first order" are event-gated, not
+    // time-gated — referralService.processReferralRewardsOnDelivery activates
+    // them, so this sweep must leave them alone or it'd credit a referral
+    // reward before the referee ever places an order.
+    "meta.awaitFirstOrder": { $ne: true },
     $or: [
       { "meta.activateAt": { $lte: now } },
       {

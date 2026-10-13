@@ -1222,6 +1222,63 @@ export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
   return updated;
 }
 
+/**
+ * Manual "resend" for a seller stuck waiting on a rider — rebroadcasts the
+ * delivery request to nearby riders right now instead of waiting for the
+ * next scheduled processDeliveryTimeoutJob retry. Resets `skippedBy` so
+ * riders who already passed on this order get another chance, same as
+ * assignReturnDelivery's renotify path for return pickups.
+ */
+export async function sellerResendDeliverySearchAtomic(sellerId, orderId) {
+  orderId = await requireCanonicalOrderId(orderId);
+  const order = await Order.findOne({ orderId, seller: sellerId });
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (order.workflowStatus !== WORKFLOW_STATUS.DELIVERY_SEARCH) {
+    const err = new Error("This order isn't waiting on a delivery partner right now");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const now = new Date();
+  const meta = order.deliverySearchMeta || {};
+
+  const updated = await Order.findOneAndUpdate(
+    { orderId, seller: sellerId, workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
+    {
+      $set: {
+        skippedBy: [],
+        "deliverySearchMeta.lastBroadcastAt": now,
+      },
+    },
+    { new: true },
+  );
+  if (!updated) {
+    const err = new Error("Unable to resend delivery request");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const orderRich = await Order.findOne({ orderId })
+    .populate("seller", "shopName address name location locality city state pincode landmark serviceRadius")
+    .lean();
+  if (orderRich) {
+    await emitDeliveryBroadcastForSeller(
+      orderRich.seller,
+      deliveryBroadcastPayloadFromOrder(orderRich, {
+        retryAttempt: meta.attempt || 1,
+        resentBySeller: true,
+      }),
+    );
+  }
+
+  return updated;
+}
+
 function toDeliveryObjectId(deliveryId) {
   if (deliveryId == null) return null;
   try {

@@ -20,9 +20,13 @@ import {
     ChevronLeft,
     Mail,
     Gift,
-    LifeBuoy
+    LifeBuoy,
+    CheckCircle2,
+    XCircle,
+    Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { customerApi } from '../services/customerApi';
 import BgImage from '@/assets/image.jpg';
 import ZintoLogo from '@/assets/zinto_logo.png';
@@ -128,6 +132,34 @@ const CustomerAuth = () => {
         }
     });
     const [agreedToTerms, setAgreedToTerms] = useState(false);
+    // 'idle' | 'checking' | 'valid' | 'invalid' — referral code is optional, so
+    // this only gates submission once the user has actually typed something.
+    const [referralStatus, setReferralStatus] = useState('idle');
+    const [referrerName, setReferrerName] = useState('');
+
+    useEffect(() => {
+        if (isLogin) return;
+        const code = (formData.referralCode || '').trim();
+        if (!code) {
+            setReferralStatus('idle');
+            setReferrerName('');
+            return;
+        }
+
+        setReferralStatus('checking');
+        const timer = setTimeout(async () => {
+            try {
+                const res = await customerApi.validateReferralCode(code);
+                setReferralStatus('valid');
+                setReferrerName(res.data?.result?.referrerName || '');
+            } catch {
+                setReferralStatus('invalid');
+                setReferrerName('');
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [formData.referralCode, isLogin]);
     const [authMode, setAuthMode] = useState(() => {
         try {
             const saved = sessionStorage.getItem('auth_authMode');
@@ -270,6 +302,10 @@ const CustomerAuth = () => {
         }
         if (!isLogin && formData.email && !/^\S+@\S+\.\S+$/.test(formData.email)) {
             toast.error('Enter a valid email address, or leave it blank');
+            return;
+        }
+        if (!isLogin && formData.referralCode?.trim() && referralStatus === 'invalid') {
+            toast.error('Invalid referral code. Fix it or leave it blank to continue.');
             return;
         }
         setIsLoading(true);
@@ -674,19 +710,37 @@ const CustomerAuth = () => {
                                         )}
 
                                         {!isLogin && (
-                                            <div className="relative group">
-                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
-                                                    <Gift size={18} />
+                                            <div className="space-y-1.5">
+                                                <div className="relative group">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
+                                                        <Gift size={18} />
+                                                    </div>
+                                                    <input
+                                                        name="referralCode"
+                                                        placeholder="Referral Code (optional)"
+                                                        value={formData.referralCode || ''}
+                                                        className={cn(
+                                                            "w-full bg-gray-50 border rounded-2xl pl-12 pr-11 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all uppercase",
+                                                            referralStatus === 'invalid' ? "border-red-300" : "border-gray-100"
+                                                        )}
+                                                        onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
+                                                        onFocus={(e) => { if (referralStatus !== 'invalid') e.target.style.borderColor = activeCategory.theme; }}
+                                                        onBlur={(e) => { if (referralStatus !== 'invalid') e.target.style.borderColor = '#F3F4F6'; }}
+                                                    />
+                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                        {referralStatus === 'checking' && <Loader2 size={18} className="text-gray-300 animate-spin" />}
+                                                        {referralStatus === 'valid' && <CheckCircle2 size={18} className="text-emerald-500" />}
+                                                        {referralStatus === 'invalid' && <XCircle size={18} className="text-red-500" />}
+                                                    </div>
                                                 </div>
-                                                <input
-                                                    name="referralCode"
-                                                    placeholder="Referral Code (optional)"
-                                                    value={formData.referralCode || ''}
-                                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-gray-800 outline-none focus:bg-white transition-all uppercase"
-                                                    onChange={(e) => setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })}
-                                                    onFocus={(e) => e.target.style.borderColor = activeCategory.theme}
-                                                    onBlur={(e) => e.target.style.borderColor = '#F3F4F6'}
-                                                />
+                                                {referralStatus === 'invalid' && (
+                                                    <p className="text-[10px] font-bold text-red-500 px-1">This referral code doesn't exist. Check it or leave it blank.</p>
+                                                )}
+                                                {referralStatus === 'valid' && (
+                                                    <p className="text-[10px] font-bold text-emerald-600 px-1">
+                                                        {referrerName ? `Valid code from ${referrerName}` : 'Valid referral code'}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
 

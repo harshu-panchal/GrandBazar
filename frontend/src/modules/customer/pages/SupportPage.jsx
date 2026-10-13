@@ -13,6 +13,21 @@ import axiosInstance from '@core/api/axios';
 const FAQ_CACHE_KEY = 'customer_faqs_cache_v1';
 const FAQ_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// wa.me needs the full international number (country code + number, no "+").
+// Admins often save just the bare 10-digit local number in Support Phone, so
+// a plain `replace(/\D/g, '')` sends WhatsApp a number with no country code
+// — WhatsApp then treats it as invalid. Assume India (+91) for a bare local
+// number, matching this app's INR/Asia-Kolkata defaults.
+const toWhatsAppNumber = (phone) => {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+    digits = digits.replace(/^0+/, '');
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return digits;
+    if (digits.length > 10) return digits;
+    return '';
+};
+
 const ISSUE_CATEGORY_LABELS = {
     missing_or_incorrect: 'Items missing or incorrect',
     quality_issue: 'Item quality issue',
@@ -128,8 +143,12 @@ const SupportPage = () => {
                         to={isAuthenticated ? "/chat" : undefined}
                         onClick={isAuthenticated ? undefined : () => {
                             if (supportPhone) {
-                                const cleanPhone = supportPhone.replace(/\D/g, '');
-                                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent("Hello Support, I need help with my account/order.")}`, '_blank');
+                                const whatsappPhone = toWhatsAppNumber(supportPhone);
+                                if (!whatsappPhone) {
+                                    showToast('Support WhatsApp number is not configured correctly', 'error');
+                                    return;
+                                }
+                                window.open(`https://wa.me/${whatsappPhone}?text=${encodeURIComponent("Hello Support, I need help with my account/order.")}`, '_blank');
                             } else if (supportEmail) {
                                 window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent("Support Request")}`;
                             } else {
@@ -207,9 +226,9 @@ const SupportPage = () => {
                             animate={{ y: 0 }}
                             exit={{ y: "100%" }}
                             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                            className="relative bg-white w-full max-w-lg rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl overflow-hidden z-10"
+                            className="relative bg-white w-full max-w-lg rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl z-10 max-h-[90dvh] flex flex-col overflow-hidden"
                         >
-                            <div className="p-8">
+                            <div className="p-8 overflow-y-auto min-h-0 flex-1">
                                 <div className="flex items-center justify-between mb-8">
                                     <div>
                                         <h2 className="text-2xl font-black text-slate-800">Raise a Ticket</h2>

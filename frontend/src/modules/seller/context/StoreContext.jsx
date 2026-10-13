@@ -19,6 +19,14 @@ export const StoreProvider = ({ children }) => {
   const isOwner = Boolean(user && !user?.subSellerId);
 
   useEffect(() => {
+    if (role === 'seller' && user) return;
+
+    setStores([]);
+    setActiveStoreId(null);
+    localStorage.removeItem(ACTIVE_STORE_KEY);
+  }, [user, role]);
+
+  useEffect(() => {
     if (role !== 'seller' || !user) return;
 
     const profileStores = user.stores || [];
@@ -57,6 +65,12 @@ export const StoreProvider = ({ children }) => {
   useEffect(() => {
     if (role !== 'seller' || !isOwner) return;
     refreshStores();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshStores();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [role, isOwner, refreshStores]);
 
   const activeStore = useMemo(
