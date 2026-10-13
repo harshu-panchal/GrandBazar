@@ -286,7 +286,10 @@ export const assignOrderToRider = async (req, res) => {
       action: "rider_assigned",
       actorId: req.user.id,
       actorRole: req.user.role,
-      orderId: canonicalOrderId,
+      // OperatorAuditLog.orderId is the Mongo _id (ref: "Order"), not the
+      // human-readable "ORD-..." code — canonicalOrderId is the latter and
+      // failed this model's cast validation on every assignment.
+      orderId: order._id,
       oldValue: { deliveryBoy: previousRiderId },
       newValue: { deliveryBoy: riderId, riderName: rider.name },
       reason,

@@ -6,6 +6,23 @@ import { createLedgerEntry } from "./ledgerService.js";
 import { createOperatorAuditLog } from "../operatorAuditLogService.js";
 import { OWNER_TYPE, LEDGER_DIRECTION, LEDGER_TRANSACTION_TYPE } from "../../constants/finance.js";
 import { roundCurrency } from "../../utils/money.js";
+import { orderMatchQueryFromRouteParam } from "../../utils/orderLookup.js";
+
+// Operators type the order ID shown everywhere else in the admin UI (the
+// human-readable "ORD-..." code), not the internal Mongo _id — but
+// ApprovalRequest.orderId and OperatorAuditLog.orderId are both ObjectId-typed
+// refs. Resolve flexibly (accepts either form) once, and use the resolved
+// document's real _id for every downstream write.
+async function resolveOrderOrThrow(orderIdOrCode) {
+  const match = orderMatchQueryFromRouteParam(orderIdOrCode);
+  const order = match ? await Order.findOne(match).select("customer shortOrderId").lean() : null;
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  return order;
+}
 
 // Root admin/superadmin bypass the limit entirely (matches checkAdminPermission's
 // existing root-bypass convention). A role with no AdminRole doc (legacy/
@@ -21,12 +38,7 @@ async function resolveMoneyLimit(actor) {
 }
 
 async function executeCredit({ orderId, amount, type, reason, actor, approvalRequestId = null }) {
-  const order = await Order.findById(orderId).select("customer shortOrderId").lean();
-  if (!order) {
-    const err = new Error("Order not found");
-    err.statusCode = 404;
-    throw err;
-  }
+  const order = await resolveOrderOrThrow(orderId);
 
   const normalizedAmount = roundCurrency(amount);
   const { wallet } = await creditWallet({
@@ -36,7 +48,7 @@ async function executeCredit({ orderId, amount, type, reason, actor, approvalReq
   });
 
   await createLedgerEntry({
-    orderId,
+    orderId: order._id,
     walletId: wallet._id,
     actorType: "ADMIN",
     actorId: actor.id,
@@ -51,7 +63,7 @@ async function executeCredit({ orderId, amount, type, reason, actor, approvalReq
     action: approvalRequestId ? "credit_approved_and_issued" : "credit_issued",
     actorId: actor.id,
     actorRole: actor.role,
-    orderId,
+    orderId: order._id,
     oldValue: null,
     newValue: { amount: normalizedAmount, type },
     reason,
@@ -86,9 +98,16 @@ export async function requestCreditOrEscalate({ orderId, amount, reason, type = 
     return executeCredit({ orderId, amount: normalizedAmount, type, reason, actor });
   }
 
+  // Above the actor's limit: still resolve+validate the order up front (the
+  // execute-now path above does this inside executeCredit) so an escalated
+  // request can't be created against a typo'd/nonexistent order id, and so
+  // the ObjectId-typed refs below get the real _id rather than the
+  // human-readable "ORD-..." code the operator typed.
+  const order = await resolveOrderOrThrow(orderId);
+
   const request = await ApprovalRequest.create({
     type,
-    orderId,
+    orderId: order._id,
     amount: normalizedAmount,
     reason,
     requestedBy: actor.id,
@@ -100,7 +119,7 @@ export async function requestCreditOrEscalate({ orderId, amount, reason, type = 
     action: "credit_escalated",
     actorId: actor.id,
     actorRole: actor.role,
-    orderId,
+    orderId: order._id,
     oldValue: null,
     newValue: { amount: normalizedAmount, type, approvalRequestId: request._id },
     reason,
