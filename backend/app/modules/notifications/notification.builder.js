@@ -286,6 +286,17 @@ function eventDefinition(eventType) {
             ? `Your delivery verification OTP for order #${payload.orderId || ""} is ${payload.data.otp}. Share this with the delivery partner.`
             : "Your delivery verification OTP has been generated.",
       };
+    case NOTIFICATION_EVENTS.CUSTOMER_PICKUP_OTP:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) =>
+          normalizeIdList(payload.customerId || payload.userId),
+        title: () => "Your Pickup OTP 🔐",
+        body: (payload) =>
+          payload.data?.otp
+            ? `Your pickup verification OTP for order #${payload.orderId || ""} is ${payload.data.otp}. Show this at the store to collect your order.`
+            : "Your store pickup OTP has been resent.",
+      };
     // ── Return Workflow Events ──────────────────────────────────────────────
     case NOTIFICATION_EVENTS.RETURN_REQUESTED:
       return {

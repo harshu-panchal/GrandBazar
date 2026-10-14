@@ -22,6 +22,7 @@ function dedupeKeyForNotification(eventType, notification, payload = {}) {
     NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
     NOTIFICATION_EVENTS.RETURN_DROP_OTP,
     NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
+    NOTIFICATION_EVENTS.CUSTOMER_PICKUP_OTP,
   ].includes(eventType);
   const otpCode = isOtpEvent ? (payload.data?.otp || payload.otp || Date.now()) : null;
 
@@ -107,6 +108,7 @@ function isDeliveryUpdateEvent(eventType) {
     NOTIFICATION_EVENTS.DELIVERY_ASSIGNED,
     NOTIFICATION_EVENTS.ORDER_READY,
     NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
+    NOTIFICATION_EVENTS.CUSTOMER_PICKUP_OTP,
     NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED,
     NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
     NOTIFICATION_EVENTS.RETURN_DROP_OTP,
@@ -165,6 +167,7 @@ export async function notify(eventType, payload = {}) {
     NOTIFICATION_EVENTS.RETURN_PICKUP_OTP,
     NOTIFICATION_EVENTS.RETURN_DROP_OTP,
     NOTIFICATION_EVENTS.ORDER_DELIVERY_OTP,
+    NOTIFICATION_EVENTS.CUSTOMER_PICKUP_OTP,
   ].includes(eventType);
   const dedupeTtlSeconds = isOtpEvent ? 5 : DEFAULT_DEDUP_TTL_SECONDS();
   let enqueued = 0;

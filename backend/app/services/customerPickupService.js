@@ -143,6 +143,17 @@ export async function resendPickupOtpBySeller(sellerId, orderId) {
     order.customer,
   );
 
+  // emitOrderStatusUpdate above is a realtime socket push only — it does
+  // nothing for a customer whose app isn't open right now. emitNotificationEvent
+  // is what actually reaches FCM/push, same as the rider delivery-OTP flow.
+  emitNotificationEvent(NOTIFICATION_EVENTS.CUSTOMER_PICKUP_OTP, {
+    orderId,
+    customerId: order.customer,
+    userId: order.customer,
+    sellerId: order.seller,
+    data: { otp },
+  });
+
   return { orderId, expiresAt };
 }
 

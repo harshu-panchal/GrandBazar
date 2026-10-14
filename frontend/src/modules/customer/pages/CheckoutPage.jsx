@@ -97,6 +97,13 @@ function buildCheckoutAddressFromSources({
   user,
   savedAddresses = [],
   currentLocation,
+  // Whether currentLocation actually holds a resolved device/GPS fix.
+  // currentLocation starts as UNSET_LOCATION ({ name: "Select your
+  // location", latitude: null, longitude: null }) before hydration/GPS
+  // resolves, and `.name` is truthy even for that placeholder string — so
+  // this must gate the fallback below, not a plain `currentLocation?.name`
+  // check, or checkout can show "Select your location" as the address.
+  hasValidLocation = false,
   previous,
 }) {
   const primarySaved = Array.isArray(savedAddresses)
@@ -123,7 +130,7 @@ function buildCheckoutAddressFromSources({
     };
   }
 
-  if (currentLocation?.name) {
+  if (hasValidLocation && currentLocation?.name) {
     return {
       type: previous?.type || "Home",
       name: displayName || previous?.name || "",
@@ -222,6 +229,7 @@ const CheckoutPage = () => {
     refreshLocation,
     isFetchingLocation,
     updateLocation,
+    hasValidLocation,
   } = useAppLocation();
   const [fulfillmentMethod, setFulfillmentMethod] = useState("platform_logistics");
   const [isScheduleSheetOpen, setIsScheduleSheetOpen] = useState(false);
@@ -360,6 +368,7 @@ const CheckoutPage = () => {
       user,
       savedAddresses: locationSavedAddresses,
       currentLocation,
+      hasValidLocation,
       previous: null,
     });
 
@@ -383,7 +392,10 @@ const CheckoutPage = () => {
           "",
       };
     });
-  }, [user, locationSavedAddresses, currentLocation]);
+    // hasValidLocation flips from false->true once GPS/reverse-geocoding
+    // resolves — re-run so the "no saved address" fallback can pick up the
+    // real current location instead of staying on the empty state forever.
+  }, [user, locationSavedAddresses, currentLocation, hasValidLocation]);
 
   useEffect(() => {
     if (!paymentMethods.length) return;
@@ -685,7 +697,7 @@ const CheckoutPage = () => {
       return;
     }
 
-    if (currentLocation?.name) {
+    if (hasValidLocation && currentLocation?.name) {
       setCurrentAddress((prev) => ({
         ...prev,
         address: currentLocation.name,
