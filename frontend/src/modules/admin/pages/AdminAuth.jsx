@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
 import {
@@ -8,6 +8,7 @@ import {
     Lock,
     User,
     ShieldCheck,
+    Users,
     ArrowRight,
     ArrowLeft,
     Eye,
@@ -18,7 +19,14 @@ import Lottie from 'lottie-react';
 import backendAnimation from '../../../assets/Backend Icon.json';
 import { adminApi } from '../services/adminApi';
 
-const AdminAuth = () => {
+// `portal="owner"` is the root admin/superadmin login (default, at
+// /admin/auth); `portal="staff"` is the same form/backend under a distinct
+// URL and copy for staff accounts (Accountant, Operator L1-L4, Assistant,
+// any custom AdminRole) — see StaffAuth.jsx. The backend login endpoint
+// treats every Admin document identically regardless of role, so this is
+// purely a separate front door, not a separate auth mechanism.
+const AdminAuth = ({ portal = 'owner' }) => {
+    const isStaffPortal = portal === 'staff';
     const [isLogin, setIsLogin] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -197,10 +205,17 @@ const AdminAuth = () => {
             }
 
             const { token, admin } = result;
-            const authData = { ...admin, token, role: 'admin' };
+            // `role` here is the top-level app-section role RoleGuard checks
+            // (must stay the literal 'admin' or every admin-panel user, staff
+            // included, gets redirected out of /admin/*) — it is NOT the same
+            // thing as the Admin document's own `role` (accountant,
+            // operator_l1, etc.), which is preserved separately as
+            // `adminRole` so AdminRoutes can tell a root admin from scoped
+            // staff and stop showing staff the full unscoped admin UI.
+            const authData = { ...admin, token, role: 'admin', adminRole: admin.role };
             login(authData);
 
-            toast.success(isLogin ? 'Welcome back, Administrator.' : 'Administrator Account Created.');
+            toast.success(isLogin ? `Welcome back, ${admin?.name || (isStaffPortal ? 'team member' : 'Administrator')}.` : 'Account Created.');
             navigate('/admin');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Authentication failed');
@@ -222,9 +237,9 @@ const AdminAuth = () => {
                 otp: twoFAOtp,
             });
             const { token, admin } = response.data.result;
-            const authData = { ...admin, token, role: 'admin' };
+            const authData = { ...admin, token, role: 'admin', adminRole: admin.role };
             login(authData);
-            toast.success('Welcome back, Administrator.');
+            toast.success(`Welcome back, ${admin?.name || (isStaffPortal ? 'team member' : 'Administrator')}.`);
             navigate('/admin');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Invalid or expired code');
@@ -243,7 +258,7 @@ const AdminAuth = () => {
             : forgotStep === 'reset'
                 ? 'New Password'
                 : isLogin
-                    ? 'Login'
+                    ? (isStaffPortal ? 'Staff Login' : 'Login')
                     : 'Sign Up';
     const subtitle = twoFAPendingToken
         ? 'Enter the 4-digit code sent to your email'
@@ -254,7 +269,7 @@ const AdminAuth = () => {
             : forgotStep === 'reset'
                 ? 'Choose a new password for your admin account'
                 : isLogin
-                    ? `Welcome to ${appName} Admin Platform`
+                    ? (isStaffPortal ? `Sign in with your ${appName} staff credentials` : `Welcome to ${appName} Admin Platform`)
                     : 'Start managing your platform today';
 
     return (
@@ -572,6 +587,14 @@ const AdminAuth = () => {
                                         </>
                                     )}
                                 </button>
+
+                                <Link
+                                    to={isStaffPortal ? '/admin/auth' : '/admin/staff-login'}
+                                    className="w-full flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-brand-700 transition-colors"
+                                >
+                                    <Users size={16} />
+                                    {isStaffPortal ? 'Platform owner? Login here' : 'Staff member? Login here'}
+                                </Link>
                             </form>
                             )}
 
@@ -580,7 +603,7 @@ const AdminAuth = () => {
                 </div>
 
                 <div className="hidden md:flex w-[55%] relative bg-[#f8f9ff] overflow-hidden items-center justify-center">
-                    <div className="absolute top-8 right-8 z-30">
+                    <div className="absolute top-8 right-8 z-30 flex flex-col items-end gap-2">
                         <div className="w-36 h-20 rounded-2xl bg-white/85 backdrop-blur-sm border border-brand-100 shadow-[0_12px_30px_rgba(79,70,229,0.18)] flex items-center justify-center overflow-hidden p-2">
                             {logoUrl ? (
                                 <img
@@ -592,6 +615,11 @@ const AdminAuth = () => {
                                 <ShieldCheck size={30} className="text-brand-600" />
                             )}
                         </div>
+                        {isStaffPortal && (
+                            <span className="px-3 py-1 rounded-full bg-brand-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                Staff Portal
+                            </span>
+                        )}
                     </div>
                     <div className="absolute inset-y-0 -left-1 w-[200px] z-20">
                         <svg className="h-full w-full fill-white" preserveAspectRatio="none" viewBox="0 0 100 100">

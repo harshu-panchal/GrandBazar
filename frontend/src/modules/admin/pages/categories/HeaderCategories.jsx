@@ -62,12 +62,14 @@ const makeSlug = (value) =>
     .replace(/-+/g, "-");
 
 const HeaderCategories = () => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
+  // `role` from useAuth()/user.role is the literal 'admin' app-section role
+  // for every admin-panel login (owner or staff) — adminRole carries the
+  // real Admin document role, which is where "superadmin" actually shows up.
+  const effectiveRole = user?.adminRole ?? user?.role;
   const isSuperAdmin =
-    role === "superadmin" ||
-    role === "SUPER_ADMIN" ||
-    user?.role === "superadmin" ||
-    user?.role === "SUPER_ADMIN";
+    effectiveRole === "superadmin" ||
+    effectiveRole === "SUPER_ADMIN";
 
   const [categories, setCategories] = useState([]);
   const [page, setPage] = useState(1);

@@ -33,7 +33,13 @@ const CAPABILITY_ROWS = [
 // no zone concept, so that panel would have to be fabricated data.
 const OperationsConsole = () => {
   const { user } = useAuth();
-  const isOwner = user?.role === "admin" || user?.role === "superadmin";
+  // user.role is always the literal 'admin' app-section role, including for
+  // scoped staff (see AdminAuth.jsx) — adminRole carries the real Admin
+  // document role (accountant, operator_l1, etc.). Without this, every
+  // operator tier saw the Owner's unscoped view (roles matrix, full
+  // approvals access) regardless of their actual permissions.
+  const effectiveRole = user?.adminRole ?? user?.role;
+  const isOwner = effectiveRole === "admin" || effectiveRole === "superadmin";
   const can = useCallback((key) => isOwner || (user?.allowedPermissions || []).includes(key), [isOwner, user]);
 
   const [unassigned, setUnassigned] = useState({ items: [], total: 0 });

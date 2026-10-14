@@ -20,6 +20,7 @@ import Auth from '../../modules/seller/pages/Auth';
 import ApplicationPending from '../../modules/seller/pages/ApplicationPending';
 import ChooseBusinessModel from '../../modules/seller/pages/ChooseBusinessModel';
 import AdminAuth from '../../modules/admin/pages/AdminAuth';
+import StaffAuth from '../../modules/admin/pages/StaffAuth';
 import DeliveryAuth from '../../modules/delivery/pages/DeliveryAuth';
 import CustomerAuth from '../../modules/customer/pages/CustomerAuth';
 
@@ -133,6 +134,10 @@ const router = createBrowserRouter([
                 {
                     path: 'admin/auth',
                     element: <AdminAuth />,
+                },
+                {
+                    path: 'admin/staff-login',
+                    element: <StaffAuth />,
                 },
                 {
                     path: 'delivery/auth',

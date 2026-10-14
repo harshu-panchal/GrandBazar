@@ -133,7 +133,11 @@ const KpiStrip = ({ kpis, period = "daily" }) => {
   const { user } = useAuth();
   if (!kpis) return null;
 
-  const isSuperAdminOrAdmin = user?.role === "superadmin" || user?.role === "admin" || !user?.role;
+  // user.role is always the literal 'admin' app-section role, including for
+  // scoped staff (see AdminAuth.jsx) — adminRole carries the real Admin
+  // document role (accountant, operator_l1, etc.).
+  const effectiveRole = user?.adminRole ?? user?.role;
+  const isSuperAdminOrAdmin = effectiveRole === "superadmin" || effectiveRole === "admin" || !effectiveRole;
   const canAccess = (perm) => {
     if (!perm) return true;
     if (isSuperAdminOrAdmin) return true;

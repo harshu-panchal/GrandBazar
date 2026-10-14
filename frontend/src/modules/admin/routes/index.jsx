@@ -362,7 +362,12 @@ const AdminRoutes = () => {
   const [pendingReturnCount, setPendingReturnCount] = React.useState(0);
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
-    const r = user?.role;
+    // `user.role` is the top-level app-section role (always 'admin' here,
+    // including for scoped staff — see AdminAuth.jsx) and can't be used to
+    // tell a root admin from an Accountant/Operator/etc. `adminRole` carries
+    // the Admin document's real role; fall back to `role` for sessions
+    // logged in before this field existed (re-login refreshes it).
+    const r = user?.adminRole ?? user?.role;
     return r === "superadmin" || r === "admin" || !r;
   }, [user]);
 

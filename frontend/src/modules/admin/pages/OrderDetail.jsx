@@ -72,7 +72,11 @@ const OrderDetail = () => {
     // Same logic as the permission check in admin/routes/index.jsx: super
     // admin/admin always pass; otherwise a custom staff role needs the
     // exact key, or its parent "orders" grant, on allowedPermissions.
-    const isSuperAdminOrAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+    // user.role is always the literal 'admin' app-section role (including
+    // for scoped staff, see AdminAuth.jsx) — adminRole carries the real
+    // Admin document role.
+    const effectiveRole = user?.adminRole ?? user?.role;
+    const isSuperAdminOrAdmin = effectiveRole === 'admin' || effectiveRole === 'superadmin';
     const hasPermission = (permissionKey) => {
         if (isSuperAdminOrAdmin) return true;
         const allowed = user?.allowedPermissions || [];
