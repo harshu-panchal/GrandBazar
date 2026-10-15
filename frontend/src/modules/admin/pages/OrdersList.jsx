@@ -125,7 +125,12 @@ const OrdersList = () => {
                     schedule: o.schedule || null,
                     storeReassignment: getOrderStoreReassignment(o),
                     date: new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-                    payment: o.payment?.method === 'cod' ? 'COD' : 'Digital',
+                    // payment.method's actual enum is "cash"/"online"/"wallet" (never
+                    // the string "cod"), so this check against 'cod' never matched and
+                    // every order — COD included — showed as "Digital". paymentMode is
+                    // the dedicated top-level "COD"/"ONLINE" field; payment.method is
+                    // kept as a fallback for any record missing it.
+                    payment: (o.paymentMode === 'COD' || o.payment?.method === 'cash') ? 'COD' : 'Digital',
                 }));
                 setOrders(formatted);
                 setSummary({
@@ -296,7 +301,7 @@ const OrdersList = () => {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `noyo-orders-${status}-${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', `orders-${status}-${new Date().toISOString().split('T')[0]}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();

@@ -1964,7 +1964,7 @@ const OrderDetail = () => {
                             {settings?.logoUrl ? (
                                 <img src={settings.logoUrl} alt="Logo" width="130" style={{ display: "inline-block", marginBottom: "16px" }} crossOrigin="anonymous" />
                             ) : (
-                                <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginBottom: "4px" }}>{settings?.appName || 'NOYO KART'}</div>
+                                <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginBottom: "4px" }}>{settings?.appName || 'Zinto'}</div>
                             )}
                             <div style={{ fontSize: "10px", color: "#64748b", fontWeight: "800", textTransform: "uppercase", letterSpacing: "3px" }}>Official Tax Invoice</div>
                         </div>
@@ -2046,23 +2046,45 @@ const OrderDetail = () => {
                                 </td>
                                 <td width="10%"></td>
                                 <td width="40%" style={{ verticalAlign: "top" }}>
-                                    <table width="100%" cellPadding="8" cellSpacing="0">
-                                        <tr>
-                                            <td align="left" style={{ fontSize: "12px", color: "#64748b", fontWeight: "700" }}>Subtotal Aggregate</td>
-                                            <td align="right" style={{ fontSize: "13px", fontWeight: "800", color: "#0f172a" }}>₹{order.pricing?.subtotal || 0}</td>
-                                        </tr>
-                                        <tr>
-                                            <td align="left" style={{ fontSize: "12px", color: "#64748b", fontWeight: "700" }}>Logistics Cost</td>
-                                            <td align="right" style={{ fontSize: "13px", fontWeight: "800", color: "#2563eb" }}>+ ₹{order.pricing?.deliveryFee || 0}</td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan="2" style={{ padding: "12px 0" }}><div style={{ height: "1px", backgroundColor: "#e2e8f0" }}></div></td>
-                                        </tr>
-                                        <tr>
-                                            <td align="left" style={{ fontSize: "15px", fontWeight: "900", color: "#0f172a" }}>Grand Total</td>
-                                            <td align="right" style={{ fontSize: "24px", fontWeight: "900", color: "#2563eb" }}>₹{order.pricing?.total || 0}</td>
-                                        </tr>
-                                    </table>
+                                    {(() => {
+                                        // order.pricing.subtotal/deliveryFee never existed on the
+                                        // breakdown object (it's productSubtotal/deliveryFeeCharged),
+                                        // so those always rendered ₹0, and tax/packing/discount/tip
+                                        // were never shown at all — only the grand total (pricing.total,
+                                        // which does map to grandTotal) was ever correct. Read from the
+                                        // real paymentBreakdown snapshot, same source OrderMoneyBreakdown
+                                        // uses for the on-screen view just above this hidden template.
+                                        const pb = order.paymentBreakdown || order.pricing || {};
+                                        const packing = Number(pb.packingFeeCharged || 0) + Number(pb.productPackagingChargeAmount || 0) + Number(pb.packagingChargeAmount || 0);
+                                        const surcharges = Number(pb.customerSurchargeAmount || 0) + Number(pb.oddHourSurchargeAmount || 0) + Number(pb.weatherSurchargeAmount || 0);
+                                        const rows = [
+                                            { label: "Subtotal Aggregate", value: pb.productSubtotal },
+                                            { label: "Delivery Fee", value: pb.deliveryFeeCharged, prefix: "+ " },
+                                            { label: "Handling Fee", value: pb.handlingFeeCharged, prefix: "+ " },
+                                            { label: "Packing Charges", value: packing, prefix: "+ " },
+                                            { label: "Surcharges", value: surcharges, prefix: "+ " },
+                                            { label: "Tax (GST)", value: pb.taxTotal, prefix: "+ " },
+                                            { label: "Tip", value: pb.tipTotal, prefix: "+ " },
+                                            { label: "Discount", value: pb.discountTotal, prefix: "- ", color: "#dc2626" },
+                                        ].filter((row) => Number(row.value) > 0);
+                                        return (
+                                            <table width="100%" cellPadding="8" cellSpacing="0">
+                                                {rows.map((row) => (
+                                                    <tr key={row.label}>
+                                                        <td align="left" style={{ fontSize: "12px", color: "#64748b", fontWeight: "700" }}>{row.label}</td>
+                                                        <td align="right" style={{ fontSize: "13px", fontWeight: "800", color: row.color || "#2563eb" }}>{row.prefix || ""}₹{Number(row.value).toFixed(0)}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr>
+                                                    <td colSpan="2" style={{ padding: "12px 0" }}><div style={{ height: "1px", backgroundColor: "#e2e8f0" }}></div></td>
+                                                </tr>
+                                                <tr>
+                                                    <td align="left" style={{ fontSize: "15px", fontWeight: "900", color: "#0f172a" }}>Grand Total</td>
+                                                    <td align="right" style={{ fontSize: "24px", fontWeight: "900", color: "#2563eb" }}>₹{Number(pb.grandTotal ?? pb.total ?? 0).toFixed(0)}</td>
+                                                </tr>
+                                            </table>
+                                        );
+                                    })()}
                                 </td>
                             </tr>
                         </table>
@@ -2076,7 +2098,7 @@ const OrderDetail = () => {
                                 This is a system-generated commercial invoice. No physical signature required.
                             </div>
                             <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "5px" }}>
-                                {settings?.appName || 'Noyo Kart'} • Customer Support: support@appzeto.com
+                                {settings?.appName || 'Zinto'} • Customer Support: {settings?.supportEmail || 'support@zinto.in'}
                             </div>
                         </div>
                     </div>

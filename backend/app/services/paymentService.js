@@ -313,7 +313,11 @@ async function transitionPaymentState(payment, {
   return payment;
 }
 
-async function moveOrderToSellerPendingAfterPayment(orderId) {
+// Exported so phoneOrderService.js can reuse this exact transition for a
+// phone order's seller alert — see its own call site for why that's safe to
+// trigger immediately instead of waiting for payment capture like a normal
+// self-checkout ONLINE order does.
+export async function moveOrderToSellerPendingAfterPayment(orderId) {
   const now = new Date();
   const order = await Order.findById(orderId).select("fulfillmentType schedule workflowStatus").lean();
   if (!order || order.workflowStatus !== WORKFLOW_STATUS.CREATED) return;

@@ -415,7 +415,7 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
 
                         <div className="relative max-w-md">
                             <Input
-                                placeholder="Search products by name"
+                                placeholder="Search by product, brand, or store name"
                                 value={productQuery}
                                 onChange={(e) => handleProductSearch(e.target.value)}
                             />
@@ -713,11 +713,52 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                 </Card>
             )}
 
-            {step === 3 && result && (
+            {step === 3 && result && (() => {
+                // The wizard only ever showed the raw product subtotal
+                // (cartTotal) before this, both pre- and post-submit — the
+                // actual order IS priced server-side with tax/delivery/
+                // packing (same pricing engine normal checkout uses), but
+                // staff had no way to see that, so it looked like charges
+                // were silently dropped. Surface the real breakdown here
+                // from what the order was actually created with.
+                const breakdown = result.order?.paymentBreakdown || result.order?.pricing || null;
+                return (
                 <Card title="Payment link sent">
                     <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm mb-4">
                         <CheckCircle2 className="h-5 w-5" /> Order created — awaiting customer payment
                     </div>
+
+                    {breakdown && (
+                        <div className="bg-slate-50 rounded-xl p-4 mb-4 max-w-xl space-y-1.5 text-sm">
+                            <div className="flex justify-between text-slate-600">
+                                <span>Items subtotal</span>
+                                <span>₹{Number(breakdown.productSubtotal || 0).toFixed(0)}</span>
+                            </div>
+                            {Number(breakdown.deliveryFeeCharged) > 0 && (
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Delivery fee</span>
+                                    <span>₹{Number(breakdown.deliveryFeeCharged).toFixed(0)}</span>
+                                </div>
+                            )}
+                            {Number(breakdown.packingFeeCharged) > 0 && (
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Packing fee</span>
+                                    <span>₹{Number(breakdown.packingFeeCharged).toFixed(0)}</span>
+                                </div>
+                            )}
+                            {Number(breakdown.taxTotal) > 0 && (
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Tax (GST)</span>
+                                    <span>₹{Number(breakdown.taxTotal).toFixed(0)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between font-black text-slate-900 pt-1.5 border-t border-slate-200">
+                                <span>Customer pays</span>
+                                <span>₹{Number(breakdown.grandTotal ?? breakdown.total ?? 0).toFixed(0)}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <p className="text-xs text-slate-500 mb-2">
                         Sent via: <span className="font-bold text-slate-700">{(result.sentVia || []).join(', ') || 'none — copy the link below'}</span>
                     </p>
@@ -731,7 +772,8 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                         <Button onClick={() => navigate(doneRoute)}>Done</Button>
                     </div>
                 </Card>
-            )}
+                );
+            })()}
         </div>
     );
 };

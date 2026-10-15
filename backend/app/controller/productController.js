@@ -379,10 +379,19 @@ export const getProducts = async (req, res) => {
 
     const query = {};
     if (search) {
-      const matchingCategories = await Category.find({
-        name: { $regex: search, $options: "i" }
-      }).select("_id");
+      const [matchingCategories, matchingStores] = await Promise.all([
+        Category.find({
+          name: { $regex: search, $options: "i" }
+        }).select("_id"),
+        // Lets "Search products by name" also surface a store's whole
+        // catalogue by typing its shop name — needed for phone orders,
+        // where staff often know the store but not a specific product name.
+        Store.find({
+          shopName: { $regex: search, $options: "i" }
+        }).select("_id"),
+      ]);
       const categoryIdsMatched = matchingCategories.map(c => c._id);
+      const storeIdsMatched = matchingStores.map(s => s._id);
 
       query.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -397,6 +406,10 @@ export const getProducts = async (req, res) => {
           { subcategoryId: { $in: categoryIdsMatched } },
           { headerId: { $in: categoryIdsMatched } }
         );
+      }
+
+      if (storeIdsMatched.length > 0) {
+        query.$or.push({ sellerId: { $in: storeIdsMatched } });
       }
     }
 
