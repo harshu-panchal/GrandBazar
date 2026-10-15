@@ -2,9 +2,11 @@ import Order from "../models/order.js";
 import Product from "../models/product.js";
 import { placeOrderAtomic } from "./orderPlacementService.js";
 import { findCustomerByPhone } from "./admin/userAdminService.js";
-import { signPhoneOrderPayLinkToken } from "./paymentService.js";
+import { signPhoneOrderPayLinkToken, moveOrderToSellerPendingAfterPayment } from "./paymentService.js";
 import { sendPhoneOrderPayLinkSms } from "./smsIndiaHubService.js";
 import { sendOrderPaymentLinkEmail } from "./emailService.js";
+import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
+import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
 const PAY_LINK_EXPIRY_MS = 30 * 60 * 1000;
 
@@ -165,6 +167,37 @@ export async function placePhoneOrderForCustomer({
   const orderRef = placement.checkoutGroup?.checkoutGroupId || primaryOrder?.orderId;
   const amount =
     primaryOrder?.paymentBreakdown?.grandTotal ?? primaryOrder?.pricing?.total ?? null;
+
+  // A normal self-checkout ONLINE order only alerts the seller (socket
+  // "order:new" popup + NEW_ORDER push) once payment actually captures —
+  // see paymentService.js's handleOrderSideEffectsFromPaymentStatus — since
+  // an uncaptured cart may simply be abandoned. A phone order has no such
+  // ambiguity: an operator already took the order verbally and is only
+  // sending the customer a link to collect payment, so the seller should be
+  // alerted to start preparing right away, the same way a COD order already
+  // alerts immediately regardless of payment timing. Reuses the exact
+  // payment-capture transition; it's guarded on workflowStatus === CREATED,
+  // so if the customer later actually pays, the equivalent call inside
+  // handleOrderSideEffectsFromPaymentStatus just no-ops (already moved on) —
+  // no double alert.
+  await Promise.all(
+    orders.map(async (order) => {
+      try {
+        await moveOrderToSellerPendingAfterPayment(order._id);
+        // moveOrderToSellerPendingAfterPayment only fires the realtime
+        // socket alert (afterPlaceOrderV2 → "order:new") — the push
+        // notification is a separate emit in the normal payment-capture
+        // path (handleOrderSideEffectsFromPaymentStatus), so it's repeated
+        // here too, same event/payload shape.
+        emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {
+          orderId: order.orderId,
+          sellerId: order.seller,
+        });
+      } catch (error) {
+        console.warn("[phoneOrderService] seller alert failed:", error.message);
+      }
+    }),
+  );
 
   const token = signPhoneOrderPayLinkToken({ orderRef, customerId: customer._id });
   const expiresAt = new Date(Date.now() + PAY_LINK_EXPIRY_MS);

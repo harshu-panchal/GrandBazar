@@ -101,7 +101,14 @@ const Returns = () => {
       const items = Array.isArray(payload.items)
         ? payload.items
         : res.data.results || [];
-      setReturns(items || []);
+      // orderId is the full id string — shortOrderId (already returned by
+      // the backend, just never read here) is what every other admin order
+      // view displays; falls back to the full id for older records that
+      // predate shortOrderId.
+      setReturns((items || []).map((item) => ({
+        ...item,
+        shortOrderId: item.shortOrderId || item.orderId,
+      })));
     } catch (error) {
       console.error("Failed to fetch returns", error);
       showToast("Failed to fetch return requests", "error");
@@ -389,8 +396,8 @@ const Returns = () => {
                           className="min-w-0 flex-1 cursor-pointer"
                           onClick={() => openDetails(ret)}
                         >
-                          <p className="text-xs font-black text-slate-900 truncate">
-                            #{ret.orderId}
+                          <p className="text-xs font-black text-slate-900 truncate" title={ret.orderId}>
+                            #{ret.shortOrderId}
                           </p>
                           <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
                             <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
@@ -470,8 +477,8 @@ const Returns = () => {
             >
               <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0">
                 <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    Return for Order #{selectedReturn.orderId}
+                  <h3 className="text-base font-black text-slate-900" title={selectedReturn.orderId}>
+                    Return for Order #{selectedReturn.shortOrderId || selectedReturn.orderId}
                   </h3>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <Badge
