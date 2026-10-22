@@ -182,4 +182,16 @@ export const sellerApi = {
     uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+    // Complaint Window — seller sees complaints against their products and
+    // approves an amount or rejects (BRD CMP-13 / SLV-07).
+    listComplaints: (params) => axiosInstance.get('/complaints/seller/mine', { params }),
+    getComplaint: (complaintId) => axiosInstance.get(`/complaints/seller/${complaintId}`),
+    complaintSellerDecision: (complaintId, data) =>
+        axiosInstance.post(`/complaints/${complaintId}/seller-decision`, data),
+
+    // Seller Settlement view (own orders + settlement invoice, BRD SLV-01..07)
+    listSettlements: (params) => axiosInstance.get('/settlements/seller/mine', { params }),
+    getSettlementInvoice: (orderId) =>
+        axiosInstance.get(`/settlements/seller/${orderId}/invoice`),
 };

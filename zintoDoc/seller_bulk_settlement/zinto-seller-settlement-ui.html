@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zinto – Seller Settlement (UI preview)</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#16202e;--mute:#667085;--line:#e4e8ef;--brand:#4f46e5;--bs:#eef0ff;--ok:#12a150;--bad:#dc2626;--warn:#d99100;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1220;--card:#151c2e;--ink:#e8ecf5;--mute:#93a0b8;--line:#243049;--brand:#8b85ff;--bs:#1e2447}}
+:root[data-theme="dark"]{--bg:#0d1220;--card:#151c2e;--ink:#e8ecf5;--mute:#93a0b8;--line:#243049;--brand:#8b85ff;--bs:#1e2447}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 18px}
+.logo{font-weight:800}.sp{flex:1}
+.tabs{display:flex;gap:6px}.tabs button{border:1px solid var(--line);background:var(--bg);color:var(--mute);border-radius:8px;padding:6px 14px;font:inherit;font-weight:600;cursor:pointer}
+.tabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+main{max-width:1180px;margin:0 auto;padding:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;min-width:0}
+h2{font-size:16px;margin:0 0 4px}.sub,.note{color:var(--mute);font-size:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input,select{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:6px 9px;font:inherit;max-width:100%}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
+.btn.p{background:var(--brand);border-color:var(--brand);color:#fff}.btn.go{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.off{background:var(--line);color:var(--mute);cursor:not-allowed}
+.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th a{color:var(--mute);text-decoration:none}th a:hover{color:var(--brand)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap}tr:last-child td{border:0}tbody tr:hover{background:var(--bs)}
+a.l{color:var(--brand);text-decoration:none;cursor:pointer}a.l:hover{text-decoration:underline}
+.dt{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:4px}.dt.g{background:var(--ok)}.dt.r{background:var(--bad)}.dt.a{background:var(--warn)}
+.tag{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--bs);color:var(--brand)}
+.tag.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}.tag.w{background:var(--line);color:var(--mute)}
+.pg{display:flex;gap:4px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}.pg .btn{padding:3px 10px}.pg .btn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.bulk{display:flex;gap:16px;align-items:center;flex-wrap:wrap;border:2px solid var(--brand)}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;align-items:flex-start;justify-content:center;overflow-y:auto;padding:18px}
+.modal.on{display:flex}.mbox{background:var(--card);border-radius:14px;padding:18px;width:100%;max-width:720px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px}.kv span:first-child{color:var(--mute)}
+.ck{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:10px;padding:10px 12px;margin-bottom:10px}.ck.bad{border-left-color:var(--bad)}.ck.wait{border-left-color:var(--warn)}
+.is{display:flex;justify-content:space-between;align-items:center;padding:3px 0}.is input{width:100px;text-align:right}
+.calc{background:var(--bs);border-radius:10px;padding:12px 14px;margin:12px 0}.calc .big{font-size:20px;font-weight:800;color:var(--brand)}
+.neg{color:var(--bad)}.pos{color:var(--ok)}
+.qr{width:96px;height:96px;border:2px dashed var(--line);border-radius:8px;display:grid;place-items:center;color:var(--mute);font-size:11px;text-align:center}
+.err{color:var(--bad);font-size:12px;min-height:16px;margin:6px 0}
+#toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:60;display:none;max-width:90%}
+.red{color:var(--bad);font-weight:700}.green{color:var(--ok);font-weight:700}
+</style>
+</head>
+<body>
+<header class="top"><div class="logo">Zinto · Seller Settlement</div><div class="tabs" id="tabs"></div><div class="sp"></div><span class="note">Admin / Finance view</span></header>
+<main id="app"></main>
+<div class="modal" id="md" onclick="if(event.target===this)closeM()"></div>
+<div id="toast"></div>
+<script>
+const $=i=>document.getElementById(i);
+const D=[['ORD2101',10,'Anita R','Fresh Basket',100,'y','y','n','n',0],['ORD2102',10,'Vikram S','Daily Dairy',240,'y','y','o','n',0],['ORD2103',9,'Meera K','Fresh Basket',180,'y','y','n','n',0],['ORD2104',9,'Arjun P','Green Mart',520,'y','y','c','n',50],['ORD2105',9,'Sana M','Daily Dairy',95,'y','y','w','n',0],['ORD2106',8,'Rohit D','Fresh Basket',310,'y','y','o','n',0],['ORD2107',8,'Neha J','Green Mart',150,'y','y','n','p',0],['ORD2108',8,'Kiran B','Fresh Basket',75,'y','y','n','n',0],['ORD2109',7,'Pooja T','Daily Dairy',430,'y','y','n','n',0],['ORD2110',7,'Imran A','Green Mart',260,'n','y','n','n',0],['ORD2111',6,'Lata G','Fresh Basket',120,'y','y','n','n',0],['ORD2112',6,'Dev N','Daily Dairy',205,'y','y','n','n',0]];
+const O=D.map(r=>({id:r[0],day:r[1],cust:r[2],seller:r[3],price:r[4],del:r[5],rzp:r[6],cmp:r[7],pen:r[8],cd:r[9],iss:[0,0,0,0,0],rev:false,set:false}));
+const ISS=['Packing','Extra charge','Quality issue','Price mismatch','Miscellaneous'];
+const CKT=['Delivered','Razorpay payment','No open complaint','No penalty / seller issue'];
+const SELLERS=['Fresh Basket','Daily Dairy','Green Mart'];
+const ITM={ORD2101:[['Tomatoes 1 kg',2,30],['Onion 1 kg',1,40]],ORD2102:[['Milk 500 ml',4,30],['Paneer 200 g',1,120]],ORD2103:[['Basmati Rice 1 kg',1,120],['Toor Dal 500 g',1,60]],ORD2104:[['Basmati Rice 5 kg',1,420],['Cooking Oil 1 L',1,100]],ORD2105:[['Curd 400 g',1,45],['Butter 100 g',1,50]],ORD2106:[['Rasagola 1 kg',1,250],['Sandesh 250 g',1,60]],ORD2107:[['Bananas 1 dozen',1,60],['Apples 1 kg',1,90]],ORD2108:[['Bread',1,40],['Eggs 6 pcs',1,35]],ORD2109:[['Chicken 1 kg',1,280],['Spice mix',3,50]],ORD2110:[['Potato 2 kg',1,60],['Green peas 1 kg',2,100]],ORD2111:[['Lemon 500 g',1,40],['Ginger 250 g',2,40]],ORD2112:[['Ghee 500 ml',1,205]]};
+const PH={ORD2101:'9845011201',ORD2102:'9845011202',ORD2103:'9739022303',ORD2104:'9739022304',ORD2105:'9886033305',ORD2106:'9886033306',ORD2107:'9900044407',ORD2108:'9900044408',ORD2109:'9606055509',ORD2110:'9606055510',ORD2111:'9448066611',ORD2112:'9448066612'};
+O.forEach(o=>{o.items=ITM[o.id];o.ph=PH[o.id]});
+const cno=o=>o.cmp=='o'||o.cmp=='c'?'C-'+o.id.slice(3):'';
+const CURL='https://claude.ai/artifact/TebD71ftCQCGnp4c1mpW87';
+const oid=o=>`#${o.id}`;
+const clink=o=>cno(o)?`<a class="l" href="${CURL}" target="_blank" rel="noopener" title="Open the complaint window">${cno(o)}</a>`:'';
+const g=id=>O.find(o=>o.id==id),sum=o=>o.iss.reduce((a,b)=>a+(+b||0),0),amt=o=>o.price-o.cd-sum(o);
+const ck=o=>[o.del=='y',o.rzp=='y',o.cmp=='n'||o.cmp=='c',o.pen=='n'],ready=o=>ck(o).every(Boolean);
+const fx=n=>'₹'+(+n.toFixed(2)).toLocaleString('en-IN');
+const ds=o=>[o.del=='y'?'g':'r',o.rzp=='y'?'g':'r',o.cmp=='n'||o.cmp=='c'?'g':o.cmp=='w'?'a':'r',o.pen=='n'?'g':'r'];
+const dots=o=>ds(o).map((x,i)=>`<i class="dt ${x}" title="${CKT[i]}: ${x=='g'?'OK':x=='a'?(i==2?'Complaint window open, about 18h left':'Waiting'):'Needs action'}"></i>`).join('');
+let T='list',Q='',SORT={k:'day',d:-1},PG=1,SEL=new Set(),BS='',BSEL=new Set(),SV='Fresh Basket',N=[],BN=1;const PS=5;
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',4500)}
+function closeM(){$('md').classList.remove('on')}
+function openM(h){$('md').innerHTML='<div class="mbox">'+h+'</div>';$('md').classList.add('on')}
+function setT(t){T=t;draw()}
+function rows(){let r=O.slice();if(Q.trim()){const re=new RegExp(Q.trim().replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*').replace(/\?/g,'.'),'i');r=r.filter(o=>re.test([o.id,o.cust,o.seller,o.day+' Oct',o.ph,o.items.map(i=>i[0]).join(' '),cno(o)].join(' ')))}
+const f=o=>SORT.k=='amt'?amt(o):SORT.k=='rev'?+o.rev:SORT.k=='set'?+o.set:o[SORT.k];r.sort((a,b)=>f(a)>f(b)?SORT.d:f(a)<f(b)?-SORT.d:0);return r}
+function sortBy(k){SORT=SORT.k==k?{k,d:-SORT.d}:{k,d:1};PG=1;upd()}
+const H=[['Date','day'],['Order ID','id'],['Customer Name','cust'],['Seller Name','seller'],['Settlement amount','amt'],['Reviewed','rev'],['Settle','set']];
+const hd=b=>`<thead><tr><th>${b}</th>${H.map(h=>`<th><a href="#" onclick="sortBy('${h[1]}');return false">${h[0]}${SORT.k==h[1]?(SORT.d>0?' ▲':' ▼'):''}</a></th>`).join('')}<th>Checks</th><th>View</th></tr></thead>`;
+function rowH(o,m){const S=m=='l'?SEL:BSEL,dis=m=='b'&&(!ready(o)||o.set);
+return `<tr><td><input type="checkbox" ${S.has(o.id)?'checked':''} ${dis?'disabled':''} onchange="tog('${m}','${o.id}',this.checked)"></td><td>${o.day} Oct</td><td><a class="l" onclick="openO('${o.id}')">${oid(o)}</a>${cno(o)?`<br><span class="note">Complaint ${clink(o)}</span>`:o.cmp=='w'?'<br><span class="note">Window open · no complaint yet</span>':''}</td><td><a class="l" onclick="Q='${o.cust}';PG=1;draw()">${o.cust}</a></td><td><a class="l" onclick="Q='${o.seller}';PG=1;draw()">${o.seller}</a></td><td><b>${fx(amt(o))}</b></td><td><span class="tag ${o.rev?'ok':'w'}">${o.rev?'Reviewed':'Not reviewed'}</span></td><td>${o.set?'<span class="tag ok">Settled</span>':`<button class="btn ${ready(o)?'go':'off'}" ${ready(o)?'':'disabled'} onclick="openD('${o.id}')">Settle Now</button>`}</td><td>${dots(o)}</td><td><a class="l" onclick="openD('${o.id}')">View</a></td></tr>`}
+function tog(m,id,on){const S=m=='l'?SEL:BSEL;on?S.add(id):S.delete(id);upd()}
+function upd(){const el=$('tbl');if(!el)return;
+if(T=='list'){const r=rows(),pages=Math.max(1,Math.ceil(r.length/PS));PG=Math.min(PG,pages);
+el.innerHTML=`<div class="wrap"><table>${hd('')}<tbody>${r.slice((PG-1)*PS,PG*PS).map(o=>rowH(o,'l')).join('')||'<tr><td colspan=11 class="note">No orders match.</td></tr>'}</tbody></table></div>
+<div class="pg"><span class="note">Showing ${r.length?(PG-1)*PS+1:0}–${Math.min(PG*PS,r.length)} of ${r.length}</span><button class="btn" onclick="PG=Math.max(1,PG-1);upd()">Prev</button>${Array.from({length:pages},(_,i)=>`<button class="btn ${i+1==PG?'on':''}" onclick="PG=${i+1};upd()">${i+1}</button>`).join('')}<button class="btn" onclick="PG=Math.min(${pages},PG+1);upd()">Next</button></div>`}
+else if(T=='bulk'){const r=O.filter(o=>o.seller==BS&&!o.set),sel=[...BSEL].map(g),tot=sel.reduce((a,o)=>a+amt(o),0);
+el.innerHTML=!BS?'<p class="note">Select a seller to see all their orders.</p>':`<div class="wrap"><table>${hd(`<input type="checkbox" title="Select all ready orders" onchange="selAll(this.checked)">`)}<tbody>${r.map(o=>rowH(o,'b')).join('')}</tbody></table></div>
+<div class="card bulk" style="margin:14px 0 0"><div><b>${sel.length}</b> orders selected</div><div>Seller: <b>${BS}</b></div><div>Total to settle: <b>${fx(tot)}</b></div><div class="sp"></div><button class="btn" onclick="bulkReview()">Review</button><button class="btn ${sel.length?'go':'off'}" ${sel.length?'':'disabled'} onclick="bulkPay()">Settle Now</button></div>`}}
+function selAll(on){BSEL.clear();if(on)O.filter(o=>o.seller==BS&&!o.set&&ready(o)).forEach(o=>BSEL.add(o.id));upd()}
+function bulkGo(){const s=[...SEL].map(i=>g(i).seller),u=[...new Set(s)];if(u.length>1){return toast('Select orders of one seller for bulk settlement.')}
+BS=u[0]||BS;BSEL=new Set([...SEL].filter(i=>ready(g(i))&&!g(i).set));T='bulk';draw()}
+function draw(){$('tabs').innerHTML=[['list','Settlements'],['bulk','Bulk Settlement'],['seller','Seller View']].map(t=>`<button class="${T==t[0]?'on':''}" onclick="setT('${t[0]}')">${t[1]}</button>`).join('');
+if(T=='list')$('app').innerHTML=`<div class="card"><div class="row"><div><h2>Settlements</h2><p class="sub">Wildcard search on order, item name, customer or phone: <b>Rasa*</b>, <b>98450*</b>, <b>Anita*</b>, <b>*Mart</b></p></div><div class="sp"></div><input id="q" placeholder="Search order, item, customer, phone" value="${Q}" style="width:260px" oninput="Q=this.value;PG=1;upd()"><button class="btn p" onclick="bulkGo()">Bulk Settlement ▸</button></div><div id="tbl" style="margin-top:12px"></div></div><p class="note">Dots: <b style="color:var(--ok)">green</b> = clear · <b style="color:var(--warn)">amber</b> = waiting (complaint window open) · <b style="color:var(--bad)">red</b> = needs action. Settle Now turns green only when all four dots are green (delivered, Razorpay paid, no complaint, no penalty).</p>`;
+else if(T=='bulk')$('app').innerHTML=`<div class="card"><div class="row"><div><h2>Bulk Settlement</h2><p class="sub">Choose a seller. All their unsettled orders appear. Only green (ready) orders can be selected.</p></div><div class="sp"></div><select onchange="BS=this.value;BSEL.clear();draw()"><option value="">Select seller</option>${SELLERS.map(s=>`<option ${BS==s?'selected':''}>${s}</option>`).join('')}</select></div><div id="tbl" style="margin-top:12px"></div></div>`;
+else seller();upd()}
+function seller(){const os=O.filter(o=>o.seller==SV),ns=N.filter(n=>n.s==SV);
+$('app').innerHTML=`<div class="card"><div class="row"><div><h2>What the seller sees</h2><p class="sub">Amounts are red until settled, then turn green with the invoice attached.</p></div><div class="sp"></div><select onchange="SV=this.value;draw()">${SELLERS.map(s=>`<option ${SV==s?'selected':''}>${s}</option>`).join('')}</select></div>
+<h2 style="margin-top:12px">Notifications</h2>${ns.length?`<table><thead><tr><th>Order ID</th><th>Customer Name</th><th>Message</th><th>Amount</th><th>Settled amount</th></tr></thead><tbody>${ns.map(n=>`<tr><td>${n.o}</td><td>${n.c}</td><td>🔔 ${n.t}</td><td>${fx(n.a)}</td><td class="green">${fx(n.x)}</td></tr>`).join('')}</tbody></table>`:'<p class="note">None yet. Settle an order to send one.</p>'}</div>
+<div class="card"><div class="wrap"><table><thead><tr><th>Order ID</th><th>Customer Name</th><th>Date</th><th>Amount (quoted)</th><th>Settled amount</th><th>Status</th><th>Invoice (attachment)</th></tr></thead><tbody>${os.map(o=>`<tr><td><a class="l" onclick="openO('${o.id}',true)">${oid(o)}</a></td><td>${o.cust}</td><td>${o.day} Oct</td><td>${fx(o.price)}</td><td class="${o.set?'green':'red'}">${fx(amt(o))}</td><td>${o.set?'Credited':'Pending'}</td><td>${o.set?`<a class="l" onclick="openSI('${o.id}')">📎 ${o.inv}</a>${o.bulk?` · <b>Bulk settlement</b> · Ref ${o.bulk}`:''} · Txn ${o.txn}`:'—'}</td></tr>`).join('')}</tbody></table></div></div>`}
+function openSI(id){const o=g(id),d=[['Complaint',o.cd]].concat(ISS.map((n,i)=>[n,o.iss[i]])).filter(x=>+x[1]);
+openM(`<div class="row"><div><h2>Settlement invoice · ${o.inv}</h2><p class="sub">${o.seller} · Order #${o.id} · Customer: <b>${o.cust}</b></p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div>
+${o.bulk?`<p style="margin:8px 0"><span class="tag">Bulk settlement · Ref ${o.bulk}</span> <span class="note">All orders in this bulk settlement share this reference.</span></p>`:''}
+<div class="kv"><span>Amount (quoted)</span><span>${fx(o.price)}</span></div>${d.map(x=>`<div class="kv"><span>− ${x[0]}</span><span class="neg">−${fx(+x[1])}</span></div>`).join('')}
+<div class="kv"><b>Settled amount</b><b class="green">${fx(amt(o))}</b></div><div class="kv"><span>Transaction no.</span><span>${o.txn}</span></div>
+<div class="row" style="margin-top:10px"><button class="btn" onclick="toast('PDF generated (sample)')">⬇ Download PDF</button></div>`)}
+function openO(id,sv){const o=g(id),tot=o.price*1.35+100;
+openM(`<div class="row"><div><h2>Order ${oid(o)}</h2><p class="sub">Customer: <b>${o.cust}</b> · ${o.seller} · ${o.day} Oct 2026${sv?'':' · Phone +91 ●●●●● '+o.ph.slice(-5)}</p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div>
+<div class="wrap"><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${i[0]}</td><td>${i[1]}</td><td>${fx(i[2])}</td><td>${fx(i[1]*i[2])}</td></tr>`).join('')}<tr><td colspan="3"><b>Item total</b></td><td><b>${fx(o.price)}</b></td></tr></tbody></table></div>
+${sv?'':`<div class="kv" style="margin-top:8px"><span>Customer paid (incl. GST, platform fee, delivery)</span><b>${fx(tot)}</b></div>`}${cno(o)?`<div class="kv"><span>Complaint</span><span>${clink(o)}</span></div>`:''}
+${sv?'':`<div class="row" style="margin-top:10px"><button class="btn" onclick="openInv('${id}')">🧾 Order invoice</button><button class="btn p" onclick="openD('${id}')">Open settlement</button></div>`}`)}
+function openInv(id){const o=g(id),gst=o.price*.05,cm=o.price*.3,tot=o.price+gst+cm+100;
+openM(`<div class="row"><div><h2>Order invoice · OI-${id.slice(3)}</h2><p class="sub">Order ${oid(o)} · Customer: <b>${o.cust}</b> · ${o.seller} · ${o.day} Oct 2026</p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div>
+<div class="wrap"><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${i[0]}</td><td>${i[1]}</td><td>${fx(i[2])}</td><td>${fx(i[1]*i[2])}</td></tr>`).join('')}</tbody></table></div>
+<div class="kv" style="margin-top:8px"><span>Item total</span><span>${fx(o.price)}</span></div><div class="kv"><span>GST 5%</span><span>${fx(gst)}</span></div><div class="kv"><span>Platform fee</span><span>${fx(cm)}</span></div><div class="kv"><span>Delivery charge</span><span>${fx(100)}</span></div><div class="kv"><b>Total paid via Razorpay</b><b>${fx(tot)}</b></div>
+${o.set?`<p class="note">Seller settlement invoice ${o.inv}${o.bulk?' · Bulk Ref '+o.bulk:''}</p>`:''}
+<div class="row" style="margin-top:10px"><button class="btn" onclick="toast('PDF generated (sample)')">⬇ Download PDF</button><button class="btn" onclick="openO('${id}')">◂ Back to items</button></div>`)}
+function openD(id){const o=g(id),c=ck(o),gst=o.price*.05,cm=o.price*.3,tot=o.price+gst+cm+100;
+const cmpT={n:'No complaint raised.',w:'24-hour complaint window is still open (about 18 hours left). No complaint raised yet. Wait for it to close.',o:'Complaint is open. Settlement is held (up to 7 days).',c:`Complaint closed. Deduct ${fx(o.cd)}.`}[o.cmp];
+const row=(ok,t,b)=>`<div class="ck ${ok===true?'':ok==='a'?'wait':'bad'}"><b>${ok===true?'✓':ok==='a'?'⏳':'✗'} ${t}</b><div class="note" style="margin-top:4px">${b}</div></div>`;
+openM(`<div class="row"><div><h2>Settlement · ${oid(o)}</h2><p class="sub">Customer: <b>${o.cust}</b> · ${o.seller} · ${o.day} Oct 2026 · <a class="l" onclick="openO('${id}')">View items</a></p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div>
+<div class="card" style="margin:10px 0"><b>Order money</b> <span class="note">(Admin / Finance only)</span><div class="kv"><span>Customer paid via Razorpay</span><b>${fx(tot)}</b></div><div class="kv"><span>Item price (seller's quote)</span><span>${fx(o.price)} · <a class="l" onclick="openInv('${id}')">Order invoice</a></span></div><div class="kv"><span>GST 5%</span><span>${fx(gst)}</span></div><div class="kv"><span>Commission 30%</span><span>${fx(cm)}</span></div><div class="kv"><span>Delivery charge</span><span>${fx(100)}</span></div><div class="kv"><span>Rider paid (Porter / Rapido)</span><span>${fx(99)}</span></div><div class="kv"><span>Razorpay fee 2.35%</span><span>${fx(tot*.0235)}</span></div></div>
+${row(c[0],'1. Order delivered',c[0]?`Delivered. <a class="l" onclick="openO('${id}')">View order details</a>`:'Not delivered yet.')}
+${row(c[1],'2. Razorpay payment',c[1]?'Payment received (API check).':'Payment not confirmed.')}
+${row(o.cmp=='w'?'a':c[2],'3. Complaint',cmpT+`<div class="kv"><span>Complaint no.</span><b>${cno(o)?clink(o):'None yet'}</b></div>`)}
+${row(c[3],'4. Seller issues (feedback, no complaint)',ISS.map((n,i)=>`<label class="is"><span>${n}</span><input type="number" min="0" value="${o.iss[i]}" ${o.set?'disabled':''} oninput="setIss('${id}',${i},this.value)"></label>`).join('')+(o.pen=='p'?'<div class="red">Penalty pending: enter amounts, then mark as reviewed.</div>':''))}
+<div class="calc"><div class="kv"><span>Seller deserves</span><b>${fx(o.price)}</b></div><div id="ded"></div><div class="kv"><span><b>Settlement amount</b></span><span class="big" id="fin"></span></div></div>
+<div class="row"><button class="btn ${o.rev?'':'p'}" onclick="markRev('${id}')">${o.rev?'Reviewed ✓':'Mark as reviewed'}</button></div>
+${o.set?`<p class="note" style="margin-top:12px">Settled · Txn ${o.txn} · ${o.inv}${o.bulk?' · Bulk Ref '+o.bulk:''}</p>`:`<h2 style="margin-top:14px">Pay</h2><label><input type="radio" name="pm" value="auto" checked onchange="pmChg()"> Automatic (Razorpay payout)</label> &nbsp; <label><input type="radio" name="pm" value="manual" onchange="pmChg()"> Manual</label>
+<div id="man" style="display:none;margin-top:10px" class="row"><div class="qr">Seller UPI QR</div><div><div class="note">Seller UPI</div><b>${o.seller.toLowerCase().replace(' ','')}@okaxis</b><div class="note" style="margin-top:8px">Pay this amount, then add the transaction number</div><input id="tx" placeholder="Transaction number"></div></div>
+<p class="err" id="pe"></p><div class="row"><div class="sp"></div><button class="btn go" onclick="payOne('${id}')">Confirm &amp; Pay</button></div>`}`);updCalc(id)}
+function updCalc(id){const o=g(id);$('ded').innerHTML=[['Complaint',o.cd]].concat(ISS.map((n,i)=>[n,o.iss[i]])).filter(x=>+x[1]).map(x=>`<div class="kv"><span>− ${x[0]}</span><span class="neg">−${fx(+x[1])}</span></div>`).join('');$('fin').textContent=fx(amt(o))}
+function setIss(id,i,v){g(id).iss[i]=+v||0;updCalc(id)}
+function pmChg(){$('man').style.display=document.querySelector('input[name=pm]:checked').value=='manual'?'flex':'none'}
+function markRev(id){const o=g(id);o.rev=true;if(o.pen=='p')o.pen='n';openD(id);upd()}
+function mk(o,ref){o.set=true;o.rev=true;o.inv='INV-'+o.id.slice(3);o.bulk=ref||null}
+function payOne(id){const o=g(id),m=document.querySelector('input[name=pm]:checked').value,tx=m=='manual'?$('tx').value.trim():'RZP-'+Math.floor(1e5+Math.random()*9e5);
+const e=!ready(o)?'All four checks must be green first.':!o.rev?'Review first, then pay.':(m=='manual'&&!tx)?'Add the transaction number.':'';if(e){$('pe').textContent=e;return}
+o.txn=tx;mk(o);N.unshift({s:o.seller,t:`Settled. Invoice ${o.inv} attached.`,o:'#'+o.id,c:o.cust,a:o.price,x:amt(o)});closeM();upd();toast(`Settled ${fx(amt(o))}. Seller notified, invoice attached.`)}
+function bulkReview(){const s=[...BSEL].map(g);if(!s.length)return toast('Select at least one order.');
+openM(`<div class="row"><div><h2>Bulk review · ${BS}</h2><p class="sub">${s.length} orders</p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div><div class="wrap"><table><thead><tr><th>Order ID</th><th>Customer Name</th><th>Seller</th><th>Delivered</th><th>Razorpay</th><th>No complaint</th><th>No penalty</th><th>Amount</th></tr></thead><tbody>${s.map(o=>`<tr><td><a class="l" onclick="openO('${o.id}')">${oid(o)}</a></td><td>${o.cust}</td><td>${o.seller}</td>${ck(o).map(x=>`<td class="${x?'green':'red'}">${x?'✓':'✗'}</td>`).join('')}<td>${fx(amt(o))}</td></tr>`).join('')}<tr><td colspan=7><b>Total</b></td><td><b>${fx(s.reduce((a,o)=>a+amt(o),0))}</b></td></tr></tbody></table></div><div class="row" style="margin-top:12px"><button class="btn" onclick="toast('PDF generated (sample)')">⬇ Download PDF</button></div>`)}
+function bulkPay(){const s=[...BSEL].map(g),t=s.reduce((a,o)=>a+amt(o),0);
+openM(`<div class="row"><div><h2>Bulk settle · ${BS}</h2><p class="sub">${s.length} orders · Total ${fx(t)}</p></div><div class="sp"></div><button class="btn" onclick="closeM()">✕</button></div>
+<label><input type="checkbox" id="brv"> I have reviewed all orders (<a class="l" onclick="bulkReview()">Review</a>)</label><div style="margin-top:10px"><label><input type="radio" name="pm" value="auto" checked onchange="pmChg()"> Automatic (Razorpay payout)</label> &nbsp; <label><input type="radio" name="pm" value="manual" onchange="pmChg()"> Manual</label></div>
+<div id="man" style="display:none;margin-top:10px" class="row"><div class="qr">Seller UPI QR</div><div><div class="note">Seller UPI</div><b>${BS.toLowerCase().replace(' ','')}@okaxis</b><div class="note" style="margin-top:8px">Pay ${fx(t)}, then add the transaction number</div><input id="tx" placeholder="Transaction number"></div></div><p class="err" id="pe"></p><div class="row"><div class="sp"></div><button class="btn go" onclick="payBulk()">Confirm &amp; Pay</button></div>`)}
+function payBulk(){const s=[...BSEL].map(g),m=document.querySelector('input[name=pm]:checked').value,tx=m=='manual'?$('tx').value.trim():'RZP-'+Math.floor(1e5+Math.random()*9e5);
+const e=!$('brv').checked?'Tick the review box first.':(m=='manual'&&!tx)?'Add the transaction number.':'';if(e){$('pe').textContent=e;return}
+const ref='BS-2610-'+String(BN++).padStart(3,'0'),t=s.reduce((a,o)=>a+amt(o),0);s.forEach(o=>{o.txn=tx;mk(o,ref)});
+N.unshift({s:BS,t:`${s.length} orders settled. Bulk settlement, Ref ${ref}. Invoices attached.`,o:s.length+' orders',c:'Multiple',a:s.reduce((q,o)=>q+o.price,0),x:t});BSEL.clear();closeM();draw();toast(`Bulk settled ${fx(t)} · Ref ${ref}. Seller notified.`)}
+draw();
+</script>
+</body>
+</html>

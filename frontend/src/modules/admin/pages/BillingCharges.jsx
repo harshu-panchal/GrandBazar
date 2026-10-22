@@ -1072,7 +1072,7 @@ const BillingCharges = () => {
             </div>
 
             {isAuditLogOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-12">
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 lg:p-12">
                     <div
                         className="fixed inset-0 bg-slate-900/40 backdrop-blur-md"
                         onClick={() => setIsAuditLogOpen(false)}

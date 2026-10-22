@@ -382,7 +382,7 @@ const ActiveDeliveryBoys = () => {
             {/* View Rider Modal */}
             <AnimatePresence>
                 {viewingRider && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -502,7 +502,7 @@ const ActiveDeliveryBoys = () => {
             {/* Onboard / Edit Rider Modal */}
             <AnimatePresence>
                 {(isOnboardModalOpen || isEditModalOpen) && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="fixed inset-0 z-[1010] flex items-center justify-center p-4 overflow-y-auto">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -694,7 +694,7 @@ const ActiveDeliveryBoys = () => {
             {/* Document Image Lightbox Modal */}
             <AnimatePresence>
                 {previewDoc && (
-                    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-8">
+                    <div className="fixed inset-0 z-[1030] flex items-center justify-center p-4 sm:p-8">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

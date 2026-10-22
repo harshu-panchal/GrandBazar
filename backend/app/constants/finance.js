@@ -91,6 +91,44 @@ export const PAYOUT_STATUS = {
   CANCELLED: "CANCELLED",
 };
 
+// Seller-settlement lifecycle per the Seller Settlement BRD / flow chart.
+// This is a finer-grained machine than ORDER_SETTLEMENT_STATUS (which tracks
+// the coarse overall roll-up) and lives on order.settlementStatus.settlementState.
+// WINDOW_OPEN: 24h complaint window still open. HELD: an open complaint holds it.
+// READY: all 4 checks green. REVIEWED: finance marked reviewed. PAYING: payout
+// in flight (manual txn entered / RazorpayX payout created, awaiting webhook).
+// SETTLED: paid, invoice + ledger posted, amounts locked. FAILED: payout failed,
+// retry allowed (idempotent).
+export const SETTLEMENT_STATE = {
+  WINDOW_OPEN: "WINDOW_OPEN",
+  HELD: "HELD",
+  READY: "READY",
+  REVIEWED: "REVIEWED",
+  PAYING: "PAYING",
+  SETTLED: "SETTLED",
+  FAILED: "FAILED",
+};
+
+// How a seller settlement payout is executed.
+// MANUAL: operator paid the seller UPI/QR out-of-band and records the txn number.
+// AUTOMATIC: RazorpayX payout API call; final status comes from the webhook.
+export const PAYOUT_MODE = {
+  MANUAL: "MANUAL",
+  AUTOMATIC: "AUTOMATIC",
+};
+
+// Seller-settlement deduction buckets (BRD: settled = quoted − complaint −
+// packing − extra − quality − price_mismatch − misc). "complaint" is linked to
+// a complaint number; the rest are seller issues entered at review time.
+export const SETTLEMENT_DEDUCTION = {
+  COMPLAINT: "complaint",
+  PACKING: "packing",
+  EXTRA: "extra",
+  QUALITY: "quality",
+  PRICE_MISMATCH: "priceMismatch",
+  MISC: "misc",
+};
+
 export const COMMISSION_TYPE = {
   PERCENTAGE: "percentage",
   FIXED: "fixed",
@@ -216,6 +254,9 @@ export const ALL_LEDGER_STATUSES = Object.values(LEDGER_STATUS);
 export const ALL_LEDGER_TRANSACTION_TYPES = Object.values(LEDGER_TRANSACTION_TYPE);
 export const ALL_PAYOUT_TYPES = Object.values(PAYOUT_TYPE);
 export const ALL_PAYOUT_STATUSES = Object.values(PAYOUT_STATUS);
+export const ALL_SETTLEMENT_STATES = Object.values(SETTLEMENT_STATE);
+export const ALL_PAYOUT_MODES = Object.values(PAYOUT_MODE);
+export const ALL_SETTLEMENT_DEDUCTIONS = Object.values(SETTLEMENT_DEDUCTION);
 export const ALL_COMMISSION_TYPES = Object.values(COMMISSION_TYPE);
 export const ALL_COMMISSION_FIXED_RULES = Object.values(COMMISSION_FIXED_RULE);
 export const ALL_HANDLING_FEE_TYPES = Object.values(HANDLING_FEE_TYPE);

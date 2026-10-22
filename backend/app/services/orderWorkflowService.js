@@ -4,6 +4,8 @@ import DeliveryAssignment from "../models/deliveryAssignment.js";
 import Delivery from "../models/delivery.js";
 import OrderOtp from "../models/orderOtp.js";
 import Store from "../models/store.js";
+import Setting from "../models/setting.js";
+import { SETTLEMENT_STATE } from "../constants/finance.js";
 import {
   WORKFLOW_STATUS,
   legacyStatusFromWorkflow,
@@ -1103,6 +1105,17 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
       await OrderOtp.updateOne({ _id: otpRecord._id }, { $set: { consumedAt: new Date() } });
     }
     $set.deliveredAt = now;
+    // Open the 24h complaint window and start the settlement state machine
+    // (BRD CMP-01 / settlement WINDOW_OPEN). Window is a server-time value so
+    // it can never be gamed from a device clock.
+    try {
+      const setting = await Setting.findOne({}).select("complaint refundWindowHours").lean();
+      const windowHours = setting?.complaint?.windowHours ?? setting?.refundWindowHours ?? 24;
+      $set.complaintWindowClosesAt = new Date(now.getTime() + windowHours * 3600 * 1000);
+      $set["settlementStatus.settlementState"] = SETTLEMENT_STATE.WINDOW_OPEN;
+    } catch {
+      // Non-fatal: the settlement engine's per-minute sweep backfills these.
+    }
     if (Array.isArray(additionalData.deliveryProofImages) && additionalData.deliveryProofImages.length) {
       $set.deliveryProofImages = additionalData.deliveryProofImages;
     }

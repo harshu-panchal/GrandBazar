@@ -4,6 +4,8 @@ import {
   ALL_ORDER_PAYMENT_STATUSES,
   ALL_ORDER_SETTLEMENT_STATUSES,
   ALL_PAYMENT_MODES,
+  ALL_SETTLEMENT_STATES,
+  ALL_PAYOUT_MODES,
   CURRENCY,
 } from "../constants/finance.js";
 
@@ -181,6 +183,15 @@ const orderSchema = new mongoose.Schema(
         type: String,
         enum: ["NOT_APPLICABLE", "PENDING", "PROCESSING", "COMPLETED", "FAILED"],
         default: "PENDING",
+      },
+      // Seller Settlement BRD state machine (finer-grained than `overall`):
+      // WINDOW_OPEN -> HELD -> READY -> REVIEWED -> PAYING -> SETTLED/FAILED.
+      // Decided server-side; drives the "Settle Now" gating and the 4 dots.
+      settlementState: {
+        type: String,
+        enum: [...ALL_SETTLEMENT_STATES, null],
+        default: null,
+        index: true,
       },
       adminEarningCredited: {
         type: Boolean,
@@ -732,6 +743,19 @@ const orderSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // Complaint Window ticket for this order (replaces disputeRef once the
+    // Complaint module is cut over in Phase 8). Set when a COMPLAINT (not plain
+    // feedback) is raised; holds the seller settlement until Admin closes it.
+    complaintRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Complaint",
+      default: null,
+      index: true,
+    },
+    // End of the 24h complaint window = deliveredAt + Setting.complaint.windowHours.
+    // Computed and frozen when the order is delivered; after this, no feedback or
+    // complaint can be created (enforced in app AND API). Null until delivered.
+    complaintWindowClosesAt: { type: Date, default: null, index: true },
     partialCancellation: {
       isPartial: { type: Boolean, default: false },
       cancelledItemIndexes: { type: [Number], default: [] },
@@ -973,6 +997,50 @@ const orderSchema = new mongoose.Schema(
     },
     refundIssuedAt: { type: Date },
     sellerPayoutReleasedAt: { type: Date },
+
+    // ---- Seller Settlement detail (BRD section 5) ------------------------
+    // All money in rupees (Number) to match the rest of the Order money model.
+    // settled = quoted − complaint − packing − extra − quality − priceMismatch
+    // − misc, recalculated server-side at pay time (never trust the browser).
+    sellerSettlement: {
+      // Quoted price the seller deserves, frozen at settlement time from the
+      // order's saved per-item seller quote.
+      quotedAmount: { type: Number, default: 0 },
+      deductions: {
+        complaint: { type: Number, default: 0 }, // linked to complaintRef
+        packing: { type: Number, default: 0 },
+        extra: { type: Number, default: 0 },
+        quality: { type: Number, default: 0 },
+        priceMismatch: { type: Number, default: 0 },
+        misc: { type: Number, default: 0 },
+      },
+      settledAmount: { type: Number, default: 0 },
+
+      // Review gate (payment blocked until reviewed; SET-17).
+      reviewed: { type: Boolean, default: false },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+      reviewedAt: { type: Date, default: null },
+
+      // Payment execution.
+      mode: { type: String, enum: [...ALL_PAYOUT_MODES, null], default: null },
+      txnNo: { type: String, default: "" }, // manual transaction number
+      razorpayPayoutId: { type: String, default: "" }, // RazorpayX payout id
+      utr: { type: String, default: "" }, // bank UTR from payout webhook
+      payout: { type: mongoose.Schema.Types.ObjectId, ref: "Payout", default: null },
+
+      // Idempotency key — one per settlement so a retry / double click can't pay
+      // twice (BRD SET-23, test scenario 10).
+      idempotencyKey: { type: String, default: null },
+
+      // Invoice + bulk reference.
+      invoiceNo: { type: String, default: "" }, // INV-xxxx
+      bulkRef: { type: String, default: "" }, // BS-YYMM-NNN if part of a bulk settlement
+
+      paidAt: { type: Date, default: null },
+      // Amounts/deductions are immutable after this is set (BRD: lock after Settled).
+      lockedAt: { type: Date, default: null },
+      failureReason: { type: String, default: "" },
+    },
     pickupProofImages: [{ type: String }],
     deliveryProofImages: [{ type: String }],
     otpValidatedAt: {
@@ -998,6 +1066,11 @@ orderSchema.index({ status: 1, seller: 1, deliveryBoy: 1, createdAt: -1 });
 // that specific gap.
 orderSchema.index({ seller: 1, createdAt: -1 });
 orderSchema.index({ customer: 1, status: 1, createdAt: -1 });
+// Seller Settlement: idempotency (sparse — most orders never settle via this
+// path), bulk reference lookups, and the per-minute "mark READY" job.
+orderSchema.index({ "sellerSettlement.idempotencyKey": 1 }, { unique: true, sparse: true });
+orderSchema.index({ "sellerSettlement.bulkRef": 1 });
+orderSchema.index({ complaintWindowClosesAt: 1, "settlementStatus.settlementState": 1 });
 orderSchema.index({ status: 1, expiresAt: 1 });
 orderSchema.index({ seller: 1, returnStatus: 1, returnRequestedAt: -1 });
 orderSchema.index({ workflowStatus: 1, sellerPendingExpiresAt: 1 });

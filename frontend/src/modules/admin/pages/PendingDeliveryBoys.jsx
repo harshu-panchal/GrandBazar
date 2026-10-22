@@ -291,7 +291,7 @@ const PendingDeliveryBoys = () => {
             {/* Application Review Modal */}
             <AnimatePresence>
                 {viewingRider && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -535,7 +535,7 @@ const PendingDeliveryBoys = () => {
             {/* Document Image Lightbox Modal */}
             <AnimatePresence>
                 {previewDoc && (
-                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-8">
+                    <div className="fixed inset-0 z-[1020] flex items-center justify-center p-4 sm:p-8">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

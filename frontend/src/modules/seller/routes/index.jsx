@@ -38,6 +38,8 @@ const CatalogPricingWizard = React.lazy(() => import("../pages/CatalogPricingWiz
 const StockManagement = React.lazy(() => import("../pages/StockManagement"));
 const AddProduct = React.lazy(() => import("../pages/AddProduct"));
 const Returns = React.lazy(() => import("../pages/Returns"));
+const SellerComplaints = React.lazy(() => import("../pages/SellerComplaints"));
+const SellerSettlementsView = React.lazy(() => import("../pages/SellerSettlementsView"));
 const Earnings = React.lazy(() => import("../pages/Earnings"));
 const BulkSettlements = React.lazy(() => import("../pages/BulkSettlements"));
 const Invoices = React.lazy(() => import("../pages/Invoices"));
@@ -72,6 +74,7 @@ const navItems = [
   { label: "Delivery Policy", path: "/seller/scheduling", icon: HiOutlineMapPin, permission: "scheduling" },
   { label: "Pre-Order Campaigns", path: "/seller/campaigns", icon: HiOutlineMegaphone, permission: "campaigns" },
   { label: "Returns", path: "/seller/returns", icon: HiOutlineArchiveBox, permission: "returns" },
+  { label: "Complaints", path: "/seller/complaints", icon: HiOutlineChatBubbleLeftRight, permission: "orders" },
   { label: "Track Orders", path: "/seller/tracking", icon: HiOutlineMapPin, permission: "tracking" },
   { label: "Offers & Coupons", path: "/seller/coupons", icon: HiOutlineTag, permission: "coupons" },
   { label: "Reward Campaigns", path: "/seller/reward-campaigns", icon: HiOutlineGift, permission: "rewards" },
@@ -98,6 +101,12 @@ const navItems = [
     label: "Earnings",
     path: "/seller/earnings",
     icon: HiOutlineCurrencyDollar,
+    permission: "withdrawals",
+  },
+  {
+    label: "Settlements",
+    path: "/seller/settlements",
+    icon: HiOutlineCreditCard,
     permission: "withdrawals",
   },
   {
@@ -202,6 +211,7 @@ const SellerRoutes = () => {
         {hasPermission("scheduling") && <Route path="scheduling" element={<DeliveryPolicyPage />} />}
         {hasPermission("campaigns") && <Route path="campaigns" element={<PreOrderCampaigns />} />}
         {hasPermission("returns") && <Route path="returns" element={<Returns />} />}
+        {hasPermission("orders") && <Route path="complaints" element={<SellerComplaints />} />}
         {hasPermission("tracking") && <Route path="tracking" element={<DeliveryTracking />} />}
         {hasPermission("coupons") && <Route path="coupons" element={<SellerCoupons />} />}
         {hasPermission("rewards") && <Route path="reward-campaigns" element={<SellerRewardCampaigns />} />}
@@ -212,6 +222,7 @@ const SellerRoutes = () => {
             <Route path="withdrawals" element={<Withdrawals />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="earnings" element={<Earnings />} />
+            <Route path="settlements" element={<SellerSettlementsView />} />
             <Route path="bulk-settlements" element={<BulkSettlements />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="cod-commission-status" element={<CodCommissionPaymentStatus />} />

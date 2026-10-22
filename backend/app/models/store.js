@@ -165,6 +165,19 @@ const storeSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // UPI VPA for manual seller settlement (BRD SET-19: show seller UPI + QR).
+    upiId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    // RazorpayX fund account id, cached after first automatic payout so repeat
+    // payouts skip re-creating the contact/fund-account (BRD SET-20).
+    razorpayFundAccountId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
 
     isVerified: {
       type: Boolean,

@@ -28,6 +28,16 @@ const releaseExpiredSellerHolds = async () => {
       // holdSellerPayoutController) only clears via the matching manual
       // release action — never by the return window simply expiring.
       "financeFlags.manualSettlementHold": { $ne: true },
+      // Orders managed by the Seller Settlement BRD flow (any settlementState
+      // set by the delivery hook) are NEVER auto-released/auto-paid here —
+      // they require the explicit review-before-pay flow, and a complaint hold
+      // must not be bypassed when the return window expires. Only legacy
+      // orders with no settlementState fall through to the old auto-release.
+      $or: [
+        { "settlementStatus.settlementState": null },
+        { "settlementStatus.settlementState": { $exists: false } },
+      ],
+      "financeFlags.sellerPayoutHeld": { $ne: true },
     })
       .select("_id orderId")
       .lean();

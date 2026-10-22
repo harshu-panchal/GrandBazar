@@ -50,6 +50,18 @@ export const NOTIFICATION_EVENTS = Object.freeze({
   SCHEDULED_ACTIVATED: "SCHEDULED_ACTIVATED",
   DISPUTE_RAISED: "DISPUTE_RAISED",
   DISPUTE_RESOLVED: "DISPUTE_RESOLVED",
+  // Complaint Window (BRD): a customer message goes out on every status change.
+  COMPLAINT_RAISED: "COMPLAINT_RAISED", // customer confirmation (ticket no.)
+  COMPLAINT_UPDATE: "COMPLAINT_UPDATE", // customer, generic status-change message
+  COMPLAINT_REFUNDED: "COMPLAINT_REFUNDED", // customer, amount + txn
+  COMPLAINT_CLOSED: "COMPLAINT_CLOSED", // customer
+  COMPLAINT_FEEDBACK_RECEIVED: "COMPLAINT_FEEDBACK_RECEIVED", // seller
+  COMPLAINT_ASSIGNED_SELLER: "COMPLAINT_ASSIGNED_SELLER", // seller needs to decide
+  COMPLAINT_ADMIN_NEW: "COMPLAINT_ADMIN_NEW", // admin notified of a new complaint/feedback
+  COMPLAINT_OVERDUE_ALERT: "COMPLAINT_OVERDUE_ALERT", // admin + owner (day 5 / overdue)
+  // Seller Settlement (BRD SLV-06 / SET-22): seller notified when paid.
+  SELLER_SETTLEMENT_PAID: "SELLER_SETTLEMENT_PAID", // seller
+  SELLER_SETTLEMENT_FAILED: "SELLER_SETTLEMENT_FAILED", // admin/finance
   ORDER_REASSIGNED: "ORDER_REASSIGNED",
   // Reward engine events
   CASHBACK_CREDITED: "CASHBACK_CREDITED",
