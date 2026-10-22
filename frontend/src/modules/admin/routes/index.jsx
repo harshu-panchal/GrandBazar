@@ -89,7 +89,9 @@ const FAQManagement = React.lazy(() => import("../pages/FAQManagement"));
 const OrdersList = React.lazy(() => import("../pages/OrdersList"));
 const OrderDetail = React.lazy(() => import("../pages/OrderDetail"));
 const CreatePhoneOrder = React.lazy(() => import("../pages/CreatePhoneOrder"));
-const DisputeConsolePage = React.lazy(() => import("../pages/DisputeConsolePage"));
+const ComplaintConsolePage = React.lazy(() => import("../pages/ComplaintConsolePage"));
+const SellerSettlementConsole = React.lazy(() => import("../pages/SellerSettlementConsole"));
+const AdminBulkSettlement = React.lazy(() => import("../pages/AdminBulkSettlement"));
 const Returns = React.lazy(() => import("../pages/Returns"));
 const Refunds = React.lazy(() => import("../pages/Refunds"));
 const SellerDetail = React.lazy(() => import("../pages/SellerDetail"));
@@ -208,6 +210,7 @@ const navItems = [
     permission: "support",
     children: [
       { label: "Help Tickets", path: "/admin/support-tickets", permission: "support.tickets" },
+      { label: "Complaints", path: "/admin/complaints", permission: "orders" },
       { label: "Review Content", path: "/admin/moderation", permission: "support.moderation" },
     ],
   },
@@ -254,6 +257,13 @@ const navItems = [
     path: "/admin/seller-transactions",
     icon: Receipt,
     color: "orange",
+    permission: "seller_payments",
+  },
+  {
+    label: "Seller Settlements",
+    path: "/admin/settlements",
+    icon: Banknote,
+    color: "emerald",
     permission: "seller_payments",
   },
   {
@@ -588,6 +598,8 @@ const AdminRoutes = () => {
         {hasPermission("operations.monitor") && <Route path="/operations" element={<OperationsConsole />} />}
         {hasPermission("withdrawals") && <Route path="/withdrawals" element={<WithdrawalRequests />} />}
         {hasPermission("seller_payments") && <Route path="/seller-transactions" element={<SellerTransactions />} />}
+        {hasPermission("seller_payments") && <Route path="/settlements" element={<SellerSettlementConsole />} />}
+        {hasPermission("seller_payments") && <Route path="/settlements/bulk" element={<AdminBulkSettlement />} />}
         {hasPermission("bulk_settlements") && <Route path="/bulk-settlements" element={<BulkSettlements />} />}
         {hasPermission("cash_collection") && <Route path="/cash-collection" element={<CashCollection />} />}
         {hasPermission("customers") && (
@@ -603,7 +615,9 @@ const AdminRoutes = () => {
           <>
             <Route path="/orders/:status" element={<OrdersList />} />
             <Route path="/orders/view/:orderId" element={<OrderDetail />} />
-            <Route path="/disputes" element={<DisputeConsolePage />} />
+            {/* Disputes retired — the Complaint Window replaces them (Phase 8). */}
+            <Route path="/disputes" element={<Navigate to="/admin/complaints" replace />} />
+            <Route path="/complaints" element={<ComplaintConsolePage />} />
             <Route path="/returns" element={<Returns />} />
             <Route path="/refunds" element={<Refunds />} />
           </>

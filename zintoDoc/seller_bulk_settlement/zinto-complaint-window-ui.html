@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zinto – Complaint Window (UI preview)</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#16202e;--mute:#667085;--line:#e4e8ef;--brand:#4f46e5;--bs:#eef0ff;--ok:#12a150;--bad:#dc2626;--warn:#d99100;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1220;--card:#151c2e;--ink:#e8ecf5;--mute:#93a0b8;--line:#243049;--brand:#8b85ff;--bs:#1e2447}}
+:root[data-theme="dark"]{--bg:#0d1220;--card:#151c2e;--ink:#e8ecf5;--mute:#93a0b8;--line:#243049;--brand:#8b85ff;--bs:#1e2447}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 18px}
+.logo{font-weight:800}.sp{flex:1}
+.sw{display:flex;gap:6px}.sw button{border:1px solid var(--line);background:var(--bg);color:var(--mute);border-radius:8px;padding:6px 14px;font:inherit;font-weight:600;cursor:pointer}
+.sw button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+main{max-width:1000px;margin:0 auto;padding:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;min-width:0}
+h2{font-size:16px;margin:0 0 4px}.sub{color:var(--mute);font-size:12px;margin:0 0 12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp2{flex:1}
+.item{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.item .hd{display:flex;gap:10px;align-items:center}.item .hd b{flex:1}
+select,input,textarea{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:6px 8px;font:inherit;max-width:100%}
+textarea{width:100%;min-height:60px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
+.btn.p{background:var(--brand);color:#fff;border-color:var(--brand)}.btn.d{color:var(--bad);border-color:var(--bad)}
+.tag{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--bs);color:var(--brand)}
+.timer{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn);padding:4px 10px;border-radius:8px;font-weight:600;font-size:12px}
+.err{color:var(--bad);font-size:12px;margin:6px 0 0;min-height:16px}
+.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+.tl{list-style:none;margin:0;padding:0}.tl li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.tl li:last-child{border:0}
+.dot{width:20px;height:20px;border-radius:50%;background:var(--line);color:#fff;display:grid;place-items:center;font-size:11px;flex:none}
+.dot.done{background:var(--ok)}.dot.now{background:var(--brand)}
+.tl small{display:block;color:var(--mute)}
+.ph{display:inline-grid;place-items:center;width:46px;height:46px;border:1px dashed var(--line);border-radius:8px;color:var(--mute);margin-right:6px;font-size:18px}
+.ph.f{border-style:solid;background:var(--bs)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px}.kv span:first-child{color:var(--mute)}
+.log{font-size:12px;padding:6px 0;border-bottom:1px solid var(--line)}.log small{color:var(--mute)}
+.note{color:var(--mute);font-size:12px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">Zinto · Complaint Window</div>
+  <div class="sw" id="sw"></div>
+  <div class="sp"></div>
+  <button class="btn" onclick="reset()">↺ Reset demo</button>
+</header>
+<main id="app"></main>
+<script>
+const $=id=>document.getElementById(id);
+const ITEMS=[['Tomatoes 1 kg',90],['Milk 500 ml',56],['Basmati Rice 5 kg',620]];
+const REASONS=['Item spoiled','Item delayed','Item missing','Wrong item sent','Damaged or leaked packaging','Short quantity or weight','Quality not as shown','Overcharged price','Rider behaviour','Other (type below)'];
+const STEPS=['New','Call done','Assigned','Refunded','Closed'];
+const MSG=['Complaint #C-1023 received. Our team will call you. Resolution within 7 days.','We spoke with you and are checking with the concerned party.','Your complaint is being looked into.','Refund done. Amount and transaction number below.','Closed. Thank you for your patience.'];
+let V='c',S,F,ERR='';
+function reset(){S={t:null,fb:null,logs:[]};F={sel:{0:1},reason:{},ph:{}};ERR='';draw()}
+const now=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const log=(who,txt)=>S.logs.unshift([now(),who,txt]);
+const idx=()=>({'New':0,'Call done':1,'Assigned':2,'Seller approved':2,'Seller rejected':2,'Refunded':3,'Closed':4}[S.t.status]);
+function setV(v){V=v;ERR='';draw()}
+function pick(i,on){on?F.sel[i]=1:delete F.sel[i];draw()}
+function setR(i,v){F.reason[i]=v}
+function addPh(i){F.ph[i]=Math.min(4,(F.ph[i]||0)+1);draw()}
+function submit(kind){const ids=Object.keys(F.sel);if(!ids.length){ERR='Select at least one product.';return draw()}
+ERR='';const names=ids.map(i=>ITEMS[i][0]).join(', ');
+if(kind=='fb'){S.fb={ack:false,names};log('Customer','Feedback sent for '+names)}
+else{S.t={id:'C-1023',status:'New',names,call:false,party:null,amount:0,txn:'',days:7};log('Customer','Complaint C-1023 raised for '+names+' · settlement held')}
+draw()}
+function ackFb(){S.fb.ack=true;log('Admin','Feedback acknowledged');draw()}
+function saveCall(){const n=$('cn').value.trim();if(!n){ERR='Write what the customer said before saving.';return draw()}
+ERR='';S.t.call=true;S.t.status='Call done';log('Admin','Call log · '+$('co').value+' · '+n);draw()}
+function assign(){if(!S.t.call){ERR='Save the call log first.';return draw()}
+const p=$('pa').value;ERR='';S.t.party=p;
+if(p=='Seller'){S.t.status='Assigned';S.t.sd=null;log('Admin','Assigned to Seller')}
+else if(p=='Customer'){S.t.status='Assigned';S.t.amount=0;log('Admin','Marked as false complaint (customer) · no refund')}
+else{const a=+$('am').value;if(!(a>0)){ERR='Enter the refund amount.';return draw()}S.t.amount=a;S.t.status='Assigned';log('Admin','Assigned to '+p+' · refund ₹'+a+' paid by platform')}
+draw()}
+function sellerDecide(ok){const a=+$('sa').value;
+if(ok){if(!(a>0)){ERR='Enter the amount.';return draw()}S.t.amount=a;S.t.sd='approved';S.t.status='Seller approved';log('Seller','Approved ₹'+a)}
+else{S.t.sd='rejected';S.t.status='Seller rejected';S.t.party=null;log('Seller','Rejected: '+($('sr').value||'no reason'))}ERR='';draw()}
+function refund(){if(S.t.party=='Customer'){ERR='False complaint: no refund.';return draw()}
+if(!S.t.amount||(S.t.party=='Seller'&&S.t.sd!='approved')){ERR='Assign and get the amount first.';return draw()}
+S.t.txn='TXN-'+Math.floor(100000+Math.random()*900000);S.t.status='Refunded';ERR='';log('Admin','Refund ₹'+S.t.amount+' sent · '+S.t.txn);draw()}
+function closeT(){const s=$('cs').value.trim();
+if(!S.t.party){ERR='Name a culprit first.';return draw()}
+if(S.t.party!='Customer'&&S.t.status!='Refunded'){ERR='Refund the customer before closing.';return draw()}
+if(!s){ERR='Write the final summary.';return draw()}
+S.t.status='Closed';S.t.summary=s;ERR='';log('Admin','Closed · culprit: '+S.t.party+' · '+s);draw()}
+const days=()=>S.t.status=='Closed'?'Closed':S.t.days+' days left';
+
+function customer(){
+ if(S.t){const i=idx();return `<div class="card"><div class="row"><div><h2>My complaint ${S.t.id}</h2><p class="sub">Order #ORD12345 · ${S.t.names}</p></div><div class="sp2"></div><span class="tag">${S.t.status}</span></div>
+ <ul class="tl">${STEPS.map((s,k)=>`<li><span class="dot ${k<i?'done':k==i?'now':''}">${k<i?'✓':k+1}</span><div><b>${s}</b>${k<=i?`<small>${k==3&&S.t.txn?'₹'+S.t.amount+' refunded · '+S.t.txn:k==3&&S.t.party=='Customer'?'No refund for this complaint':MSG[k]}</small>`:''}</div></li>`).join('')}</ul>
+ ${S.t.summary?`<p class="note">Outcome: ${S.t.summary}</p>`:''}</div>`}
+ if(S.fb)return `<div class="card"><div class="ok">✓ Feedback sent to the seller. ${S.fb.ack?'Acknowledged by Zinto. Thank you!':'Zinto will acknowledge it shortly.'}</div></div>`;
+ return `<div class="card"><div class="row"><div><h2>Order #ORD12345 · Delivered</h2><p class="sub">Tick the product(s) with a problem</p></div><div class="sp2"></div><span class="timer">⏱ Window closes in 18h 24m</span></div>
+ ${ITEMS.map((it,i)=>`<div class="item"><div class="hd"><input type="checkbox" ${F.sel[i]?'checked':''} onchange="pick(${i},this.checked)"><b>${it[0]}</b><span>₹${it[1]}</span></div>
+ ${F.sel[i]?`<div class="row" style="margin-top:8px"><select onchange="setR(${i},this.value)">${REASONS.map(r=>`<option ${F.reason[i]==r?'selected':''}>${r}</option>`).join('')}</select><input placeholder="Other reason (optional)" style="flex:1"></div>
+ <div style="margin-top:8px">${[0,1,2,3].map(k=>`<span class="ph ${k<(F.ph[i]||0)?'f':''}">${k<(F.ph[i]||0)?'🖼':'+'}</span>`).join('')}<button class="btn" onclick="addPh(${i})">📷 Add photo (${F.ph[i]||0}/4)</button></div>`:''}</div>`).join('')}
+ <div class="row" style="margin-top:10px"><button class="btn" onclick="submit('fb')">Submit as Feedback</button><button class="btn p" onclick="submit('c')">Submit as Complaint</button></div><p class="err">${ERR}</p>
+ <p class="note">After 24 hours from delivery this window is disabled. A complaint must be closed within 7 days.</p></div>`}
+
+function seller(){
+ if(!S.t)return `<div class="card"><h2>Complaints against my products</h2><p class="sub">Shop: Fresh Basket</p>${S.fb?`<div class="item"><b>Feedback</b> · ${S.fb.names}<br><span class="note">Order #ORD12345 · ${S.fb.ack?'Acknowledged by Admin':'Awaiting Admin acknowledgement'}</span></div>`:'<p class="note">No complaints yet. Raise one from the Customer view.</p>'}</div>`;
+ const mine=S.t.party=='Seller';
+ return `<div class="card"><div class="row"><div><h2>Complaint ${S.t.id}</h2><p class="sub">Order #ORD12345 · ${S.t.names} · ${days()}</p></div><div class="sp2"></div><span class="tag">${S.t.status}</span></div>
+ <div style="margin-bottom:10px"><span class="ph f">🖼</span><span class="ph f">🖼</span><span class="ph f">🖼</span><span class="note">Customer photos</span></div>
+ <div class="kv"><span>Reason</span><b>Item spoiled</b></div><div class="kv"><span>Order settlement</span><b>${S.t.status=='Closed'?'Released':'On hold'}</b></div>
+ ${mine&&!S.t.sd?`<div class="row" style="margin-top:8px"><input id="sa" type="number" placeholder="Amount ₹" value="50" style="width:110px"><button class="btn p" onclick="sellerDecide(true)">Approve</button><input id="sr" placeholder="Reason if rejecting" style="flex:1"><button class="btn d" onclick="sellerDecide(false)">Reject</button></div><p class="err">${ERR}</p>`
+ :S.t.sd=='approved'?`<div class="ok" style="margin-top:8px">₹${S.t.amount} will be deducted in your settlement · complaint ${S.t.id}</div>`
+ :S.t.sd=='rejected'?`<p class="note" style="margin-top:8px">You rejected this. It went back to Admin.</p>`:`<p class="note" style="margin-top:8px">${S.t.party?'Admin assigned this to '+S.t.party+'.':'Admin is reviewing. No action needed from you yet.'}</p>`}</div>`}
+
+function admin(){
+ if(!S.t)return `<div class="card"><h2>Admin Complaint Window</h2>${S.fb?`<div class="item"><b>Feedback</b> · ${S.fb.names}<div style="margin-top:6px">${S.fb.ack?'<span class="tag">Acknowledged</span>':'<button class="btn p" onclick="ackFb()">Acknowledge feedback</button>'}</div></div>`:'<p class="note">No complaints yet. Raise one from the Customer view.</p>'}${logs()}</div>`;
+ const t=S.t;return `<div class="card"><div class="row"><div><h2>Complaint ${t.id} · Order #ORD12345</h2><p class="sub">${t.names} · ${days()} · Settlement ${t.status=='Closed'?'released':'on hold'}</p></div><div class="sp2"></div><span class="tag">${t.status}</span></div>
+ <div class="grid"><div><b>1. Call log</b><p class="note">Call the customer from the app, then write what you understood.</p>
+ <select id="co"><option>Called and understood facts</option><option>Called and settled</option><option>No answer</option><option>Needs follow-up</option></select>
+ <textarea id="cn" placeholder="What the customer said (facts)">${t.call?'Saved':''}</textarea><div style="margin-top:6px"><button class="btn" onclick="saveCall()">Save call log</button></div>
+ <p style="margin:14px 0 4px"><b>2. Decide culprit and assign</b></p><div class="row"><select id="pa"><option>Seller</option><option>Rider / Logistics</option><option>Platform</option><option>Customer</option></select><input id="am" type="number" placeholder="Refund ₹ (non-seller)" style="width:150px"><button class="btn p" onclick="assign()">Assign</button></div>
+ <p class="note">Seller approves the amount. Other parties: enter it here. Reassign any number of times.</p></div>
+ <div><b>3. Refund and close</b><div class="kv"><span>Culprit</span><b>${t.party||'Not decided'}</b></div><div class="kv"><span>Amount</span><b>₹${t.amount}</b></div>
+ <div class="kv"><span>Cost booked to</span><b>${t.party=='Seller'?'Seller settlement (deduction)':t.party=='Platform'?'Zinto commission (profit reduced)':t.party=='Rider / Logistics'?'Platform, recovery ticket raised':'None'}</b></div>
+ <button class="btn p" onclick="refund()">Refund customer</button>
+ <textarea id="cs" placeholder="Final summary (required to close)" style="margin-top:10px"></textarea><div style="margin-top:6px"><button class="btn d" onclick="closeT()">Close complaint</button></div></div></div><p class="err">${ERR}</p></div>${logs()}`}
+function logs(){return `<div class="card"><h2>Audit log</h2><p class="sub">Read-only. Every step is recorded.</p>${S.logs.length?S.logs.map(l=>`<div class="log"><small>${l[0]}</small> · <b>${l[1]}</b> · ${l[2]}</div>`).join(''):'<p class="note">No entries yet.</p>'}</div>`}
+function draw(){$('sw').innerHTML=[['c','Customer'],['s','Seller'],['a','Admin']].map(x=>`<button class="${V==x[0]?'on':''}" onclick="setV('${x[0]}')">${x[1]}</button>`).join('');
+$('app').innerHTML=(V=='c'?customer():V=='s'?seller():admin())+(V!='a'&&S.logs.length?'':'')}
+reset();
+</script>
+</body>
+</html>

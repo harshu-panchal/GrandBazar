@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { customerApi } from "../../services/customerApi";
 import DeliverySlotPicker from "../checkout/DeliverySlotPicker";
 import AddOrderItemsModal from "./AddOrderItemsModal";
+import ComplaintWindowModal from "./ComplaintWindowModal";
 import { canCustomerAddItems, getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 import { toast } from "sonner";
 
@@ -11,14 +12,13 @@ import { toast } from "sonner";
 export default function OrderLifecycleActions({ order, onRefresh, returnWindowMinutes = 1440 }) {
   const [showReschedule, setShowReschedule] = useState(false);
   const [schedulePayload, setSchedulePayload] = useState(null);
-  const [disputeReason, setDisputeReason] = useState("");
   const [paying, setPaying] = useState(false);
   const [resolvingAdjustment, setResolvingAdjustment] = useState("");
   const [reviewingReplacement, setReviewingReplacement] = useState("");
   const [disputeCountdown, setDisputeCountdown] = useState(null);
   const [showAddItems, setShowAddItems] = useState(false);
-  const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
+  const [showComplaint, setShowComplaint] = useState(false);
 
   const isDelivered = getLegacyStatusFromOrder(order) === "delivered";
 
@@ -60,6 +60,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
   const hasDispute = Boolean(
     disputeSubmitted ||
     order.disputeRef ||
+    order.complaintRef ||
     order.dispute ||
     order.status === "disputed" ||
     order.orderStatus === "disputed" ||
@@ -134,27 +135,8 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
     }
   };
 
-  const raiseDispute = async () => {
-    if (!disputeReason.trim()) {
-      toast.error("Please enter a description for the dispute");
-      return;
-    }
-    try {
-      setSubmittingDispute(true);
-      await customerApi.raiseDispute(order.orderId, {
-        reason: disputeReason.trim(),
-        reasonCategory: "other",
-      });
-      setDisputeSubmitted(true);
-      toast.success("Dispute raised successfully");
-      setDisputeReason("");
-      onRefresh?.();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Could not raise dispute");
-    } finally {
-      setSubmittingDispute(false);
-    }
-  };
+  // The legacy free-text "raise dispute" flow was replaced by the Complaint
+  // Window (ComplaintWindowModal) in the settlement/complaint workstream.
 
   const reviewReplacement = async (requestId, decision, selectedAlternativeIndex = 0) => {
     try {
@@ -393,22 +375,25 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
               Complaint window ends in {disputeCountdown}
             </p>
           )}
-          <textarea
-            className="w-full rounded-xl border border-slate-200 p-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
-            placeholder="Describe the issue"
-            value={disputeReason}
-            onChange={(e) => setDisputeReason(e.target.value)}
-            disabled={submittingDispute}
-          />
           <button
             type="button"
-            disabled={submittingDispute}
-            onClick={raiseDispute}
-            className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
+            onClick={() => setShowComplaint(true)}
+            className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
           >
-            {submittingDispute ? "Submitting dispute..." : "Raise dispute"}
+            Report a problem
           </button>
         </div>
+      )}
+      {showComplaint && (
+        <ComplaintWindowModal
+          order={order}
+          onClose={() => setShowComplaint(false)}
+          onSubmitted={(type) => {
+            setDisputeSubmitted(true);
+            toast.success(type === "feedback" ? "Feedback sent" : "Complaint raised");
+            onRefresh?.();
+          }}
+        />
       )}
       {isDelivered && disputeCountdown === 0 && !hasDispute && (
         <p className="text-xs font-semibold text-slate-400">

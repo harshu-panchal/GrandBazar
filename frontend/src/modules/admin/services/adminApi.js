@@ -314,6 +314,32 @@ export const adminApi = {
     // Order lifecycle
     listDisputes: (params) => axiosInstance.get('/orders/disputes', { params }),
     resolveDispute: (disputeId, data) => axiosInstance.put(`/orders/disputes/${disputeId}/resolve`, data),
+
+    // Complaint Window (replaces disputes — BRD section 4)
+    listComplaints: (params) => axiosInstance.get('/complaints', { params }),
+    getComplaint: (complaintId) => axiosInstance.get(`/complaints/${complaintId}`),
+    getOrderComplaint: (orderId) => axiosInstance.get(`/complaints/order/${orderId}`),
+    acknowledgeFeedback: (complaintId) => axiosInstance.post(`/complaints/${complaintId}/acknowledge`),
+    logComplaintCall: (complaintId, data) => axiosInstance.post(`/complaints/${complaintId}/calls`, data),
+    assignComplaint: (complaintId, data) => axiosInstance.post(`/complaints/${complaintId}/assign`, data),
+    refundComplaint: (complaintId) => axiosInstance.post(`/complaints/${complaintId}/refund`),
+    closeComplaint: (complaintId, data) => axiosInstance.post(`/complaints/${complaintId}/close`, data),
+
+    // Seller Settlement (BRD section 5)
+    listSettlements: (params) => axiosInstance.get('/settlements', { params }),
+    getSettlement: (orderId) => axiosInstance.get(`/settlements/${orderId}`),
+    setSettlementIssues: (orderId, data) => axiosInstance.patch(`/settlements/${orderId}/issues`, data),
+    reviewSettlement: (orderId) => axiosInstance.post(`/settlements/${orderId}/review`),
+    paySettlement: (orderId, data) => axiosInstance.post(`/settlements/${orderId}/pay`, data),
+    retrySettlement: (orderId, data) => axiosInstance.post(`/settlements/${orderId}/retry`, data),
+    getSettlementInvoice: (orderId) => axiosInstance.get(`/settlements/${orderId}/invoice`),
+
+    // Bulk Settlement (BRD section 6)
+    listSellerUnsettledOrders: (sellerId) => axiosInstance.get(`/settlements/bulk/seller/${sellerId}/orders`),
+    previewBulkSettlement: (data) => axiosInstance.post('/settlements/bulk/preview', data),
+    payBulkSettlement: (data) => axiosInstance.post('/settlements/bulk/pay', data),
+    listBulkSettlementsBRD: (params) => axiosInstance.get('/settlements/bulk', { params }),
+    getBulkSettlementBRD: (refNo) => axiosInstance.get(`/settlements/bulk/${refNo}`),
     adminRescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}/admin`, data),
     adjustOrder: (orderId, data) => axiosInstance.put(`/orders/${orderId}/adjust`, data),
     previewAdjustOrder: (orderId, data) => axiosInstance.post(`/orders/${orderId}/adjust-preview`, data),

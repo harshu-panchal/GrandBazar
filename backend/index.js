@@ -55,6 +55,14 @@ import {
   getProductAvailabilityJobHandler,
   getProductAvailabilityJobInterval,
 } from "./app/jobs/productAvailabilityJob.js";
+import {
+  getComplaintSlaJobHandler,
+  getComplaintSlaJobInterval,
+} from "./app/jobs/complaintSlaJob.js";
+import {
+  getSettlementReadyJobHandler,
+  getSettlementReadyJobInterval,
+} from "./app/jobs/settlementReadyJob.js";
 import logger from "./app/services/logger.js";
 import { stopScheduledJobs } from "./app/services/distributedScheduler.js";
 import {
@@ -335,6 +343,20 @@ async function startScheduler() {
     'productAvailabilityJob',
     getProductAvailabilityJobInterval(),
     getProductAvailabilityJobHandler()
+  );
+
+  // Complaint SLA sweep: day-5 alert, day-7 OVERDUE flag (BRD CMP-04).
+  registerScheduledJob(
+    'complaintSlaJob',
+    getComplaintSlaJobInterval(),
+    getComplaintSlaJobHandler()
+  );
+
+  // Settlement READY sweep: mark orders READY when the 4 checks turn green.
+  registerScheduledJob(
+    'settlementReadyJob',
+    getSettlementReadyJobInterval(),
+    getSettlementReadyJobHandler()
   );
 
   // Register payout batch job (if enabled)

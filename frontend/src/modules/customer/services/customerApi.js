@@ -135,6 +135,16 @@ export const customerApi = {
   rescheduleOrder: (orderId, data) => axiosInstance.put(`/orders/reschedule/${orderId}`, data),
   requestReschedule: (orderId, data) =>
     axiosInstance.post(`/orders/reschedule/${orderId}/request`, data),
+
+  // Complaint Window — raise feedback or a complaint within the 24h window,
+  // and track the ticket (BRD section 4).
+  raiseComplaint: (orderId, data) =>
+    axiosInstance.post(`/complaints/order/${orderId}`, data),
+  getOrderComplaint: (orderId) => axiosInstance.get(`/complaints/order/${orderId}`),
+  uploadComplaintPhoto: (formData) =>
+    axiosInstance.post("/media/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
   payOrderDifference: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/pay-difference`, data),
   approveOrderAdjustment: (orderId) =>

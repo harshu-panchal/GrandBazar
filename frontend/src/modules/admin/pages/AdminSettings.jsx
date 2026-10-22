@@ -15,7 +15,8 @@ import {
     CreditCard,
     Loader2,
     X,
-    Truck
+    Truck,
+    ShieldAlert
 } from 'lucide-react';
 import { FaFacebook as Facebook, FaTwitter as Twitter, FaInstagram as Instagram, FaLinkedin as Linkedin, FaYoutube as Youtube } from 'react-icons/fa';
 import { cn } from '@/lib/utils';
@@ -86,6 +87,28 @@ const AdminSettings = () => {
             basePrepTimeMinutes: 8,
             minutesPerKm: 4,
             rangeSpreadMinutes: 7,
+        },
+        // Complaint Window + Seller Settlement (Zinto BRD) — config, not fixed
+        // in code (BRD section 9).
+        complaint: {
+            windowHours: 24,
+            slaDays: 7,
+            day5AlertEnabled: true,
+            day5AlertDay: 5,
+            photosRequired: false,
+            maxPhotosPerItem: 4,
+            settlementHoldScope: 'whole_order',
+        },
+        razorpay: {
+            enabled: false,
+            keyId: '',
+            payoutAccountNumber: '',
+            payoutMode: 'IMPS',
+            webhookEnabled: false,
+            payoutFeePercent: 2.35,
+        },
+        settlement: {
+            requireDifferentReviewerAndPayer: false,
         },
     });
 
@@ -213,6 +236,7 @@ const AdminSettings = () => {
         { id: 'social', label: 'Social & Apps', icon: Share2 },
         { id: 'seo', label: 'SEO & Meta', icon: Search },
         { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
+        { id: 'complaints', label: 'Complaints & Settlement', icon: ShieldAlert },
     ];
 
     return (
@@ -926,6 +950,280 @@ const AdminSettings = () => {
                                 </div>
                             </div>
                         </Card>
+                    )}
+
+                    {/* Complaints & Settlement Settings */}
+                    {activeTab === 'complaints' && (
+                        <div className="space-y-6">
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    Complaint Window
+                                </h3>
+                                <p className="text-xs font-bold text-slate-500 mt-2">
+                                    How long customers have to raise a complaint, and how fast Admin must close it.
+                                </p>
+                            </div>
+                            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Complaint Window (Hours)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="168"
+                                        value={settings.complaint?.windowHours ?? 24}
+                                        onChange={(e) => handleInputChange('complaint', { ...settings.complaint, windowHours: Number(e.target.value) })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-xs font-bold text-slate-500">After delivery, the customer may raise feedback or a complaint within this many hours (BRD default: 24).</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resolution SLA (Days)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="30"
+                                        value={settings.complaint?.slaDays ?? 7}
+                                        onChange={(e) => handleInputChange('complaint', { ...settings.complaint, slaDays: Number(e.target.value) })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-xs font-bold text-slate-500">A raised complaint must be closed within this many days (BRD default: 7).</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Day-5 Alert Fires On Day</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="30"
+                                        value={settings.complaint?.day5AlertDay ?? 5}
+                                        onChange={(e) => handleInputChange('complaint', { ...settings.complaint, day5AlertDay: Number(e.target.value) })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Photos Per Product</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="10"
+                                        value={settings.complaint?.maxPhotosPerItem ?? 4}
+                                        onChange={(e) => handleInputChange('complaint', { ...settings.complaint, maxPhotosPerItem: Number(e.target.value) })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Settlement Hold Scope (open BRD question)</label>
+                                    <select
+                                        value={settings.complaint?.settlementHoldScope || 'whole_order'}
+                                        onChange={(e) => handleInputChange('complaint', { ...settings.complaint, settlementHoldScope: e.target.value })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    >
+                                        <option value="whole_order">Hold the whole order (BRD default/assumption)</option>
+                                        <option value="complained_amount">Hold only the complained amount</option>
+                                    </select>
+                                    <p className="text-xs font-bold text-slate-500">
+                                        Recorded here for traceability; the hold-release logic currently implements "whole order" regardless of this value — confirm with the client before switching.
+                                    </p>
+                                </div>
+                                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Day-5 Alert Enabled</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">
+                                            Notify Admin and the Platform Owner when an open complaint reaches day 5.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={settings.complaint?.day5AlertEnabled}
+                                        onClick={() => handleInputChange('complaint', { ...settings.complaint, day5AlertEnabled: !settings.complaint?.day5AlertEnabled })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 shrink-0",
+                                            settings.complaint?.day5AlertEnabled ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                            settings.complaint?.day5AlertEnabled ? "translate-x-7" : "translate-x-1"
+                                        )} />
+                                    </button>
+                                </div>
+                                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Photos Mandatory (open BRD question)</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">
+                                            Require at least one photo per complained product. Off by default — the BRD left this unconfirmed.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={settings.complaint?.photosRequired}
+                                        onClick={() => handleInputChange('complaint', { ...settings.complaint, photosRequired: !settings.complaint?.photosRequired })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 shrink-0",
+                                            settings.complaint?.photosRequired ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                            settings.complaint?.photosRequired ? "translate-x-7" : "translate-x-1"
+                                        )} />
+                                    </button>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    Seller Settlement — Maker-Checker
+                                </h3>
+                                <p className="text-xs font-bold text-slate-500 mt-2">
+                                    BRD SEC-05 (open question): whether the person who reviews a settlement may also be the one who pays it.
+                                </p>
+                            </div>
+                            <div className="p-8">
+                                <div className="rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Require a different reviewer and payer</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">
+                                            Off by default (today's behavior). When on, the Admin/Finance user who marked an order "Reviewed"
+                                            cannot also click "Confirm &amp; Pay" — a different user must process the payment. In Bulk
+                                            Settlement, any order not already reviewed by someone else will fail with a clear reason rather
+                                            than silently bypassing the rule.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={settings.settlement?.requireDifferentReviewerAndPayer}
+                                        onClick={() => handleInputChange('settlement', { ...settings.settlement, requireDifferentReviewerAndPayer: !settings.settlement?.requireDifferentReviewerAndPayer })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 shrink-0",
+                                            settings.settlement?.requireDifferentReviewerAndPayer ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                            settings.settlement?.requireDifferentReviewerAndPayer ? "translate-x-7" : "translate-x-1"
+                                        )} />
+                                    </button>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                                    <CreditCard className="h-4 w-4 text-slate-400" />
+                                    Razorpay (Seller Payouts)
+                                </h3>
+                                <p className="text-xs font-bold text-slate-500 mt-2">
+                                    Non-secret config only. The API key secret, RazorpayX account and webhook secret live in server
+                                    environment variables (RAZORPAY_KEY_SECRET, RAZORPAYX_ACCOUNT_NUMBER, RAZORPAY_WEBHOOK_SECRET) —
+                                    never entered here. Until those are set on the server, automatic settlement payouts run in a safe
+                                    simulation mode.
+                                </p>
+                            </div>
+                            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Razorpay Payouts Enabled</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">Turn on once the server-side credentials are configured and verified.</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={settings.razorpay?.enabled}
+                                        onClick={() => handleInputChange('razorpay', { ...settings.razorpay, enabled: !settings.razorpay?.enabled })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 shrink-0",
+                                            settings.razorpay?.enabled ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                            settings.razorpay?.enabled ? "translate-x-7" : "translate-x-1"
+                                        )} />
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Key ID</label>
+                                    <input
+                                        type="text"
+                                        value={settings.razorpay?.keyId || ''}
+                                        onChange={(e) => handleInputChange('razorpay', { ...settings.razorpay, keyId: e.target.value })}
+                                        placeholder="rzp_live_xxxxxxxxxxxx"
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payout Account Number</label>
+                                    <input
+                                        type="text"
+                                        value={settings.razorpay?.payoutAccountNumber || ''}
+                                        onChange={(e) => handleInputChange('razorpay', { ...settings.razorpay, payoutAccountNumber: e.target.value })}
+                                        placeholder="RazorpayX source account"
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payout Mode</label>
+                                    <select
+                                        value={settings.razorpay?.payoutMode || 'IMPS'}
+                                        onChange={(e) => handleInputChange('razorpay', { ...settings.razorpay, payoutMode: e.target.value })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    >
+                                        <option value="IMPS">IMPS</option>
+                                        <option value="NEFT">NEFT</option>
+                                        <option value="UPI">UPI</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payout Gateway Fee % (open BRD question)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={settings.razorpay?.payoutFeePercent ?? 2.35}
+                                        onChange={(e) => handleInputChange('razorpay', { ...settings.razorpay, payoutFeePercent: Number(e.target.value) })}
+                                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
+                                    />
+                                    <p className="text-xs font-bold text-slate-500">
+                                        Shown to Admin/Finance in the settlement "Order money" box only — never deducted from the seller's
+                                        settled amount. BRD notes gave conflicting figures (≈2.35% vs ₹200); confirm with Razorpay/the client
+                                        and correct here.
+                                    </p>
+                                </div>
+                                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">Webhook Registered</p>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">
+                                            Mark this on once you've registered{' '}
+                                            <code className="px-1.5 py-0.5 bg-white rounded font-mono text-[11px]">POST /api/settlements/webhooks/razorpay/payout</code>{' '}
+                                            in the Razorpay dashboard. Informational only — it does not change server behavior.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={settings.razorpay?.webhookEnabled}
+                                        onClick={() => handleInputChange('razorpay', { ...settings.razorpay, webhookEnabled: !settings.razorpay?.webhookEnabled })}
+                                        className={cn(
+                                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 shrink-0",
+                                            settings.razorpay?.webhookEnabled ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200",
+                                            settings.razorpay?.webhookEnabled ? "translate-x-7" : "translate-x-1"
+                                        )} />
+                                    </button>
+                                </div>
+                            </div>
+                        </Card>
+                        </div>
                     )}
                 </div>
             </div>

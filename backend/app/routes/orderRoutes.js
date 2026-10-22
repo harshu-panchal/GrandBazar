@@ -594,7 +594,8 @@ router.get(
   getOrderModificationHistory,
 );
 
-// Disputes
+// Disputes — DEPRECATED (Phase 8): superseded by the Complaint Window
+// (/api/complaints/*). Kept for legacy/external callers during transition.
 router.post(
   "/:orderId/dispute",
   verifyToken,

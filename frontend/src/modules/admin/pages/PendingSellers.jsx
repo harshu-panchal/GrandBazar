@@ -408,7 +408,7 @@ const PendingSellers = () => {
             )}
 
             {isInviteModalOpen && (
-                <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4" onClick={() => setIsInviteModalOpen(false)}>
+                <div className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center p-4" onClick={() => setIsInviteModalOpen(false)}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-base font-black text-slate-900 uppercase tracking-wider mb-4">Invite Seller</h3>
                         <form onSubmit={handleSendInvite} className="space-y-3">

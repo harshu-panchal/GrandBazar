@@ -7,7 +7,12 @@ import User from "../../models/customer.js";
 import Delivery from "../../models/delivery.js";
 import Payout from "../../models/payout.js";
 import Review from "../../models/review.js";
+// Dispute is DEPRECATED (Phase 8 — superseded by Complaint, see
+// services/complaintService.js) but kept here so historical/legacy rows
+// still count toward these KPIs during the transition.
 import Dispute from "../../models/dispute.js";
+import Complaint from "../../models/complaint.js";
+import { OPEN_COMPLAINT_STATUSES } from "../../constants/complaint.js";
 import Transaction from "../../models/transaction.js";
 import Notification from "../../models/notification.js";
 import SellerSubscription from "../../models/sellerSubscription.js";
@@ -493,7 +498,14 @@ async function fetchEntityCounts(windows) {
       status: SUBSCRIPTION_STATUS.ACTIVE,
       currentPeriodEnd: { $gte: now, $lte: in7d },
     }),
-    Dispute.countDocuments({ status: { $in: ["open", "under_review"] } }),
+    // Counts BOTH systems during the Dispute -> Complaint transition (Phase
+    // 8): legacy Dispute rows not yet migrated, plus new open Complaint
+    // tickets. Field name stays `openDisputes` so existing consumers
+    // (dashboard KPI tile, alert banner) keep working unchanged.
+    Promise.all([
+      Dispute.countDocuments({ status: { $in: ["open", "under_review"] } }),
+      Complaint.countDocuments({ status: { $in: OPEN_COMPLAINT_STATUSES } }),
+    ]).then(([legacy, complaints]) => legacy + complaints),
     Transaction.countDocuments({ type: "Withdrawal", status: "Pending" }),
     Product.countDocuments({
       stock: { $gt: 0 },
@@ -753,9 +765,10 @@ async function fetchAlerts(counts) {
     });
   }
   if (counts.openDisputes > 0) {
+    // counts.openDisputes is legacy Disputes + open Complaints combined.
     computed.push({
       severity: "critical",
-      message: `${counts.openDisputes} dispute${counts.openDisputes === 1 ? " is" : "s are"} open and need attention`,
+      message: `${counts.openDisputes} complaint${counts.openDisputes === 1 ? " is" : "s are"} open and need attention`,
       at: new Date(),
     });
   }
@@ -788,7 +801,7 @@ async function fetchAlerts(counts) {
 }
 
 async function fetchActivityFeed() {
-  const [reviewedStores, payouts, subPayments, newSellers, resolvedDisputes] = await Promise.all([
+  const [reviewedStores, payouts, subPayments, newSellers, resolvedDisputes, closedComplaints] = await Promise.all([
     safe(
       Store.find({ applicationStatus: { $in: ["approved", "rejected"] }, reviewedAt: { $ne: null } })
         .sort({ reviewedAt: -1 })
@@ -829,6 +842,15 @@ async function fetchActivityFeed() {
         .lean(),
       [],
     ),
+    safe(
+      // Closed Complaint tickets (the Dispute replacement — Phase 8).
+      Complaint.find({ status: "CLOSED", closedAt: { $ne: null } })
+        .sort({ closedAt: -1 })
+        .limit(4)
+        .select("closedAt")
+        .lean(),
+      [],
+    ),
   ]);
 
   const events = [
@@ -856,6 +878,11 @@ async function fetchActivityFeed() {
       type: "dispute",
       message: "A customer dispute was resolved",
       at: d.resolvedAt,
+    })),
+    ...(closedComplaints || []).map((c) => ({
+      type: "complaint",
+      message: "A customer complaint was closed",
+      at: c.closedAt,
     })),
   ];
 

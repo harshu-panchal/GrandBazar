@@ -1,3 +1,9 @@
+// DEPRECATED (Phase 8): the Dispute system has been superseded by the Complaint
+// Window (models/complaint.js + services/complaintService.js). New UI no longer
+// calls these endpoints; existing rows are moved by
+// scripts/migrate_phase8_dispute_to_complaint.js. This file and its routes are
+// kept temporarily so any external/legacy API consumer keeps working during the
+// transition — do not build new features on it. Remove once no caller remains.
 import mongoose from "mongoose";
 import Order from "../models/order.js";
 import Dispute from "../models/dispute.js";

@@ -111,6 +111,28 @@ Redis is **mandatory in production** (`NODE_ENV=production`). Startup fails if n
 | `PAYOUT_BATCH_INTERVAL_MS` | `900000` | No | Payout batch run interval |
 | `ENABLE_PAYOUT_BATCH_JOB` | `false` | No | Enable payout batch job |
 | `PAYOUT_BATCH_LIMIT` | `25` | No | Max payouts per batch run |
+| `COMPLAINT_SLA_JOB_INTERVAL_MS` | `21600000` (6h) | No | Complaint day-5 alert + day-7 OVERDUE flag sweep interval |
+| `SETTLEMENT_READY_JOB_INTERVAL_MS` | `60000` | No | Seller Settlement READY-check sweep interval (per-minute by default) |
+
+## Seller Settlement — Razorpay Payouts
+
+Secrets only — non-secret config (enabled flag, key ID, payout account number,
+payout mode, gateway fee %) lives in the database via Admin Settings >
+Complaints & Settlement, not in env vars. Until these are set, automatic
+settlement payouts run in a safe SIMULATION mode (a fake payout id is
+generated so review → pay → invoice can be tested end to end).
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `RAZORPAY_KEY_ID` | — | No* | Razorpay API key id |
+| `RAZORPAY_KEY_SECRET` | — | No* | Razorpay API key secret |
+| `RAZORPAYX_ACCOUNT_NUMBER` | — | No* | RazorpayX source account that seller payouts are paid from |
+| `RAZORPAY_WEBHOOK_SECRET` | — | No* | HMAC secret used to verify the payout webhook signature |
+| `RAZORPAY_PAYOUT_MODE` | `IMPS` | No | Default payout mode: `IMPS` \| `NEFT` \| `UPI` |
+
+\* Required only to take real (non-simulated) automatic payouts. Register the
+webhook URL in the Razorpay dashboard as
+`POST https://<your-api-host>/api/settlements/webhooks/razorpay/payout`.
 
 ## Bull Queues
 

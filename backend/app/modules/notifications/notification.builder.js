@@ -732,6 +732,86 @@ function eventDefinition(eventType) {
           },
         ],
       };
+    case NOTIFICATION_EVENTS.COMPLAINT_RAISED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Complaint received",
+        body: (payload) =>
+          `Complaint ${payload.complaintId || ""} received for order #${payload.orderId || ""}. Our team will call you. Resolution within ${payload.slaDays || 7} days.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_UPDATE:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Complaint update",
+        body: (payload) =>
+          payload.message || `Your complaint ${payload.complaintId || ""} has been updated.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_REFUNDED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Refund done ✅",
+        body: (payload) =>
+          `₹${payload.amount || 0} refunded for order #${payload.orderId || ""}. Transaction ${payload.txnNo || ""}.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_CLOSED:
+      return {
+        role: NOTIFICATION_ROLES.CUSTOMER,
+        recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
+        title: () => "Complaint closed",
+        body: (payload) =>
+          `Complaint ${payload.complaintId || ""} is closed. Thank you for your patience.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_FEEDBACK_RECEIVED:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "New feedback",
+        body: (payload) =>
+          `Feedback received on order #${payload.orderId || ""}. Please review.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_ASSIGNED_SELLER:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Complaint needs your decision",
+        body: (payload) =>
+          `Complaint ${payload.complaintId || ""} on order #${payload.orderId || ""} was assigned to you. Approve an amount or reject.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_ADMIN_NEW:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: (payload) =>
+          payload.submitType === "feedback" ? "New feedback" : "New complaint",
+        body: (payload) =>
+          `${payload.submitType === "feedback" ? "Feedback" : `Complaint ${payload.complaintId || ""}`} on order #${payload.orderId || ""}.`,
+      };
+    case NOTIFICATION_EVENTS.COMPLAINT_OVERDUE_ALERT:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: (payload) => (payload.overdue ? "Complaint OVERDUE" : "Complaint nearing SLA"),
+        body: (payload) =>
+          `Complaint ${payload.complaintId || ""} on order #${payload.orderId || ""} ${payload.overdue ? "is overdue (past 7 days)." : "is on day 5. Please resolve."}`,
+      };
+    case NOTIFICATION_EVENTS.SELLER_SETTLEMENT_PAID:
+      return {
+        role: NOTIFICATION_ROLES.SELLER,
+        recipientIds: (payload) => normalizeIdList(payload.sellerId),
+        title: () => "Settlement credited ✅",
+        body: (payload) =>
+          `₹${payload.amount || 0} settled for order #${payload.orderId || ""}. Invoice ${payload.invoiceNo || ""} attached.`,
+      };
+    case NOTIFICATION_EVENTS.SELLER_SETTLEMENT_FAILED:
+      return {
+        role: NOTIFICATION_ROLES.ADMIN,
+        recipientIds: (payload) => normalizeIdList(payload.adminIds),
+        title: () => "Settlement payout failed",
+        body: (payload) => `Payout ${payload.payoutId || ""} failed. Retry from the settlement screen.`,
+      };
     case NOTIFICATION_EVENTS.CASHBACK_CREDITED:
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,

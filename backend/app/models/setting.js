@@ -318,6 +318,51 @@ const settingSchema = new mongoose.Schema(
             min: 0,
         },
 
+        // Complaint Window + Seller Settlement configuration (BRD section 9:
+        // "the 24-hour window, 7-day limit, GST rate, commission rate and
+        // delivery charge are settings, not fixed in code"). GST/commission/
+        // delivery already live in the finance settings above; these cover the
+        // complaint/settlement-specific knobs.
+        complaint: {
+            windowHours: { type: Number, default: 24, min: 0 },   // raise window after delivery
+            slaDays: { type: Number, default: 7, min: 1 },         // must be closed within
+            day5AlertEnabled: { type: Boolean, default: true },    // alert Admin + Owner on day 5
+            day5AlertDay: { type: Number, default: 5, min: 1 },    // which day the alert fires
+            photosRequired: { type: Boolean, default: false },     // open question — default per BRD assumption
+            maxPhotosPerItem: { type: Number, default: 4, min: 1 },
+            settlementHoldScope: {
+                type: String,
+                enum: ["whole_order", "complained_amount"],
+                default: "whole_order",
+            },
+        },
+
+        // Razorpay integration (per the BRD: Payments status for Check 2,
+        // RazorpayX Payouts for automatic settlement, webhook for payout
+        // success/failure). Secrets should come from env in production — these
+        // fields are for non-secret config + the webhook enable flag.
+        razorpay: {
+            enabled: { type: Boolean, default: false },
+            keyId: { type: String, default: "" },
+            payoutAccountNumber: { type: String, default: "" }, // RazorpayX source account
+            payoutMode: { type: String, default: "IMPS" },       // IMPS/NEFT/UPI
+            webhookEnabled: { type: Boolean, default: false },
+            // BRD open question: "the Razorpay deduction is about 2.35%... also
+            // mentioned ₹200. Confirm the correct figure." Shown informationally
+            // in the Admin/Finance "Order money" box only (BRD SET-11) — it is
+            // NEVER subtracted from the seller's settled amount; the BRD formula
+            // (quoted − complaint − packing − extra − quality − priceMismatch −
+            // misc) never lists a gateway-fee deduction, so Zinto absorbs it.
+            payoutFeePercent: { type: Number, default: 2.35, min: 0 },
+        },
+
+        // Seller Settlement maker/checker control (BRD SEC-05, open question:
+        // "confirm whether the reviewer and payer must be different people").
+        // Defaults to false (today's behavior, unchanged) so this is opt-in.
+        settlement: {
+            requireDifferentReviewerAndPayer: { type: Boolean, default: false },
+        },
+
         // Delivery-time estimate shown on store cards / store detail / checkout —
         // one computed value (see deliveryEtaService.js) instead of independent
         // hardcoded strings scattered across frontend components.
