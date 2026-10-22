@@ -21,7 +21,13 @@ import {
   OPEN_COMPLAINT_STATUSES,
   ALL_COMPLAINT_REASONS,
 } from "../constants/complaint.js";
-import { SETTLEMENT_STATE } from "../constants/finance.js";
+import {
+  SETTLEMENT_STATE,
+  LEDGER_TRANSACTION_TYPE,
+  LEDGER_DIRECTION,
+  OWNER_TYPE,
+} from "../constants/finance.js";
+import { createLedgerEntry } from "./finance/ledgerService.js";
 
 // ---------------------------------------------------------------------------
 // Complaint Window service (BRD section 4 + "Complaint ticket – status machine").
@@ -358,7 +364,9 @@ export async function logCall({ complaintId, adminId, adminName = "", outcome, f
     throw httpError(`Cannot log a call while the complaint is ${complaint.status}`, 409);
   }
 
+  const order = await Order.findById(complaint.order).select("orderId customer").lean();
   const session = await mongoose.startSession();
+  const afterCommit = [];
   try {
     await session.withTransaction(async () => {
       await CallLog.create(
@@ -412,10 +420,25 @@ export async function logCall({ complaintId, adminId, adminName = "", outcome, f
         },
         { session },
       );
+
+      // CMP-19: a message goes to the customer at EVERY status change — this
+      // transition (NEW/UNDER_REVIEW -> CALL_DONE) previously sent none.
+      if (order) {
+        afterCommit.push(() =>
+          emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_UPDATE, {
+            orderId: order.orderId,
+            complaintId,
+            userId: order.customer,
+            customerId: order.customer,
+            message: "We spoke with you and are checking with the concerned party.",
+          }),
+        );
+      }
     });
   } finally {
     await session.endSession();
   }
+  for (const fn of afterCommit) await fn();
   return Complaint.findById(complaint._id).lean();
 }
 
@@ -630,6 +653,58 @@ export async function refundCustomer({ complaintId, adminId, ctx = {} }) {
         ],
         { session },
       );
+
+      // Who actually bears this cost (BRD CMP-15 / section 9): seller's share
+      // is handled separately via sellerDecision's deductions.complaint.
+      // Platform and logistics faults post a ledger entry here, tagged with
+      // the order, seller and complaint number, so the cost is traceable and
+      // not just a wallet credit with no accounting trail.
+      if (complaint.culprit === COMPLAINT_CULPRIT.PLATFORM) {
+        await createLedgerEntry(
+          {
+            orderId: order._id,
+            actorType: OWNER_TYPE.ADMIN,
+            actorId: adminId || null,
+            type: LEDGER_TRANSACTION_TYPE.COMPLAINT_PLATFORM_PAID,
+            direction: LEDGER_DIRECTION.DEBIT,
+            amount,
+            description: `Complaint ${complaintId}: platform at fault, refunded ₹${amount} from commission`,
+            reference: txnNo,
+            metadata: { complaintId, sellerId: order.seller, culprit: complaint.culprit },
+          },
+          { session },
+        );
+        // "Order profit reduces" — debit the order's own recorded platform
+        // earning so downstream profit/commission reports reflect the cost.
+        await Order.updateOne(
+          { _id: order._id },
+          { $inc: { "paymentBreakdown.platformTotalEarning": -amount } },
+          { session },
+        );
+      } else if (complaint.culprit === COMPLAINT_CULPRIT.RIDER_LOGISTICS) {
+        await createLedgerEntry(
+          {
+            orderId: order._id,
+            actorType: OWNER_TYPE.ADMIN,
+            actorId: adminId || null,
+            type: LEDGER_TRANSACTION_TYPE.COMPLAINT_LOGISTICS_PAID,
+            direction: LEDGER_DIRECTION.DEBIT,
+            amount,
+            description: `Complaint ${complaintId}: logistics at fault, platform paid ₹${amount} now — recovery ticket ${complaint.recoveryTicketRef || "(none)"}`,
+            reference: txnNo,
+            metadata: {
+              complaintId,
+              sellerId: order.seller,
+              culprit: complaint.culprit,
+              recoveryTicketRef: complaint.recoveryTicketRef || "",
+            },
+          },
+          { session },
+        );
+        // Not deducted from platformTotalEarning here — BRD says this is paid
+        // now and recovered later via the logistics partner, not a permanent
+        // platform loss like the PLATFORM-fault case above.
+      }
 
       await writeEvent(session, complaint, {
         actorId: adminId,

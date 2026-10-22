@@ -511,18 +511,29 @@ async function finalizeSettlement(orderDbId, { payoutId, txnNo = "", utr = "", m
       },
     },
   );
-  const order = await Order.findById(orderDbId).select("orderId seller customer sellerSettlement").lean();
+  const order = await Order.findById(orderDbId)
+    .select("orderId seller customer sellerSettlement")
+    .populate("customer", "name")
+    .lean();
   await syncBulkOrder(orderDbId, {
     status: SETTLEMENT_STATE.SETTLED,
     invoiceNo,
     txnNo,
     settledAmount: computeSettled(order),
   });
+  // SLV-06: "a notification with Order ID, Customer Name, Amount and Settled
+  // amount" — the persistent settlement list is the full "columns" view;
+  // this push/in-app notification carries the same facts in its payload.
+  // BLK-07: bulk invoices/notifications say "Bulk settlement".
+  const bulkRef = order.sellerSettlement?.bulkRef || "";
   emitNotificationEvent(NOTIFICATION_EVENTS.SELLER_SETTLEMENT_PAID, {
     orderId: order.orderId,
     sellerId: order.seller,
     invoiceNo,
+    customerName: order.customer?.name || "",
+    quotedAmount: getQuoted(order),
     amount: computeSettled(order),
+    bulkRef,
   });
   return invoiceNo;
 }

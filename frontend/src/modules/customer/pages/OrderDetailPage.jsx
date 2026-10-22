@@ -192,12 +192,21 @@ const OrderDetailPage = () => {
   const [pickupQr, setPickupQr] = useState("");
   const [clockTick, setClockTick] = useState(Date.now());
   const returnWindowMinutes = useMemo(() => {
+    // Prefer the Complaint Window's own hours (Admin Settings > Complaints &
+    // Settlement) — it can be set independently of the older refundWindowHours
+    // field, and this countdown must match what the server actually enforces
+    // when raising a complaint (complaintService.js reads complaint.windowHours
+    // first, falling back to refundWindowHours only when unset).
+    const complaintHours = settings?.complaint?.windowHours;
+    if (typeof complaintHours === "number" && complaintHours > 0) {
+      return complaintHours * 60;
+    }
     if (settings?.refundWindowHours && typeof settings.refundWindowHours === "number" && settings.refundWindowHours > 0) {
       return settings.refundWindowHours * 60;
     }
     const parsed = parseInt(import.meta.env.VITE_RETURN_WINDOW_MINUTES || "1440", 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1440;
-  }, [settings?.refundWindowHours]);
+  }, [settings?.complaint?.windowHours, settings?.refundWindowHours]);
   const routeOriginRef = useRef(null);
   const routeRequestRef = useRef({ phase: "", startedAt: 0 });
   const [returnCountdown, setReturnCountdown] = useState(null);

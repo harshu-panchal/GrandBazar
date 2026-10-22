@@ -801,9 +801,16 @@ function eventDefinition(eventType) {
       return {
         role: NOTIFICATION_ROLES.SELLER,
         recipientIds: (payload) => normalizeIdList(payload.sellerId),
-        title: () => "Settlement credited ✅",
-        body: (payload) =>
-          `₹${payload.amount || 0} settled for order #${payload.orderId || ""}. Invoice ${payload.invoiceNo || ""} attached.`,
+        title: (payload) => (payload.bulkRef ? "Bulk settlement credited ✅" : "Settlement credited ✅"),
+        body: (payload) => {
+          const who = payload.customerName ? ` (${payload.customerName})` : "";
+          const quoted =
+            payload.quotedAmount != null && payload.quotedAmount !== payload.amount
+              ? ` Quoted ₹${payload.quotedAmount}, settled ₹${payload.amount || 0}.`
+              : ` ₹${payload.amount || 0} settled.`;
+          const bulk = payload.bulkRef ? ` Bulk settlement, Ref ${payload.bulkRef}.` : "";
+          return `Order #${payload.orderId || ""}${who}.${quoted}${bulk} Invoice ${payload.invoiceNo || ""} attached.`;
+        },
       };
     case NOTIFICATION_EVENTS.SELLER_SETTLEMENT_FAILED:
       return {
