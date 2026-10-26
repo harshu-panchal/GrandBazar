@@ -4,7 +4,6 @@ import axiosInstance from "@core/api/axios";
 import Card from "@shared/components/ui/Card";
 import Badge from "@shared/components/ui/Badge";
 import { sellerApi } from "../services/sellerApi";
-import { useStoreContext } from "../context/StoreContext";
 import { toast } from "sonner";
 import {
   HiOutlineMagnifyingGlass,
@@ -44,7 +43,6 @@ const deriveFromVariants = (variants = []) => {
 
 const BrowseCatalog = () => {
   const navigate = useNavigate();
-  const { activeStoreId } = useStoreContext();
   const [catalogItems, setCatalogItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [sellerProducts, setSellerProducts] = useState([]);
@@ -149,7 +147,7 @@ const BrowseCatalog = () => {
     }
     const timer = setTimeout(async () => {
       try {
-        const response = await sellerApi.previewCommission(activeStoreId, {
+        const response = await sellerApi.previewCommission({
           price,
           categoryId: String(categoryId),
           quantity: 1,

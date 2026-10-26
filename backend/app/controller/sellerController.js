@@ -17,7 +17,7 @@ import {
   isOwnerAccountApproved,
 } from "../services/sellerAccountService.js";
 import { formatBusinessModelPayload } from "../services/sellerBusinessModelService.js";
-import { getStoreSubscriptionSummary } from "../services/subscriptionService.js";
+import { getSellerSubscriptionSummary } from "../services/subscriptionService.js";
 import { getPlatformDeliveryProvider } from "../services/finance/financeSettingsService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance, computeStoreDistanceKm } from "../services/deliveryEtaService.js";
 import { getNearbySellersWithDistanceForCustomer } from "../services/customerVisibilityService.js";
@@ -295,8 +295,7 @@ export const getSellerProfile = async (req, res) => {
     }
 
     if (!store && req.user.accountId && account) {
-      // No store yet — business model is per-store now, so there's nothing
-      // to report for it (and no subscription) until the owner adds a shop.
+      const subscriptionSummary = await getSellerSubscriptionSummary(req.user.accountId);
       return handleResponse(res, 200, "Seller profile fetched successfully", {
         ...account,
         account,
@@ -308,9 +307,9 @@ export const getSellerProfile = async (req, res) => {
         isAccountApproved: isOwnerAccountApproved(account),
         accountApplicationStatus: getOwnerAccountApplicationStatus(account),
         applicationStatus: getOwnerAccountApplicationStatus(account),
-        businessModel: null,
-        hasActiveSubscription: false,
-        subscription: null,
+        ...formatBusinessModelPayload(account),
+        hasActiveSubscription: Boolean(subscriptionSummary.activeSubscription),
+        subscription: subscriptionSummary,
       });
     }
 
@@ -318,7 +317,9 @@ export const getSellerProfile = async (req, res) => {
       return handleResponse(res, 404, "Store not found");
     }
 
-    const subscriptionSummary = await getStoreSubscriptionSummary(store._id);
+    const subscriptionSummary = account
+      ? await getSellerSubscriptionSummary(account._id)
+      : null;
 
     const result = {
       ...store,
@@ -333,8 +334,7 @@ export const getSellerProfile = async (req, res) => {
       logoUrl: store.logoUrl || "",
       isAccountApproved: isOwnerAccountApproved(account),
       accountApplicationStatus: getOwnerAccountApplicationStatus(account),
-      // This store's own business model (not the account's — see models/store.js).
-      ...formatBusinessModelPayload(store),
+      ...(account ? formatBusinessModelPayload(account) : {}),
       hasActiveSubscription: Boolean(subscriptionSummary?.activeSubscription),
       subscription: subscriptionSummary,
     };
@@ -517,24 +517,31 @@ export const getPublicSellerProfile = async (req, res) => {
     }
 
     const store = await Store.findById(id)
-      .select("shopName slug category description banners storeVideo logoUrl address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId businessModel favoriteCount avgRating reviewCount seoTitle seoDescription seoKeywords")
+      .select("shopName slug category description banners storeVideo logoUrl address locality pincode city state location serviceRadius isActive isOpen isVerified applicationStatus ownerId favoriteCount avgRating reviewCount seoTitle seoDescription seoKeywords")
       .lean();
 
     if (!store || !store.isActive || !store.isVerified || store.applicationStatus !== "approved") {
       return handleResponse(res, 404, "Store not found or is currently inactive");
     }
 
-    // businessModel lives on the store directly now.
-    if (store.businessModel === "commission") {
-      // visible
-    } else if (store.businessModel === "subscription") {
-      const { isStoreSubscriptionOperational } = await import("../services/subscriptionService.js");
-      const operational = await isStoreSubscriptionOperational(store._id);
-      if (!operational) {
+    if (store.ownerId) {
+      const owner = await Seller.findById(store.ownerId)
+        .select("businessModel")
+        .lean();
+      if (!owner) {
         return handleResponse(res, 404, "Store not found or is currently inactive");
       }
-    } else {
-      return handleResponse(res, 404, "Store not found or is currently inactive");
+      if (owner.businessModel === "commission") {
+        // visible
+      } else if (owner.businessModel === "subscription") {
+        const { isSellerSubscriptionOperational } = await import("../services/subscriptionService.js");
+        const operational = await isSellerSubscriptionOperational(store.ownerId);
+        if (!operational) {
+          return handleResponse(res, 404, "Store not found or is currently inactive");
+        }
+      } else {
+        return handleResponse(res, 404, "Store not found or is currently inactive");
+      }
     }
 
     const signatureProducts = await Product.find({

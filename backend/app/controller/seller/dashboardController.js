@@ -769,9 +769,8 @@ export const getSellerDashboard = async (req, res) => {
           .lean(),
         [],
       ),
-      // businessModel lives on the store now, not the owner account.
-      isOwner
-        ? safe(Store.findById(storeId).select("businessModel").lean())
+      isOwner && ownerId
+        ? safe(Seller.findById(ownerId).select("businessModel").lean())
         : Promise.resolve(null),
       safe(resolveFreeTierStatus(storeId), { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" }),
     ]);
@@ -951,9 +950,9 @@ export const getSellerDashboard = async (req, res) => {
 
     /* ---------- Subscription days remaining (for recommendations) ---------- */
     let subscriptionDaysRemaining = null;
-    if (isOwner && ownerDoc?.businessModel === "subscription") {
-      const { getActiveSubscriptionForStore } = await import("../../services/subscriptionService.js");
-      const active = await safe(getActiveSubscriptionForStore(storeId));
+    if (isOwner && ownerId && ownerDoc?.businessModel === "subscription") {
+      const { getActiveSubscriptionForSeller } = await import("../../services/subscriptionService.js");
+      const active = await safe(getActiveSubscriptionForSeller(ownerId));
       if (active?.currentPeriodEnd) {
         subscriptionDaysRemaining = Math.max(
           0,

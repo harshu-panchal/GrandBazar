@@ -1,23 +1,21 @@
 import { jest } from "@jest/globals";
 import {
-  resolveStoreCommissionConfig,
+  resolveSellerCommissionConfig,
   BUSINESS_MODEL,
   COMMISSION_SCOPE,
-  buildStoreCommissionSummary,
+  buildSellerCommissionSummary,
 } from "../app/services/sellerBusinessModelService.js";
 import { calculateCategoryCommission } from "../app/services/finance/pricingService.js";
 
-// Business model lives on the STORE now (not the seller account) — see
-// models/store.js. These functions take a store-shaped object.
 describe("sellerBusinessModelService", () => {
   const category = {
     adminCommissionType: "percentage",
     adminCommissionValue: 10,
   };
 
-  it("returns zero commission for subscription stores", () => {
-    const store = { businessModel: BUSINESS_MODEL.SUBSCRIPTION };
-    const { config, source } = resolveStoreCommissionConfig(store, "cat1", category);
+  it("returns zero commission for subscription sellers", () => {
+    const seller = { businessModel: BUSINESS_MODEL.SUBSCRIPTION };
+    const { config, source } = resolveSellerCommissionConfig(seller, "cat1", category);
     const result = calculateCategoryCommission({ price: 100, quantity: 1 }, config);
     expect(source).toBe("subscription");
     expect(result.adminCommission).toBe(0);
@@ -25,11 +23,11 @@ describe("sellerBusinessModelService", () => {
   });
 
   it("uses category commission when scope is category", () => {
-    const store = {
+    const seller = {
       businessModel: BUSINESS_MODEL.COMMISSION,
       commissionConfig: { scope: COMMISSION_SCOPE.CATEGORY },
     };
-    const { config, source } = resolveStoreCommissionConfig(store, "cat1", category);
+    const { config, source } = resolveSellerCommissionConfig(seller, "cat1", category);
     const result = calculateCategoryCommission({ price: 100, quantity: 1 }, config);
     expect(source).toBe("category");
     expect(result.adminCommission).toBe(10);
@@ -37,7 +35,7 @@ describe("sellerBusinessModelService", () => {
   });
 
   it("uses seller-wise commission when scope is seller", () => {
-    const store = {
+    const seller = {
       businessModel: BUSINESS_MODEL.COMMISSION,
       commissionConfig: {
         scope: COMMISSION_SCOPE.SELLER,
@@ -46,7 +44,7 @@ describe("sellerBusinessModelService", () => {
         fixedRule: "per_qty",
       },
     };
-    const { config, source } = resolveStoreCommissionConfig(store, "cat1", category);
+    const { config, source } = resolveSellerCommissionConfig(seller, "cat1", category);
     const result = calculateCategoryCommission({ price: 100, quantity: 1 }, config);
     expect(source).toBe("seller");
     expect(result.adminCommission).toBe(15);
@@ -54,22 +52,15 @@ describe("sellerBusinessModelService", () => {
   });
 
   it("returns null config when business model not chosen", () => {
-    const { config, source } = resolveStoreCommissionConfig({ businessModel: null }, "cat1", category);
+    const { config, source } = resolveSellerCommissionConfig({ businessModel: null }, "cat1", category);
     expect(config).toBeNull();
     expect(source).toBe("none");
   });
-
-  it("two stores under the same seller can resolve independently", () => {
-    const commissionStore = { businessModel: BUSINESS_MODEL.COMMISSION, commissionConfig: { scope: COMMISSION_SCOPE.CATEGORY } };
-    const subscriptionStore = { businessModel: BUSINESS_MODEL.SUBSCRIPTION };
-    expect(resolveStoreCommissionConfig(commissionStore, "cat1", category).source).toBe("category");
-    expect(resolveStoreCommissionConfig(subscriptionStore, "cat1", category).source).toBe("subscription");
-  });
 });
 
-describe("buildStoreCommissionSummary", () => {
-  it("returns seller-wise summary for commission stores", async () => {
-    const summary = await buildStoreCommissionSummary({
+describe("buildSellerCommissionSummary", () => {
+  it("returns seller-wise summary for commission sellers", async () => {
+    const summary = await buildSellerCommissionSummary({
       businessModel: BUSINESS_MODEL.COMMISSION,
       commissionConfig: {
         scope: COMMISSION_SCOPE.SELLER,
@@ -81,8 +72,8 @@ describe("buildStoreCommissionSummary", () => {
     expect(summary.label).toBe("12%");
   });
 
-  it("returns null for subscription stores", async () => {
-    const summary = await buildStoreCommissionSummary({
+  it("returns null for subscription sellers", async () => {
+    const summary = await buildSellerCommissionSummary({
       businessModel: BUSINESS_MODEL.SUBSCRIPTION,
     });
     expect(summary).toBeNull();

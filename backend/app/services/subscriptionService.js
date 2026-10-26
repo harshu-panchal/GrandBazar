@@ -1,3 +1,4 @@
+import Seller from "../models/seller.js";
 import Store from "../models/store.js";
 import Product from "../models/product.js";
 import Setting from "../models/setting.js";
@@ -13,35 +14,16 @@ import {
 import { PAYMENT_STATUS } from "../constants/payment.js";
 import { BUSINESS_MODEL } from "./sellerBusinessModelService.js";
 
-// ---------------------------------------------------------------------------
-// Subscriptions are per STORE, not per seller account (see
-// sellerBusinessModelService.js) — a seller with several shops can run each
-// on a different plan, billed independently. Every function here is keyed by
-// storeId. SellerSubscription/SellerSubscriptionPayment/
-// SubscriptionPaymentRequest still carry a denormalized sellerId (derived
-// from store.ownerId) purely for "all of this seller's billing" admin
-// listings — it is never the authoritative key.
-// ---------------------------------------------------------------------------
-
 function buildPlanSnapshot(plan) {
   return {
     name: plan.name,
+    shopCount: plan.shopCount,
     productCountPerShop: plan.productCountPerShop,
     durationDays: plan.durationDays,
     price: plan.price,
     sortOrder: plan.sortOrder || 0,
     billingCycle: plan.billingCycle || "monthly",
   };
-}
-
-async function requireStore(storeId, select = "ownerId") {
-  const store = await Store.findById(storeId).select(select).lean();
-  if (!store) {
-    const err = new Error("Store not found");
-    err.statusCode = 404;
-    throw err;
-  }
-  return store;
 }
 
 export async function getSubscriptionPaymentSettings() {
@@ -56,11 +38,11 @@ export async function getSubscriptionPaymentSettings() {
   };
 }
 
-export async function getActiveSubscriptionForStore(storeId) {
-  if (!storeId) return null;
+export async function getActiveSubscriptionForSeller(sellerId) {
+  if (!sellerId) return null;
   const now = new Date();
   return SellerSubscription.findOne({
-    storeId,
+    sellerId,
     status: SUBSCRIPTION_STATUS.ACTIVE,
     currentPeriodEnd: { $gt: now },
   })
@@ -68,61 +50,61 @@ export async function getActiveSubscriptionForStore(storeId) {
     .lean();
 }
 
-export async function isStoreSubscriptionOperational(storeId) {
-  const store = await Store.findById(storeId).select("businessModel").lean();
-  if (!store) return false;
-  if (store.businessModel === BUSINESS_MODEL.COMMISSION) return true;
-  if (store.businessModel === BUSINESS_MODEL.SUBSCRIPTION) {
-    const active = await getActiveSubscriptionForStore(storeId);
+export async function isSellerSubscriptionOperational(sellerId) {
+  const seller = await Seller.findById(sellerId).select("businessModel").lean();
+  if (!seller) return false;
+  if (seller.businessModel === BUSINESS_MODEL.COMMISSION) return true;
+  if (seller.businessModel === BUSINESS_MODEL.SUBSCRIPTION) {
+    const active = await getActiveSubscriptionForSeller(sellerId);
     return Boolean(active);
   }
   return false;
 }
 
-export async function getSubscriptionOperationalStoreIds(storeIds = []) {
+export async function getSubscriptionOperationalOwnerIds(ownerIds = []) {
   const normalized = Array.from(
-    new Set(storeIds.map((id) => String(id || "")).filter(Boolean)),
+    new Set(ownerIds.map((id) => String(id || "")).filter(Boolean)),
   );
   if (!normalized.length) return new Set();
 
-  const stores = await Store.find({ _id: { $in: normalized } })
+  const owners = await Seller.find({ _id: { $in: normalized } })
     .select("_id businessModel")
     .lean();
 
-  const commissionIds = stores
-    .filter((s) => s.businessModel === BUSINESS_MODEL.COMMISSION)
-    .map((s) => String(s._id));
+  const commissionIds = owners
+    .filter((o) => o.businessModel === BUSINESS_MODEL.COMMISSION)
+    .map((o) => String(o._id));
 
-  const subscriptionStoreIds = stores
-    .filter((s) => s.businessModel === BUSINESS_MODEL.SUBSCRIPTION)
-    .map((s) => s._id);
+  const subscriptionOwnerIds = owners
+    .filter((o) => o.businessModel === BUSINESS_MODEL.SUBSCRIPTION)
+    .map((o) => o._id);
 
   const now = new Date();
-  const activeSubs = subscriptionStoreIds.length
+  const activeSubs = subscriptionOwnerIds.length
     ? await SellerSubscription.find({
-        storeId: { $in: subscriptionStoreIds },
+        sellerId: { $in: subscriptionOwnerIds },
         status: SUBSCRIPTION_STATUS.ACTIVE,
         currentPeriodEnd: { $gt: now },
       })
-        .select("storeId")
+        .select("sellerId")
         .lean()
     : [];
 
-  const activeIds = activeSubs.map((s) => String(s.storeId));
-  return new Set([...commissionIds, ...activeIds]);
+  const subscriptionIds = activeSubs.map((s) => String(s.sellerId));
+  return new Set([...commissionIds, ...subscriptionIds]);
 }
 
-export async function getStoreSubscriptionSummary(storeId) {
+export async function getSellerSubscriptionSummary(sellerId) {
   const [active, pendingRequest, pendingPhonePePayment] = await Promise.all([
-    getActiveSubscriptionForStore(storeId),
+    getActiveSubscriptionForSeller(sellerId),
     SubscriptionPaymentRequest.findOne({
-      storeId,
+      sellerId,
       status: PAYMENT_REQUEST_STATUS.PENDING,
     })
       .sort({ createdAt: -1 })
       .lean(),
     SellerSubscriptionPayment.findOne({
-      storeId,
+      sellerId,
       status: { $in: [PAYMENT_STATUS.CREATED, PAYMENT_STATUS.PENDING] },
     })
       .sort({ createdAt: -1 })
@@ -134,32 +116,63 @@ export async function getStoreSubscriptionSummary(storeId) {
     activePlan = await SubscriptionPlan.findById(active.planId).lean();
   }
 
-  const publishedProductCount = await Product.countDocuments({
-    sellerId: storeId,
-    status: "active",
-    isPublished: { $ne: false },
-  });
+  const stores = await Store.find({ ownerId: sellerId }).select("_id").lean();
+  const storeIds = stores.map((s) => s._id);
+  const publishedProductCount = storeIds.length
+    ? await Product.countDocuments({
+        sellerId: { $in: storeIds },
+        status: "active",
+        isPublished: { $ne: false },
+      })
+    : 0;
 
   const limits = active?.planSnapshot || activePlan || {};
-  const productLimit = Number(limits.productCountPerShop || 0) || null;
+  const shopLimit = Number(limits.shopCount || 0);
+  const productLimitPerShop = Number(limits.productCountPerShop || 0);
+  const totalProductLimit = shopLimit * productLimitPerShop;
 
   return {
     activeSubscription: active,
     pendingPaymentRequest: pendingRequest,
     pendingPhonePePayment,
     usage: {
+      shopCount: stores.length,
+      shopLimit,
       publishedProductCount,
-      productLimit,
+      productLimit: totalProductLimit || null,
     },
     paymentSettings: await getSubscriptionPaymentSettings(),
   };
 }
 
-export async function assertCanPublishProduct(storeId, additionalCount = 1) {
-  const store = await requireStore(storeId, "businessModel").catch(() => null);
-  if (!store || store.businessModel !== BUSINESS_MODEL.SUBSCRIPTION) return;
+export async function assertCanCreateStore(ownerId) {
+  const seller = await Seller.findById(ownerId).select("businessModel").lean();
+  if (seller?.businessModel !== BUSINESS_MODEL.SUBSCRIPTION) return;
 
-  const active = await getActiveSubscriptionForStore(storeId);
+  const active = await getActiveSubscriptionForSeller(ownerId);
+  if (!active) {
+    const err = new Error("Active subscription required to create shops");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const limit = Number(active.planSnapshot?.shopCount || 0);
+  const currentCount = await Store.countDocuments({ ownerId });
+  if (limit > 0 && currentCount >= limit) {
+    const err = new Error(`Shop limit reached (${limit}). Upgrade your subscription plan.`);
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
+export async function assertCanPublishProduct(storeId, additionalCount = 1) {
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store?.ownerId) return;
+
+  const seller = await Seller.findById(store.ownerId).select("businessModel").lean();
+  if (seller?.businessModel !== BUSINESS_MODEL.SUBSCRIPTION) return;
+
+  const active = await getActiveSubscriptionForSeller(store.ownerId);
   if (!active) {
     const err = new Error("Active subscription required to publish products");
     err.statusCode = 403;
@@ -185,7 +198,7 @@ export async function assertCanPublishProduct(storeId, additionalCount = 1) {
 }
 
 /**
- * Free-tier product cap for commission-model stores (checklist items 92-94).
+ * Free-tier product cap for commission-model sellers (checklist items 92-94).
  * Unlike `assertCanPublishProduct` (subscription-tier, hard block), this
  * limit's enforcement is itself admin-configurable via
  * Setting.freeTierEnforcementMode:
@@ -195,11 +208,16 @@ export async function assertCanPublishProduct(storeId, additionalCount = 1) {
  *  - "hard": creating further products is blocked once the limit is
  *    reached — see assertCanCreateFreeTierProduct below.
  * Computed live (not a stored flag) so it can never drift out of sync with
- * the store's actual published-product count.
+ * the seller's actual published-product count.
  */
 export async function resolveFreeTierStatus(storeId) {
-  const store = await Store.findById(storeId).select("businessModel").lean();
-  if (!store || store.businessModel !== BUSINESS_MODEL.COMMISSION) {
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store?.ownerId) {
+    return { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" };
+  }
+
+  const seller = await Seller.findById(store.ownerId).select("businessModel").lean();
+  if (seller?.businessModel !== BUSINESS_MODEL.COMMISSION) {
     return { applicable: false, isOverLimit: false, publishedCount: 0, limit: 0, surchargePercent: 0, enforcementMode: "soft" };
   }
 
@@ -246,7 +264,7 @@ export async function assertCanCreateFreeTierProduct(storeId) {
 }
 
 export async function createSubscriptionPaymentRequest({
-  storeId,
+  sellerId,
   planId,
   paymentMethod,
   transactionRef,
@@ -254,7 +272,6 @@ export async function createSubscriptionPaymentRequest({
   sellerNote,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
 }) {
-  const store = await requireStore(storeId, "ownerId");
   const plan = await SubscriptionPlan.findOne({ _id: planId, isActive: true }).lean();
   if (!plan) {
     const err = new Error("Subscription plan not found or inactive");
@@ -263,16 +280,16 @@ export async function createSubscriptionPaymentRequest({
   }
 
   const existingPending = await SubscriptionPaymentRequest.findOne({
-    storeId,
+    sellerId,
     status: PAYMENT_REQUEST_STATUS.PENDING,
   }).lean();
   if (existingPending) {
-    const err = new Error("This shop already has a pending payment request");
+    const err = new Error("You already have a pending payment request");
     err.statusCode = 400;
     throw err;
   }
 
-  const active = await getActiveSubscriptionForStore(storeId);
+  const active = await getActiveSubscriptionForSeller(sellerId);
   const resolvedType = resolveSubscriptionRequestType({
     activeSubscription: active,
     selectedPlan: plan,
@@ -280,8 +297,7 @@ export async function createSubscriptionPaymentRequest({
   });
 
   const request = await SubscriptionPaymentRequest.create({
-    sellerId: store.ownerId,
-    storeId,
+    sellerId,
     planId: plan._id,
     requestType: resolvedType,
     amount: plan.price,
@@ -293,7 +309,7 @@ export async function createSubscriptionPaymentRequest({
     status: PAYMENT_REQUEST_STATUS.PENDING,
   });
 
-  await Store.findByIdAndUpdate(storeId, {
+  await Seller.findByIdAndUpdate(sellerId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
     businessModelChosenAt: new Date(),
   });
@@ -312,13 +328,9 @@ export async function activateSubscriptionFromPaymentRequest(request) {
   if (!plan) {
     throw new Error("Plan not found for payment request");
   }
-  const storeId = request.storeId;
-  if (!storeId) {
-    throw new Error("Payment request has no storeId (pre-migration row?)");
-  }
 
   const now = new Date();
-  const existingActive = await getActiveSubscriptionForStore(storeId);
+  const existingActive = await getActiveSubscriptionForSeller(request.sellerId);
   let periodStart = now;
   let periodEnd = addDays(now, plan.durationDays);
 
@@ -357,7 +369,6 @@ export async function activateSubscriptionFromPaymentRequest(request) {
   } else {
     subscription = await SellerSubscription.create({
       sellerId: request.sellerId,
-      storeId,
       planId: plan._id,
       status: SUBSCRIPTION_STATUS.ACTIVE,
       currentPeriodStart: periodStart,
@@ -368,22 +379,25 @@ export async function activateSubscriptionFromPaymentRequest(request) {
     });
   }
 
-  await Store.findByIdAndUpdate(storeId, {
+  await Seller.findByIdAndUpdate(request.sellerId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
     businessModelChosenAt: new Date(),
     "businessModelSwitch.status": "none",
   });
 
-  await restoreStoreVisibility(storeId);
-  await enforceSubscriptionLimits(storeId, subscription.planSnapshot);
+  await restoreSellerVisibility(request.sellerId);
+  await enforceSubscriptionLimits(request.sellerId, subscription.planSnapshot);
 
   return subscription;
 }
 
-/** Re-activates ONE store (the one whose subscription just activated). */
-export async function restoreStoreVisibility(storeId) {
-  await Store.updateOne(
-    { _id: storeId, isVerified: true, applicationStatus: "approved" },
+export async function restoreSellerVisibility(ownerId) {
+  await Store.updateMany(
+    {
+      ownerId,
+      isVerified: true,
+      applicationStatus: "approved",
+    },
     { $set: { isActive: true } },
   );
 }
@@ -407,53 +421,73 @@ export function resolveSubscriptionRequestType({
   return isHigherTier ? PAYMENT_REQUEST_TYPE.UPGRADE : PAYMENT_REQUEST_TYPE.RENEWAL;
 }
 
-/**
- * Keeps ONE store's published-product count within its new plan's limit.
- * Each store now has its own independent subscription — there is no more
- * "N shops covered by one plan" to enforce across an account.
- */
-export async function enforceSubscriptionLimits(storeId, planSnapshot) {
-  const perShop = Number(planSnapshot?.productCountPerShop || 0);
-  if (perShop <= 0) return;
+export async function enforceSubscriptionLimits(sellerId, planSnapshot) {
+  const limits = planSnapshot || {};
+  const shopLimit = Number(limits.shopCount || 0);
+  const perShop = Number(limits.productCountPerShop || 0);
 
-  const products = await Product.find({
-    sellerId: storeId,
-    status: "active",
-    isPublished: { $ne: false },
-  })
+  const stores = await Store.find({ ownerId: sellerId })
     .sort({ createdAt: 1 })
-    .select("_id")
+    .select("_id isActive")
     .lean();
 
-  if (products.length > perShop) {
-    const unpublishIds = products.slice(perShop).map((p) => p._id);
-    await Product.updateMany({ _id: { $in: unpublishIds } }, { $set: { isPublished: false } });
+  if (shopLimit > 0 && stores.length > shopLimit) {
+    const keepIds = stores.slice(0, shopLimit).map((s) => s._id);
+    const disableIds = stores.slice(shopLimit).map((s) => s._id);
+    await Store.updateMany({ _id: { $in: disableIds } }, { $set: { isActive: false } });
+    await Store.updateMany(
+      { _id: { $in: keepIds }, isVerified: true, applicationStatus: "approved" },
+      { $set: { isActive: true } },
+    );
+  }
+
+  if (perShop > 0) {
+    const activeStoreIds = stores.slice(0, shopLimit || stores.length).map((s) => s._id);
+    for (const storeId of activeStoreIds) {
+      const products = await Product.find({
+        sellerId: storeId,
+        status: "active",
+        isPublished: { $ne: false },
+      })
+        .sort({ createdAt: 1 })
+        .select("_id")
+        .lean();
+
+      if (products.length > perShop) {
+        const unpublishIds = products.slice(perShop).map((p) => p._id);
+        await Product.updateMany({ _id: { $in: unpublishIds } }, { $set: { isPublished: false } });
+      }
+    }
   }
 }
 
-/** Deactivates ONE store + unpublishes its products when its subscription expires. */
-export async function hideStoreOnExpiry(storeId) {
-  await Store.updateOne({ _id: storeId }, { $set: { isActive: false } });
-  await Product.updateMany(
-    { sellerId: storeId },
-    { $set: { isPublished: false } },
-  );
+export async function hideSellerOnExpiry(ownerId) {
+  const stores = await Store.find({ ownerId }).select("_id").lean();
+  const storeIds = stores.map((s) => s._id);
+
+  await Store.updateMany({ ownerId }, { $set: { isActive: false } });
+
+  if (storeIds.length) {
+    await Product.updateMany(
+      { sellerId: { $in: storeIds } },
+      { $set: { isPublished: false } },
+    );
+  }
 }
 
 export async function activateSubscriptionFromPhonePePayment({
-  storeId,
+  sellerId,
   planId,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
   gatewayOrderId,
   amount,
 }) {
-  const store = await requireStore(storeId, "ownerId");
   const plan = await SubscriptionPlan.findById(planId).lean();
   if (!plan) {
     throw new Error("Plan not found for subscription payment");
   }
 
-  const active = await getActiveSubscriptionForStore(storeId);
+  const active = await getActiveSubscriptionForSeller(sellerId);
   const resolvedType = resolveSubscriptionRequestType({
     activeSubscription: active,
     selectedPlan: plan,
@@ -461,8 +495,7 @@ export async function activateSubscriptionFromPhonePePayment({
   });
 
   const request = await SubscriptionPaymentRequest.create({
-    sellerId: store.ownerId,
-    storeId,
+    sellerId,
     planId: plan._id,
     requestType: resolvedType,
     amount: Number(amount ?? plan.price),
@@ -486,11 +519,10 @@ export async function activateSubscriptionFromPhonePePayment({
  * way an approved manual/PhonePe payment does, just with no money involved.
  */
 export async function activateFreeSubscriptionPlan({
-  storeId,
+  sellerId,
   planId,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
 }) {
-  const store = await requireStore(storeId, "ownerId");
   const plan = await SubscriptionPlan.findById(planId).lean();
   if (!plan) {
     const err = new Error("Subscription plan not found");
@@ -503,7 +535,7 @@ export async function activateFreeSubscriptionPlan({
     throw err;
   }
 
-  const active = await getActiveSubscriptionForStore(storeId);
+  const active = await getActiveSubscriptionForSeller(sellerId);
   const resolvedType = resolveSubscriptionRequestType({
     activeSubscription: active,
     selectedPlan: plan,
@@ -511,8 +543,7 @@ export async function activateFreeSubscriptionPlan({
   });
 
   const request = await SubscriptionPaymentRequest.create({
-    sellerId: store.ownerId,
-    storeId,
+    sellerId,
     planId: plan._id,
     requestType: resolvedType,
     amount: 0,
@@ -590,9 +621,7 @@ export async function expireDueSubscriptions() {
         },
       },
     );
-    if (sub.storeId) {
-      await hideStoreOnExpiry(sub.storeId);
-    }
+    await hideSellerOnExpiry(sub.sellerId);
     expiredCount += 1;
   }
   return expiredCount;
@@ -605,6 +634,7 @@ export async function listActivePlans() {
 }
 
 async function ensureFreePlan({
+  shopCount = 1,
   productCountPerShop = 50,
   durationDays = 30,
 } = {}) {
@@ -624,6 +654,7 @@ async function ensureFreePlan({
     plan = await SubscriptionPlan.create({
       name: "Free",
       description: "Complimentary plan assigned by admin",
+      shopCount: Math.max(1, Number(shopCount) || 1),
       productCountPerShop: Math.max(1, Number(productCountPerShop) || 50),
       durationDays: Math.max(1, Number(durationDays) || 30),
       price: 0,
@@ -638,26 +669,27 @@ async function ensureFreePlan({
 }
 
 /**
- * Admin grants a free/complimentary subscription to ONE store.
+ * Admin grants a free/complimentary subscription to a seller.
  * Creates a Free plan (price 0) if none exists, unless planId is provided.
  */
 export async function assignComplimentarySubscription({
-  storeId,
+  sellerId,
   planId,
   durationDays,
+  shopCount,
   productCountPerShop,
   adminId,
   note = "",
 } = {}) {
-  if (!storeId) {
-    const err = new Error("Store is required");
+  if (!sellerId) {
+    const err = new Error("Seller is required");
     err.statusCode = 400;
     throw err;
   }
 
-  const store = await Store.findById(storeId).select("_id ownerId shopName").lean();
-  if (!store) {
-    const err = new Error("Store not found");
+  const seller = await Seller.findById(sellerId).select("_id name email").lean();
+  if (!seller) {
+    const err = new Error("Seller not found");
     err.statusCode = 404;
     throw err;
   }
@@ -671,7 +703,7 @@ export async function assignComplimentarySubscription({
       throw err;
     }
   } else {
-    plan = await ensureFreePlan({ productCountPerShop, durationDays });
+    plan = await ensureFreePlan({ shopCount, productCountPerShop, durationDays });
   }
 
   const days = Math.max(
@@ -686,7 +718,7 @@ export async function assignComplimentarySubscription({
     durationDays: days,
   };
 
-  const existingActive = await getActiveSubscriptionForStore(storeId);
+  const existingActive = await getActiveSubscriptionForSeller(sellerId);
   let subscription;
 
   if (existingActive) {
@@ -709,8 +741,7 @@ export async function assignComplimentarySubscription({
     );
   } else {
     subscription = await SellerSubscription.create({
-      sellerId: store.ownerId,
-      storeId,
+      sellerId,
       planId: plan._id,
       status: SUBSCRIPTION_STATUS.ACTIVE,
       currentPeriodStart: now,
@@ -723,19 +754,19 @@ export async function assignComplimentarySubscription({
     });
   }
 
-  await Store.findByIdAndUpdate(storeId, {
+  await Seller.findByIdAndUpdate(sellerId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
     businessModelChosenAt: new Date(),
     "businessModelSwitch.status": "none",
   });
 
-  await restoreStoreVisibility(storeId);
-  await enforceSubscriptionLimits(storeId, snapshot);
+  await restoreSellerVisibility(sellerId);
+  await enforceSubscriptionLimits(sellerId, snapshot);
 
   return {
     subscription,
     plan,
-    store,
+    seller,
   };
 }
 
@@ -745,25 +776,25 @@ export async function listComplimentarySubscriptions({ limit = 200 } = {}) {
     .limit(Math.min(Number(limit) || 200, 500))
     .lean();
 
-  const storeIds = [...new Set(subs.map((s) => String(s.storeId)).filter(Boolean))];
+  const sellerIds = [...new Set(subs.map((s) => String(s.sellerId)))];
   const planIds = [...new Set(subs.map((s) => String(s.planId)))];
 
-  const [stores, plans] = await Promise.all([
-    Store.find({ _id: { $in: storeIds } })
-      .select("shopName ownerId businessModel")
+  const [sellers, plans] = await Promise.all([
+    Seller.find({ _id: { $in: sellerIds } })
+      .select("name email phone businessModel")
       .lean(),
     SubscriptionPlan.find({ _id: { $in: planIds } })
-      .select("name price durationDays productCountPerShop")
+      .select("name price durationDays shopCount productCountPerShop")
       .lean(),
   ]);
 
-  const storeMap = new Map(stores.map((s) => [String(s._id), s]));
+  const sellerMap = new Map(sellers.map((s) => [String(s._id), s]));
   const planMap = new Map(plans.map((p) => [String(p._id), p]));
   const now = new Date();
 
   return subs.map((sub) => ({
     ...sub,
-    store: storeMap.get(String(sub.storeId)) || null,
+    seller: sellerMap.get(String(sub.sellerId)) || null,
     plan: planMap.get(String(sub.planId)) || null,
     isActiveNow:
       sub.status === SUBSCRIPTION_STATUS.ACTIVE
@@ -772,13 +803,13 @@ export async function listComplimentarySubscriptions({ limit = 200 } = {}) {
   }));
 }
 
-export async function listStoresForComplimentaryAssign() {
-  return Store.find({
+export async function listSellersForComplimentaryAssign() {
+  return Seller.find({
     applicationStatus: "approved",
     isActive: { $ne: false },
   })
-    .select("shopName ownerId businessModel")
-    .sort({ shopName: 1 })
+    .select("name email phone businessModel")
+    .sort({ name: 1 })
     .limit(500)
     .lean();
 }

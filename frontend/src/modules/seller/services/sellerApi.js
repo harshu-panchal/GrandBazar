@@ -125,19 +125,19 @@ export const sellerApi = {
     updateSellerRole: (id, data) => axiosInstance.put(`/seller/roles/${id}`, data),
     deleteSellerRole: (id) => axiosInstance.delete(`/seller/roles/${id}`),
 
-    // Business model — chosen PER STORE now, not for the whole account.
-    getBusinessModel: (storeId) => axiosInstance.get(`/seller/stores/${storeId}/business-model`),
-    chooseBusinessModel: (storeId, data) => axiosInstance.post(`/seller/stores/${storeId}/business-model/choose`, data),
-    requestBusinessModelSwitch: (storeId, data) => axiosInstance.post(`/seller/stores/${storeId}/business-model/request-switch`, data),
-    previewCommission: (storeId, params) => axiosInstance.get(`/seller/stores/${storeId}/commission-preview`, { params }),
+    // Business model
+    getBusinessModel: () => axiosInstance.get('/seller/business-model'),
+    chooseBusinessModel: (data) => axiosInstance.post('/seller/business-model/choose', data),
+    requestBusinessModelSwitch: (data) => axiosInstance.post('/seller/business-model/request-switch', data),
+    previewCommission: (params) => axiosInstance.get('/seller/commission-preview', { params }),
 
-    getSubscriptionPlans: (storeId) => axiosInstance.get(`/seller/stores/${storeId}/subscription/plans`),
-    getSubscriptionStatus: (storeId) => axiosInstance.get(`/seller/stores/${storeId}/subscription/status`),
-    initiateSubscriptionPayment: (storeId, data) => axiosInstance.post(`/seller/stores/${storeId}/subscription/pay`, data),
-    verifySubscriptionPayment: (storeId, merchantOrderId) =>
-        axiosInstance.get(`/seller/stores/${storeId}/subscription/payment/verify`, { params: { merchantOrderId } }),
-    submitSubscriptionPayment: (storeId, formData) =>
-        axiosInstance.post(`/seller/stores/${storeId}/subscription/payment-request`, formData, {
+    getSubscriptionPlans: () => axiosInstance.get('/seller/subscription/plans'),
+    getSubscriptionStatus: () => axiosInstance.get('/seller/subscription/status'),
+    initiateSubscriptionPayment: (data) => axiosInstance.post('/seller/subscription/pay', data),
+    verifySubscriptionPayment: (merchantOrderId) =>
+        axiosInstance.get('/seller/subscription/payment/verify', { params: { merchantOrderId } }),
+    submitSubscriptionPayment: (formData) =>
+        axiosInstance.post('/seller/subscription/payment-request', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
 

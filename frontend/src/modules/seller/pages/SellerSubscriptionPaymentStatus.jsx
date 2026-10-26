@@ -6,13 +6,11 @@ import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import { sellerApi } from "../services/sellerApi";
 import { useAuth } from "@core/context/AuthContext";
-import { useStoreContext } from "../context/StoreContext";
 
 const SellerSubscriptionPaymentStatus = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
-  const { activeStoreId } = useStoreContext();
   const merchantOrderId = searchParams.get("merchantOrderId");
   const [status, setStatus] = useState("verifying");
   const [payment, setPayment] = useState(null);
@@ -26,10 +24,9 @@ const SellerSubscriptionPaymentStatus = () => {
       setError("Missing payment reference");
       return;
     }
-    if (!activeStoreId) return;
 
     try {
-      const response = await sellerApi.verifySubscriptionPayment(activeStoreId, merchantOrderId);
+      const response = await sellerApi.verifySubscriptionPayment(merchantOrderId);
       const result = response.data.result || {};
       const paymentStatus = result.status;
       setPayment(result.payment);

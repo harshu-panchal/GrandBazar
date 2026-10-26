@@ -6,24 +6,19 @@ import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import { sellerApi } from "../services/sellerApi";
 import { useAuth } from "@core/context/AuthContext";
-import { useStoreContext } from "../context/StoreContext";
 
-// Subscriptions are per shop now — this page acts on the currently active
-// shop (switched via the store switcher), same as Orders/Products do.
 const SellerSubscription = () => {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
-  const { activeStoreId } = useStoreContext();
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [data, setData] = useState(null);
   const [selectedPlanId, setSelectedPlanId] = useState("");
 
   const loadData = async () => {
-    if (!activeStoreId) return;
     setIsLoading(true);
     try {
-      const response = await sellerApi.getSubscriptionPlans(activeStoreId);
+      const response = await sellerApi.getSubscriptionPlans();
       setData(response.data.result || {});
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load subscription plans");
@@ -34,8 +29,7 @@ const SellerSubscription = () => {
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStoreId]);
+  }, []);
 
   const handlePayWithPhonePe = async () => {
     if (!selectedPlanId) {
@@ -56,7 +50,7 @@ const SellerSubscription = () => {
 
     setIsPaying(true);
     try {
-      const response = await sellerApi.initiateSubscriptionPayment(activeStoreId, {
+      const response = await sellerApi.initiateSubscriptionPayment({
         planId: selectedPlanId,
         requestType,
       });

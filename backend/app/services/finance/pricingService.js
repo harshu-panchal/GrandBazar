@@ -1085,10 +1085,8 @@ export async function generateOrderPaymentBreakdown({
     throw err;
   }
   if (owner?.businessModel === "subscription") {
-    const { getActiveSubscriptionForStore } = await import("../subscriptionService.js");
-    // owner._id is the STORE id now (loadStoreOwnerBusinessModel resolves per
-    // store, not per seller account — see sellerBusinessModelService.js).
-    const active = await getActiveSubscriptionForStore(owner._id);
+    const { getActiveSubscriptionForSeller } = await import("../subscriptionService.js");
+    const active = await getActiveSubscriptionForSeller(owner._id);
     if (!active) {
       const err = new Error("Active subscription required for checkout");
       err.statusCode = 403;

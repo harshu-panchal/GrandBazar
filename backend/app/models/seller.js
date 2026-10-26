@@ -105,13 +105,6 @@ const sellerSchema = new mongoose.Schema(
       default: true,
     },
 
-    // DEPRECATED: business model moved to the STORE level (one choice per
-    // shop, not per seller account) — see models/store.js businessModel block
-    // and services/sellerBusinessModelService.js. These account-level fields
-    // are kept, unwritten by new code, so scripts/migrate_business_model_to_store.js
-    // can read a seller's prior choice and copy it onto each existing store.
-    // Safe to remove once that migration has run everywhere and no code reads
-    // these anymore.
     businessModel: {
       type: String,
       enum: ["commission", "subscription", null],

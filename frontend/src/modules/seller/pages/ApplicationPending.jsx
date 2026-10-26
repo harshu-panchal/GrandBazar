@@ -54,9 +54,8 @@ const ApplicationPending = () => {
         (user?.isVerified === true && applicationStatus === "approved");
 
       if (isAccountApproved) {
-        // Business model is per shop now (chosen after adding one) — an
-        // approved account with no shops yet always starts at Add New Shop.
-        return <Navigate to="/seller/stores" replace />;
+        const hasBusinessModel = Boolean(user?.businessModel);
+        return <Navigate to={hasBusinessModel ? "/seller/stores" : "/seller/choose-model"} replace />;
       }
     } else {
       const isApproved =

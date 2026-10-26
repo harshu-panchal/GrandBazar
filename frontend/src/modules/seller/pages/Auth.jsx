@@ -469,6 +469,8 @@ const Auth = () => {
         const accountApproved =
           isAccountApproved ??
           (seller?.isVerified === true && (accountApplicationStatus || "pending") === "approved");
+        const businessModel = response.data.result?.businessModel ?? seller?.businessModel ?? null;
+
         if (isOwner && !accountApproved) {
           navigate("/seller/pending-approval", {
             replace: true,
@@ -477,6 +479,8 @@ const Auth = () => {
               rejectionReason: rejectionReason || "",
             },
           });
+        } else if (isOwner && !businessModel) {
+          navigate("/seller/choose-model", { replace: true });
         } else if (hasApprovedStore === false && isOwner) {
           navigate("/seller/stores", { replace: true });
         } else {

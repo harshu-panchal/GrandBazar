@@ -78,18 +78,16 @@ const SellerProfile = () => {
   const isOwnerAccount = Boolean(profile) && !profile?.subSellerId;
 
   useEffect(() => {
-    // Business model is per shop now — this reads the currently active shop's.
-    if (!isOwnerAccount || !profile?.activeStoreId) return;
-    sellerApi.getBusinessModel(profile.activeStoreId)
+    if (!isOwnerAccount) return;
+    sellerApi.getBusinessModel()
       .then((response) => setBusinessModelData(response.data.result))
       .catch(() => setBusinessModelData(null));
-  }, [isOwnerAccount, profile?.activeStoreId, profile?.businessModel]);
+  }, [isOwnerAccount, profile?.businessModel]);
 
   const handleRequestModelSwitch = async (requestedModel) => {
-    if (!profile?.activeStoreId) return;
     setSwitchLoading(true);
     try {
-      const response = await sellerApi.requestBusinessModelSwitch(profile.activeStoreId, { requestedModel });
+      const response = await sellerApi.requestBusinessModelSwitch({ requestedModel });
       setBusinessModelData(response.data.result);
       toast.success(response.data.message || "Switch request submitted");
     } catch (error) {

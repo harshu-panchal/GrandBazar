@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import { sellerApi } from "../services/sellerApi";
-import { useStoreContext } from "../context/StoreContext";
 import { toast } from "sonner";
 import {
   HiOutlineArrowLeft,
@@ -14,7 +13,6 @@ import {
 const CatalogPricingWizard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeStoreId } = useStoreContext();
   const [products, setProducts] = useState([]);
   const [pricingMap, setPricingMap] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
@@ -33,7 +31,7 @@ const CatalogPricingWizard = () => {
       return;
     }
     try {
-      const response = await sellerApi.previewCommission(activeStoreId, {
+      const response = await sellerApi.previewCommission({
         price: numericPrice,
         categoryId: String(categoryId),
         quantity: 1,

@@ -1,19 +1,16 @@
-import Store from "../../models/store.js";
+import Seller from "../../models/seller.js";
 import handleResponse from "../../utils/helper.js";
 import {
   BUSINESS_MODEL,
   COMMISSION_SCOPE,
   formatBusinessModelPayload,
-  resolveStoreIdFromSellerOrStoreId,
+  resolveOwnerIdFromSellerOrStoreId,
 } from "../../services/sellerBusinessModelService.js";
-import { getActiveSubscriptionForStore } from "../../services/subscriptionService.js";
+import { getActiveSubscriptionForSeller } from "../../services/subscriptionService.js";
 
-// Business model lives on the STORE now. :id in these admin routes may still
-// be a sellerId from an older link — resolveStoreIdFromSellerOrStoreId
-// accepts either and resolves to a concrete storeId.
-async function resolveStoreFromParam(id) {
-  const storeId = await resolveStoreIdFromSellerOrStoreId(id);
-  return storeId ? Store.findById(storeId) : null;
+async function resolveOwnerFromParam(id) {
+  const ownerId = await resolveOwnerIdFromSellerOrStoreId(id);
+  return ownerId ? Seller.findById(ownerId) : null;
 }
 
 function normalizeCommissionConfig(input = {}) {
@@ -45,16 +42,16 @@ function normalizeCommissionConfig(input = {}) {
 
 export async function getAdminSellerBusinessModel(req, res) {
   try {
-    const store = await resolveStoreFromParam(req.params.id);
-    if (!store) {
-      return handleResponse(res, 404, "Shop not found");
+    const seller = await resolveOwnerFromParam(req.params.id);
+    if (!seller) {
+      return handleResponse(res, 404, "Seller owner not found");
     }
 
-    return handleResponse(res, 200, "Shop business model fetched", {
-      storeId: store._id,
-      shopName: store.shopName,
-      ownerId: store.ownerId,
-      ...formatBusinessModelPayload(store),
+    return handleResponse(res, 200, "Seller business model fetched", {
+      ownerId: seller._id,
+      ...formatBusinessModelPayload(seller),
+      name: seller.name,
+      email: seller.email,
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -63,9 +60,9 @@ export async function getAdminSellerBusinessModel(req, res) {
 
 export async function updateAdminSellerBusinessModel(req, res) {
   try {
-    const store = await resolveStoreFromParam(req.params.id);
-    if (!store) {
-      return handleResponse(res, 404, "Shop not found");
+    const seller = await resolveOwnerFromParam(req.params.id);
+    if (!seller) {
+      return handleResponse(res, 404, "Seller owner not found");
     }
 
     const { businessModel } = req.body || {};
@@ -78,15 +75,15 @@ export async function updateAdminSellerBusinessModel(req, res) {
     }
 
     if (businessModel) {
-      store.businessModel = businessModel;
-      store.businessModelChosenAt = store.businessModelChosenAt || new Date();
+      seller.businessModel = businessModel;
+      seller.businessModelChosenAt = seller.businessModelChosenAt || new Date();
     }
 
-    await store.save();
+    await seller.save();
 
-    return handleResponse(res, 200, "Shop business model updated", {
-      storeId: store._id,
-      ...formatBusinessModelPayload(store),
+    return handleResponse(res, 200, "Seller business model updated", {
+      ownerId: seller._id,
+      ...formatBusinessModelPayload(seller),
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -95,22 +92,22 @@ export async function updateAdminSellerBusinessModel(req, res) {
 
 export async function updateAdminSellerCommission(req, res) {
   try {
-    const store = await resolveStoreFromParam(req.params.id);
-    if (!store) {
-      return handleResponse(res, 404, "Shop not found");
+    const seller = await resolveOwnerFromParam(req.params.id);
+    if (!seller) {
+      return handleResponse(res, 404, "Seller owner not found");
     }
 
-    store.commissionConfig = normalizeCommissionConfig(req.body || {});
-    if (!store.businessModel) {
-      store.businessModel = BUSINESS_MODEL.COMMISSION;
-      store.businessModelChosenAt = new Date();
+    seller.commissionConfig = normalizeCommissionConfig(req.body || {});
+    if (!seller.businessModel) {
+      seller.businessModel = BUSINESS_MODEL.COMMISSION;
+      seller.businessModelChosenAt = new Date();
     }
 
-    await store.save();
+    await seller.save();
 
-    return handleResponse(res, 200, "Shop commission settings updated", {
-      storeId: store._id,
-      ...formatBusinessModelPayload(store),
+    return handleResponse(res, 200, "Seller commission settings updated", {
+      ownerId: seller._id,
+      ...formatBusinessModelPayload(seller),
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -121,12 +118,12 @@ export async function listModelSwitchRequests(req, res) {
   try {
     const status = req.query.status || "pending";
     const filter = { "businessModelSwitch.status": status };
-    const stores = await Store.find(filter)
-      .select("shopName ownerId businessModel businessModelSwitch createdAt")
+    const sellers = await Seller.find(filter)
+      .select("name email phone businessModel businessModelSwitch createdAt")
       .sort({ "businessModelSwitch.requestedAt": -1 })
       .limit(200)
       .lean();
-    return handleResponse(res, 200, "Model switch requests fetched", stores);
+    return handleResponse(res, 200, "Model switch requests fetched", sellers);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -134,26 +131,26 @@ export async function listModelSwitchRequests(req, res) {
 
 export async function approveModelSwitchRequest(req, res) {
   try {
-    const store = await resolveStoreFromParam(req.params.id);
-    if (!store) {
-      return handleResponse(res, 404, "Shop not found");
+    const seller = await resolveOwnerFromParam(req.params.id);
+    if (!seller) {
+      return handleResponse(res, 404, "Seller owner not found");
     }
-    if (store.businessModelSwitch?.status !== "pending") {
+    if (seller.businessModelSwitch?.status !== "pending") {
       return handleResponse(res, 400, "No pending model switch request");
     }
 
-    const requested = store.businessModelSwitch.requestedModel;
+    const requested = seller.businessModelSwitch.requestedModel;
     if (requested === BUSINESS_MODEL.SUBSCRIPTION) {
-      store.businessModel = BUSINESS_MODEL.SUBSCRIPTION;
-      store.businessModelChosenAt = store.businessModelChosenAt || new Date();
+      seller.businessModel = BUSINESS_MODEL.SUBSCRIPTION;
+      seller.businessModelChosenAt = seller.businessModelChosenAt || new Date();
     } else if (requested === BUSINESS_MODEL.COMMISSION) {
-      const active = await getActiveSubscriptionForStore(store._id);
+      const active = await getActiveSubscriptionForSeller(seller._id);
       if (active) {
-        return handleResponse(res, 400, "Cannot switch to commission while this shop's subscription is active");
+        return handleResponse(res, 400, "Cannot switch to commission while subscription is active");
       }
-      store.businessModel = BUSINESS_MODEL.COMMISSION;
-      if (!store.commissionConfig?.scope) {
-        store.commissionConfig = {
+      seller.businessModel = BUSINESS_MODEL.COMMISSION;
+      if (!seller.commissionConfig?.scope) {
+        seller.commissionConfig = {
           scope: COMMISSION_SCOPE.CATEGORY,
           type: "percentage",
           value: 0,
@@ -163,16 +160,16 @@ export async function approveModelSwitchRequest(req, res) {
       }
     }
 
-    store.businessModelSwitch = {
+    seller.businessModelSwitch = {
       requestedModel: requested,
-      requestedAt: store.businessModelSwitch.requestedAt,
+      requestedAt: seller.businessModelSwitch.requestedAt,
       effectiveAt: new Date(),
       status: "approved",
       rejectionReason: "",
     };
-    await store.save();
+    await seller.save();
 
-    return handleResponse(res, 200, "Model switch approved", formatBusinessModelPayload(store));
+    return handleResponse(res, 200, "Model switch approved", formatBusinessModelPayload(seller));
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -180,23 +177,23 @@ export async function approveModelSwitchRequest(req, res) {
 
 export async function rejectModelSwitchRequest(req, res) {
   try {
-    const store = await resolveStoreFromParam(req.params.id);
-    if (!store) {
-      return handleResponse(res, 404, "Shop not found");
+    const seller = await resolveOwnerFromParam(req.params.id);
+    if (!seller) {
+      return handleResponse(res, 404, "Seller owner not found");
     }
-    if (store.businessModelSwitch?.status !== "pending") {
+    if (seller.businessModelSwitch?.status !== "pending") {
       return handleResponse(res, 400, "No pending model switch request");
     }
 
-    store.businessModelSwitch = {
-      ...(store.businessModelSwitch?.toObject?.() || store.businessModelSwitch || {}),
+    seller.businessModelSwitch = {
+      ...(seller.businessModelSwitch?.toObject?.() || seller.businessModelSwitch || {}),
       status: "rejected",
       effectiveAt: new Date(),
       rejectionReason: String(req.body?.rejectionReason || "").trim(),
     };
-    await store.save();
+    await seller.save();
 
-    return handleResponse(res, 200, "Model switch rejected", formatBusinessModelPayload(store));
+    return handleResponse(res, 200, "Model switch rejected", formatBusinessModelPayload(seller));
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

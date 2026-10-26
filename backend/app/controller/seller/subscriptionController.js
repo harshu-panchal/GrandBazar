@@ -1,9 +1,8 @@
 import handleResponse from "../../utils/helper.js";
 import { uploadToCloudinary } from "../../services/mediaService.js";
-import Store from "../../models/store.js";
 import {
   createSubscriptionPaymentRequest,
-  getStoreSubscriptionSummary,
+  getSellerSubscriptionSummary,
   listActivePlans,
   activateFreeSubscriptionPlan,
 } from "../../services/subscriptionService.js";
@@ -14,26 +13,20 @@ import {
 } from "../../services/subscriptionPaymentService.js";
 import { PAYMENT_REQUEST_TYPE } from "../../constants/subscription.js";
 
-// Subscriptions are per STORE now — every handler below requires :storeId in
-// the route and verifies it belongs to the calling owner before touching it.
-async function requireOwnedStore(req) {
-  const ownerId = req.user?.accountId;
-  const storeId = req.params?.storeId;
-  if (!ownerId || !storeId) return null;
-  const store = await Store.findOne({ _id: storeId, ownerId }).select("_id ownerId").lean();
-  return store;
+function resolveOwnerId(req) {
+  return req.user?.accountId || null;
 }
 
 export async function getSellerSubscriptionPlans(req, res) {
   try {
-    const store = await requireOwnedStore(req);
-    if (!store) {
-      return handleResponse(res, 403, "Only this shop's owner can view subscription plans");
+    const ownerId = resolveOwnerId(req);
+    if (!ownerId) {
+      return handleResponse(res, 403, "Only the store owner can view subscription plans");
     }
 
     const [plans, summary] = await Promise.all([
       listActivePlans(),
-      getStoreSubscriptionSummary(store._id),
+      getSellerSubscriptionSummary(ownerId),
     ]);
 
     return handleResponse(res, 200, "Subscription plans fetched", {
@@ -47,12 +40,12 @@ export async function getSellerSubscriptionPlans(req, res) {
 
 export async function getSellerSubscriptionStatus(req, res) {
   try {
-    const store = await requireOwnedStore(req);
-    if (!store) {
-      return handleResponse(res, 403, "Only this shop's owner can view subscription status");
+    const ownerId = resolveOwnerId(req);
+    if (!ownerId) {
+      return handleResponse(res, 403, "Only the store owner can view subscription status");
     }
 
-    const summary = await getStoreSubscriptionSummary(store._id);
+    const summary = await getSellerSubscriptionSummary(ownerId);
     return handleResponse(res, 200, "Subscription status fetched", summary);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -61,9 +54,9 @@ export async function getSellerSubscriptionStatus(req, res) {
 
 export async function submitSubscriptionPaymentRequest(req, res) {
   try {
-    const store = await requireOwnedStore(req);
-    if (!store) {
-      return handleResponse(res, 403, "Only this shop's owner can submit payment proof");
+    const ownerId = resolveOwnerId(req);
+    if (!ownerId) {
+      return handleResponse(res, 403, "Only the store owner can submit payment proof");
     }
 
     const { planId, paymentMethod, transactionRef, sellerNote, requestType } = req.body || {};
@@ -83,7 +76,7 @@ export async function submitSubscriptionPaymentRequest(req, res) {
     }
 
     const request = await createSubscriptionPaymentRequest({
-      storeId: store._id,
+      sellerId: ownerId,
       planId,
       paymentMethod,
       transactionRef,
@@ -100,9 +93,9 @@ export async function submitSubscriptionPaymentRequest(req, res) {
 
 export async function initiateSubscriptionPhonePePayment(req, res) {
   try {
-    const store = await requireOwnedStore(req);
-    if (!store) {
-      return handleResponse(res, 403, "Only this shop's owner can pay for subscription");
+    const ownerId = resolveOwnerId(req);
+    if (!ownerId) {
+      return handleResponse(res, 403, "Only the store owner can pay for subscription");
     }
 
     const { planId, requestType } = req.body || {};
@@ -116,7 +109,7 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
     const plan = await SubscriptionPlan.findById(planId).select("price").lean();
     if (plan && Number(plan.price) <= 0) {
       const { subscription } = await activateFreeSubscriptionPlan({
-        storeId: store._id,
+        sellerId: ownerId,
         planId,
         requestType: requestType || PAYMENT_REQUEST_TYPE.NEW,
       });
@@ -127,7 +120,7 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
     }
 
     const result = await createSubscriptionPhonePeCheckout({
-      storeId: store._id,
+      sellerId: ownerId,
       planId,
       requestType: requestType || PAYMENT_REQUEST_TYPE.NEW,
     });
@@ -144,9 +137,9 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
 
 export async function verifySubscriptionPhonePePaymentStatus(req, res) {
   try {
-    const store = await requireOwnedStore(req);
-    if (!store) {
-      return handleResponse(res, 403, "Only this shop's owner can verify subscription payment");
+    const ownerId = resolveOwnerId(req);
+    if (!ownerId) {
+      return handleResponse(res, 403, "Only the store owner can verify subscription payment");
     }
 
     const merchantOrderId = req.query.merchantOrderId || req.params.merchantOrderId;
@@ -156,7 +149,7 @@ export async function verifySubscriptionPhonePePaymentStatus(req, res) {
 
     const result = await verifySubscriptionPhonePePayment({
       merchantOrderId,
-      sellerId: req.user.accountId,
+      sellerId: ownerId,
     });
 
     return handleResponse(res, 200, "Subscription payment status", {

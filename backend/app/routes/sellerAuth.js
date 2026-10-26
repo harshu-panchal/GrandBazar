@@ -128,9 +128,6 @@ const sellerAuthChain = [verifyToken, allowRoles("seller"), resolveActiveStore];
 
 // Store management (owner only)
 router.get("/stores", ...sellerAuthChain, allowOwnerOnly, listOwnerStores);
-// NOTE: no requireBusinessModelChosen gate here (removed — business model is
-// now chosen PER STORE as part of/after creating this shop, not an
-// account-wide precondition for creating one at all; see models/store.js).
 router.post("/stores", upload.any(), ...sellerAuthChain, allowOwnerOnly, createStore);
 router.patch("/stores/:storeId/kyc-resubmit", upload.any(), ...sellerAuthChain, allowOwnerOnly, resubmitStoreKyc);
 router.get("/stores/:storeId", ...sellerAuthChain, allowOwnerOnly, getStoreById);
@@ -139,21 +136,18 @@ router.post("/stores/switch", ...sellerAuthChain, allowOwnerOnly, switchActiveSt
 router.patch("/stores/:storeId/toggle-active", ...sellerAuthChain, allowOwnerOnly, toggleStoreActive);
 
 // Business model (owner only — no businessModel gate)
-// Business model + subscription are per STORE now — every route below is
-// scoped to :storeId (verified to belong to the calling owner in the
-// controller), not implicit from the account.
-router.get("/stores/:storeId/business-model", ...sellerAuthChain, allowOwnerOnly, getSellerBusinessModel);
-router.post("/stores/:storeId/business-model/choose", ...sellerAuthChain, allowOwnerOnly, chooseSellerBusinessModel);
-router.post("/stores/:storeId/business-model/request-switch", ...sellerAuthChain, allowOwnerOnly, requestSellerBusinessModelSwitch);
-router.get("/stores/:storeId/commission-preview", ...sellerAuthChain, allowOwnerOnly, previewSellerCommission);
+router.get("/business-model", ...sellerAuthChain, allowOwnerOnly, getSellerBusinessModel);
+router.post("/business-model/choose", ...sellerAuthChain, allowOwnerOnly, chooseSellerBusinessModel);
+router.post("/business-model/request-switch", ...sellerAuthChain, allowOwnerOnly, requestSellerBusinessModelSwitch);
+router.get("/commission-preview", ...sellerAuthChain, allowOwnerOnly, previewSellerCommission);
 
 const sellerSubscriptionChain = [...sellerAuthChain, allowOwnerOnly];
-router.get("/stores/:storeId/subscription/plans", ...sellerSubscriptionChain, getSellerSubscriptionPlans);
-router.get("/stores/:storeId/subscription/status", ...sellerSubscriptionChain, getSellerSubscriptionStatus);
-router.post("/stores/:storeId/subscription/pay", ...sellerSubscriptionChain, initiateSubscriptionPhonePePayment);
-router.get("/stores/:storeId/subscription/payment/verify", ...sellerSubscriptionChain, verifySubscriptionPhonePePaymentStatus);
+router.get("/subscription/plans", ...sellerSubscriptionChain, getSellerSubscriptionPlans);
+router.get("/subscription/status", ...sellerSubscriptionChain, getSellerSubscriptionStatus);
+router.post("/subscription/pay", ...sellerSubscriptionChain, initiateSubscriptionPhonePePayment);
+router.get("/subscription/payment/verify", ...sellerSubscriptionChain, verifySubscriptionPhonePePaymentStatus);
 router.post(
-    "/stores/:storeId/subscription/payment-request",
+    "/subscription/payment-request",
     upload.single("proof"),
     ...sellerSubscriptionChain,
     submitSubscriptionPaymentRequest,

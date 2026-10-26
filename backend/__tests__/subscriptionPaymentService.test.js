@@ -1,12 +1,7 @@
 import { jest } from "@jest/globals";
 
-// Subscription payments are per STORE now — createSubscriptionPhonePeCheckout
-// takes storeId (looks up the owning Seller for the denormalized sellerId),
-// and sets Store.businessModel (not Seller's) once checkout is created.
-
 const mockPlanFindOne = jest.fn();
-const mockStoreFindById = jest.fn();
-const mockStoreFindByIdAndUpdate = jest.fn();
+const mockSellerFindByIdAndUpdate = jest.fn();
 const mockSubscriptionPaymentCountDocuments = jest.fn();
 const mockSubscriptionPaymentCreate = jest.fn();
 const mockActivateFromPhonePe = jest.fn();
@@ -29,11 +24,8 @@ jest.unstable_mockModule("../app/models/subscriptionPlan.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../app/models/store.js", () => ({
-  default: {
-    findById: mockStoreFindById,
-    findByIdAndUpdate: mockStoreFindByIdAndUpdate,
-  },
+jest.unstable_mockModule("../app/models/seller.js", () => ({
+  default: { findByIdAndUpdate: mockSellerFindByIdAndUpdate },
 }));
 
 jest.unstable_mockModule("../app/models/sellerSubscriptionPayment.js", () => ({
@@ -47,12 +39,12 @@ jest.unstable_mockModule("../app/models/sellerSubscriptionPayment.js", () => ({
 }));
 
 jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
-  getActiveSubscriptionForStore: jest.fn().mockResolvedValue(null),
+  getActiveSubscriptionForSeller: jest.fn().mockResolvedValue(null),
   activateSubscriptionFromPhonePePayment: mockActivateFromPhonePe,
   resolveSubscriptionRequestType: jest.fn().mockReturnValue("new"),
 }));
 
-describe("subscriptionPaymentService (per-store)", () => {
+describe("subscriptionPaymentService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.PHONEPE_CLIENT_ID = "test-client";
@@ -60,11 +52,11 @@ describe("subscriptionPaymentService (per-store)", () => {
     process.env.PHONEPE_ENV = "SANDBOX";
     process.env.FRONTEND_URL = "http://localhost:5173";
 
-    mockStoreFindById.mockReturnValue({ select: () => ({ lean: async () => ({ ownerId: "seller123" }) }) });
     mockPlanFindOne.mockResolvedValue({
       _id: "plan1",
       name: "Starter",
       price: 999,
+      shopCount: 1,
       productCountPerShop: 50,
       durationDays: 30,
       isActive: true,
@@ -94,31 +86,25 @@ describe("subscriptionPaymentService (per-store)", () => {
     expect(isSubscriptionMerchantOrderId("ORD-123")).toBe(false);
   });
 
-  it("createSubscriptionPhonePeCheckout returns redirect URL and sets businessModel on the STORE", async () => {
+  it("createSubscriptionPhonePeCheckout returns redirect URL", async () => {
     const { createSubscriptionPhonePeCheckout } = await import("../app/services/subscriptionPaymentService.js");
 
     const result = await createSubscriptionPhonePeCheckout({
-      storeId: "store123",
+      sellerId: "seller123",
       planId: "plan1",
     });
 
     expect(result.redirectUrl).toBe("https://phonepe.test/pay");
     expect(mockAxiosPost).toHaveBeenCalled();
-    const createArg = mockSubscriptionPaymentCreate.mock.calls[0][0];
-    expect(createArg.storeId).toBe("store123");
-    expect(createArg.sellerId).toBe("seller123"); // denormalized from the store's owner
-    expect(mockStoreFindByIdAndUpdate).toHaveBeenCalledWith(
-      "store123",
-      expect.objectContaining({ businessModel: "subscription" }),
-    );
+    expect(mockSubscriptionPaymentCreate).toHaveBeenCalled();
+    expect(mockSellerFindByIdAndUpdate).toHaveBeenCalled();
   });
 
   it("verifySubscriptionPhonePePayment activates on CAPTURED", async () => {
     const paymentDoc = {
       sellerId: "seller123",
-      storeId: "store123",
       planId: "plan1",
-      gatewayOrderId: "SUB-STORE123-PLAN1-A1",
+      gatewayOrderId: "SUB-SELLER123-PLAN1-A1",
       status: "PENDING",
       planSnapshot: { price: 999 },
       save: jest.fn().mockResolvedValue(true),
@@ -141,13 +127,11 @@ describe("subscriptionPaymentService (per-store)", () => {
 
     const { verifySubscriptionPhonePePayment } = await import("../app/services/subscriptionPaymentService.js");
     const result = await verifySubscriptionPhonePePayment({
-      merchantOrderId: "SUB-STORE123-PLAN1-A1",
+      merchantOrderId: "SUB-SELLER123-PLAN1-A1",
       sellerId: "seller123",
     });
 
     expect(result.status).toBe("CAPTURED");
-    expect(mockActivateFromPhonePe).toHaveBeenCalledWith(
-      expect.objectContaining({ storeId: "store123" }),
-    );
+    expect(mockActivateFromPhonePe).toHaveBeenCalled();
   });
 });
