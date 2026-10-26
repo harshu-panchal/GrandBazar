@@ -1066,9 +1066,22 @@ orderSchema.index({ status: 1, seller: 1, deliveryBoy: 1, createdAt: -1 });
 // that specific gap.
 orderSchema.index({ seller: 1, createdAt: -1 });
 orderSchema.index({ customer: 1, status: 1, createdAt: -1 });
-// Seller Settlement: idempotency (sparse — most orders never settle via this
-// path), bulk reference lookups, and the per-minute "mark READY" job.
-orderSchema.index({ "sellerSettlement.idempotencyKey": 1 }, { unique: true, sparse: true });
+// Seller Settlement idempotency — most orders never settle via this path, so
+// the field is null almost always. A unique+SPARSE index does NOT exclude
+// that: sparse only skips a field that is truly ABSENT, and Mongoose
+// auto-vivifies sellerSettlement (it has nested defaults) on every order,
+// writing idempotencyKey: null literally. That made the second order ever
+// created collide with the first on the shared null key, and every order
+// since (E11000 duplicate key on sellerSettlement.idempotencyKey_1) — see
+// the identical, already-fixed case right above: placement.idempotencyKey
+// uses the same partialFilterExpression pattern for the same reason.
+orderSchema.index(
+  { "sellerSettlement.idempotencyKey": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "sellerSettlement.idempotencyKey": { $type: "string" } },
+  },
+);
 orderSchema.index({ "sellerSettlement.bulkRef": 1 });
 orderSchema.index({ complaintWindowClosesAt: 1, "settlementStatus.settlementState": 1 });
 orderSchema.index({ status: 1, expiresAt: 1 });
