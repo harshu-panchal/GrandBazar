@@ -8,24 +8,34 @@ import {
 } from "../constants/finance.js";
 import { calculateCategoryCommission } from "./finance/pricingService.js";
 
+// ---------------------------------------------------------------------------
+// Business model (commission vs subscription) lives on the STORE, not the
+// seller's owner account — a seller with several shops can run each
+// independently (shop A on commission, shop B on its own subscription plan).
+// Formerly account-level (Seller.businessModel) — see models/seller.js and
+// models/store.js for the deprecation note and field shapes.
+// ---------------------------------------------------------------------------
+
 /**
- * Admin screens address a shop by its STORE id (e.g. /admin/sellers/active/:id),
- * while the business model, commission config and subscription live on the
- * owner's SELLER account. Since multi-store accounts, those ids differ. This
- * accepts either and returns the owner's Seller id, or null when nothing matches.
+ * Admin screens historically addressed a shop by either its STORE id or the
+ * owner's SELLER id. Business model now lives on the Store, so this resolves
+ * either to the relevant Store id:
+ *  - a Store id is returned as-is;
+ *  - a Seller (owner) id is a legacy shape — returns that owner's single
+ *    store if they have exactly one, otherwise null (ambiguous: admin UI
+ *    should pass a storeId directly once on the new per-store screens).
  */
-export async function resolveOwnerIdFromSellerOrStoreId(id) {
+export async function resolveStoreIdFromSellerOrStoreId(id) {
   const raw = String(id || "").trim();
   if (!mongoose.Types.ObjectId.isValid(raw)) return null;
 
-  const seller = await Seller.findById(raw).select("_id accountType").lean();
-  if (seller && (seller.accountType === "owner" || !seller.accountType)) {
-    return seller._id;
-  }
+  const store = await Store.findById(raw).select("_id").lean();
+  if (store) return store._id;
 
-  // Not an owner account (or not a Seller at all): treat it as a store id.
-  const store = await Store.findById(raw).select("ownerId").lean();
-  return store?.ownerId || null;
+  const seller = await Seller.findById(raw).select("_id accountType").lean();
+  if (!seller) return null;
+  const stores = await Store.find({ ownerId: seller._id }).select("_id").limit(2).lean();
+  return stores.length === 1 ? stores[0]._id : null;
 }
 
 export const BUSINESS_MODEL = {
@@ -52,37 +62,38 @@ function toCommissionConfigShape({ type, value, fixedRule }) {
   };
 }
 
-export function isBusinessModelChosen(seller) {
-  return seller?.businessModel === BUSINESS_MODEL.COMMISSION
-    || seller?.businessModel === BUSINESS_MODEL.SUBSCRIPTION;
+/** `store` is a Store doc/lean-object carrying businessModel (own or synced). */
+export function isBusinessModelChosen(store) {
+  return store?.businessModel === BUSINESS_MODEL.COMMISSION
+    || store?.businessModel === BUSINESS_MODEL.SUBSCRIPTION;
 }
 
-export function isSellerOperationalForCustomers(seller) {
-  if (!seller) return false;
-  if (seller.businessModel === BUSINESS_MODEL.COMMISSION) return true;
+export function isStoreOperationalForCustomers(store) {
+  if (!store) return false;
+  if (store.businessModel === BUSINESS_MODEL.COMMISSION) return true;
   return false;
 }
 
-export async function isSellerOperationalForCustomersAsync(sellerId) {
-  const { isSellerSubscriptionOperational } = await import("./subscriptionService.js");
-  return isSellerSubscriptionOperational(sellerId);
+export async function isStoreOperationalForCustomersAsync(storeId) {
+  const { isStoreSubscriptionOperational } = await import("./subscriptionService.js");
+  return isStoreSubscriptionOperational(storeId);
 }
 
-export function resolveSellerCommissionConfig(seller, categoryId, category = null) {
-  if (!seller || seller.businessModel === BUSINESS_MODEL.SUBSCRIPTION) {
+export function resolveStoreCommissionConfig(store, categoryId, category = null) {
+  if (!store || store.businessModel === BUSINESS_MODEL.SUBSCRIPTION) {
     return {
       config: ZERO_COMMISSION_CONFIG,
-      source: seller?.businessModel === BUSINESS_MODEL.SUBSCRIPTION
+      source: store?.businessModel === BUSINESS_MODEL.SUBSCRIPTION
         ? "subscription"
         : "none",
     };
   }
 
-  if (seller.businessModel !== BUSINESS_MODEL.COMMISSION) {
+  if (store.businessModel !== BUSINESS_MODEL.COMMISSION) {
     return { config: null, source: "none" };
   }
 
-  const commissionConfig = seller.commissionConfig || {};
+  const commissionConfig = store.commissionConfig || {};
   if (commissionConfig.scope === COMMISSION_SCOPE.SELLER) {
     const overrides = Array.isArray(commissionConfig.categoryOverrides)
       ? commissionConfig.categoryOverrides
@@ -108,53 +119,52 @@ export function resolveSellerCommissionConfig(seller, categoryId, category = nul
   };
 }
 
+/**
+ * Resolves the business model that applies to a store. Returns `{ store,
+ * owner }` where `owner` is the SAME object pricingService.js/
+ * orderActivationService.js already expect (businessModel, commissionConfig,
+ * businessModelChosenAt, businessModelSwitch, _id) — just sourced from the
+ * Store now instead of the Seller account, so those call sites barely change.
+ * `owner._id` is the STORE id going forward (it's what callers pass on to
+ * subscriptionService's per-store functions).
+ */
 export async function loadStoreOwnerBusinessModel(storeId, { session = null } = {}) {
   if (!mongoose.Types.ObjectId.isValid(String(storeId || ""))) {
     return { store: null, owner: null };
   }
 
-  const storeQuery = Store.findById(storeId).select("ownerId").lean();
+  const storeQuery = Store.findById(storeId)
+    .select("ownerId businessModel businessModelChosenAt commissionConfig businessModelSwitch");
   if (session) storeQuery.session(session);
-  const store = await storeQuery;
-  if (!store?.ownerId) {
+  const store = await storeQuery.lean();
+  if (!store) {
     return { store: null, owner: null };
   }
 
-  const ownerQuery = Seller.findById(store.ownerId)
-    .select("businessModel businessModelChosenAt commissionConfig businessModelSwitch accountType")
-    .lean();
-  if (session) ownerQuery.session(session);
-  const owner = await ownerQuery;
+  const owner = {
+    _id: store._id,
+    ownerId: store.ownerId,
+    businessModel: store.businessModel,
+    businessModelChosenAt: store.businessModelChosenAt,
+    commissionConfig: store.commissionConfig,
+    businessModelSwitch: store.businessModelSwitch,
+  };
   return { store, owner };
 }
 
-export async function getOwnerIdsWithOperationalBusinessModel(ownerIds = []) {
-  const { getSubscriptionOperationalOwnerIds } = await import("./subscriptionService.js");
-  return getSubscriptionOperationalOwnerIds(ownerIds);
+export async function getStoreIdsWithOperationalBusinessModel(storeIds = []) {
+  const { getSubscriptionOperationalStoreIds } = await import("./subscriptionService.js");
+  return getSubscriptionOperationalStoreIds(storeIds);
 }
 
 export async function filterStoreIdsByOwnerBusinessModel(storeIds = []) {
-  const normalized = Array.from(
-    new Set(storeIds.map((id) => String(id || "")).filter(Boolean)),
+  return getStoreIdsWithOperationalBusinessModel(storeIds).then((set) =>
+    storeIds.map((id) => String(id)).filter((id) => set.has(id)),
   );
-  if (!normalized.length) return [];
-
-  const stores = await Store.find({ _id: { $in: normalized } })
-    .select("_id ownerId")
-    .lean();
-  if (!stores.length) return [];
-
-  const operationalOwnerIds = await getOwnerIdsWithOperationalBusinessModel(
-    stores.map((store) => store.ownerId),
-  );
-
-  return stores
-    .filter((store) => operationalOwnerIds.has(String(store.ownerId)))
-    .map((store) => String(store._id));
 }
 
-export async function previewCommissionForSeller({
-  seller,
+export async function previewCommissionForStore({
+  store,
   price,
   quantity = 1,
   categoryId,
@@ -168,8 +178,8 @@ export async function previewCommissionForSeller({
       .lean();
   }
 
-  const { config, source } = resolveSellerCommissionConfig(
-    seller,
+  const { config, source } = resolveStoreCommissionConfig(
+    store,
     categoryId,
     category,
   );
@@ -193,17 +203,18 @@ export async function previewCommissionForSeller({
     appliedCommissionValue: commission.appliedCommissionValue,
     appliedCommissionFixedRule: commission.appliedFixedRule,
     commissionSource: source,
-    businessModel: seller?.businessModel || null,
+    businessModel: store?.businessModel || null,
     categoryName: category?.name || null,
   };
 }
 
-export function formatBusinessModelPayload(seller) {
-  if (!seller) return null;
-  const switchState = seller.businessModelSwitch || {};
+export function formatBusinessModelPayload(store) {
+  if (!store) return null;
+  const switchState = store.businessModelSwitch || {};
   return {
-    businessModel: seller.businessModel || null,
-    businessModelChosenAt: seller.businessModelChosenAt || null,
+    storeId: store._id,
+    businessModel: store.businessModel || null,
+    businessModelChosenAt: store.businessModelChosenAt || null,
     businessModelSwitch: {
       requestedModel: switchState.requestedModel ?? null,
       requestedAt: switchState.requestedAt || null,
@@ -211,7 +222,7 @@ export function formatBusinessModelPayload(seller) {
       status: switchState.status || "none",
       rejectionReason: switchState.rejectionReason || "",
     },
-    commissionConfig: seller.commissionConfig || {
+    commissionConfig: store.commissionConfig || {
       scope: COMMISSION_SCOPE.CATEGORY,
       type: COMMISSION_TYPE.PERCENTAGE,
       value: 0,
@@ -240,12 +251,12 @@ function formatCommissionRateLabel({
     : `₹${rateValue} per qty`;
 }
 
-export async function buildSellerCommissionSummary(seller) {
-  if (!seller || seller.businessModel !== BUSINESS_MODEL.COMMISSION) {
+export async function buildStoreCommissionSummary(store) {
+  if (!store || store.businessModel !== BUSINESS_MODEL.COMMISSION) {
     return null;
   }
 
-  const config = seller.commissionConfig || {};
+  const config = store.commissionConfig || {};
   const scope = config.scope || COMMISSION_SCOPE.CATEGORY;
 
   if (scope === COMMISSION_SCOPE.SELLER) {

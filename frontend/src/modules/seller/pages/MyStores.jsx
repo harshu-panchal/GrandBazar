@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store,
@@ -157,6 +157,7 @@ function handleKycFieldChange(field, rawValue, setFormData) {
 
 const MyStores = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { stores, activeStoreId, switchStore, refreshStores, isSwitching } = useStoreContext();
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -505,6 +506,11 @@ const MyStores = () => {
                       {store.isOpen !== false ? 'Open' : 'Off'}
                     </span>
                   )}
+                  {isApplicationApproved(store) && !store.businessModel && (
+                    <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-100">
+                      Business model needed
+                    </span>
+                  )}
                 </div>
                 </div>
 
@@ -531,6 +537,14 @@ const MyStores = () => {
                       onClick={() => handleToggleActive(store._id)}
                     >
                       {store.isOpen !== false ? 'Close store' : 'Open store'}
+                    </Button>
+                  )}
+                  {isApplicationApproved(store) && !store.businessModel && (
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/seller/stores/${store._id}/choose-model`)}
+                    >
+                      Choose business model
                     </Button>
                   )}
                   {!isApplicationApproved(store) && status === 'pending' && (

@@ -4,6 +4,11 @@ import { Plus, X, Image as ImageIcon, Save, Trash2, Video, Star } from "lucide-r
 import { sellerApi } from "../services/sellerApi";
 import Button from "@shared/components/ui/Button";
 
+// The logo is sent to the API as a base64 data URL inside the storefront JSON
+// payload (alongside the banners), so this ceiling is bounded by the server's
+// express.json limit rather than by any upload middleware.
+const LOGO_MAX_SIZE_MB = 5;
+
 const getEmbedUrl = (url) => {
   if (!url) return "";
   const shortMatch = url.match(/shorts\/([^/?]+)/);
@@ -69,8 +74,8 @@ const Storefront = () => {
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1 * 1024 * 1024) {
-        toast.error("Logo size must be less than 1MB");
+      if (file.size > LOGO_MAX_SIZE_MB * 1024 * 1024) {
+        toast.error(`Logo size must be less than ${LOGO_MAX_SIZE_MB}MB`);
         return;
       }
       const reader = new FileReader();
@@ -143,7 +148,7 @@ const Storefront = () => {
               <h4 className="text-base font-bold text-slate-800">Your Store Logo</h4>
               <p className="text-sm text-slate-500 leading-relaxed mt-1">
                 Upload a high-resolution logo (512x512px).<br className="hidden sm:block" />
-                Valid formats: JPG, PNG. Max file size: 1MB.
+                Valid formats: JPG, PNG. Max file size: {LOGO_MAX_SIZE_MB}MB.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-1">

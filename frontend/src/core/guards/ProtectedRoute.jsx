@@ -45,8 +45,10 @@ const ProtectedRoute = ({ children }) => {
 
     if (location.pathname.startsWith('/seller')) {
         const isStoresPage = location.pathname.startsWith('/seller/stores');
-        const isChooseModelPage = location.pathname.startsWith('/seller/choose-model');
-        const isSubscriptionPage = location.pathname.startsWith('/seller/subscription');
+        // Both now live under /seller/stores/:storeId/... — isStoresPage already
+        // covers them; kept as their own flags for clarity at the call site below.
+        const isChooseModelPage = /\/seller\/stores\/[^/]+\/choose-model/.test(location.pathname);
+        const isSubscriptionPage = /\/seller\/stores\/[^/]+\/subscription/.test(location.pathname);
         const isOwner = Boolean(user && !user?.subSellerId);
         const stores = user?.stores || [];
 
@@ -70,20 +72,12 @@ const ProtectedRoute = ({ children }) => {
                 );
             }
 
-            if (!user?.businessModel && !isChooseModelPage && !isSubscriptionPage) {
-                return <Navigate to="/seller/choose-model" replace />;
-            }
-
-            if (
-                user?.businessModel === 'subscription'
-                && !user?.hasActiveSubscription
-                && !isSubscriptionPage
-                && !isStoresPage
-                && !isChooseModelPage
-                && location.pathname !== '/seller/profile'
-            ) {
-                return <Navigate to="/seller/subscription" replace />;
-            }
+            // Business model is chosen PER SHOP now (see MyStores.jsx), not as an
+            // account-wide gate before anything else — a seller with zero shops
+            // has nothing to choose a model for yet. The old forced redirect to
+            // /seller/choose-model is removed; "no approved store yet" below
+            // sends them to add one instead, and each shop's own model/subscription
+            // status is surfaced from MyStores.jsx itself.
 
             const hasApprovedStore = stores.some(isStoreApproved);
             if (!hasApprovedStore && !isStoresPage && !isChooseModelPage && !isSubscriptionPage) {

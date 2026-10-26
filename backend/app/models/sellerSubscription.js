@@ -9,6 +9,17 @@ const sellerSubscriptionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Subscriptions are per STORE, not per seller account: a seller with 3
+    // shops can have 3 independent subscriptions (different plans, different
+    // billing). sellerId stays denormalized above for "all of this seller's
+    // subscriptions" admin queries, but storeId is the authoritative key for
+    // every operational check (is THIS store's subscription active).
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+      index: true,
+    },
     planId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionPlan",
@@ -55,6 +66,7 @@ const sellerSubscriptionSchema = new mongoose.Schema(
 );
 
 sellerSubscriptionSchema.index({ sellerId: 1, status: 1 });
+sellerSubscriptionSchema.index({ storeId: 1, status: 1 });
 sellerSubscriptionSchema.index({ status: 1, currentPeriodEnd: 1 });
 
 export default mongoose.model("SellerSubscription", sellerSubscriptionSchema);

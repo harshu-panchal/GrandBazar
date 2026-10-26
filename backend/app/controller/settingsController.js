@@ -164,7 +164,12 @@ export const getPublicSettings = async (req, res) => {
       async () => {
         const existing = await Setting.findOne(filter)
           .select(
-            "appName supportEmail supportPhone currencySymbol currencyCode timezone logoUrl faviconUrl primaryColor secondaryColor returnDeliveryCommission deliveryPricingMode pricingMode customerBaseDeliveryFee riderBasePayout baseDeliveryCharge baseDistanceCapacityKm incrementalKmSurcharge deliveryPartnerRatePerKm fleetCommissionRatePerKm fixedDeliveryFee handlingFeeStrategy codEnabled onlineEnabled lowStockAlertsEnabled productApproval defaultDeliveryProvider refundWindowHours deliveryEta operatingHours createdAt",
+            // complaint.windowHours (and only that one field of the complaint
+            // block) is exposed here: it's as non-sensitive as refundWindowHours
+            // and the customer-facing complaint countdown needs the current
+            // value, not a stale duplicate. complaint.slaDays/photosRequired/
+            // etc. and the razorpay/settlement blocks stay admin-only (SEC-01).
+            "appName supportEmail supportPhone currencySymbol currencyCode timezone logoUrl faviconUrl primaryColor secondaryColor returnDeliveryCommission deliveryPricingMode pricingMode customerBaseDeliveryFee riderBasePayout baseDeliveryCharge baseDistanceCapacityKm incrementalKmSurcharge deliveryPartnerRatePerKm fleetCommissionRatePerKm fixedDeliveryFee handlingFeeStrategy codEnabled onlineEnabled lowStockAlertsEnabled productApproval defaultDeliveryProvider refundWindowHours complaint.windowHours deliveryEta operatingHours createdAt",
           )
           .lean();
         return existing || null;

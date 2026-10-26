@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Percent, Store, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
@@ -8,20 +8,23 @@ import Card from "@shared/components/ui/Card";
 import { sellerApi } from "../services/sellerApi";
 import { useAuth } from "@core/context/AuthContext";
 
+// Business model is chosen PER SHOP (see models/store.js on the backend) —
+// this page acts on :storeId from the route, not the seller's account.
 const ChooseBusinessModel = () => {
   const navigate = useNavigate();
-  const { user, refreshUser } = useAuth();
+  const { storeId } = useParams();
+  const { refreshUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChooseSubscription = async () => {
     setIsSubmitting(true);
     try {
-      await sellerApi.chooseBusinessModel({ businessModel: "subscription" });
+      await sellerApi.chooseBusinessModel(storeId, { businessModel: "subscription" });
       toast.success("Subscription model selected. Choose a plan and pay with PhonePe.");
       if (typeof refreshUser === "function") {
         await refreshUser();
       }
-      navigate("/seller/subscription", { replace: true });
+      navigate(`/seller/stores/${storeId}/subscription`, { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to select subscription model");
     } finally {
@@ -32,18 +35,12 @@ const ChooseBusinessModel = () => {
   const handleChooseCommission = async () => {
     setIsSubmitting(true);
     try {
-      await sellerApi.chooseBusinessModel({ businessModel: "commission" });
+      await sellerApi.chooseBusinessModel(storeId, { businessModel: "commission" });
       toast.success("Commission model activated. You can start selling.");
       if (typeof refreshUser === "function") {
         await refreshUser();
       }
-      const hasApprovedStore = (user?.stores || []).some(
-        (store) =>
-          store.isVerified === true &&
-          store.isActive === true &&
-          (store.applicationStatus || "approved") === "approved",
-      );
-      navigate(hasApprovedStore ? "/seller" : "/seller/stores", { replace: true });
+      navigate("/seller/stores", { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to activate commission model");
     } finally {
@@ -59,10 +56,11 @@ const ChooseBusinessModel = () => {
         className="w-full max-w-3xl space-y-6"
       >
         <div className="text-center space-y-2">
-          <p className="text-xs font-bold uppercase tracking-widest text-primary-600">Step 7</p>
-          <h1 className="text-3xl font-bold text-slate-900">Choose your business model</h1>
+          <p className="text-xs font-bold uppercase tracking-widest text-primary-600">For this shop</p>
+          <h1 className="text-3xl font-bold text-slate-900">Choose a business model</h1>
           <p className="text-slate-500 max-w-xl mx-auto">
-            Select how you want to earn on GrandBazar. You can request a switch to subscription later.
+            Select how this shop earns on GrandBazar. Each of your shops chooses independently, and you can
+            request a switch later.
           </p>
         </div>
 

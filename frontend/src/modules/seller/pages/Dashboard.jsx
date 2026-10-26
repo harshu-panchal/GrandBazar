@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import PageHeader from "@shared/components/ui/PageHeader";
 import { exportToCSV } from "@/lib/exportUtils";
 import { sellerApi } from "../services/sellerApi";
+import { useStoreContext } from "../context/StoreContext";
 import { Skeleton } from "@shared/components/dashboard/common";
 import KpiCards from "../components/dashboard/KpiCards";
 import ShopPerformance from "../components/dashboard/ShopPerformance";
@@ -109,6 +110,7 @@ const buildReportRows = (data) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { activeStoreId } = useStoreContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -220,7 +222,7 @@ const Dashboard = () => {
             </p>
           )}
           <button
-            onClick={() => navigate("/seller/choose-model")}
+            onClick={() => navigate(`/seller/stores/${activeStoreId}/choose-model`)}
             className={`shrink-0 px-4 py-2 rounded-xl text-white text-xs font-bold transition-colors ${
               data.freeTierStatus.enforcementMode === "hard"
                 ? "bg-rose-600 hover:bg-rose-700"

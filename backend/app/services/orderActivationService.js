@@ -20,19 +20,17 @@ import {
   scheduleDeliveryTimeoutJob,
   deliveryBroadcastPayloadFromOrder,
 } from "./orderWorkflowService.js";
-import { isSellerSubscriptionOperational } from "./subscriptionService.js";
-import Seller from "../models/seller.js";
+import { isStoreSubscriptionOperational } from "./subscriptionService.js";
 
 const INITIAL_DELIVERY_RADIUS_M = () =>
   parseInt(process.env.INITIAL_DELIVERY_RADIUS_METERS || "5000", 10);
 
 async function isSellerOperational(storeId) {
-  const store = await Store.findById(storeId).select("ownerId isActive isVerified applicationStatus").lean();
+  // businessModel lives on the Store directly now — no Seller join needed.
+  const store = await Store.findById(storeId).select("businessModel isActive isVerified applicationStatus").lean();
   if (!store?.isActive || !store?.isVerified) return false;
-  const seller = await Seller.findById(store.ownerId).select("businessModel").lean();
-  if (!seller) return true;
-  if (seller.businessModel === "subscription") {
-    return isSellerSubscriptionOperational(store.ownerId);
+  if (store.businessModel === "subscription") {
+    return isStoreSubscriptionOperational(storeId);
   }
   return true;
 }

@@ -72,6 +72,13 @@ export const LEDGER_TRANSACTION_TYPE = {
   PAYOUT_CANCELLED: "PAYOUT_CANCELLED",
   SELLER_COD_COMMISSION_DUE: "SELLER_COD_COMMISSION_DUE",
   SELLER_COD_COMMISSION_REMITTED: "SELLER_COD_COMMISSION_REMITTED",
+  // Complaint Window (BRD section 9: "every settlement, complaint deduction
+  // and platform-paid complaint posts to the ledger automatically, tagged
+  // with order, seller and complaint number") and CMP-15 ("Platform at
+  // fault: paid from commission, order profit reduces. Logistics at fault:
+  // platform pays now, raises a recovery ticket").
+  COMPLAINT_PLATFORM_PAID: "COMPLAINT_PLATFORM_PAID",
+  COMPLAINT_LOGISTICS_PAID: "COMPLAINT_LOGISTICS_PAID",
 };
 
 export const PAYOUT_TYPE = {

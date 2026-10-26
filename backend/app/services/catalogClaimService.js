@@ -33,6 +33,36 @@ export async function generateDistinctSku(baseSku) {
   return finalSku;
 }
 
+// A product claimed without any priced variant used to be stored with an empty
+// `variants` array, so the seller panel showed "None" until they opened the
+// edit form (which silently materialises a default row) and saved. Every
+// onboarded product now gets one default variant up front, carrying the
+// product-level price/stock, so what the seller sees right after onboarding is
+// what is actually stored.
+export const DEFAULT_VARIANT_NAME = "Standard";
+
+export async function ensureDefaultVariant(
+  variants,
+  { name, weight, price, salePrice, stock } = {},
+) {
+  if (Array.isArray(variants) && variants.length > 0) return variants;
+
+  // Name it after the pack size when the catalogue defines one ("500g"), so the
+  // customer-facing variant chip reads as a real choice rather than a label.
+  const variantName = String(weight || "").trim() || DEFAULT_VARIANT_NAME;
+  const sku = await generateDistinctSku(makeProductSku(name, 2));
+
+  return [
+    {
+      name: variantName,
+      price: Number(price) || 0,
+      salePrice: Number(salePrice) || 0,
+      stock: Number(stock) || 0,
+      sku,
+    },
+  ];
+}
+
 export async function createProductFromCatalog({
   catalogProduct,
   sellerId,
@@ -61,6 +91,14 @@ export async function createProductFromCatalog({
     const varSku = await generateDistinctSku(baseVarSku);
     variantsWithSku.push({ ...variant, sku: varSku });
   }
+
+  const resolvedVariants = await ensureDefaultVariant(variantsWithSku, {
+    name,
+    weight: catalogProduct.weight,
+    price,
+    salePrice,
+    stock,
+  });
 
   return Product.create({
     catalogProductId: catalogProduct._id,
@@ -94,7 +132,7 @@ export async function createProductFromCatalog({
     adminCommissionFixedRule: catalogProduct.adminCommissionFixedRule || "per_qty",
     status,
     approvalStatus: "approved",
-    variants: variantsWithSku,
+    variants: resolvedVariants,
     importSource,
     isPublished,
   });

@@ -22,6 +22,7 @@ import {
   addMoney,
   ceilKm,
   clampMoney,
+  effectiveUnitPrice,
   percentOf,
   roundCurrency,
 } from "../../utils/money.js";
@@ -844,10 +845,15 @@ export async function hydrateOrderItems(
     }
 
     const quantity = normalizeLineQuantity(item.quantity);
+    // `salePrice || price` would charge the sale price even when it is ABOVE
+    // the base price, so a mis-entered sale price billed the customer more
+    // than the cart showed them. effectiveUnitPrice ignores a sale price that
+    // is not a genuine discount, matching what the cart and reorder flows show.
+    const variantUnitPrice = resolvedVariant ? effectiveUnitPrice(resolvedVariant) : 0;
     const serverUnitPrice = normalizeLinePrice(
-      resolvedVariant
-        ? resolvedVariant.salePrice || resolvedVariant.price || product.salePrice || product.price
-        : product.salePrice || product.price,
+      resolvedVariant && variantUnitPrice > 0
+        ? variantUnitPrice
+        : effectiveUnitPrice(product),
     );
     const inferredUnitPrice = enforceServerPricing
       ? serverUnitPrice
@@ -1079,8 +1085,10 @@ export async function generateOrderPaymentBreakdown({
     throw err;
   }
   if (owner?.businessModel === "subscription") {
-    const { getActiveSubscriptionForSeller } = await import("../subscriptionService.js");
-    const active = await getActiveSubscriptionForSeller(owner._id);
+    const { getActiveSubscriptionForStore } = await import("../subscriptionService.js");
+    // owner._id is the STORE id now (loadStoreOwnerBusinessModel resolves per
+    // store, not per seller account — see sellerBusinessModelService.js).
+    const active = await getActiveSubscriptionForStore(owner._id);
     if (!active) {
       const err = new Error("Active subscription required for checkout");
       err.statusCode = 403;

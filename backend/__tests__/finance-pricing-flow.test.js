@@ -48,7 +48,9 @@ jest.unstable_mockModule("../app/services/finance/financeSettingsService.js", ()
   getOrCreateFinanceSettings: mockGetOrCreateFinanceSettings,
 }));
 
-const mockGetActiveSubscriptionForSeller = jest.fn();
+// Business model lives on the Store now (not the Seller account) — see
+// models/store.js / services/sellerBusinessModelService.js.
+const mockGetActiveSubscriptionForStore = jest.fn();
 const mockResolveFreeTierStatus = jest.fn().mockResolvedValue({
   applicable: false,
   isOverLimit: false,
@@ -57,7 +59,7 @@ const mockResolveFreeTierStatus = jest.fn().mockResolvedValue({
   surchargePercent: 0,
 });
 jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
-  getActiveSubscriptionForSeller: mockGetActiveSubscriptionForSeller,
+  getActiveSubscriptionForStore: mockGetActiveSubscriptionForStore,
   resolveFreeTierStatus: mockResolveFreeTierStatus,
 }));
 
@@ -81,17 +83,19 @@ describe("finance pricing flow", () => {
     mockProductFind.mockReturnValue(createQueryChain([]));
     mockStoreFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1", city: "Indore" }),
-    });
-    mockSellerFindById.mockReturnValue({
-      select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue({
-        _id: "owner-1",
+        _id: "seller-1",
+        ownerId: "owner-1",
+        city: "Indore",
         businessModel: "commission",
         commissionConfig: { scope: "category" },
       }),
     });
-    mockGetActiveSubscriptionForSeller.mockResolvedValue({ _id: "sub1" });
+    mockSellerFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: "owner-1" }),
+    });
+    mockGetActiveSubscriptionForStore.mockResolvedValue({ _id: "sub1" });
     mockCityCommissionFindOne.mockReturnValue(createQueryChain(null));
   });
 
@@ -711,21 +715,18 @@ describe("finance pricing flow", () => {
     expect(resolvedItem.commissionInclusiveLineTotal).toBe(92);
   });
 
-  it("blocks checkout when subscription seller has no active subscription", async () => {
+  it("blocks checkout when subscription store has no active subscription", async () => {
     const storeId = "507f1f77bcf86cd799439011";
     mockStoreFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: storeId, ownerId: "507f1f77bcf86cd799439012" }),
-    });
-    mockSellerFindById.mockReturnValue({
-      select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue({
-        _id: "507f1f77bcf86cd799439012",
+        _id: storeId,
+        ownerId: "507f1f77bcf86cd799439012",
         businessModel: "subscription",
         commissionConfig: { scope: "category" },
       }),
     });
-    mockGetActiveSubscriptionForSeller.mockResolvedValue(null);
+    mockGetActiveSubscriptionForStore.mockResolvedValue(null);
 
     await expect(
       generateOrderPaymentBreakdown({
