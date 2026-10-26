@@ -1,6 +1,7 @@
 import React from "react";
 import { Plus, Minus } from "lucide-react";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
+import { fmt } from "./CheckoutPricingBreakdown";
 
 /**
  * CheckoutCartSummary
@@ -81,8 +82,11 @@ const CheckoutCartSummary = React.memo(function CheckoutCartSummary({
                 sale > 0 &&
                 sale < mrp;
               const unit = hasDiscount ? sale : mrp;
-              const total = Math.round(unit * qty);
-              const totalMrp = Math.round(mrp * qty);
+              // Formatted the same way as the order summary below. Rounding to
+              // a whole rupee here made the line read 173 against an item total
+              // of 172.50 for the very same item.
+              const total = fmt(unit * qty);
+              const totalMrp = fmt(mrp * qty);
               return (
                 <div className="text-right leading-tight">
                   <p className="text-base font-black text-slate-800">₹{total}</p>

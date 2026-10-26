@@ -24,17 +24,25 @@ const ProductCard = React.memo(
 
     const imageRef = React.useRef(null);
 
-    const displayPrice =
-      product?.customerSalePrice ??
-      product?.customerPrice ??
-      product?.salePrice ??
-      product?.price ??
-      0;
     const displayOriginalPrice =
       product?.customerPrice ??
       product?.originalPrice ??
       product?.price ??
       0;
+    // Only show the sale price when it is an actual discount. Taking it
+    // unconditionally meant a product whose sale price was mis-entered ABOVE
+    // its base price advertised the higher figure here while the cart and the
+    // order total used the lower one.
+    const displayPrice = React.useMemo(() => {
+      const sale = Number(
+        product?.customerSalePrice ?? product?.salePrice ?? 0,
+      );
+      const base = Number(
+        product?.customerPrice ?? product?.price ?? displayOriginalPrice ?? 0,
+      );
+      if (sale > 0 && (base <= 0 || sale < base)) return sale;
+      return base || 0;
+    }, [product, displayOriginalPrice]);
 
     const defaultVariant = React.useMemo(() => {
       const variants = Array.isArray(product?.variants) ? product.variants : [];

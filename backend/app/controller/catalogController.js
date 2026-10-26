@@ -9,6 +9,7 @@ import { resolveCategoryName } from "../services/entityNameCache.js";
 import { invalidate, buildKey } from "../services/cacheService.js";
 import { enqueueProductIndex } from "../services/searchSyncService.js";
 import { computeCustomerPriceFieldsForWrite } from "../services/finance/customerPriceService.js";
+import { ensureDefaultVariant } from "../services/catalogClaimService.js";
 
 // Helper to auto-generate SKU prefix
 function makeProductSku(name, index = 1) {
@@ -847,7 +848,10 @@ export const claimCatalogProduct = async (req, res) => {
       skuCounter++;
     }
 
-    const variantsWithSku = await buildClaimVariantsWithSku(chosenName, claimVariants);
+    const variantsWithSku = await ensureDefaultVariant(
+      await buildClaimVariantsWithSku(chosenName, claimVariants),
+      { name: chosenName, weight: catalogProduct.weight, price, salePrice, stock },
+    );
 
     // Create the Product instance owned by the seller
     const newProduct = await Product.create({
@@ -956,7 +960,10 @@ export const bulkClaimCatalogProducts = async (req, res) => {
         continue;
       }
       const { price, salePrice, stock } = resolved;
-      const variantsWithSku = await buildClaimVariantsWithSku(chosenName, resolved.variants);
+      const variantsWithSku = await ensureDefaultVariant(
+        await buildClaimVariantsWithSku(chosenName, resolved.variants),
+        { name: chosenName, weight: catalogProduct.weight, price, salePrice, stock },
+      );
 
       let distinctSlug = `${slugify(chosenName)}-${sellerId.toString().slice(-6)}`;
       let slugExists = await Product.findOne({ slug: distinctSlug });

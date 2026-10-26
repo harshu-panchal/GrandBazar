@@ -38,6 +38,10 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@shared/components/ui/Toast';
 import { useSettings } from '@core/context/SettingsContext';
 import { getProductImageUrl, handleProductImageError, getAvatarImageUrl, handleAvatarImageError } from '@core/utils/imageUtils';
+
+// Must stay in line with the seller-side Storefront page: the logo travels as a
+// base64 data URL in the JSON payload, so the real cap is express.json's limit.
+const LOGO_MAX_SIZE_MB = 5;
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
 import MapPicker from '@/shared/components/MapPicker';
@@ -556,8 +560,8 @@ const SellerDetail = () => {
     const handleLogoUpload = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        if (file.size > 1 * 1024 * 1024) {
-            showToast('Logo size must be less than 1MB', 'error');
+        if (file.size > LOGO_MAX_SIZE_MB * 1024 * 1024) {
+            showToast(`Logo size must be less than ${LOGO_MAX_SIZE_MB}MB`, 'error');
             return;
         }
         const reader = new FileReader();

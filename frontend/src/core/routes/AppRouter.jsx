@@ -122,7 +122,8 @@ const router = createBrowserRouter([
                     element: <ApplicationPending />,
                 },
                 {
-                    path: 'seller/choose-model',
+                    // Business model is per shop — this route needs the storeId.
+                    path: 'seller/stores/:storeId/choose-model',
                     element: (
                         <ProtectedRoute>
                             <RoleGuard allowedRoles={[UserRole.SELLER]}>

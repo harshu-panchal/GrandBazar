@@ -1,4 +1,4 @@
-import admin from "firebase-admin";
+import { getMessaging } from "firebase-admin/messaging";
 import { getFirebaseAdminApp } from "../../config/firebaseAdmin.js";
 
 const MAX_FCM_MULTICAST_TOKENS = 500;
@@ -35,7 +35,7 @@ function getMessagingClient() {
     err.code = "fcm/not-configured";
     throw err;
   }
-  return admin.messaging(app);
+  return getMessaging(app);
 }
 
 function isWebLink(value = "") {

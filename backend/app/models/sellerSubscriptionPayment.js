@@ -14,6 +14,14 @@ const sellerSubscriptionPaymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Subscription payments are per STORE (see models/sellerSubscription.js).
+    // sellerId stays for admin "all payments by this seller" queries.
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+      index: true,
+    },
     planId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionPlan",
@@ -84,5 +92,7 @@ const sellerSubscriptionPaymentSchema = new mongoose.Schema(
 
 sellerSubscriptionPaymentSchema.index({ sellerId: 1, createdAt: -1 });
 sellerSubscriptionPaymentSchema.index({ sellerId: 1, status: 1 });
+sellerSubscriptionPaymentSchema.index({ storeId: 1, createdAt: -1 });
+sellerSubscriptionPaymentSchema.index({ storeId: 1, status: 1 });
 
 export default mongoose.model("SellerSubscriptionPayment", sellerSubscriptionPaymentSchema);

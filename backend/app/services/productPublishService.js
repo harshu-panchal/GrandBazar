@@ -39,6 +39,17 @@ export async function publishProductPricing({
   product.price = parsedPrice;
   product.salePrice = parsedSalePrice;
   product.stock = parsedStock;
+  // An imported product carries a single auto-created default variant that
+  // mirrors the product-level figures. Pricing is set here, not per variant, so
+  // the default variant has to follow — otherwise it stays at 0 and any order
+  // placed against it (the customer sheet sends a variantSku whenever variants
+  // exist) would recompute the product's stock down to 0. Multi-variant
+  // products are priced per variant elsewhere and are left alone.
+  if (Array.isArray(product.variants) && product.variants.length === 1) {
+    product.variants[0].price = parsedPrice;
+    product.variants[0].salePrice = parsedSalePrice;
+    product.variants[0].stock = parsedStock;
+  }
   product.status = "active";
   product.isPublished = true;
   product.isCurrentlyAvailable = true;

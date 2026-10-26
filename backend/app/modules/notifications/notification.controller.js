@@ -580,12 +580,19 @@ export const broadcastNotification = async (req, res) => {
 
     const created = await Notification.insertMany(docs, { ordered: false });
     const notificationIds = created.map((item) => item?._id).filter(Boolean);
-    const deliveryResults = await Promise.allSettled(
+    await Promise.allSettled(
       notificationIds.map((notificationId) => deliverNotificationById(notificationId)),
     );
 
-    const delivered = deliveryResults.filter((result) => result.status === "fulfilled").length;
-    const failed = deliveryResults.length - delivered;
+    // deliverNotificationById returns normally even when it could not deliver
+    // (no active token for the user, for instance), so counting fulfilled
+    // promises reported every broadcast as fully delivered. The worker records
+    // the real outcome on each notification, so read the counts back from there.
+    const delivered = await Notification.countDocuments({
+      _id: { $in: notificationIds },
+      status: "sent",
+    });
+    const failed = notificationIds.length - delivered;
 
     return handleResponse(res, 200, "Broadcast notification sent", {
       broadcastId,

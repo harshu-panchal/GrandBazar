@@ -4,14 +4,14 @@ import SellerSubscriptionPayment from "../../models/sellerSubscriptionPayment.js
 import SellerSubscription from "../../models/sellerSubscription.js";
 import Seller from "../../models/seller.js";
 import handleResponse from "../../utils/helper.js";
-import { resolveOwnerIdFromSellerOrStoreId } from "../../services/sellerBusinessModelService.js";
+import { resolveStoreIdFromSellerOrStoreId } from "../../services/sellerBusinessModelService.js";
 import {
   approvePaymentRequest,
   rejectPaymentRequest,
   getSubscriptionPaymentSettings,
   assignComplimentarySubscription,
   listComplimentarySubscriptions,
-  listSellersForComplimentaryAssign,
+  listStoresForComplimentaryAssign,
 } from "../../services/subscriptionService.js";
 import { SUBSCRIPTION_STATUS } from "../../constants/subscription.js";
 import Setting from "../../models/setting.js";
@@ -208,13 +208,13 @@ export async function listSubscriptionPayments(req, res) {
 
 export async function getComplimentarySubscriptions(req, res) {
   try {
-    const [items, sellers] = await Promise.all([
+    const [items, stores] = await Promise.all([
       listComplimentarySubscriptions(),
-      listSellersForComplimentaryAssign(),
+      listStoresForComplimentaryAssign(),
     ]);
     return handleResponse(res, 200, "Complimentary subscriptions fetched", {
       items,
-      sellers,
+      stores,
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -225,21 +225,27 @@ export async function assignComplimentarySubscriptionAdmin(req, res) {
   try {
     const {
       sellerId,
+      storeId: bodyStoreId,
       planId,
       durationDays,
-      shopCount,
       productCountPerShop,
       note,
     } = req.body || {};
 
-    // The shop page passes the store id; the subscription belongs to the owner.
-    const ownerId = (await resolveOwnerIdFromSellerOrStoreId(sellerId)) || sellerId;
+    // Subscriptions are per store now — resolve whichever id the caller sent
+    // (a storeId directly, or a legacy sellerId with exactly one store) to a
+    // concrete storeId.
+    const storeId = bodyStoreId
+      ? await resolveStoreIdFromSellerOrStoreId(bodyStoreId)
+      : await resolveStoreIdFromSellerOrStoreId(sellerId);
+    if (!storeId) {
+      return handleResponse(res, 400, "A valid storeId is required (or a sellerId with exactly one shop)");
+    }
 
     const result = await assignComplimentarySubscription({
-      sellerId: ownerId,
+      storeId,
       planId,
       durationDays,
-      shopCount,
       productCountPerShop,
       adminId: req.user?.id,
       note,

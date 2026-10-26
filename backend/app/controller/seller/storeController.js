@@ -21,7 +21,6 @@ import {
 } from "../../services/storeService.js";
 import { invalidateSellerName } from "../../services/entityNameCache.js";
 import { isOwnerAccountApproved } from "../../services/sellerAccountService.js";
-import { assertCanCreateStore } from "../../services/subscriptionService.js";
 
 async function getAdminIds() {
   const admins = await Admin.find().select("_id").lean();
@@ -79,7 +78,9 @@ export const createStore = async (req, res) => {
       );
     }
 
-    await assertCanCreateStore(accountId);
+    // No more "shop limit by plan" check here — business model (and any
+    // subscription) is now chosen per store, not for the whole account, so
+    // there is no account-wide plan capping how many shops a seller can add.
 
     const uploadedDocs = await resolveUploadedDocs(req);
     const body = { ...req.body, ...uploadedDocs };

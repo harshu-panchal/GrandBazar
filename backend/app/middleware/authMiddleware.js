@@ -307,15 +307,20 @@ export const requireStoreOwner = (req, res, next) => {
 // independently fetched the same Seller document with overlapping
 // projections. Stashing it on req after the first fetch lets the second
 // middleware reuse it instead of querying again.
-async function getSellerBusinessModelDoc(req, ownerId) {
-  if (req._sellerBusinessModelDoc && req._sellerBusinessModelDoc._ownerId === ownerId) {
-    return req._sellerBusinessModelDoc;
+// Business model lives on the STORE now, not the seller's owner account (a
+// seller with several shops runs each independently — see models/store.js
+// and services/sellerBusinessModelService.js). These gates check the
+// request's ACTIVE store (set by resolveActiveStore earlier in the chain),
+// not the account.
+async function getStoreBusinessModelDoc(req, storeId) {
+  if (req._storeBusinessModelDoc && req._storeBusinessModelDoc._storeId === storeId) {
+    return req._storeBusinessModelDoc;
   }
-  const seller = await Seller.findById(ownerId)
+  const store = await Store.findById(storeId)
     .select("businessModel businessModelChosenAt")
     .lean();
-  const doc = seller ? { ...seller, _ownerId: ownerId } : null;
-  req._sellerBusinessModelDoc = doc;
+  const doc = store ? { ...store, _storeId: storeId } : null;
+  req._storeBusinessModelDoc = doc;
   return doc;
 }
 
@@ -325,19 +330,15 @@ export const requireBusinessModelChosen = async (req, res, next) => {
       return next();
     }
 
-    if (req.user?.subSellerId) {
+    const storeId = req.user?.activeStoreId;
+    if (!storeId) {
       return next();
     }
 
-    const ownerId = req.user?.accountId;
-    if (!ownerId) {
-      return next();
-    }
+    const store = await getStoreBusinessModelDoc(req, storeId);
 
-    const seller = await getSellerBusinessModelDoc(req, ownerId);
-
-    if (!seller?.businessModel) {
-      return handleResponse(res, 403, "Please choose a business model before continuing.", {
+    if (!store?.businessModel) {
+      return handleResponse(res, 403, "Please choose a business model for this shop before continuing.", {
         businessModelRequired: true,
       });
     }
@@ -350,29 +351,29 @@ export const requireBusinessModelChosen = async (req, res, next) => {
 
 export const requireSellerOperational = async (req, res, next) => {
   try {
-    if (req.user?.role !== "seller" || req.user?.subSellerId) {
+    if (req.user?.role !== "seller") {
       return next();
     }
 
-    const ownerId = req.user?.accountId;
-    if (!ownerId) {
+    const storeId = req.user?.activeStoreId;
+    if (!storeId) {
       return next();
     }
 
-    const seller = await getSellerBusinessModelDoc(req, ownerId);
-    if (!seller?.businessModel) {
+    const store = await getStoreBusinessModelDoc(req, storeId);
+    if (!store?.businessModel) {
       return next();
     }
 
-    if (seller.businessModel === "commission") {
+    if (store.businessModel === "commission") {
       return next();
     }
 
-    if (seller.businessModel === "subscription") {
-      const { isSellerSubscriptionOperational } = await import("../services/subscriptionService.js");
-      const operational = await isSellerSubscriptionOperational(ownerId);
+    if (store.businessModel === "subscription") {
+      const { isStoreSubscriptionOperational } = await import("../services/subscriptionService.js");
+      const operational = await isStoreSubscriptionOperational(storeId);
       if (!operational) {
-        return handleResponse(res, 403, "Active subscription required. Complete payment or renew your plan.", {
+        return handleResponse(res, 403, "Active subscription required. Complete payment or renew your plan for this shop.", {
           subscriptionRequired: true,
         });
       }

@@ -52,3 +52,18 @@ export function ceilKm(valueKm) {
   if (!Number.isFinite(num) || num <= 0) return 0;
   return Math.ceil(num);
 }
+
+/**
+ * The price a customer actually pays for one unit, given a base (MRP) price
+ * and an optional sale price.
+ *
+ * A sale price only counts when it is a genuine discount. A sale price that is
+ * zero, equal to, or above the base price is ignored rather than charged —
+ * otherwise a seller who mis-enters it (sale 100 on a base of 80) would have
+ * customers billed MORE than the listed price.
+ */
+export function effectiveUnitPrice(source = {}) {
+  const base = Number(source.price || 0);
+  const sale = Number(source.salePrice || 0);
+  return sale > 0 && sale < base ? sale : base;
+}

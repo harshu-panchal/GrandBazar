@@ -117,6 +117,41 @@ function makeProductSku(name, index = 1) {
 
 // "" / null / undefined / invalid -> null (explicitly unset, falls back to
 // category/store packaging); anything else -> a non-negative number.
+// A sale price is a discount, so it has to sit below the base price. Nothing
+// used to enforce this, and an inverted pair (sale 100 on a base of 80) made
+// the listing card show the HIGHER figure while the cart showed the lower one.
+// Rejected on write so the two can never disagree again.
+function findInvertedSalePrice(data = {}, existing = null) {
+  const check = (price, salePrice, label) => {
+    const base = Number(price || 0);
+    const sale = Number(salePrice || 0);
+    if (sale > 0 && base > 0 && sale >= base) {
+      return `${label} sale price (${sale}) must be lower than the price (${base})`;
+    }
+    return null;
+  };
+
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(data, key);
+  // An update may carry only one of the pair, so the other is read back off the
+  // stored product — otherwise raising salePrice alone would skip the check.
+  const resolve = (key) => (hasOwn(key) ? data[key] : existing?.[key]);
+
+  if (hasOwn("salePrice") || hasOwn("price")) {
+    const error = check(resolve("price"), resolve("salePrice"), "The");
+    if (error) return error;
+  }
+
+  if (Array.isArray(data.variants)) {
+    for (const variant of data.variants) {
+      const name = String(variant?.name || "").trim() || "a variant";
+      const error = check(variant?.price, variant?.salePrice, `The "${name}"`);
+      if (error) return error;
+    }
+  }
+
+  return null;
+}
+
 function normalizeOptionalNonNegativeNumber(value) {
   if (value === "" || value === null || value === undefined) return null;
   const num = Number(value);
@@ -1358,6 +1393,11 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    const createSalePriceError = findInvertedSalePrice(productData);
+    if (createSalePriceError) {
+      return handleResponse(res, 400, createSalePriceError);
+    }
+
     let moderationUpdate = {};
     let successMessage = "Product created successfully";
 
@@ -1622,6 +1662,11 @@ export const updateProduct = async (req, res) => {
           0,
         );
       }
+    }
+
+    const updateSalePriceError = findInvertedSalePrice(productData, product);
+    if (updateSalePriceError) {
+      return handleResponse(res, 400, updateSalePriceError);
     }
 
     let moderationUpdate = {};

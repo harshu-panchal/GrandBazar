@@ -3,7 +3,7 @@ import { Clipboard, Tag, Heart, Wallet, ChevronDown, ChevronUp } from "lucide-re
 import { motion, AnimatePresence } from "framer-motion";
 
 /** Consistent currency display: always 2 decimal places, no floating point drift */
-const fmt = (amount) => {
+export const fmt = (amount) => {
   const n = Number(amount || 0);
   if (!Number.isFinite(n)) return "0.00";
   return n.toFixed(2);

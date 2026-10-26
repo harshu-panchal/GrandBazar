@@ -12,6 +12,14 @@ const subscriptionPaymentRequestSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Manual (proof-upload) subscription payments are per STORE too — see
+    // models/sellerSubscription.js.
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+      index: true,
+    },
     planId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionPlan",

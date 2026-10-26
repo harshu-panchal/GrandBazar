@@ -12,11 +12,11 @@ import {
 } from "../constants/payment.js";
 import {
   activateSubscriptionFromPhonePePayment,
-  getActiveSubscriptionForSeller,
+  getActiveSubscriptionForStore,
   resolveSubscriptionRequestType,
 } from "./subscriptionService.js";
 import { BUSINESS_MODEL } from "./sellerBusinessModelService.js";
-import Seller from "../models/seller.js";
+import Store from "../models/store.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 const SUBSCRIPTION_MERCHANT_PREFIX = "SUB-";
@@ -58,9 +58,9 @@ function sanitizePart(value) {
     .slice(0, 12);
 }
 
-function buildSubscriptionMerchantOrderId(sellerId, planId, attemptCount = 1) {
+function buildSubscriptionMerchantOrderId(storeId, planId, attemptCount = 1) {
   const suffix = `-A${Math.max(1, Number(attemptCount) || 1)}`;
-  const base = `${SUBSCRIPTION_MERCHANT_PREFIX}${sanitizePart(sellerId)}-${sanitizePart(planId)}`;
+  const base = `${SUBSCRIPTION_MERCHANT_PREFIX}${sanitizePart(storeId)}-${sanitizePart(planId)}`;
   const maxBaseLength = MAX_MERCHANT_ORDER_ID_LENGTH - suffix.length;
   return `${base.slice(0, Math.max(8, maxBaseLength))}${suffix}`;
 }
@@ -104,7 +104,7 @@ async function handleSubscriptionPaymentCaptured(payment) {
   }
 
   const result = await activateSubscriptionFromPhonePePayment({
-    sellerId: payment.sellerId,
+    storeId: payment.storeId,
     planId: payment.planId,
     requestType: payment.requestType,
     gatewayOrderId: payment.gatewayOrderId,
@@ -118,10 +118,18 @@ async function handleSubscriptionPaymentCaptured(payment) {
 }
 
 export async function createSubscriptionPhonePeCheckout({
-  sellerId,
+  storeId,
   planId,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
 }) {
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store) {
+    const err = new Error("Store not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  const sellerId = store.ownerId;
+
   const plan = await SubscriptionPlan.findOne({ _id: planId, isActive: true }).lean();
   if (!plan) {
     const err = new Error("Subscription plan not found or inactive");
@@ -136,7 +144,7 @@ export async function createSubscriptionPhonePeCheckout({
     throw err;
   }
 
-  const active = await getActiveSubscriptionForSeller(sellerId);
+  const active = await getActiveSubscriptionForStore(storeId);
   let resolvedType = resolveSubscriptionRequestType({
     activeSubscription: active,
     selectedPlan: plan,
@@ -144,7 +152,7 @@ export async function createSubscriptionPhonePeCheckout({
   });
 
   const existingOpen = await SellerSubscriptionPayment.findOne({
-    sellerId,
+    storeId,
     status: { $in: [PAYMENT_STATUS.CREATED, PAYMENT_STATUS.PENDING] },
   }).sort({ createdAt: -1 });
 
@@ -164,13 +172,14 @@ export async function createSubscriptionPhonePeCheckout({
   // both be able to call PhonePe with the same id. The unique index makes
   // exactly one of them win the insert; the loser retries with the next count.
   let payment = null;
-  let attemptCount = await SellerSubscriptionPayment.countDocuments({ sellerId, planId }) + 1;
+  let attemptCount = await SellerSubscriptionPayment.countDocuments({ storeId, planId }) + 1;
   const MAX_RESERVE_ATTEMPTS = 5;
   for (let i = 0; i < MAX_RESERVE_ATTEMPTS && !payment; i += 1) {
-    const candidateOrderId = buildSubscriptionMerchantOrderId(sellerId, planId, attemptCount);
+    const candidateOrderId = buildSubscriptionMerchantOrderId(storeId, planId, attemptCount);
     try {
       payment = await SellerSubscriptionPayment.create({
         sellerId,
+        storeId,
         planId: plan._id,
         requestType: resolvedType,
         gatewayName: PAYMENT_GATEWAY.PHONEPE,
@@ -180,7 +189,6 @@ export async function createSubscriptionPhonePeCheckout({
         status: PAYMENT_STATUS.CREATED,
         planSnapshot: {
           name: plan.name,
-          shopCount: plan.shopCount,
           productCountPerShop: plan.productCountPerShop,
           durationDays: plan.durationDays,
           price: plan.price,
@@ -255,7 +263,7 @@ export async function createSubscriptionPhonePeCheckout({
   };
   await payment.save();
 
-  await Seller.findByIdAndUpdate(sellerId, {
+  await Store.findByIdAndUpdate(storeId, {
     businessModel: BUSINESS_MODEL.SUBSCRIPTION,
     businessModelChosenAt: new Date(),
   });
