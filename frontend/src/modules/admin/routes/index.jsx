@@ -370,7 +370,8 @@ const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
   const { user } = useAuth();
   const [pendingDeliveryCount, setPendingDeliveryCount] = React.useState(0);
-  const [pendingSellerCount, setPendingSellerCount] = React.useState(0);
+  const [pendingSellerAdminCount, setPendingSellerAdminCount] = React.useState(0);
+  const [pendingSellerShopCount, setPendingSellerShopCount] = React.useState(0);
   const [pendingReturnCount, setPendingReturnCount] = React.useState(0);
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
@@ -419,11 +420,22 @@ const AdminRoutes = () => {
   React.useEffect(() => {
     if (!hasPermission("sellers")) return undefined;
     let cancelled = false;
+    // Counted per type, because the two now live on separate screens: a
+    // single combined total would badge one list with the other's backlog.
     const fetchPendingSellerCount = async () => {
       try {
-        const res = await adminApi.getPendingSellers({ limit: 1 });
-        const total = Number(res?.data?.result?.total ?? 0);
-        if (!cancelled) setPendingSellerCount(Number.isFinite(total) ? total : 0);
+        const [adminRes, shopRes] = await Promise.all([
+          adminApi.getPendingSellers({ limit: 1, applicationType: "seller_admin" }),
+          adminApi.getPendingSellers({ limit: 1, applicationType: "store" }),
+        ]);
+        const toCount = (res) => {
+          const total = Number(res?.data?.result?.total ?? 0);
+          return Number.isFinite(total) ? total : 0;
+        };
+        if (!cancelled) {
+          setPendingSellerAdminCount(toCount(adminRes));
+          setPendingSellerShopCount(toCount(shopRes));
+        }
       } catch {
         // Non-fatal — badge just stays at its last known value.
       }
@@ -494,7 +506,9 @@ const AdminRoutes = () => {
 
     const supportCount = Number.isFinite(totalUnread) ? totalUnread : 0;
     const deliveryCount = Number.isFinite(pendingDeliveryCount) ? pendingDeliveryCount : 0;
-    const sellerCount = Number.isFinite(pendingSellerCount) ? pendingSellerCount : 0;
+    const sellerAdminCount = Number.isFinite(pendingSellerAdminCount) ? pendingSellerAdminCount : 0;
+    const sellerShopCount = Number.isFinite(pendingSellerShopCount) ? pendingSellerShopCount : 0;
+    const sellerCount = sellerAdminCount + sellerShopCount;
     const returnCount = Number.isFinite(pendingReturnCount) ? pendingReturnCount : 0;
 
     return filteredItems.map((item) => {
@@ -505,7 +519,24 @@ const AdminRoutes = () => {
         return { ...item, badgeCount: deliveryCount, badgePath: "/admin/delivery-boys/pending" };
       }
       if (item?.label === "Sellers" && sellerCount > 0) {
-        return { ...item, badgeCount: sellerCount, badgePath: "/admin/sellers/pending" };
+        return {
+          ...item,
+          badgeCount: sellerCount,
+          // Points at whichever list actually has work, so clicking the badge
+          // never lands on an empty screen.
+          badgePath: sellerAdminCount > 0
+            ? "/admin/sellers/admin-requests"
+            : "/admin/sellers/pending",
+          children: item.children?.map((child) => {
+            if (child.path === "/admin/sellers/admin-requests") {
+              return { ...child, badgeCount: sellerAdminCount };
+            }
+            if (child.path === "/admin/sellers/pending") {
+              return { ...child, badgeCount: sellerShopCount };
+            }
+            return child;
+          }),
+        };
       }
       if (item?.label === "Orders" && returnCount > 0) {
         return {
@@ -521,7 +552,7 @@ const AdminRoutes = () => {
       }
       return item;
     });
-  }, [totalUnread, pendingDeliveryCount, pendingSellerCount, pendingReturnCount, user, isSuperAdminOrAdmin]);
+  }, [totalUnread, pendingDeliveryCount, pendingSellerAdminCount, pendingSellerShopCount, pendingReturnCount, user, isSuperAdminOrAdmin]);
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">
@@ -552,7 +583,19 @@ const AdminRoutes = () => {
           <>
             <Route path="/sellers/active" element={<ActiveSellers />} />
             <Route path="/sellers/active/:id" element={<SellerDetail />} />
-            <Route path="/sellers/pending" element={<PendingSellers />} />
+            {/* Shop applications only — owner-account registrations have their
+                own screen at /sellers/admin-requests, so a request shows up in
+                exactly one of the two lists. */}
+            <Route
+              path="/sellers/pending"
+              element={(
+                <PendingSellers
+                  applicationType="store"
+                  description="Shop applications from sellers opening another store. New seller sign-ups are under Seller Admin Requests."
+                  rejectedDescription="Shops you rejected or deactivated. Reactivate one to put it back online."
+                />
+              )}
+            />
             <Route path="/sellers/admin-requests" element={<SellerAdminRequests />} />
             <Route path="/subscriptions" element={<SubscriptionManagement />} />
             <Route path="/seller-locations" element={<SellerLocations />} />
