@@ -90,11 +90,20 @@ function applySearchFilter(conditions, search, fields) {
 export async function getPendingSellerApplications({
   q = "",
   status = "pending",
+  applicationType = "all",
   page,
   limit,
   skip,
 }) {
   const normalizedStatus = String(status || "pending").trim().toLowerCase();
+
+  // Which kind of application to list. "seller_admin" is an owner-account
+  // registration (a new seller signing up), "store" is an existing seller
+  // applying to open another shop, and "all" merges both — the default the
+  // combined Seller Applications screen has always used.
+  const normalizedType = String(applicationType || "all").trim().toLowerCase();
+  const wantsOwners = normalizedType === "all" || normalizedType === "seller_admin";
+  const wantsStores = normalizedType === "all" || normalizedType === "store";
 
   const storeConditions = [buildPendingStoreQuery(normalizedStatus)];
   applySearchFilter(storeConditions, q, ["shopName", "address", "category"]);
@@ -105,20 +114,30 @@ export async function getPendingSellerApplications({
   const storeQuery = storeConditions.length > 1 ? { $and: storeConditions } : storeConditions[0];
   const ownerQuery = ownerConditions.length > 1 ? { $and: ownerConditions } : ownerConditions[0];
 
+  // The stats below count only the types being listed, so a filtered screen
+  // reports its own backlog rather than the combined one.
   const [stores, owners, allPendingStores, allPendingOwners] = await Promise.all([
-    Store.find(storeQuery)
-      .sort({ createdAt: -1 })
-      .populate("ownerId", "name email phone businessModel")
-      .lean(),
-    Seller.find(ownerQuery)
-      .sort({ createdAt: -1 })
-      .lean(),
-    Store.find(buildPendingStoreQuery("pending"))
-      .select("address documents createdAt")
-      .lean(),
-    Seller.find(buildPendingOwnerQuery("pending"))
-      .select("createdAt")
-      .lean(),
+    wantsStores
+      ? Store.find(storeQuery)
+          .sort({ createdAt: -1 })
+          .populate("ownerId", "name email phone businessModel")
+          .lean()
+      : [],
+    wantsOwners
+      ? Seller.find(ownerQuery)
+          .sort({ createdAt: -1 })
+          .lean()
+      : [],
+    wantsStores
+      ? Store.find(buildPendingStoreQuery("pending"))
+          .select("address documents createdAt")
+          .lean()
+      : [],
+    wantsOwners
+      ? Seller.find(buildPendingOwnerQuery("pending"))
+          .select("createdAt")
+          .lean()
+      : [],
   ]);
 
   const mergedRaw = [
@@ -173,10 +192,16 @@ export async function getPendingSellerApplications({
   };
 }
 
+// NOTE: approving does NOT choose a business model. Commission vs subscription
+// is the SELLER'S own account-level choice, made at /seller/choose-model after
+// approval (see services/sellerBusinessModelService.js). Setting it here used
+// to default every approved seller to "commission", so that gate never fired —
+// and approving a seller's SECOND shop silently reset the account's model back
+// to commission. commissionConfig below is unrelated: it is the admin's
+// per-store commission OVERRIDE, which legitimately stays per store.
 export async function approveSellerApplicationById({
   sellerId,
   reviewedBy,
-  businessModel = "commission",
   commissionConfig = {},
   subscriptionPlanId = null,
 }) {
@@ -190,7 +215,7 @@ export async function approveSellerApplicationById({
     rejectionReason: null,
   };
 
-  if (businessModel === "commission" || commissionConfig?.applyCommission !== undefined) {
+  if (commissionConfig?.applyCommission !== undefined) {
     storeUpdateData.applyCommission = Boolean(commissionConfig.applyCommission);
     storeUpdateData.adminCommissionType = commissionConfig.adminCommissionType || "percentage";
     storeUpdateData.adminCommissionValue = Number(commissionConfig.adminCommissionValue ?? 0);
@@ -219,14 +244,15 @@ export async function approveSellerApplicationById({
         reviewedAt: new Date(),
         reviewedBy,
         rejectionReason: null,
-        businessModel: businessModel || "commission",
-        businessModelChosenAt: new Date(),
       },
     },
     { new: true }
   );
 
-  if (account && businessModel === "subscription" && subscriptionPlanId) {
+  // Keyed on the admin actually picking a plan (it used to require a
+  // business model that approval no longer sets). A complimentary plan
+  // granted here is simply waiting for the seller if they pick subscription.
+  if (account && subscriptionPlanId) {
     try {
       const { assignComplimentarySubscription } = await import("../subscriptionService.js");
       await assignComplimentarySubscription({
@@ -245,7 +271,7 @@ export async function approveSellerApplicationById({
     action: "SELLER_APPLICATION_APPROVED",
     targetType: store ? "Store" : "Seller",
     targetId: store ? store._id : ownerId,
-    after: { applicationStatus: "approved", businessModel },
+    after: { applicationStatus: "approved" },
     metadata: { subscriptionPlanId },
   });
 
@@ -323,7 +349,6 @@ export async function createVendorAccountByAdmin({
   bankName,
   deliveryPolicy,
   reviewedBy,
-  businessModel = "commission",
   applyCommission,
   adminCommissionType,
   adminCommissionValue,
@@ -353,11 +378,11 @@ export async function createVendorAccountByAdmin({
     applicationStatus: "approved",
     reviewedAt: new Date(),
     reviewedBy,
-    businessModel: businessModel || "commission",
-    businessModelChosenAt: new Date(),
+    // Business model left unset on purpose — the seller picks it themselves
+    // at /seller/choose-model on first login, same as a self-registered one.
   });
 
-  if (seller && businessModel === "subscription" && subscriptionPlanId) {
+  if (seller && subscriptionPlanId) {
     try {
       const { assignComplimentarySubscription } = await import("../subscriptionService.js");
       await assignComplimentarySubscription({

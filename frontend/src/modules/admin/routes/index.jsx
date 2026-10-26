@@ -54,6 +54,7 @@ const CatalogBundleManagement = React.lazy(
 );
 const ActiveSellers = React.lazy(() => import("../pages/ActiveSellers"));
 const PendingSellers = React.lazy(() => import("../pages/PendingSellers"));
+const SellerAdminRequests = React.lazy(() => import("../pages/SellerAdminRequests"));
 const SellerLocations = React.lazy(() => import("../pages/SellerLocations"));
 const ActiveDeliveryBoys = React.lazy(
   () => import("../pages/ActiveDeliveryBoys"),
@@ -221,6 +222,7 @@ const navItems = [
     permission: "sellers",
     children: [
       { label: "Active Sellers", path: "/admin/sellers/active", permission: "sellers.active" },
+      { label: "Seller Admin Requests", path: "/admin/sellers/admin-requests", permission: "sellers.admin_requests" },
       { label: "Seller Applications", path: "/admin/sellers/pending", permission: "sellers.pending" },
       { label: "Subscriptions", path: "/admin/subscriptions", permission: "sellers.subscriptions" },
       { label: "Seller Locations", path: "/admin/seller-locations", permission: "sellers.locations" },
@@ -551,6 +553,7 @@ const AdminRoutes = () => {
             <Route path="/sellers/active" element={<ActiveSellers />} />
             <Route path="/sellers/active/:id" element={<SellerDetail />} />
             <Route path="/sellers/pending" element={<PendingSellers />} />
+            <Route path="/sellers/admin-requests" element={<SellerAdminRequests />} />
             <Route path="/subscriptions" element={<SubscriptionManagement />} />
             <Route path="/seller-locations" element={<SellerLocations />} />
           </>

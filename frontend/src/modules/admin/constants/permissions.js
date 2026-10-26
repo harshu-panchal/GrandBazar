@@ -86,6 +86,7 @@ export const PERMISSION_TREE = [
     desc: 'Approve, reject & manage vendor stores',
     children: [
       { key: 'sellers.active', label: 'Active Sellers', desc: 'Approved sellers directory' },
+      { key: 'sellers.admin_requests', label: 'Seller Admin Requests', desc: 'New seller admin account registrations' },
       { key: 'sellers.pending', label: 'Seller Applications', desc: 'Pending approvals' },
       { key: 'sellers.subscriptions', label: 'Subscriptions', desc: 'Seller subscription plans (view)' },
       { key: 'sellers.subscriptions_write', label: 'Manage Subscriptions', desc: 'Create/edit plans, approve payment requests' },

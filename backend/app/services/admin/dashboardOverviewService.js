@@ -1139,7 +1139,7 @@ export async function getAdminDashboardOverview({ city = "", period = "daily" } 
 
   /* ---------- Approval center ---------- */
   const approvalCenter = [
-    { key: "sellerRegistrations", label: "Seller Registrations", count: counts.pendingOwnerSellers, link: "/admin/sellers/pending" },
+    { key: "sellerRegistrations", label: "Seller Registrations", count: counts.pendingOwnerSellers, link: "/admin/sellers/admin-requests" },
     { key: "shopApprovals", label: "Shop Approvals", count: counts.pendingShops, link: "/admin/sellers/pending" },
     { key: "kycVerifications", label: "KYC / Document Verifications", count: counts.pendingShops, link: "/admin/sellers/pending" },
     { key: "subscriptionRequests", label: "Subscription Requests", count: counts.pendingSubscriptionRequests, link: "/admin/subscriptions" },

@@ -13,7 +13,7 @@ import {
 
 export const getPendingSellers = async (req, res) => {
   try {
-    const { q = "", status = "pending" } = req.query;
+    const { q = "", status = "pending", applicationType = "all" } = req.query;
     const { page, limit, skip } = getPagination(req, {
       defaultLimit: 25,
       maxLimit: 100,
@@ -22,6 +22,7 @@ export const getPendingSellers = async (req, res) => {
     const data = await getPendingSellerApplications({
       q,
       status,
+      applicationType,
       page,
       limit,
       skip,
@@ -36,11 +37,12 @@ export const getPendingSellers = async (req, res) => {
 export const approveSellerApplication = async (req, res) => {
   try {
     const { id } = req.params;
-    const { businessModel, commissionConfig, subscriptionPlanId } = req.body || {};
+    // businessModel is deliberately not read from the body — the seller
+    // chooses it themselves after approval (see approveSellerApplicationById).
+    const { commissionConfig, subscriptionPlanId } = req.body || {};
     const seller = await approveSellerApplicationById({
       sellerId: id,
       reviewedBy: req.user.id,
-      businessModel,
       commissionConfig,
       subscriptionPlanId,
     });

@@ -31,7 +31,16 @@ const STATUS_TABS = [
     { value: 'all', label: 'All Open' },
 ];
 
-const PendingSellers = () => {
+// Renders the combined Seller Applications screen by default. Passing
+// applicationType scopes it to one kind of request, which is how the
+// Seller Admin Requests screen reuses this page rather than duplicating the
+// review/approve/reject flow.
+const PendingSellers = ({
+    applicationType = 'all',
+    title = 'Seller Applications',
+    description,
+    rejectedDescription,
+}) => {
     const navigate = useNavigate();
     const [pendingSellers, setPendingSellers] = useState([]);
     const [statusFilter, setStatusFilter] = useState('pending');
@@ -196,6 +205,7 @@ const PendingSellers = () => {
             const response = await adminApi.getPendingSellers({
                 q: searchTerm || undefined,
                 status: statusFilter,
+                applicationType,
             });
             const payload = response.data.result || {};
             const items = Array.isArray(payload.items) ? payload.items : [];
@@ -217,7 +227,7 @@ const PendingSellers = () => {
     useEffect(() => {
         fetchPendingSellers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [statusFilter]);
+    }, [statusFilter, applicationType]);
 
     const isRejectedView = statusFilter === 'rejected';
 
@@ -267,15 +277,18 @@ const PendingSellers = () => {
     const handleApprove = async (id, { reactivate = false } = {}) => {
         setIsProcessing(true);
         try {
+            // Only the admin's per-store commission override is sent. The
+            // business model is the seller's own choice after approval, and a
+            // complimentary plan is granted from Subscriptions, not here — the
+            // plan id below used to be auto-filled with whatever plan happened
+            // to be first, which nobody ever picked.
             const payload = {
-                businessModel: approvalPlanConfig.businessModel,
                 commissionConfig: {
                     applyCommission: approvalPlanConfig.applyCommission,
                     adminCommissionType: approvalPlanConfig.adminCommissionType,
                     adminCommissionValue: Number(approvalPlanConfig.adminCommissionValue || 0),
                     adminCommissionFixedRule: approvalPlanConfig.adminCommissionFixedRule,
                 },
-                subscriptionPlanId: approvalPlanConfig.subscriptionPlanId,
             };
             await adminApi.approveSeller(id, payload);
             setIsReviewModalOpen(false);
@@ -322,7 +335,7 @@ const PendingSellers = () => {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                     <h1 className="ds-h1 flex items-center gap-2">
-                        Seller Applications
+                        {title}
                         {statusFilter === 'pending' && (
                             <Badge variant="warning" className="admin-tiny px-1.5 py-0 font-bold animate-pulse">Action Required</Badge>
                         )}
@@ -332,8 +345,10 @@ const PendingSellers = () => {
                     </h1>
                     <p className="ds-description mt-0.5">
                         {isRejectedView
-                            ? 'Review rejected or deactivated seller admin accounts and shops. Reactivate to restore dashboard access.'
-                            : 'Check new seller applications before they can start selling.'}
+                            ? (rejectedDescription
+                                || 'Review rejected or deactivated seller admin accounts and shops. Reactivate to restore dashboard access.')
+                            : (description
+                                || 'Check new seller applications before they can start selling.')}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
