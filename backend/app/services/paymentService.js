@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import axios from "axios";
 import mongoose from "mongoose";
+import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "@phonepe-pg/pg-sdk-node";
 import jwt from "jsonwebtoken";
 
 import Order from "../models/order.js";
@@ -28,27 +28,37 @@ import { buildKey, invalidate } from "./cacheService.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 
-function getPhonePeConfig() {
-  const merchantId = String(process.env.PHONEPE_MERCHANT_ID || process.env.PHONEPE_CLIENT_ID || "").trim();
+// PhonePe Checkout (Pay API) — official SDK, OAuth client-credentials auth.
+// This was a hand-rolled v1 Standard Checkout checksum call (X-VERIFY over
+// merchantId+clientSecret) from 2026-09-24 to 2026-10-26, which is the WRONG
+// API for client_id/client_secret-style credentials: PhonePe rejected every
+// request with "KEY_NOT_CONFIGURED — Key not found for the merchant" because
+// these credentials were never provisioned with a v1 salt key. Restored to
+// the SDK this project used successfully for two months before that change
+// (see services/codRemittanceService.js / sellerCodCommissionService.js for
+// a genuinely different PhonePe product — Payouts — that legitimately still
+// uses checksum auth; do not conflate the two).
+let phonePeClient = null;
+function getPhonePeClient() {
+  if (phonePeClient) return phonePeClient;
+
+  const clientId = String(process.env.PHONEPE_CLIENT_ID || process.env.PHONEPE_MERCHANT_ID || "").trim();
   const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
   const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
   const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
 
-  if (!merchantId || !clientSecret) {
+  if (!clientId || !clientSecret) {
     throw new Error("PhonePe credentials not configured");
   }
 
-  const baseUrl = isProd
-    ? "https://api.phonepe.com/apis/hermes"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
-
-  return {
-    merchantId,
+  phonePeClient = StandardCheckoutClient.getInstance(
+    clientId,
     clientSecret,
     clientVersion,
-    baseUrl,
-    clientId: String(process.env.PHONEPE_CLIENT_ID || merchantId).trim(),
-  };
+    isProd ? Env.PRODUCTION : Env.SANDBOX,
+  );
+
+  return phonePeClient;
 }
 
 function sanitizeGatewayPayload(payload = {}) {
@@ -586,49 +596,19 @@ export async function createPaymentOrderForOrderRef({
     attemptCount,
   );
 
-  const config = getPhonePeConfig();
+  const client = getPhonePeClient();
   const redirectUrl = payLinkToken
     ? `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}&payLinkToken=${encodeURIComponent(payLinkToken)}`
     : `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
 
-  const payload = {
-    merchantId: config.merchantId,
-    merchantTransactionId: merchantOrderId,
-    merchantUserId: String(primaryOrder.customer || "CUST-GUEST"),
-    amount: amountPaise,
-    redirectUrl: redirectUrl,
-    redirectMode: "REDIRECT",
-    paymentInstrument: {
-      type: "PAY_PAGE",
-    },
-  };
+  const request = StandardCheckoutPayRequest.builder()
+    .merchantOrderId(merchantOrderId)
+    .amount(amountPaise)
+    .redirectUrl(redirectUrl)
+    .build();
 
-  const payloadString = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signString = payloadString + "/pg/v1/pay" + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
-
-  let redirectUrlResult = null;
-  try {
-    const apiRes = await axios.post(
-      `${config.baseUrl}/pg/v1/pay`,
-      { request: payloadString },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-        },
-      }
-    );
-    redirectUrlResult = apiRes.data?.data?.instrumentResponse?.redirectInfo?.url;
-    if (!redirectUrlResult) {
-      throw new Error(apiRes.data?.message || "No redirect url in PhonePe response");
-    }
-  } catch (err) {
-    const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-    const error = new Error(`PhonePe pay request failed: ${detail}`);
-    error.statusCode = 502;
-    throw error;
-  }
+  const response = await client.pay(request);
+  const redirectUrlResult = response.redirectUrl;
 
   const paymentData = {
     order: primaryOrder._id,
@@ -755,43 +735,25 @@ export async function verifyPhonePePaymentStatus({
       throw err;
   }
 
-  const config = getPhonePeConfig();
-  const endpoint = `/pg/v1/status/${config.merchantId}/${merchantOrderId}`;
-  const signString = endpoint + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
-
-  let responseData = null;
-  try {
-    const apiRes = await axios.get(
-      `${config.baseUrl}${endpoint}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-          "X-MERCHANT-ID": config.merchantId,
-        },
-      }
-    );
-    responseData = apiRes.data || {};
-  } catch (err) {
-    responseData = err.response?.data || {};
-  }
-
-  const responseState = responseData?.data?.state || responseData?.code || "PENDING";
-  const nextStatus = mapPhonePeStatusToInternal(responseState);
+  const client = getPhonePeClient();
+  const response = await client.getOrderStatus(merchantOrderId);
+  const nextStatus = mapPhonePeStatusToInternal(response.state);
+  // Latest payment attempt's detail — getOrderStatus(id) without `details:true`
+  // returns only the most recent attempt under paymentDetails[0].
+  const latestAttempt = response.paymentDetails?.[0];
 
   await transitionPaymentState(payment, {
     nextStatus,
     source: PAYMENT_EVENT_SOURCE.CLIENT_VERIFY,
-    reason: `PhonePe status check: ${responseState}`,
-    gatewayPaymentId: responseData?.data?.transactionId,
-    rawGatewayResponse: responseData,
+    reason: `PhonePe status check: ${response.state}`,
+    gatewayPaymentId: latestAttempt?.transactionId,
+    rawGatewayResponse: response,
   });
 
   await handleOrderSideEffectsFromPaymentStatus(
     payment,
     nextStatus,
-    responseData?.code || responseState,
+    latestAttempt?.errorCode || response.state,
   );
 
   payment.correlationId = correlationId || payment.correlationId;
@@ -819,45 +781,43 @@ export async function processPhonePeWebhook({
   authorization,
   correlationId = null,
 }) {
-  const config = getPhonePeConfig();
-  let jsonPayload;
+  const client = getPhonePeClient();
+  // v2 webhooks POST the event JSON directly as the body (no base64 "response"
+  // wrapper — that was the old v1 shape). The SDK's own Basic-Auth-style
+  // check (sha256(username:password) === Authorization) is what the merchant
+  // dashboard's webhook username/password are for; it throws on a mismatch
+  // rather than returning false.
+  const webhookUsername = String(process.env.PHONEPE_WEBHOOK_USERNAME || "").trim();
+  const webhookPassword = String(process.env.PHONEPE_WEBHOOK_SECRET || "").trim();
+  if (!webhookUsername || !webhookPassword) {
+    throw new Error("PhonePe webhook credentials not configured");
+  }
+
+  let callback;
   try {
-    jsonPayload = JSON.parse(rawBody.toString('utf8'));
+    callback = client.validateCallback(
+      webhookUsername,
+      webhookPassword,
+      authorization,
+      rawBody.toString('utf8'),
+    );
   } catch {
-    const err = new Error("Invalid format: Webhook body must be JSON");
-    err.statusCode = 400;
+    const err = new Error("Invalid webhook signature");
+    err.statusCode = 401;
     throw err;
   }
 
-  const base64Response = jsonPayload.response;
-  if (!base64Response) {
-    const err = new Error("Invalid payload: Missing 'response' field");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const expectedHash = crypto.createHash("sha256").update(base64Response + config.clientSecret).digest("hex");
-  const expectedWithVersion = `${expectedHash}###${config.clientVersion}`;
-  const isValid = authorization && (
-    authorization === expectedWithVersion ||
-    authorization === expectedHash ||
-    authorization.startsWith(expectedHash)
-  );
-
-  if (!isValid) {
-      const err = new Error("Invalid webhook signature");
-      err.statusCode = 401;
-      throw err;
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(Buffer.from(base64Response, 'base64').toString('utf8'));
-  } catch {
-    const err = new Error("Invalid webhook payload: Base64 decode failed");
-    err.statusCode = 400;
-    throw err;
-  }
+  const callbackData = callback.payload;
+  // Flattened to the shape the rest of this function (and the subscription /
+  // COD-remittance handlers it dispatches to) has always expected —
+  // transactionId/responseCode live under paymentDetails[0] on the real SDK
+  // response, not flat on the payload.
+  const latestAttempt = callbackData.paymentDetails?.[0];
+  const payload = {
+    ...callbackData,
+    transactionId: latestAttempt?.transactionId,
+    responseCode: latestAttempt?.errorCode,
+  };
 
   const eventId = payload.transactionId || crypto.randomUUID();
   const payloadHash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");

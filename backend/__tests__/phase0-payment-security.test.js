@@ -20,13 +20,39 @@ const mockPhonePePay = jest.fn();
 const mockPhonePeGetOrderStatus = jest.fn();
 const mockPhonePeValidateCallback = jest.fn();
 
-const mockAxiosPost = jest.fn();
-const mockAxiosGet = jest.fn();
-
-jest.unstable_mockModule("axios", () => ({
-  default: {
-    post: mockAxiosPost,
-    get: mockAxiosGet,
+jest.unstable_mockModule("@phonepe-pg/pg-sdk-node", () => ({
+  Env: {
+    PRODUCTION: "PRODUCTION",
+    SANDBOX: "SANDBOX",
+  },
+  StandardCheckoutClient: {
+    getInstance: jest.fn(() => ({
+      pay: mockPhonePePay,
+      getOrderStatus: mockPhonePeGetOrderStatus,
+      validateCallback: mockPhonePeValidateCallback,
+    })),
+  },
+  StandardCheckoutPayRequest: {
+    builder: jest.fn(() => {
+      const request = {};
+      return {
+        merchantOrderId(value) {
+          request.merchantOrderId = value;
+          return this;
+        },
+        amount(value) {
+          request.amount = value;
+          return this;
+        },
+        redirectUrl(value) {
+          request.redirectUrl = value;
+          return this;
+        },
+        build() {
+          return request;
+        },
+      };
+    }),
   },
 }));
 
@@ -81,6 +107,8 @@ describe("Phase 0 payment hardening", () => {
     process.env.PHONEPE_CLIENT_ID = "phonepe-client";
     process.env.PHONEPE_CLIENT_SECRET = "phonepe-secret";
     process.env.PHONEPE_CLIENT_VERSION = "1";
+    process.env.PHONEPE_WEBHOOK_USERNAME = "webhook-user";
+    process.env.PHONEPE_WEBHOOK_SECRET = "webhook-secret";
     process.env.FRONTEND_URL = "https://frontend.test";
 
     mockPaymentFindOne.mockImplementation((query) => {
@@ -105,17 +133,11 @@ describe("Phase 0 payment hardening", () => {
       paymentBreakdown: { grandTotal: 499 },
     });
     mockPaymentCountDocuments.mockResolvedValue(0);
-    mockAxiosPost.mockResolvedValue({
-      data: {
-        success: true,
-        data: {
-          instrumentResponse: {
-            redirectInfo: {
-              url: "https://pay.test/checkout",
-            },
-          },
-        },
-      },
+    mockPhonePePay.mockResolvedValue({
+      orderId: "phonepe-order-1",
+      state: "PENDING",
+      expireAt: Date.now() + 600000,
+      redirectUrl: "https://pay.test/checkout",
     });
     mockPaymentCreate.mockResolvedValue({
       _id: "payment-1",
@@ -138,7 +160,7 @@ describe("Phase 0 payment hardening", () => {
       correlationId: "corr-1",
     });
 
-    expect(mockAxiosPost).toHaveBeenCalled();
+    expect(mockPhonePePay).toHaveBeenCalled();
     expect(result.payment.amount).toBe(49900);
   });
 
@@ -183,21 +205,30 @@ describe("Phase 0 payment hardening", () => {
   it("treats duplicate webhook event id as idempotent", async () => {
     mockWebhookEventCreate.mockRejectedValueOnce({ code: 11000 });
 
-    const callbackPayload = Buffer.from(
+    // v2 webhooks POST the event JSON directly (no base64 "response" wrapper
+    // — that was the old v1 shape). validateCallback itself is mocked here,
+    // so its real signature check is exercised separately by the SDK, not by
+    // this unit test — only the shape it hands back to the rest of the
+    // function matters.
+    mockPhonePeValidateCallback.mockReturnValue({
+      payload: {
+        state: "COMPLETED",
+        merchantOrderId: "gateway-order-1",
+        paymentDetails: [{ transactionId: "pay_1" }],
+      },
+    });
+
+    const rawBody = Buffer.from(
       JSON.stringify({
         state: "COMPLETED",
         merchantOrderId: "gateway-order-1",
         transactionId: "pay_1",
       }),
-    ).toString("base64");
-
-    const payload = Buffer.from(JSON.stringify({ response: callbackPayload }));
-    const crypto = await import("crypto");
-    const authHeader = crypto.createHash("sha256").update(callbackPayload + "phonepe-secret").digest("hex") + "###1";
+    );
 
     const result = await processPhonePeWebhook({
-      rawBody: payload,
-      authorization: authHeader,
+      rawBody,
+      authorization: "mock-authorization-header",
       eventId: "event-duplicate-1",
       correlationId: "corr-webhook",
     });

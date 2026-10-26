@@ -6,13 +6,41 @@ const mockSubscriptionPaymentCountDocuments = jest.fn();
 const mockSubscriptionPaymentCreate = jest.fn();
 const mockActivateFromPhonePe = jest.fn();
 
-const mockAxiosPost = jest.fn();
-const mockAxiosGet = jest.fn();
+const mockPhonePePay = jest.fn();
+const mockPhonePeGetOrderStatus = jest.fn();
 
-jest.unstable_mockModule("axios", () => ({
-  default: {
-    post: mockAxiosPost,
-    get: mockAxiosGet,
+jest.unstable_mockModule("@phonepe-pg/pg-sdk-node", () => ({
+  Env: {
+    PRODUCTION: "PRODUCTION",
+    SANDBOX: "SANDBOX",
+  },
+  StandardCheckoutClient: {
+    getInstance: jest.fn(() => ({
+      pay: mockPhonePePay,
+      getOrderStatus: mockPhonePeGetOrderStatus,
+    })),
+  },
+  StandardCheckoutPayRequest: {
+    builder: jest.fn(() => {
+      const request = {};
+      return {
+        merchantOrderId(value) {
+          request.merchantOrderId = value;
+          return this;
+        },
+        amount(value) {
+          request.amount = value;
+          return this;
+        },
+        redirectUrl(value) {
+          request.redirectUrl = value;
+          return this;
+        },
+        build() {
+          return request;
+        },
+      };
+    }),
   },
 }));
 
@@ -62,16 +90,11 @@ describe("subscriptionPaymentService", () => {
       isActive: true,
     });
     mockSubscriptionPaymentCountDocuments.mockResolvedValue(0);
-    mockAxiosPost.mockResolvedValue({
-      data: {
-        data: {
-          instrumentResponse: {
-            redirectInfo: {
-              url: "https://phonepe.test/pay",
-            },
-          },
-        },
-      },
+    mockPhonePePay.mockResolvedValue({
+      orderId: "phonepe-order-1",
+      state: "PENDING",
+      expireAt: Date.now() + 600000,
+      redirectUrl: "https://phonepe.test/pay",
     });
     mockSubscriptionPaymentCreate.mockImplementation((doc) => ({
       ...doc,
@@ -95,7 +118,7 @@ describe("subscriptionPaymentService", () => {
     });
 
     expect(result.redirectUrl).toBe("https://phonepe.test/pay");
-    expect(mockAxiosPost).toHaveBeenCalled();
+    expect(mockPhonePePay).toHaveBeenCalled();
     expect(mockSubscriptionPaymentCreate).toHaveBeenCalled();
     expect(mockSellerFindByIdAndUpdate).toHaveBeenCalled();
   });
@@ -111,14 +134,12 @@ describe("subscriptionPaymentService", () => {
     };
     const SellerSubscriptionPayment = (await import("../app/models/sellerSubscriptionPayment.js")).default;
     SellerSubscriptionPayment.findOne.mockResolvedValue(paymentDoc);
-    mockAxiosGet.mockResolvedValue({
-      data: {
-        code: "PAYMENT_SUCCESS",
-        data: {
-          state: "COMPLETED",
-          transactionId: "txn-1",
-        },
-      },
+    mockPhonePeGetOrderStatus.mockResolvedValue({
+      orderId: "phonepe-order-1",
+      state: "COMPLETED",
+      amount: 99900,
+      expireAt: Date.now() + 600000,
+      paymentDetails: [{ transactionId: "txn-1" }],
     });
     mockActivateFromPhonePe.mockResolvedValue({
       request: { _id: "req1" },

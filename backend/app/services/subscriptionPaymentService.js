@@ -1,5 +1,4 @@
-import crypto from "crypto";
-import axios from "axios";
+import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "@phonepe-pg/pg-sdk-node";
 import SellerSubscriptionPayment from "../models/sellerSubscriptionPayment.js";
 import SubscriptionPlan from "../models/subscriptionPlan.js";
 import {
@@ -21,27 +20,29 @@ import Seller from "../models/seller.js";
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 const SUBSCRIPTION_MERCHANT_PREFIX = "SUB-";
 
-function getPhonePeConfig() {
-  const merchantId = String(process.env.PHONEPE_MERCHANT_ID || process.env.PHONEPE_CLIENT_ID || "").trim();
+// Official SDK — see the matching comment in paymentService.js for why this
+// is not a hand-rolled v1 checksum call.
+let phonePeClient = null;
+function getPhonePeClient() {
+  if (phonePeClient) return phonePeClient;
+
+  const clientId = String(process.env.PHONEPE_CLIENT_ID || process.env.PHONEPE_MERCHANT_ID || "").trim();
   const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
   const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
   const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
 
-  if (!merchantId || !clientSecret) {
+  if (!clientId || !clientSecret) {
     throw new Error("PhonePe credentials not configured");
   }
 
-  const baseUrl = isProd
-    ? "https://api.phonepe.com/apis/hermes"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
-
-  return {
-    merchantId,
+  phonePeClient = StandardCheckoutClient.getInstance(
+    clientId,
     clientSecret,
     clientVersion,
-    baseUrl,
-    clientId: String(process.env.PHONEPE_CLIENT_ID || merchantId).trim(),
-  };
+    isProd ? Env.PRODUCTION : Env.SANDBOX,
+  );
+
+  return phonePeClient;
 }
 
 export function isSubscriptionMerchantOrderId(merchantOrderId) {
@@ -201,50 +202,25 @@ export async function createSubscriptionPhonePeCheckout({
   }
 
   const merchantOrderId = payment.gatewayOrderId;
-  const config = getPhonePeConfig();
+  const client = getPhonePeClient();
   const redirectUrl = `${process.env.FRONTEND_URL}/seller/subscription/payment-status?merchantOrderId=${merchantOrderId}`;
 
-  const payload = {
-    merchantId: config.merchantId,
-    merchantTransactionId: merchantOrderId,
-    merchantUserId: String(sellerId),
-    amount: amountPaise,
-    redirectUrl: redirectUrl,
-    redirectMode: "REDIRECT",
-    paymentInstrument: {
-      type: "PAY_PAGE",
-    },
-  };
-
-  const payloadString = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signString = payloadString + "/pg/v1/pay" + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
+  const request = StandardCheckoutPayRequest.builder()
+    .merchantOrderId(merchantOrderId)
+    .amount(amountPaise)
+    .redirectUrl(redirectUrl)
+    .build();
 
   let redirectUrlResult = null;
   try {
-    const apiRes = await axios.post(
-      `${config.baseUrl}/pg/v1/pay`,
-      { request: payloadString },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-        },
-      }
-    );
-    redirectUrlResult = apiRes.data?.data?.instrumentResponse?.redirectInfo?.url;
-    if (!redirectUrlResult) {
-      throw new Error(apiRes.data?.message || "No redirect url in PhonePe response");
-    }
+    const response = await client.pay(request);
+    redirectUrlResult = response.redirectUrl;
   } catch (error) {
     payment.status = PAYMENT_STATUS.FAILED;
     payment.failedAt = new Date();
-    payment.failureReason = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+    payment.failureReason = error.message;
     await payment.save();
-    const detail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-    const err = new Error(`PhonePe pay request failed: ${detail}`);
-    err.statusCode = 502;
-    throw err;
+    throw error;
   }
 
   payment.status = PAYMENT_STATUS.PENDING;
@@ -288,35 +264,15 @@ export async function verifySubscriptionPhonePePayment({
     return { payment, status: payment.status, alreadyCaptured: true };
   }
 
-  const config = getPhonePeConfig();
-  const endpoint = `/pg/v1/status/${config.merchantId}/${merchantOrderId}`;
-  const signString = endpoint + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
-
-  let responseData = null;
-  try {
-    const apiRes = await axios.get(
-      `${config.baseUrl}${endpoint}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-          "X-MERCHANT-ID": config.merchantId,
-        },
-      }
-    );
-    responseData = apiRes.data || {};
-  } catch (err) {
-    responseData = err.response?.data || {};
-  }
-
-  const responseState = responseData?.data?.state || responseData?.code || "PENDING";
-  const nextStatus = mapPhonePeStatusToInternal(responseState);
+  const client = getPhonePeClient();
+  const response = await client.getOrderStatus(merchantOrderId);
+  const nextStatus = mapPhonePeStatusToInternal(response.state);
+  const latestAttempt = response.paymentDetails?.[0];
 
   await transitionSubscriptionPaymentState(payment, {
     nextStatus,
-    gatewayPaymentId: responseData?.data?.transactionId,
-    rawGatewayResponse: responseData,
+    gatewayPaymentId: latestAttempt?.transactionId,
+    rawGatewayResponse: response,
   });
 
   if (nextStatus === PAYMENT_STATUS.CAPTURED) {
