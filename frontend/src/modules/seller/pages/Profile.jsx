@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   User,
@@ -16,6 +17,7 @@ import {
   Truck,
   Percent,
   ArrowRightLeft,
+  ArrowRight,
   Loader2,
   CreditCard,
   Camera,
@@ -27,6 +29,7 @@ import Button from "@shared/components/ui/Button";
 import MapPicker from "../../../shared/components/MapPicker";
 
 const SellerProfile = () => {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -657,11 +660,24 @@ const SellerProfile = () => {
                 </div>
               )}
 
-              {modelSwitch?.status === "approved" && modelSwitch.requestedModel === "subscription" && !profile?.hasActiveSubscription && (
-                <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+              {/* Subscription chosen (either at initial sign-up or an
+                  approved switch) but no plan paid for yet — point the
+                  seller straight at the Subscription page instead of just
+                  telling them where to find it. */}
+              {currentModel === "subscription" && !profile?.hasActiveSubscription && (
+                <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100 space-y-3">
                   <p className="text-xs font-bold text-emerald-800">
-                    Switch approved — complete PhonePe payment on the Subscription page to activate.
+                    {modelSwitch?.status === "approved" && modelSwitch.requestedModel === "subscription"
+                      ? "Switch approved — choose a plan and pay with PhonePe to activate."
+                      : "Choose a plan and pay with PhonePe to activate your subscription."}
                   </p>
+                  <Button
+                    className="w-full text-xs font-bold"
+                    onClick={() => navigate("/seller/subscription")}
+                  >
+                    Choose subscription plan
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
                 </div>
               )}
 
