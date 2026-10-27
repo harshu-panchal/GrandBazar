@@ -1,8 +1,9 @@
 import express from "express";
 import {
   createPaymentOrder,
+  getPaymentStatusById,
   verifyPaymentStatus,
-  handlePhonePeWebhook,
+  handleRazorpayWebhook,
   resolvePhoneOrderPayLinkController,
 } from "../controller/paymentController.js";
 import { verifyToken, optionalVerifyToken } from "../middleware/authMiddleware.js";
@@ -11,7 +12,9 @@ import { paymentRouteRateLimiter } from "../middleware/securityMiddlewares.js";
 const paymentRoute = express.Router();
 
 /**
- * Initiate a PhonePe payment order for a specific CheckoutGroupId or OrderId.
+ * Initiate a Razorpay order for a specific CheckoutGroupId or OrderId. The
+ * frontend opens Razorpay's embedded Checkout.js against the returned
+ * razorpayOrderId.
  * Auth: Required (Customer paying for their own order)
  */
 paymentRoute.post(
@@ -22,12 +25,25 @@ paymentRoute.post(
 );
 
 /**
- * Verify payment status from client side (after redirect back from PhonePe).
+ * Passive DB-read status check (fallback/refresh — e.g. the status page
+ * picking up a result the webhook already resolved).
  * Auth: a bearer token for a normal logged-in customer, OR a payLinkToken
- * query param for an anonymous phone-order customer (see verifyPaymentStatus
- * for the fallback logic — optionalVerifyToken itself never 401s).
+ * query param for an anonymous phone-order customer.
  */
 paymentRoute.get(
+  "/status/:id",
+  optionalVerifyToken,
+  paymentRouteRateLimiter,
+  getPaymentStatusById,
+);
+
+/**
+ * Verify a payment right after Razorpay Checkout.js's success handler fires,
+ * via razorpay_order_id/payment_id/signature in the body.
+ * Auth: a bearer token for a normal logged-in customer, OR a payLinkToken
+ * in the body for an anonymous phone-order customer.
+ */
+paymentRoute.post(
   "/status/:id",
   optionalVerifyToken,
   paymentRouteRateLimiter,
@@ -35,7 +51,7 @@ paymentRoute.get(
 );
 
 /**
- * Resolve an admin-phone-order pay-by-link token into a PhonePe checkout.
+ * Resolve an admin-phone-order pay-by-link token into a Razorpay checkout.
  * Auth: None (anonymous recipient of an SMS/email link) — identity comes
  * from the signed token itself.
  */
@@ -46,13 +62,13 @@ paymentRoute.get(
 );
 
 /**
- * PhonePe Server-to-Server Webhook.
- * Auth: None (Internal verification via x-verify / authorization header)
+ * Razorpay Server-to-Server Webhook.
+ * Auth: None (Internal verification via X-Razorpay-Signature header)
  */
 paymentRoute.post(
-  "/webhook/phonepe",
-  express.raw({ type: "application/json" }), // SDK needs raw body for verification
-  handlePhonePeWebhook,
+  "/webhook/razorpay",
+  express.raw({ type: "application/json" }), // needed raw body for HMAC verification
+  handleRazorpayWebhook,
 );
 
 export default paymentRoute;

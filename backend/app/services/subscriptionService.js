@@ -95,7 +95,7 @@ export async function getSubscriptionOperationalOwnerIds(ownerIds = []) {
 }
 
 export async function getSellerSubscriptionSummary(sellerId) {
-  const [active, pendingRequest, pendingPhonePePayment] = await Promise.all([
+  const [active, pendingRequest, pendingRazorpayPayment] = await Promise.all([
     getActiveSubscriptionForSeller(sellerId),
     SubscriptionPaymentRequest.findOne({
       sellerId,
@@ -134,7 +134,7 @@ export async function getSellerSubscriptionSummary(sellerId) {
   return {
     activeSubscription: active,
     pendingPaymentRequest: pendingRequest,
-    pendingPhonePePayment,
+    pendingRazorpayPayment,
     usage: {
       shopCount: stores.length,
       shopLimit,
@@ -475,7 +475,7 @@ export async function hideSellerOnExpiry(ownerId) {
   }
 }
 
-export async function activateSubscriptionFromPhonePePayment({
+export async function activateSubscriptionFromPayment({
   sellerId,
   planId,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
@@ -499,10 +499,10 @@ export async function activateSubscriptionFromPhonePePayment({
     planId: plan._id,
     requestType: resolvedType,
     amount: Number(amount ?? plan.price),
-    paymentMethod: "phonepe",
+    paymentMethod: "razorpay",
     transactionRef: String(gatewayOrderId || ""),
     proofDocumentUrl: "",
-    sellerNote: "Auto-approved via PhonePe",
+    sellerNote: "Auto-approved via Razorpay",
     planSnapshot: buildPlanSnapshot(plan),
     status: PAYMENT_REQUEST_STATUS.APPROVED,
     reviewedAt: new Date(),
@@ -513,10 +513,10 @@ export async function activateSubscriptionFromPhonePePayment({
 }
 
 /**
- * A ₹0 plan has nothing to pay — routing it through PhonePe checkout throws
- * ("Invalid plan price for payment", PhonePe rejects sub-₹1 amounts) since
- * that path assumes a real payment. Activates immediately instead, the same
- * way an approved manual/PhonePe payment does, just with no money involved.
+ * A ₹0 plan has nothing to pay — routing it through Razorpay checkout throws
+ * (Razorpay rejects sub-₹1 amounts) since that path assumes a real payment.
+ * Activates immediately instead, the same way an approved manual/Razorpay
+ * payment does, just with no money involved.
  */
 export async function activateFreeSubscriptionPlan({
   sellerId,

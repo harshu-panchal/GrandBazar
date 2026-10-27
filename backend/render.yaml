@@ -26,6 +26,12 @@ services:
         sync: false
       - key: ADMIN_SECRET_KEY
         sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_CHECKOUT_WEBHOOK_SECRET
+        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

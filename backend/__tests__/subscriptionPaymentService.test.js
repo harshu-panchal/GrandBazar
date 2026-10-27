@@ -4,44 +4,21 @@ const mockPlanFindOne = jest.fn();
 const mockSellerFindByIdAndUpdate = jest.fn();
 const mockSubscriptionPaymentCountDocuments = jest.fn();
 const mockSubscriptionPaymentCreate = jest.fn();
-const mockActivateFromPhonePe = jest.fn();
+const mockActivateFromPayment = jest.fn();
 
-const mockPhonePePay = jest.fn();
-const mockPhonePeGetOrderStatus = jest.fn();
+const mockCreateRazorpayOrder = jest.fn();
+const mockVerifyRazorpaySignature = jest.fn();
 
-jest.unstable_mockModule("@phonepe-pg/pg-sdk-node", () => ({
-  Env: {
-    PRODUCTION: "PRODUCTION",
-    SANDBOX: "SANDBOX",
+jest.unstable_mockModule("../app/services/razorpay/razorpayCheckoutClient.js", () => ({
+  createRazorpayOrder: mockCreateRazorpayOrder,
+  verifyRazorpaySignature: mockVerifyRazorpaySignature,
+  mapRazorpayStatusToInternal: (status) => {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "captured" || normalized === "payment.captured") return "CAPTURED";
+    if (normalized === "failed" || normalized === "payment.failed") return "FAILED";
+    return "PENDING";
   },
-  StandardCheckoutClient: {
-    getInstance: jest.fn(() => ({
-      pay: mockPhonePePay,
-      getOrderStatus: mockPhonePeGetOrderStatus,
-    })),
-  },
-  StandardCheckoutPayRequest: {
-    builder: jest.fn(() => {
-      const request = {};
-      return {
-        merchantOrderId(value) {
-          request.merchantOrderId = value;
-          return this;
-        },
-        amount(value) {
-          request.amount = value;
-          return this;
-        },
-        redirectUrl(value) {
-          request.redirectUrl = value;
-          return this;
-        },
-        build() {
-          return request;
-        },
-      };
-    }),
-  },
+  razorpayCheckoutConfig: () => ({ keyId: "rzp_test_key", keySecret: "test-secret", webhookSecret: "test-webhook-secret" }),
 }));
 
 jest.unstable_mockModule("../app/models/subscriptionPlan.js", () => ({
@@ -68,16 +45,15 @@ jest.unstable_mockModule("../app/models/sellerSubscriptionPayment.js", () => ({
 
 jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
   getActiveSubscriptionForSeller: jest.fn().mockResolvedValue(null),
-  activateSubscriptionFromPhonePePayment: mockActivateFromPhonePe,
+  activateSubscriptionFromPayment: mockActivateFromPayment,
   resolveSubscriptionRequestType: jest.fn().mockReturnValue("new"),
 }));
 
 describe("subscriptionPaymentService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.PHONEPE_CLIENT_ID = "test-client";
-    process.env.PHONEPE_CLIENT_SECRET = "test-secret";
-    process.env.PHONEPE_ENV = "SANDBOX";
+    process.env.RAZORPAY_KEY_ID = "rzp_test_key";
+    process.env.RAZORPAY_KEY_SECRET = "test-secret";
     process.env.FRONTEND_URL = "http://localhost:5173";
 
     mockPlanFindOne.mockResolvedValue({
@@ -90,11 +66,11 @@ describe("subscriptionPaymentService", () => {
       isActive: true,
     });
     mockSubscriptionPaymentCountDocuments.mockResolvedValue(0);
-    mockPhonePePay.mockResolvedValue({
-      orderId: "phonepe-order-1",
-      state: "PENDING",
-      expireAt: Date.now() + 600000,
-      redirectUrl: "https://phonepe.test/pay",
+    mockCreateRazorpayOrder.mockResolvedValue({
+      razorpayOrderId: "order_razorpay1",
+      amount: 99900,
+      currency: "INR",
+      status: "created",
     });
     mockSubscriptionPaymentCreate.mockImplementation((doc) => ({
       ...doc,
@@ -109,50 +85,71 @@ describe("subscriptionPaymentService", () => {
     expect(isSubscriptionMerchantOrderId("ORD-123")).toBe(false);
   });
 
-  it("createSubscriptionPhonePeCheckout returns redirect URL", async () => {
-    const { createSubscriptionPhonePeCheckout } = await import("../app/services/subscriptionPaymentService.js");
+  it("createSubscriptionRazorpayCheckout returns a Razorpay order", async () => {
+    const { createSubscriptionRazorpayCheckout } = await import("../app/services/subscriptionPaymentService.js");
 
-    const result = await createSubscriptionPhonePeCheckout({
+    const result = await createSubscriptionRazorpayCheckout({
       sellerId: "seller123",
       planId: "plan1",
     });
 
-    expect(result.redirectUrl).toBe("https://phonepe.test/pay");
-    expect(mockPhonePePay).toHaveBeenCalled();
+    expect(result.razorpayOrderId).toBe("order_razorpay1");
+    expect(mockCreateRazorpayOrder).toHaveBeenCalled();
     expect(mockSubscriptionPaymentCreate).toHaveBeenCalled();
     expect(mockSellerFindByIdAndUpdate).toHaveBeenCalled();
   });
 
-  it("verifySubscriptionPhonePePayment activates on CAPTURED", async () => {
+  it("verifySubscriptionRazorpayPayment activates on valid signature", async () => {
     const paymentDoc = {
       sellerId: "seller123",
       planId: "plan1",
-      gatewayOrderId: "SUB-SELLER123-PLAN1-A1",
+      gatewayOrderId: "order_razorpay1",
       status: "PENDING",
       planSnapshot: { price: 999 },
       save: jest.fn().mockResolvedValue(true),
     };
     const SellerSubscriptionPayment = (await import("../app/models/sellerSubscriptionPayment.js")).default;
     SellerSubscriptionPayment.findOne.mockResolvedValue(paymentDoc);
-    mockPhonePeGetOrderStatus.mockResolvedValue({
-      orderId: "phonepe-order-1",
-      state: "COMPLETED",
-      amount: 99900,
-      expireAt: Date.now() + 600000,
-      paymentDetails: [{ transactionId: "txn-1" }],
-    });
-    mockActivateFromPhonePe.mockResolvedValue({
+    mockVerifyRazorpaySignature.mockReturnValue(true);
+    mockActivateFromPayment.mockResolvedValue({
       request: { _id: "req1" },
       subscription: { _id: "sub1" },
     });
 
-    const { verifySubscriptionPhonePePayment } = await import("../app/services/subscriptionPaymentService.js");
-    const result = await verifySubscriptionPhonePePayment({
-      merchantOrderId: "SUB-SELLER123-PLAN1-A1",
+    const { verifySubscriptionRazorpayPayment } = await import("../app/services/subscriptionPaymentService.js");
+    const result = await verifySubscriptionRazorpayPayment({
+      razorpayOrderId: "order_razorpay1",
+      razorpayPaymentId: "pay_razorpay1",
+      razorpaySignature: "valid-signature",
       sellerId: "seller123",
     });
 
     expect(result.status).toBe("CAPTURED");
-    expect(mockActivateFromPhonePe).toHaveBeenCalled();
+    expect(mockActivateFromPayment).toHaveBeenCalled();
+  });
+
+  it("verifySubscriptionRazorpayPayment fails on invalid signature", async () => {
+    const paymentDoc = {
+      sellerId: "seller123",
+      planId: "plan1",
+      gatewayOrderId: "order_razorpay1",
+      status: "PENDING",
+      planSnapshot: { price: 999 },
+      save: jest.fn().mockResolvedValue(true),
+    };
+    const SellerSubscriptionPayment = (await import("../app/models/sellerSubscriptionPayment.js")).default;
+    SellerSubscriptionPayment.findOne.mockResolvedValue(paymentDoc);
+    mockVerifyRazorpaySignature.mockReturnValue(false);
+
+    const { verifySubscriptionRazorpayPayment } = await import("../app/services/subscriptionPaymentService.js");
+    const result = await verifySubscriptionRazorpayPayment({
+      razorpayOrderId: "order_razorpay1",
+      razorpayPaymentId: "pay_razorpay1",
+      razorpaySignature: "bad-signature",
+      sellerId: "seller123",
+    });
+
+    expect(result.status).toBe("FAILED");
+    expect(mockActivateFromPayment).not.toHaveBeenCalled();
   });
 });

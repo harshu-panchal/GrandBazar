@@ -8,8 +8,8 @@ import {
 } from "../../services/subscriptionService.js";
 import SubscriptionPlan from "../../models/subscriptionPlan.js";
 import {
-  createSubscriptionPhonePeCheckout,
-  verifySubscriptionPhonePePayment,
+  createSubscriptionRazorpayCheckout,
+  verifySubscriptionRazorpayPayment,
 } from "../../services/subscriptionPaymentService.js";
 import { PAYMENT_REQUEST_TYPE } from "../../constants/subscription.js";
 
@@ -91,7 +91,7 @@ export async function submitSubscriptionPaymentRequest(req, res) {
   }
 }
 
-export async function initiateSubscriptionPhonePePayment(req, res) {
+export async function initiateSubscriptionRazorpayPayment(req, res) {
   try {
     const ownerId = resolveOwnerId(req);
     if (!ownerId) {
@@ -103,7 +103,7 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
       return handleResponse(res, 400, "planId is required");
     }
 
-    // A ₹0 plan has nothing to pay — PhonePe checkout requires a real amount
+    // A ₹0 plan has nothing to pay — Razorpay checkout requires a real amount
     // (sub-₹1 is rejected), so activate it directly instead of routing
     // through the payment gateway.
     const plan = await SubscriptionPlan.findById(planId).select("price").lean();
@@ -119,15 +119,17 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
       });
     }
 
-    const result = await createSubscriptionPhonePeCheckout({
+    const result = await createSubscriptionRazorpayCheckout({
       sellerId: ownerId,
       planId,
       requestType: requestType || PAYMENT_REQUEST_TYPE.NEW,
     });
 
-    return handleResponse(res, 200, "PhonePe checkout created", {
-      redirectUrl: result.redirectUrl,
-      merchantOrderId: result.payment.gatewayOrderId,
+    return handleResponse(res, 200, "Razorpay checkout created", {
+      razorpayOrderId: result.razorpayOrderId,
+      amount: result.amount,
+      currency: result.currency,
+      keyId: result.keyId,
       duplicate: result.duplicate,
     });
   } catch (error) {
@@ -135,20 +137,22 @@ export async function initiateSubscriptionPhonePePayment(req, res) {
   }
 }
 
-export async function verifySubscriptionPhonePePaymentStatus(req, res) {
+export async function verifySubscriptionRazorpayPaymentStatus(req, res) {
   try {
     const ownerId = resolveOwnerId(req);
     if (!ownerId) {
       return handleResponse(res, 403, "Only the store owner can verify subscription payment");
     }
 
-    const merchantOrderId = req.query.merchantOrderId || req.params.merchantOrderId;
-    if (!merchantOrderId) {
-      return handleResponse(res, 400, "merchantOrderId is required");
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return handleResponse(res, 400, "razorpayOrderId, razorpayPaymentId and razorpaySignature are required");
     }
 
-    const result = await verifySubscriptionPhonePePayment({
-      merchantOrderId,
+    const result = await verifySubscriptionRazorpayPayment({
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
       sellerId: ownerId,
     });
 

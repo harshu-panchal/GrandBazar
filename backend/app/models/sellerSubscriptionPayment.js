@@ -28,7 +28,7 @@ const sellerSubscriptionPaymentSchema = new mongoose.Schema(
     gatewayName: {
       type: String,
       enum: ALL_PAYMENT_GATEWAYS,
-      default: "PHONEPE",
+      default: "RAZORPAY",
     },
     gatewayOrderId: {
       type: String,

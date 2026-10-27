@@ -668,8 +668,8 @@ const SellerProfile = () => {
                 <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100 space-y-3">
                   <p className="text-xs font-bold text-emerald-800">
                     {modelSwitch?.status === "approved" && modelSwitch.requestedModel === "subscription"
-                      ? "Switch approved — choose a plan and pay with PhonePe to activate."
-                      : "Choose a plan and pay with PhonePe to activate your subscription."}
+                      ? "Switch approved — choose a plan and pay with Razorpay to activate."
+                      : "Choose a plan and pay with Razorpay to activate your subscription."}
                   </p>
                   <Button
                     className="w-full text-xs font-bold"

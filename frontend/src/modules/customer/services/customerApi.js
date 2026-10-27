@@ -180,9 +180,16 @@ export const customerApi = {
   // Payments
   createPaymentOrder: (data) =>
     axiosInstance.post("/payments/create-order", data),
-  verifyPaymentStatus: (id, { payLinkToken } = {}) =>
+  getPaymentStatus: (id, { payLinkToken } = {}) =>
     axiosInstance.get(`/payments/status/${id}`, {
       params: payLinkToken ? { payLinkToken } : undefined,
+    }),
+  verifyPaymentStatus: (id, { razorpayPaymentId, razorpaySignature, payLinkToken } = {}) =>
+    axiosInstance.post(`/payments/status/${id}`, {
+      razorpayOrderId: id,
+      razorpayPaymentId,
+      razorpaySignature,
+      payLinkToken,
     }),
   resolvePhoneOrderPayLink: (token) =>
     axiosInstance.get(`/payments/pay-link/${encodeURIComponent(token)}`),

@@ -27,6 +27,7 @@ import { useSellerEarnings } from "../context/SellerEarningsContext";
 import { useStoreContext } from "../context/StoreContext";
 import { sellerApi } from "../services/sellerApi";
 import Pagination from "@shared/components/ui/Pagination";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 import { getStatusVariant } from "@/shared/utils/orderStatus";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
@@ -189,17 +190,45 @@ const Earnings = () => {
     try {
       setIsPayingCommission(true);
       const res = await sellerApi.initiateCodCommissionPayment({ amount });
-      const redirectUrl = res.data?.data?.redirectUrl;
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-      } else {
+      const checkout = res.data?.result;
+      if (!checkout?.razorpayOrderId) {
         toast.success("Payment initiated successfully");
         setIsPayCommissionModalOpen(false);
         refreshEarnings();
+        return;
       }
+
+      await openRazorpayCheckout({
+        razorpayOrderId: checkout.razorpayOrderId,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        keyId: checkout.keyId,
+        description: "COD commission payment",
+        onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+          try {
+            await sellerApi.verifyCodCommissionPayment({
+              razorpayOrderId,
+              razorpayPaymentId,
+              razorpaySignature,
+            });
+            toast.success("Payment successful");
+          } catch {
+            toast.success("Payment received — confirming shortly");
+          }
+          setIsPayCommissionModalOpen(false);
+          setIsPayingCommission(false);
+          refreshEarnings();
+        },
+        onFailure: (error) => {
+          setIsPayingCommission(false);
+          toast.error(error?.description || "Payment failed");
+        },
+        onDismiss: () => {
+          setIsPayingCommission(false);
+        },
+      });
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to initiate payment");
-    } finally {
       setIsPayingCommission(false);
     }
   };
@@ -727,7 +756,7 @@ const Earnings = () => {
                     />
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">
-                    Pay securely using UPI, Cards, NetBanking via PhonePe.
+                    Pay securely using UPI, Cards, NetBanking via Razorpay.
                   </p>
                 </div>
 

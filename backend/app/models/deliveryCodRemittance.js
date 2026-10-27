@@ -21,7 +21,7 @@ const deliveryCodRemittanceSchema = new mongoose.Schema(
     gatewayName: {
       type: String,
       enum: ALL_PAYMENT_GATEWAYS,
-      default: PAYMENT_GATEWAY.PHONEPE,
+      default: PAYMENT_GATEWAY.RAZORPAY,
     },
     gatewayOrderId: {
       type: String,

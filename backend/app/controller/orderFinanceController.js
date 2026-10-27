@@ -17,7 +17,7 @@ import {
 import { syncLegacyDeliveryTransactions } from "../services/orderSettlement.js";
 import { placeOrderAtomic } from "../services/orderPlacementService.js";
 import { orderMatchQueryFromRouteParam } from "../utils/orderLookup.js";
-import { verifyClientPaymentCallback } from "../services/paymentService.js";
+import { getPaymentRecordStatus } from "../services/paymentService.js";
 import { buildCheckoutPricingSnapshot } from "../services/checkoutPricingService.js";
 import { checkOperatingHours } from "../utils/operatingHours.js";
 
@@ -149,16 +149,16 @@ export const createOrderWithFinancialSnapshot = async (req, res) => {
   }
 };
 
+// Passive DB-read check — the authoritative capture confirmation happens via
+// the Checkout.js success signature-verify call (paymentController.js) or
+// the Razorpay webhook; this endpoint just reports what's currently on file
+// for the given gateway order id.
 export const verifyOnlineOrderPayment = async (req, res) => {
   try {
-    const { id } = req.params;
     const payload = validateWithJoi(verifyOnlinePaymentSchema, req.body || {});
-    const verification = await verifyClientPaymentCallback({
-      orderRef: id,
-      userId: req.user?.id,
+    const verification = await getPaymentRecordStatus({
       gatewayOrderId: payload.merchantOrderId,
-      gatewayPaymentId: payload.transactionId || null,
-      correlationId: req.correlationId || null,
+      userId: req.user?.id,
     });
 
     return handleResponse(res, 200, "Online payment verification processed", {

@@ -630,7 +630,7 @@ async function fetchSystemHealth() {
   };
 
   const paymentConfigured = Boolean(
-    process.env.PHONEPE_CLIENT_ID && process.env.PHONEPE_CLIENT_SECRET,
+    process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET,
   );
   const notificationsConfigured = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
 
@@ -647,7 +647,7 @@ async function fetchSystemHealth() {
       { key: "mongodb", label: "MongoDB Database", status: mapStatus(mongo.status), detail: mongo.responseTime != null ? `${mongo.responseTime}ms` : mongo.error || "" },
       { key: "redis", label: "Redis Cache", status: mapStatus(redis.status), detail: redis.responseTime != null && redis.status === "UP" ? `${redis.responseTime}ms` : redis.error || "" },
       { key: "queue", label: "Job Queue", status: mapStatus(queue.status), detail: queue.error || "" },
-      { key: "payments", label: "Payment Gateway", status: paymentConfigured ? "configured" : "not_configured", detail: "PhonePe" },
+      { key: "payments", label: "Payment Gateway", status: paymentConfigured ? "configured" : "not_configured", detail: "Razorpay" },
       { key: "notifications", label: "Notification Service", status: notificationsConfigured ? "configured" : "not_configured", detail: "Firebase" },
     ],
     serverLoadPct,

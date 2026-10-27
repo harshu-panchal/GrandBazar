@@ -19,11 +19,11 @@ node backend/scripts/migrate_store_gst_legacy.js   # legacy stores only
 6. Admin approves shop → seller receives store approval notification.
 7. Seller publishes a product → customer can checkout.
 
-## 2. Subscription seller — PhonePe + expiry
+## 2. Subscription seller — Razorpay + expiry
 
 1. Register seller → admin approves account.
 2. Seller chooses **Subscription** → redirected to subscription page.
-3. Pay via PhonePe → subscription activates instantly.
+3. Pay via Razorpay → subscription activates instantly.
 4. Verify shop visible on storefront; product limit shown on subscription page.
 5. Let subscription expire (or run expiry job) → shops hidden from customers.
 6. Renew same plan → period extends from current end date.
@@ -32,7 +32,7 @@ node backend/scripts/migrate_store_gst_legacy.js   # legacy stores only
 ## 3. Model switch
 
 1. Commission seller requests switch to subscription → appears in admin **Model switches** tab.
-2. Admin approves → seller completes PhonePe payment.
+2. Admin approves → seller completes Razorpay payment.
 3. Subscription seller requests switch to commission (expired sub) → admin approves → commission model active.
 
 ## 4. External logistics

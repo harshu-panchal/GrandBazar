@@ -159,7 +159,7 @@ export async function getSubscriptionOverview(req, res) {
       activePlanCount,
       activeSubscriptions,
       pendingRequests,
-      capturedPhonePePayments,
+      capturedRazorpayPayments,
     ] = await Promise.all([
       SubscriptionPlan.countDocuments(),
       SubscriptionPlan.countDocuments({ isActive: true }),
@@ -173,7 +173,7 @@ export async function getSubscriptionOverview(req, res) {
       activePlanCount,
       activeSubscriptions,
       pendingRequests,
-      capturedPhonePePayments,
+      capturedRazorpayPayments,
     });
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);

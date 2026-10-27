@@ -64,9 +64,9 @@ function isDelivered(order) {
 }
 export function paymentReceived(order) {
   // Gateway-aware: "payment received" = the order's actual capture is
-  // reconciled, whichever gateway took it (live: PhonePe; Razorpay-ready).
-  // For a true Razorpay order a live fetch could be added here keyed on the
-  // gateway payment id; the reconciled status is the source of truth.
+  // reconciled, whichever gateway took it (live: Razorpay). A live fetch
+  // could be added here keyed on the gateway payment id; the reconciled
+  // status is the source of truth.
   const ps = String(order.paymentStatus || "").toUpperCase();
   if (["PAID", "CASH_COLLECTED", "COD_RECONCILED", "PARTIALLY_REMITTED"].includes(ps)) return true;
   return String(order.payment?.status || "").toLowerCase() === "completed";

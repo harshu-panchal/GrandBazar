@@ -1,8 +1,9 @@
 import handleResponse from "../utils/helper.js";
 import {
   createPaymentOrderForOrderRef,
-  verifyPhonePePaymentStatus,
-  processPhonePeWebhook,
+  getPaymentRecordStatus,
+  verifyRazorpayPaymentStatus,
+  processRazorpayWebhook,
   resolvePhoneOrderPayLink,
   verifyPhoneOrderPayLinkToken,
 } from "../services/paymentService.js";
@@ -17,12 +18,12 @@ function resolvePaymentErrorMessage(error) {
   if (directMessage) return directMessage;
 
   const responseStatusText = String(error?.response?.statusText || "").trim();
-  if (responseStatusText) return `PhonePe gateway error: ${responseStatusText}`;
+  if (responseStatusText) return `Razorpay gateway error: ${responseStatusText}`;
 
   const causeCode = String(error?.cause?.code || error?.code || "").trim();
-  if (causeCode) return `PhonePe gateway request failed (${causeCode})`;
+  if (causeCode) return `Razorpay gateway request failed (${causeCode})`;
 
-  return "Unable to initiate payment with PhonePe right now";
+  return "Unable to initiate payment with Razorpay right now";
 }
 
 export const createPaymentOrder = async (req, res) => {
@@ -41,8 +42,11 @@ export const createPaymentOrder = async (req, res) => {
       result.duplicate ? "Re-using existing payment" : "Payment initiated",
       {
         payment: result.payment,
-        redirectUrl: result.redirectUrl,
-        merchantOrderId: result.payment.gatewayOrderId,
+        razorpayOrderId: result.razorpayOrderId,
+        merchantOrderId: result.merchantOrderId,
+        amount: result.amount,
+        currency: result.currency,
+        keyId: result.keyId,
       },
     );
   } catch (error) {
@@ -64,19 +68,20 @@ export const createPaymentOrder = async (req, res) => {
   }
 };
 
+// Passive DB-read fallback (e.g. the status page polling to see if the
+// webhook already resolved a payment). The real confirmation happens via
+// verifyPaymentStatus below, called by the Checkout.js success handler.
 // Route uses optionalVerifyToken (not verifyToken) so an anonymous
-// phone-order customer redirected back from PhonePe can still reach this
-// handler. For a logged-in customer, req.user is set exactly as before and
-// behavior is unchanged. For an anonymous caller, a payLinkToken query
-// param (threaded through the redirect URL by createPaymentOrderForOrderRef
-// — see resolvePhoneOrderPayLink) stands in for the bearer identity.
-export const verifyPaymentStatus = async (req, res) => {
+// phone-order customer can still reach this handler — a payLinkToken query
+// param (threaded through by resolvePhoneOrderPayLink) stands in for the
+// bearer identity.
+export const getPaymentStatusById = async (req, res) => {
   try {
     const { id } = req.params;
-    const merchantOrderId = id || req.query.merchantOrderId;
+    const razorpayOrderId = id || req.query.razorpayOrderId;
 
-    if (!merchantOrderId) {
-        return handleResponse(res, 400, "merchantOrderId is required");
+    if (!razorpayOrderId) {
+      return handleResponse(res, 400, "razorpayOrderId is required");
     }
 
     let effectiveUserId = req.user?.id || null;
@@ -92,8 +97,56 @@ export const verifyPaymentStatus = async (req, res) => {
       payLinkOrderRef = decoded.orderRef;
     }
 
-    const verification = await verifyPhonePePaymentStatus({
-      merchantOrderId,
+    const result = await getPaymentRecordStatus({ gatewayOrderId: razorpayOrderId, userId: effectiveUserId });
+
+    if (payLinkOrderRef) {
+      const paymentOrderRef = result.payment.checkoutGroupId || result.payment.publicOrderId;
+      if (String(paymentOrderRef) !== String(payLinkOrderRef)) {
+        return handleResponse(res, 403, "This payment link is not valid for this order");
+      }
+    }
+
+    return handleResponse(res, 200, "Payment status retrieved", {
+      status: result.status,
+      payment: result.payment,
+    });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+// Called by the frontend's Razorpay Checkout.js success handler, right after
+// the modal closes, with the razorpay_order_id/payment_id/signature it
+// returned. Confirms the payment via HMAC signature and runs the order's
+// side effects. See optionalVerifyToken note above — same anonymous
+// pay-link support applies here.
+export const verifyPaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const razorpayOrderId = id || req.body.razorpayOrderId;
+    const { razorpayPaymentId, razorpaySignature } = req.body || {};
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return handleResponse(res, 400, "razorpayOrderId, razorpayPaymentId and razorpaySignature are required");
+    }
+
+    let effectiveUserId = req.user?.id || null;
+    let payLinkOrderRef = null;
+
+    if (!effectiveUserId) {
+      const payLinkToken = req.body.payLinkToken || req.query.payLinkToken;
+      if (!payLinkToken) {
+        return handleResponse(res, 401, "Unauthorized, token missing");
+      }
+      const decoded = verifyPhoneOrderPayLinkToken(payLinkToken);
+      effectiveUserId = decoded.customerId;
+      payLinkOrderRef = decoded.orderRef;
+    }
+
+    const verification = await verifyRazorpayPaymentStatus({
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
       userId: effectiveUserId,
       correlationId: req.correlationId || null,
     });
@@ -119,29 +172,29 @@ export const verifyPaymentStatus = async (req, res) => {
   }
 };
 
-export const handlePhonePeWebhook = async (req, res) => {
+export const handleRazorpayWebhook = async (req, res) => {
   try {
-    const authorization = req.headers["x-verify"] || req.headers["authorization"];
+    const signatureHeader = req.headers["x-razorpay-signature"];
     const rawBody = req.body;
 
-    if (!authorization) {
-        console.warn("[PhonePeWebhook] Missing verification header");
+    if (!signatureHeader) {
+        console.warn("[RazorpayWebhook] Missing signature header");
         return res.status(401).send("Unauthorized");
     }
 
-    const result = await processPhonePeWebhook({
+    const result = await processRazorpayWebhook({
       rawBody,
-      authorization,
+      signatureHeader,
       correlationId: req.correlationId || null,
     });
 
     if (result.accepted) {
       return res.status(200).send("OK");
     }
-    
+
     return res.status(400).send("Bad Request");
   } catch (error) {
-    console.error("[PhonePeWebhook] Error processing webhook:", error.message);
+    console.error("[RazorpayWebhook] Error processing webhook:", error.message);
     return res.status(500).send("Internal Server Error");
   }
 };
@@ -157,7 +210,12 @@ export const resolvePhoneOrderPayLinkController = async (req, res) => {
       res,
       result.duplicate ? 200 : 201,
       result.duplicate ? "Re-using existing payment" : "Payment initiated",
-      { redirectUrl: result.redirectUrl },
+      {
+        razorpayOrderId: result.razorpayOrderId,
+        amount: result.amount,
+        currency: result.currency,
+        keyId: result.keyId,
+      },
     );
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
@@ -167,19 +225,13 @@ export const resolvePhoneOrderPayLinkController = async (req, res) => {
 export const getPaymentStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const merchantOrderId = id;
-    
-        const verification = await verifyPhonePePaymentStatus({
-          merchantOrderId,
-          userId: req.user?.id,
-          correlationId: req.correlationId || null,
-        });
-    
+        const result = await getPaymentRecordStatus({ gatewayOrderId: id, userId: req.user?.id });
+
         return handleResponse(res, 200, "Payment status retrieved", {
-          status: verification.status,
-          merchantOrderId: verification.payment.gatewayOrderId,
-          amount: verification.payment.amount,
-          currency: verification.payment.currency,
+          status: result.status,
+          razorpayOrderId: result.payment.gatewayOrderId,
+          amount: result.payment.amount,
+          currency: result.payment.currency,
         });
       } catch (error) {
         return handleResponse(res, error.statusCode || 500, error.message);

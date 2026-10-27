@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import Card from "@/shared/components/ui/Card";
 import Button from "@/shared/components/ui/Button";
 import { deliveryApi } from "../services/deliveryApi";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 
 const RUPEE = "\u20B9";
 
@@ -84,15 +85,44 @@ const CodCash = () => {
 
     try {
       setPaying(true);
-      const res = await deliveryApi.initiateCodRemittancePhonePe({
+      const res = await deliveryApi.initiateCodRemittanceRazorpay({
         amount: enteredPayAmount,
       });
-      if (res.data?.result?.redirectUrl) {
-        window.location.href = res.data.result.redirectUrl;
-      } else {
-        toast.error("Failed to get payment url");
+      const checkout = res.data?.result;
+      if (!checkout?.razorpayOrderId) {
+        toast.error("Failed to initiate payment");
         setPaying(false);
+        return;
       }
+
+      await openRazorpayCheckout({
+        razorpayOrderId: checkout.razorpayOrderId,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        keyId: checkout.keyId,
+        description: "COD cash remittance",
+        onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+          try {
+            await deliveryApi.verifyCodRemittanceRazorpay({
+              razorpayOrderId,
+              razorpayPaymentId,
+              razorpaySignature,
+            });
+            toast.success("Payment successful");
+          } catch {
+            toast.success("Payment received — confirming shortly");
+          }
+          setPaying(false);
+          fetchSummary();
+        },
+        onFailure: (error) => {
+          setPaying(false);
+          toast.error(error?.description || "Payment failed");
+        },
+        onDismiss: () => {
+          setPaying(false);
+        },
+      });
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to initiate payment");
       setPaying(false);

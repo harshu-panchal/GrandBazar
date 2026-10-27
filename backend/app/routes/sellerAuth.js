@@ -57,8 +57,8 @@ import {
     getSellerSubscriptionPlans,
     getSellerSubscriptionStatus,
     submitSubscriptionPaymentRequest,
-    initiateSubscriptionPhonePePayment,
-    verifySubscriptionPhonePePaymentStatus,
+    initiateSubscriptionRazorpayPayment,
+    verifySubscriptionRazorpayPaymentStatus,
 } from "../controller/seller/subscriptionController.js";
 
 const allowOwnerOnly = requireStoreOwner;
@@ -144,8 +144,8 @@ router.get("/commission-preview", ...sellerAuthChain, allowOwnerOnly, previewSel
 const sellerSubscriptionChain = [...sellerAuthChain, allowOwnerOnly];
 router.get("/subscription/plans", ...sellerSubscriptionChain, getSellerSubscriptionPlans);
 router.get("/subscription/status", ...sellerSubscriptionChain, getSellerSubscriptionStatus);
-router.post("/subscription/pay", ...sellerSubscriptionChain, initiateSubscriptionPhonePePayment);
-router.get("/subscription/payment/verify", ...sellerSubscriptionChain, verifySubscriptionPhonePePaymentStatus);
+router.post("/subscription/pay", ...sellerSubscriptionChain, initiateSubscriptionRazorpayPayment);
+router.post("/subscription/payment/verify", ...sellerSubscriptionChain, verifySubscriptionRazorpayPaymentStatus);
 router.post(
     "/subscription/payment-request",
     upload.single("proof"),
@@ -185,7 +185,7 @@ router.get("/earnings", ...sellerOpsChain, checkSubSellerPermission("withdrawals
 router.get("/wallet/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerWalletSummaryController);
 router.get("/cod-commission/summary", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerCodCommissionSummaryController);
 router.post("/cod-commission/initiate", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), initiateSellerCodCommissionCheckoutController);
-router.get("/cod-commission/status/:merchantOrderId", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), verifySellerCodCommissionPaymentController);
+router.post("/cod-commission/verify", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), verifySellerCodCommissionPaymentController);
 router.get("/finance/bulk-settlements", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "read"), getSellerBulkSettlementsController);
 router.post("/request-withdrawal", ...sellerOpsChain, checkSubSellerPermission("withdrawals", "write"), requestWithdrawal);
 

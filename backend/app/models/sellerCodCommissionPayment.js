@@ -20,13 +20,15 @@ const sellerCodCommissionPaymentSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["ONLINE_PHONEPE", "MANUAL_ADMIN_RECONCILIATION", "AUTO_WALLET_OFFSET"],
-      default: "ONLINE_PHONEPE",
+      // ONLINE_PHONEPE kept for historical records written before the
+      // Razorpay migration; new online payments write ONLINE_RAZORPAY.
+      enum: ["ONLINE_PHONEPE", "ONLINE_RAZORPAY", "MANUAL_ADMIN_RECONCILIATION", "AUTO_WALLET_OFFSET"],
+      default: "ONLINE_RAZORPAY",
     },
     gatewayName: {
       type: String,
       enum: ALL_PAYMENT_GATEWAYS,
-      default: PAYMENT_GATEWAY.PHONEPE,
+      default: PAYMENT_GATEWAY.RAZORPAY,
     },
     gatewayOrderId: {
       type: String,

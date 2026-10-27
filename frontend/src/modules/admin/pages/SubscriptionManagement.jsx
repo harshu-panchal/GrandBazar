@@ -66,7 +66,7 @@ const REQUEST_STATUS_OPTIONS = [
   { value: "all", label: "All" },
 ];
 
-const PHONEPE_STATUS_OPTIONS = [
+const RAZORPAY_STATUS_OPTIONS = [
   { value: "all", label: "All" },
   { value: "CAPTURED", label: "Captured" },
   { value: "PENDING", label: "Pending" },
@@ -306,7 +306,7 @@ const PlanCard = ({ plan, onEdit, onDeactivate, isDeactivating }) => (
 
 const SubscriptionManagement = () => {
   const [tab, setTab] = useState("plans");
-  const [requestSubTab, setRequestSubTab] = useState("phonepe");
+  const [requestSubTab, setRequestSubTab] = useState("razorpay");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
@@ -316,7 +316,7 @@ const SubscriptionManagement = () => {
   const [overview, setOverview] = useState(null);
   const [plans, setPlans] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [phonePePayments, setPhonePePayments] = useState([]);
+  const [razorpayPayments, setRazorpayPayments] = useState([]);
   const [modelSwitchRequests, setModelSwitchRequests] = useState([]);
   const [complimentaryItems, setComplimentaryItems] = useState([]);
   const [assignSellers, setAssignSellers] = useState([]);
@@ -336,7 +336,7 @@ const SubscriptionManagement = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const [requestStatusFilter, setRequestStatusFilter] = useState("pending");
-  const [phonePeStatusFilter, setPhonePeStatusFilter] = useState("all");
+  const [razorpayStatusFilter, setRazorpayStatusFilter] = useState("all");
   const [rejectReasons, setRejectReasons] = useState({});
 
   const [paymentSettingsForm, setPaymentSettingsForm] = useState(emptyPaymentSettings);
@@ -354,7 +354,7 @@ const SubscriptionManagement = () => {
         overviewRes,
         plansRes,
         requestsRes,
-        phonePeRes,
+        razorpayRes,
         modelSwitchRes,
         complimentaryRes,
         paymentSettingsRes,
@@ -362,7 +362,7 @@ const SubscriptionManagement = () => {
         adminApi.getSubscriptionOverview(),
         adminApi.getSubscriptionPlans(),
         adminApi.getSubscriptionPaymentRequests({ status: requestStatusFilter }),
-        adminApi.getSubscriptionPayments({ status: phonePeStatusFilter }),
+        adminApi.getSubscriptionPayments({ status: razorpayStatusFilter }),
         adminApi.getModelSwitchRequests({ status: "pending" }),
         adminApi.getComplimentarySubscriptions(),
         adminApi.getSubscriptionPaymentSettings(),
@@ -371,7 +371,7 @@ const SubscriptionManagement = () => {
       setOverview(overviewRes.data.result || {});
       setPlans(unwrapList(plansRes));
       setRequests(unwrapList(requestsRes));
-      setPhonePePayments(unwrapList(phonePeRes));
+      setRazorpayPayments(unwrapList(razorpayRes));
       setModelSwitchRequests(unwrapList(modelSwitchRes));
       const paymentSettingsPayload = paymentSettingsRes.data?.result || {};
       setPaymentSettingsForm({
@@ -399,7 +399,7 @@ const SubscriptionManagement = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [requestStatusFilter, phonePeStatusFilter]);
+  }, [requestStatusFilter, razorpayStatusFilter]);
 
   useEffect(() => {
     loadAll();
@@ -608,8 +608,8 @@ const SubscriptionManagement = () => {
         />
         <StatCard
           icon={CreditCard}
-          label="PhonePe payments"
-          value={overview?.capturedPhonePePayments ?? 0}
+          label="Razorpay payments"
+          value={overview?.capturedRazorpayPayments ?? 0}
           hint="Successfully captured"
         />
       </div>
@@ -684,7 +684,7 @@ const SubscriptionManagement = () => {
               Create plan
             </h2>
             <p className="text-xs text-slate-500 mb-5">
-              Sellers pay via PhonePe and get instant activation after successful payment.
+              Sellers pay via Razorpay and get instant activation after successful payment.
             </p>
             <PlanForm
               form={planForm}
@@ -911,14 +911,14 @@ const SubscriptionManagement = () => {
           <div className="flex gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setRequestSubTab("phonepe")}
+              onClick={() => setRequestSubTab("razorpay")}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-sm font-medium",
-                requestSubTab === "phonepe" ? "bg-primary-100 text-primary-800" : "bg-slate-100 text-slate-600",
+                requestSubTab === "razorpay" ? "bg-primary-100 text-primary-800" : "bg-slate-100 text-slate-600",
               )}
             >
               <Smartphone className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-              PhonePe payments
+              Razorpay payments
             </button>
             <button
               type="button"
@@ -943,26 +943,26 @@ const SubscriptionManagement = () => {
             </button>
           </div>
 
-          {requestSubTab === "phonepe" && (
+          {requestSubTab === "razorpay" && (
             <Card className="overflow-hidden">
               <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-bold text-slate-900">PhonePe subscription payments</h2>
+                  <h2 className="font-bold text-slate-900">Razorpay subscription payments</h2>
                   <p className="text-xs text-slate-500 mt-0.5">Auto-activated on successful capture</p>
                 </div>
                 <select
                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm"
-                  value={phonePeStatusFilter}
-                  onChange={(e) => setPhonePeStatusFilter(e.target.value)}
+                  value={razorpayStatusFilter}
+                  onChange={(e) => setRazorpayStatusFilter(e.target.value)}
                 >
-                  {PHONEPE_STATUS_OPTIONS.map((opt) => (
+                  {RAZORPAY_STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>
 
-              {phonePePayments.length === 0 ? (
-                <p className="p-8 text-sm text-slate-500 text-center">No PhonePe payments found.</p>
+              {razorpayPayments.length === 0 ? (
+                <p className="p-8 text-sm text-slate-500 text-center">No Razorpay payments found.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -977,7 +977,7 @@ const SubscriptionManagement = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {phonePePayments.map((payment) => (
+                      {razorpayPayments.map((payment) => (
                         <tr key={payment._id} className="hover:bg-slate-50/50">
                           <td className="px-4 py-3">
                             <p className="font-semibold text-slate-900">{payment.seller?.name || "—"}</p>

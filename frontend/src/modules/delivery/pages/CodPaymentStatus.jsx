@@ -1,57 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import Button from "@/shared/components/ui/Button";
-import { deliveryApi } from "../services/deliveryApi";
 
+// COD remittance payment now completes in-page via Razorpay's embedded
+// Checkout.js modal (see CodCash.jsx's handlePayNow) instead of a
+// redirect-based gateway hop, so nothing navigates here anymore. Kept as a
+// dead-link-safe fallback in case an old link/bookmark still points at it.
 const CodPaymentStatus = () => {
     const [searchParams] = useSearchParams();
-    const merchantOrderId = searchParams.get("merchantOrderId");
-    const [loading, setLoading] = useState(true);
-    const [paymentStatus, setPaymentStatus] = useState("PENDING");
-    const [errorMsg, setErrorMsg] = useState("");
-
-    useEffect(() => {
-        if (!merchantOrderId) {
-            setErrorMsg("Payment order ID missing");
-            setLoading(false);
-            return;
-        }
-        checkStatus(merchantOrderId);
-    }, [merchantOrderId]);
-
-    const checkStatus = async (id) => {
-        try {
-            const res = await deliveryApi.checkCodRemittancePhonePeStatus(id);
-            const data = res.data?.result || {};
-            setPaymentStatus(data.status || "FAILED");
-            // If it's pending, keep polling or let webhook complete
-            if (data.status === "PENDING" || data.status === "CREATED") {
-                setTimeout(() => checkStatus(id), 3000);
-            } else {
-                setLoading(false);
-            }
-        } catch (error) {
-            setErrorMsg(error.response?.data?.message || "Failed to check status");
-            setPaymentStatus("FAILED");
-            setLoading(false);
-        }
-    };
-
-    if (loading || paymentStatus === "PENDING" || paymentStatus === "CREATED") {
-        return (
-            <div className="flex min-h-screen items-center justify-center py-6 border-b border-gray-100 px-2 bg-white pb-24">
-                <div className="w-full max-w-sm p-8 text-center flex flex-col items-center">
-                    <Loader2 className="h-10 w-10 animate-spin text-orange-500 mb-4" />
-                    <h2 className="text-xl font-bold text-gray-900">Verifying Payment</h2>
-                    <p className="text-sm text-gray-500 mt-2">
-                        Please wait while we confirm your COD remittance payment.
-                        Do not hit back or refresh.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    const razorpayPaymentId = searchParams.get("razorpayPaymentId");
+    const [paymentStatus] = useState(razorpayPaymentId ? "CAPTURED" : "FAILED");
+    const [errorMsg] = useState(
+        razorpayPaymentId ? "" : "This payment status link is no longer used — check the COD Cash page for the latest status.",
+    );
 
     if (paymentStatus === "CAPTURED") {
         return (

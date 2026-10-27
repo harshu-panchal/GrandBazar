@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@shared/components/ui/Toast";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 import { useSettings } from "@core/context/SettingsContext";
 import SlideToPay from "../components/shared/SlideToPay";
 import { getCachedGeocode, setCachedGeocode } from "@/core/utils/geocodeCache";
@@ -1265,15 +1266,52 @@ const CheckoutPage = () => {
               orderRef: paymentRef,
               orderId: mainOrderId,
             });
-            if (paymentRes.data.success && paymentRes.data.result?.redirectUrl) {
-              clearCart();
-              window.location.href = paymentRes.data.result.redirectUrl;
-              return;
-            } else {
+            const checkout = paymentRes.data?.result;
+            if (!paymentRes.data.success || !checkout?.razorpayOrderId) {
               throw new Error(
                 paymentRes.data.message || "Failed to initiate payment gateway"
               );
             }
+
+            await openRazorpayCheckout({
+              razorpayOrderId: checkout.razorpayOrderId,
+              amount: checkout.amount,
+              currency: checkout.currency,
+              keyId: checkout.keyId,
+              description: `Order #${mainOrderId}`,
+              prefill: {
+                name: user?.name || "",
+                email: user?.email || "",
+                contact: user?.phone || "",
+              },
+              onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+                try {
+                  await customerApi.verifyPaymentStatus(razorpayOrderId, {
+                    razorpayPaymentId,
+                    razorpaySignature,
+                  });
+                } catch {
+                  // Webhook is the authoritative fallback if this verify call fails.
+                }
+                clearCart();
+                setIsPlacingOrder(false);
+                navigate(`/orders/${mainOrderId}`);
+              },
+              onFailure: (error) => {
+                setIsPlacingOrder(false);
+                showToast(
+                  error?.description || "Payment failed. Please try again from order details.",
+                  "error"
+                );
+                navigate(`/orders/${mainOrderId}`);
+              },
+              onDismiss: () => {
+                setIsPlacingOrder(false);
+                showToast("Payment cancelled. You can pay again from order details.", "info");
+                navigate(`/orders/${mainOrderId}`);
+              },
+            });
+            return;
           } catch (payError) {
             setIsPlacingOrder(false);
             showToast(

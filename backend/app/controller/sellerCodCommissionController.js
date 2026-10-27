@@ -30,7 +30,10 @@ export const initiateSellerCodCommissionCheckoutController = async (req, res) =>
     });
 
     return handleResponse(res, 200, "Payment checkout initiated successfully", {
-      redirectUrl: result.redirectUrl,
+      razorpayOrderId: result.razorpayOrderId,
+      amount: result.amount,
+      currency: result.currency,
+      keyId: result.keyId,
       paymentId: result.payment._id,
       duplicate: result.duplicate,
     });
@@ -42,11 +45,15 @@ export const initiateSellerCodCommissionCheckoutController = async (req, res) =>
 export const verifySellerCodCommissionPaymentController = async (req, res) => {
   try {
     const sellerId = req.user?.id || req.user?._id;
-    const merchantOrderId = req.params.merchantOrderId;
-    if (!merchantOrderId) return handleResponse(res, 400, "Missing merchantOrderId parameter");
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return handleResponse(res, 400, "razorpayOrderId, razorpayPaymentId and razorpaySignature are required");
+    }
 
     const result = await verifySellerCodCommissionPayment({
-      merchantOrderId,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
       sellerId,
     });
 

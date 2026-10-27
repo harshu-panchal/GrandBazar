@@ -6,6 +6,7 @@ import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import { sellerApi } from "../services/sellerApi";
 import { useAuth } from "@core/context/AuthContext";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 
 const SellerSubscription = () => {
   const navigate = useNavigate();
@@ -31,13 +32,14 @@ const SellerSubscription = () => {
     loadData();
   }, []);
 
-  const handlePayWithPhonePe = async () => {
-    if (!selectedPlanId) {
+  const handlePayWithRazorpay = async (planIdOverride) => {
+    const targetPlanId = planIdOverride || selectedPlanId;
+    if (!targetPlanId) {
       toast.error("Select a plan first");
       return;
     }
 
-    const selectedPlan = plans.find((p) => String(p._id) === String(selectedPlanId));
+    const selectedPlan = plans.find((p) => String(p._id) === String(targetPlanId));
     let requestType = "new";
     if (activeSubscription && selectedPlan) {
       const currentPrice = Number(activeSubscription.planSnapshot?.price || 0);
@@ -51,10 +53,10 @@ const SellerSubscription = () => {
     setIsPaying(true);
     try {
       const response = await sellerApi.initiateSubscriptionPayment({
-        planId: selectedPlanId,
+        planId: targetPlanId,
         requestType,
       });
-      const { redirectUrl, activated } = response.data.result || {};
+      const { razorpayOrderId, amount, currency: payCurrency, keyId, activated } = response.data.result || {};
 
       if (activated) {
         toast.success("Plan activated — no payment required");
@@ -66,13 +68,41 @@ const SellerSubscription = () => {
         return;
       }
 
-      if (!redirectUrl) {
-        throw new Error("Payment URL not received");
+      if (!razorpayOrderId) {
+        throw new Error("Payment order not received");
       }
-      if (typeof refreshUser === "function") {
-        await refreshUser();
-      }
-      window.location.href = redirectUrl;
+
+      await openRazorpayCheckout({
+        razorpayOrderId,
+        amount,
+        currency: payCurrency,
+        keyId,
+        description: selectedPlan?.name ? `${selectedPlan.name} subscription` : "Subscription payment",
+        onSuccess: async ({ razorpayOrderId: orderId, razorpayPaymentId, razorpaySignature }) => {
+          try {
+            await sellerApi.verifySubscriptionPayment({
+              razorpayOrderId: orderId,
+              razorpayPaymentId,
+              razorpaySignature,
+            });
+            toast.success("Subscription activated!");
+          } catch (verifyError) {
+            toast.error(verifyError.response?.data?.message || "Could not confirm payment — please refresh");
+          }
+          if (typeof refreshUser === "function") {
+            await refreshUser();
+          }
+          setIsPaying(false);
+          await loadData();
+        },
+        onFailure: (error) => {
+          setIsPaying(false);
+          toast.error(error?.description || "Payment failed. Please try again.");
+        },
+        onDismiss: () => {
+          setIsPaying(false);
+        },
+      });
     } catch (error) {
       toast.error(error.response?.data?.message || error.message || "Failed to start payment");
       setIsPaying(false);
@@ -90,7 +120,7 @@ const SellerSubscription = () => {
   const {
     plans = [],
     activeSubscription,
-    pendingPhonePePayment,
+    pendingRazorpayPayment,
     usage,
     paymentSettings = {},
   } = data || {};
@@ -131,7 +161,7 @@ const SellerSubscription = () => {
 
         <Card className="p-6 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
           <h2 className="font-bold text-slate-900 mb-2">Renew or upgrade</h2>
-          <p className="text-sm text-slate-500 mb-4">Pay with PhonePe to extend or change your plan.</p>
+          <p className="text-sm text-slate-500 mb-4">Pay with Razorpay to extend or change your plan.</p>
           <div className="grid md:grid-cols-2 gap-3">
             {plans.map((plan) => (
               <button
@@ -159,13 +189,13 @@ const SellerSubscription = () => {
               <Button
                 className="mt-4"
                 disabled={isPaying}
-                onClick={handlePayWithPhonePe}
+                onClick={handlePayWithRazorpay}
               >
                 {isPaying
-                  ? "Redirecting to PhonePe..."
+                  ? "Opening Razorpay..."
                   : isUpgrade
-                    ? "Upgrade with PhonePe"
-                    : "Renew with PhonePe"}
+                    ? "Upgrade with Razorpay"
+                    : "Renew with Razorpay"}
               </Button>
             );
           })()}
@@ -179,29 +209,30 @@ const SellerSubscription = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Subscription plans</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Choose a plan and pay securely with PhonePe. Your subscription activates instantly after payment.
+          Choose a plan and pay securely with Razorpay. Your subscription activates instantly after payment.
         </p>
       </div>
 
-      {pendingPhonePePayment && (
+      {pendingRazorpayPayment && (
         <Card className="p-4 border-amber-200 bg-amber-50 flex items-start gap-3 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border">
           <Clock className="h-5 w-5 text-amber-600 shrink-0" />
           <div>
             <p className="font-semibold text-amber-900">Payment in progress</p>
             <p className="text-sm text-amber-700">
-              Complete your PhonePe payment for {pendingPhonePePayment.planSnapshot?.name || "the selected plan"}.
+              Complete your Razorpay payment for {pendingRazorpayPayment.planSnapshot?.name || "the selected plan"}.
             </p>
-            {pendingPhonePePayment.rawGatewayResponse?.redirectUrl && (
-              <Button
-                size="sm"
-                className="mt-2"
-                onClick={() => {
-                  window.location.href = pendingPhonePePayment.rawGatewayResponse.redirectUrl;
-                }}
-              >
-                Continue payment
-              </Button>
-            )}
+            <Button
+              size="sm"
+              className="mt-2"
+              disabled={isPaying}
+              onClick={() => {
+                const planId = String(pendingRazorpayPayment.planId);
+                setSelectedPlanId(planId);
+                handlePayWithRazorpay(planId);
+              }}
+            >
+              Continue payment
+            </Button>
           </div>
         </Card>
       )}
@@ -234,21 +265,21 @@ const SellerSubscription = () => {
         ))}
       </div>
 
-      {selectedPlanId && !pendingPhonePePayment && (
+      {selectedPlanId && !pendingRazorpayPayment && (
         <Card className="p-5 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
           <div className="flex items-center gap-3 mb-4">
             <CreditCard className="h-5 w-5 text-primary-600" />
-            <h2 className="font-bold text-slate-900">Pay with PhonePe</h2>
+            <h2 className="font-bold text-slate-900">Pay with Razorpay</h2>
           </div>
           <p className="text-sm text-slate-500 mb-4">
-            You will be redirected to PhonePe to complete payment. Subscription activates automatically once payment succeeds.
+            Pay securely with Razorpay. Subscription activates automatically once payment succeeds.
           </p>
           <Button
             disabled={isPaying}
-            onClick={() => handlePayWithPhonePe()}
+            onClick={() => handlePayWithRazorpay()}
             className="w-full md:w-auto"
           >
-            {isPaying ? "Redirecting to PhonePe..." : "Pay with PhonePe"}
+            {isPaying ? "Opening Razorpay..." : "Pay with Razorpay"}
           </Button>
         </Card>
       )}

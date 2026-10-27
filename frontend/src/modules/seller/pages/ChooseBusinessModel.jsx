@@ -17,7 +17,7 @@ const ChooseBusinessModel = () => {
     setIsSubmitting(true);
     try {
       await sellerApi.chooseBusinessModel({ businessModel: "subscription" });
-      toast.success("Subscription model selected. Choose a plan and pay with PhonePe.");
+      toast.success("Subscription model selected. Choose a plan and pay with Razorpay.");
       if (typeof refreshUser === "function") {
         await refreshUser();
       }
@@ -109,13 +109,13 @@ const ChooseBusinessModel = () => {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Subscription model</h2>
-                <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide">PhonePe payment</p>
+                <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide">Razorpay payment</p>
               </div>
             </div>
             <ul className="text-sm text-slate-600 space-y-2 mb-6">
               <li>• Pay rental for shop & product capacity</li>
               <li>• Keep 100% of product sales (no commission)</li>
-              <li>• Pay securely with PhonePe</li>
+              <li>• Pay securely with Razorpay</li>
               <li>• Instant activation after successful payment</li>
             </ul>
             <Button

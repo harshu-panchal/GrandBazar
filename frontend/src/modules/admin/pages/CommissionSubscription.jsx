@@ -56,7 +56,7 @@ const CommissionSubscription = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Active Subscriptions" value={overview.activeSubscriptions} icon={HiOutlineUserGroup} color="text-brand-600" bg="bg-brand-50" />
           <StatCard label="Active Plans" value={`${overview.activePlanCount} / ${overview.planCount}`} icon={HiOutlineDocumentText} color="text-violet-600" bg="bg-violet-50" />
-          <StatCard label="Captured Payments" value={overview.capturedPhonePePayments} icon={HiOutlineReceiptPercent} color="text-emerald-600" bg="bg-emerald-50" />
+          <StatCard label="Captured Payments" value={overview.capturedRazorpayPayments} icon={HiOutlineReceiptPercent} color="text-emerald-600" bg="bg-emerald-50" />
           <StatCard label="Pending Payment Requests" value={overview.pendingRequests} icon={HiOutlineClock} color="text-amber-600" bg="bg-amber-50" />
         </div>
       )}

@@ -11,11 +11,17 @@ const PaymentStatusPage = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
     
-    const merchantOrderId = searchParams.get("merchantOrderId");
-    // Present only when PhonePe redirects back an anonymous phone-order
-    // customer (see resolvePhoneOrderPayLink/createPaymentOrderForOrderRef
-    // on the backend) — lets this still-logged-out browser authenticate the
-    // verify call below instead of falling back to the slower async webhook.
+    const merchantOrderId = searchParams.get("razorpayOrderId") || searchParams.get("merchantOrderId");
+    // Present only right after Razorpay Checkout.js's success handler fires
+    // (see openRazorpayCheckout usages) — a one-time signature verify. Absent
+    // on a plain refresh/fallback visit, where this page instead polls the
+    // passive DB-read status endpoint for a result the webhook may have
+    // already resolved.
+    const razorpayPaymentId = searchParams.get("razorpayPaymentId");
+    const razorpaySignature = searchParams.get("razorpaySignature");
+    // Present only for an anonymous phone-order customer (see
+    // resolvePhoneOrderPayLink on the backend) — lets this still-logged-out
+    // browser authenticate the status/verify calls below.
     const payLinkToken = searchParams.get("payLinkToken");
     const [status, setStatus] = useState("verifying"); // verifying, success, failure, timeout
     const [orderDetails, setOrderDetails] = useState(null);
@@ -23,6 +29,7 @@ const PaymentStatusPage = () => {
     const [retryCount, setRetryCount] = useState(0);
     const maxRetries = 10;
     const pollInterval = useRef(null);
+    const verifiedRef = useRef(false);
 
     const verifyPayment = async () => {
         if (!merchantOrderId) {
@@ -32,7 +39,17 @@ const PaymentStatusPage = () => {
         }
 
         try {
-            const response = await customerApi.verifyPaymentStatus(merchantOrderId, { payLinkToken });
+            let response;
+            if (razorpayPaymentId && razorpaySignature && !verifiedRef.current) {
+                verifiedRef.current = true;
+                response = await customerApi.verifyPaymentStatus(merchantOrderId, {
+                    razorpayPaymentId,
+                    razorpaySignature,
+                    payLinkToken,
+                });
+            } else {
+                response = await customerApi.getPaymentStatus(merchantOrderId, { payLinkToken });
+            }
             if (response.data.success) {
                 const paymentStatus = response.data.result.status;
                 const payment = response.data.result.payment;
@@ -62,7 +79,7 @@ const PaymentStatusPage = () => {
 
             if (isNetworkError) {
                 setStatus("timeout");
-                setError("Cannot reach the backend. If PhonePe opened this on another device/app, localhost URLs will not work.");
+                setError("Cannot reach the backend. If Razorpay opened this on another device/app, localhost URLs will not work.");
                 if (pollInterval.current) clearInterval(pollInterval.current);
                 return;
             }
@@ -202,7 +219,7 @@ const PaymentStatusPage = () => {
                         {status === "verifying" && (
                             <motion.div key="text-verifying" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                                 <h1 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight">Verifying Payment</h1>
-                                <p className="text-slate-500 text-sm font-medium">Please wait while we confirm your transaction with PhonePe. Do not refresh or go back.</p>
+                                <p className="text-slate-500 text-sm font-medium">Please wait while we confirm your transaction with Razorpay. Do not refresh or go back.</p>
                                 <div className="mt-6 flex justify-center gap-1">
                                     {[0, 1, 2].map((i) => (
                                         <motion.div
@@ -241,7 +258,7 @@ const PaymentStatusPage = () => {
                             <motion.div key="text-failure" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                                 <h1 className="text-2xl font-[1000] text-slate-800 mb-2 uppercase tracking-tight">Payment Failed</h1>
                                 <p className="text-rose-600 text-sm font-black mb-6 uppercase tracking-wider">{error || "Transaction Rejected"}</p>
-                                <p className="text-slate-500 text-sm font-medium mb-8">Oops! Something went wrong with the transaction. Your money (if debited) will be refunded automatically by PhonePe.</p>
+                                <p className="text-slate-500 text-sm font-medium mb-8">Oops! Something went wrong with the transaction. Your money (if debited) will be refunded automatically by Razorpay.</p>
                                 <div className="flex flex-col gap-3">
                                     <Button 
                                         onClick={() => navigate('/checkout')}
@@ -267,7 +284,7 @@ const PaymentStatusPage = () => {
                                 <div className="bg-amber-50 rounded-2xl p-4 mb-8 border border-amber-100 flex items-start gap-3 text-left">
                                     <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
                                     <p className="text-xs text-amber-800 font-medium leading-relaxed">
-                                        We haven't received confirmation from PhonePe yet. This sometimes happens due to bank delays. Please check your order history in a few minutes.
+                                        We haven't received confirmation from Razorpay yet. This sometimes happens due to bank delays. Please check your order history in a few minutes.
                                     </p>
                                 </div>
                                 <div className="flex flex-col gap-3">

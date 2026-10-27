@@ -16,8 +16,8 @@ import {
   updateDeliveryLocation,
   generateDeliveryOtp,
   validateDeliveryOtp,
-  initiateCodRemittancePhonePe,
-  checkCodRemittancePhonePeStatus,
+  initiateCodRemittanceRazorpay,
+  verifyCodRemittanceRazorpay,
 } from "../controller/deliveryController.js";
 import { getRiderWalletSummaryController } from "../controller/adminFinanceController.js";
 
@@ -42,8 +42,8 @@ router.get("/stats", verifyToken, getDeliveryStats);
 router.get("/earnings", verifyToken, getDeliveryEarnings);
 router.get("/cod/summary", verifyToken, allowRoles("delivery"), getDeliveryCodCashSummary);
 router.post("/cod/pay", verifyToken, allowRoles("delivery"), submitDeliveryCodCashToAdmin);
-router.post("/cod/phonepe/initiate", verifyToken, allowRoles("delivery"), initiateCodRemittancePhonePe);
-router.get("/cod/phonepe/status/:merchantOrderId", verifyToken, allowRoles("delivery"), checkCodRemittancePhonePeStatus);
+router.post("/cod/razorpay/initiate", verifyToken, allowRoles("delivery"), initiateCodRemittanceRazorpay);
+router.post("/cod/razorpay/verify", verifyToken, allowRoles("delivery"), verifyCodRemittanceRazorpay);
 router.get("/wallet/summary", verifyToken, allowRoles("delivery"), getRiderWalletSummaryController);
 router.get(
   "/order-history",

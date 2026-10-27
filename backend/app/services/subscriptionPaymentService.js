@@ -1,4 +1,3 @@
-import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "@phonepe-pg/pg-sdk-node";
 import SellerSubscriptionPayment from "../models/sellerSubscriptionPayment.js";
 import SubscriptionPlan from "../models/subscriptionPlan.js";
 import {
@@ -10,40 +9,21 @@ import {
   canTransitionPaymentStatus,
 } from "../constants/payment.js";
 import {
-  activateSubscriptionFromPhonePePayment,
+  activateSubscriptionFromPayment,
   getActiveSubscriptionForSeller,
   resolveSubscriptionRequestType,
 } from "./subscriptionService.js";
 import { BUSINESS_MODEL } from "./sellerBusinessModelService.js";
 import Seller from "../models/seller.js";
+import {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  mapRazorpayStatusToInternal,
+  razorpayCheckoutConfig,
+} from "./razorpay/razorpayCheckoutClient.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 const SUBSCRIPTION_MERCHANT_PREFIX = "SUB-";
-
-// Official SDK — see the matching comment in paymentService.js for why this
-// is not a hand-rolled v1 checksum call.
-let phonePeClient = null;
-function getPhonePeClient() {
-  if (phonePeClient) return phonePeClient;
-
-  const clientId = String(process.env.PHONEPE_CLIENT_ID || process.env.PHONEPE_MERCHANT_ID || "").trim();
-  const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
-  const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
-  const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
-
-  if (!clientId || !clientSecret) {
-    throw new Error("PhonePe credentials not configured");
-  }
-
-  phonePeClient = StandardCheckoutClient.getInstance(
-    clientId,
-    clientSecret,
-    clientVersion,
-    isProd ? Env.PRODUCTION : Env.SANDBOX,
-  );
-
-  return phonePeClient;
-}
 
 export function isSubscriptionMerchantOrderId(merchantOrderId) {
   return String(merchantOrderId || "")
@@ -64,15 +44,6 @@ function buildSubscriptionMerchantOrderId(sellerId, planId, attemptCount = 1) {
   const base = `${SUBSCRIPTION_MERCHANT_PREFIX}${sanitizePart(sellerId)}-${sanitizePart(planId)}`;
   const maxBaseLength = MAX_MERCHANT_ORDER_ID_LENGTH - suffix.length;
   return `${base.slice(0, Math.max(8, maxBaseLength))}${suffix}`;
-}
-
-function mapPhonePeStatusToInternal(state) {
-  const normalized = String(state || "").toUpperCase();
-  if (normalized === "COMPLETED" || normalized === "SUCCESS") return PAYMENT_STATUS.CAPTURED;
-  if (normalized === "FAILED") return PAYMENT_STATUS.FAILED;
-  if (normalized === "CANCELLED" || normalized === "CANCELED") return PAYMENT_STATUS.CANCELLED;
-  if (normalized === "PENDING") return PAYMENT_STATUS.PENDING;
-  return PAYMENT_STATUS.PENDING;
 }
 
 async function transitionSubscriptionPaymentState(payment, { nextStatus, gatewayPaymentId, rawGatewayResponse }) {
@@ -104,7 +75,7 @@ async function handleSubscriptionPaymentCaptured(payment) {
     return payment;
   }
 
-  const result = await activateSubscriptionFromPhonePePayment({
+  const result = await activateSubscriptionFromPayment({
     sellerId: payment.sellerId,
     planId: payment.planId,
     requestType: payment.requestType,
@@ -118,7 +89,7 @@ async function handleSubscriptionPaymentCaptured(payment) {
   return payment;
 }
 
-export async function createSubscriptionPhonePeCheckout({
+export async function createSubscriptionRazorpayCheckout({
   sellerId,
   planId,
   requestType = PAYMENT_REQUEST_TYPE.NEW,
@@ -149,21 +120,24 @@ export async function createSubscriptionPhonePeCheckout({
     status: { $in: [PAYMENT_STATUS.CREATED, PAYMENT_STATUS.PENDING] },
   }).sort({ createdAt: -1 });
 
-  if (existingOpen?.rawGatewayResponse?.redirectUrl) {
+  if (existingOpen?.gatewayOrderId) {
     return {
       payment: existingOpen,
-      redirectUrl: existingOpen.rawGatewayResponse.redirectUrl,
+      razorpayOrderId: existingOpen.gatewayOrderId,
+      amount: existingOpen.amount,
+      currency: existingOpen.currency,
+      keyId: razorpayCheckoutConfig().keyId,
       duplicate: true,
     };
   }
 
   // Reserve a unique merchantOrderId via the DB's unique index BEFORE calling
-  // PhonePe. PhonePe rejects a second pay() call for an already-used
-  // merchantOrderId outright ("Duplicate merchantOrderId") rather than
-  // returning the first call's response, so the race has to be closed here —
-  // two concurrent requests reading the same countDocuments() value must not
-  // both be able to call PhonePe with the same id. The unique index makes
-  // exactly one of them win the insert; the loser retries with the next count.
+  // Razorpay, so two concurrent requests reading the same countDocuments()
+  // value can't both reserve the same id — the unique index makes exactly
+  // one of them win the insert; the loser retries with the next count. The
+  // reserved id becomes notes.merchantOrderId on the Razorpay order (for
+  // webhook routing) and is replaced on gatewayOrderId by the real Razorpay
+  // order id once that's created below.
   let payment = null;
   let attemptCount = await SellerSubscriptionPayment.countDocuments({ sellerId, planId }) + 1;
   const MAX_RESERVE_ATTEMPTS = 5;
@@ -174,7 +148,7 @@ export async function createSubscriptionPhonePeCheckout({
         sellerId,
         planId: plan._id,
         requestType: resolvedType,
-        gatewayName: PAYMENT_GATEWAY.PHONEPE,
+        gatewayName: PAYMENT_GATEWAY.RAZORPAY,
         gatewayOrderId: candidateOrderId,
         amount: amountPaise,
         currency: "INR",
@@ -202,19 +176,15 @@ export async function createSubscriptionPhonePeCheckout({
   }
 
   const merchantOrderId = payment.gatewayOrderId;
-  const client = getPhonePeClient();
-  const redirectUrl = `${process.env.FRONTEND_URL}/seller/subscription/payment-status?merchantOrderId=${merchantOrderId}`;
 
-  const request = StandardCheckoutPayRequest.builder()
-    .merchantOrderId(merchantOrderId)
-    .amount(amountPaise)
-    .redirectUrl(redirectUrl)
-    .build();
-
-  let redirectUrlResult = null;
+  let razorpayOrder;
   try {
-    const response = await client.pay(request);
-    redirectUrlResult = response.redirectUrl;
+    razorpayOrder = await createRazorpayOrder({
+      amountPaise,
+      currency: "INR",
+      receipt: merchantOrderId,
+      notes: { merchantOrderId, sellerId: String(sellerId), planId: String(planId) },
+    });
   } catch (error) {
     payment.status = PAYMENT_STATUS.FAILED;
     payment.failedAt = new Date();
@@ -224,9 +194,10 @@ export async function createSubscriptionPhonePeCheckout({
   }
 
   payment.status = PAYMENT_STATUS.PENDING;
+  payment.gatewayOrderId = razorpayOrder.razorpayOrderId;
   payment.rawGatewayResponse = {
-    redirectUrl: redirectUrlResult,
     merchantOrderId,
+    razorpayOrderId: razorpayOrder.razorpayOrderId,
     amount: amountPaise,
   };
   await payment.save();
@@ -238,16 +209,21 @@ export async function createSubscriptionPhonePeCheckout({
 
   return {
     payment,
-    redirectUrl: redirectUrlResult,
+    razorpayOrderId: razorpayOrder.razorpayOrderId,
+    amount: amountPaise,
+    currency: "INR",
+    keyId: razorpayCheckoutConfig().keyId,
     duplicate: false,
   };
 }
 
-export async function verifySubscriptionPhonePePayment({
-  merchantOrderId,
+export async function verifySubscriptionRazorpayPayment({
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
   sellerId,
 }) {
-  const payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: merchantOrderId });
+  const payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: razorpayOrderId });
   if (!payment) {
     const err = new Error("Subscription payment not found");
     err.statusCode = 404;
@@ -264,15 +240,17 @@ export async function verifySubscriptionPhonePePayment({
     return { payment, status: payment.status, alreadyCaptured: true };
   }
 
-  const client = getPhonePeClient();
-  const response = await client.getOrderStatus(merchantOrderId);
-  const nextStatus = mapPhonePeStatusToInternal(response.state);
-  const latestAttempt = response.paymentDetails?.[0];
+  const signatureValid = verifyRazorpaySignature({
+    orderId: razorpayOrderId,
+    paymentId: razorpayPaymentId,
+    signature: razorpaySignature,
+  });
+  const nextStatus = signatureValid ? PAYMENT_STATUS.CAPTURED : PAYMENT_STATUS.FAILED;
 
   await transitionSubscriptionPaymentState(payment, {
     nextStatus,
-    gatewayPaymentId: latestAttempt?.transactionId,
-    rawGatewayResponse: response,
+    gatewayPaymentId: razorpayPaymentId,
+    rawGatewayResponse: { razorpayOrderId, razorpayPaymentId },
   });
 
   if (nextStatus === PAYMENT_STATUS.CAPTURED) {
@@ -282,21 +260,21 @@ export async function verifySubscriptionPhonePePayment({
   return { payment, status: nextStatus };
 }
 
-export async function processSubscriptionPhonePeWebhook({ payload, correlationId = null }) {
+export async function processSubscriptionRazorpayWebhook({ payload, correlationId = null }) {
   const merchantOrderId = payload.merchantOrderId;
   if (!isSubscriptionMerchantOrderId(merchantOrderId)) {
     return { accepted: false, ignored: true };
   }
 
-  const payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: merchantOrderId });
+  const payment = await SellerSubscriptionPayment.findOne({ gatewayOrderId: payload.razorpayOrderId });
   if (!payment) {
     return { accepted: true, ignored: true, reason: "Subscription payment not found" };
   }
 
-  const nextStatus = mapPhonePeStatusToInternal(payload.state);
+  const nextStatus = mapRazorpayStatusToInternal(payload.event || payload.status);
   await transitionSubscriptionPaymentState(payment, {
     nextStatus,
-    gatewayPaymentId: payload.transactionId,
+    gatewayPaymentId: payload.razorpayPaymentId,
     rawGatewayResponse: payload,
   });
 

@@ -4,11 +4,13 @@ import { motion } from "framer-motion";
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import Button from "@shared/components/ui/Button";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 
 // Public, no-login resolver for an admin-phone-order pay-by-link. The
 // customer clicking this from SMS/email has no session on this device —
 // the token itself (not a logged-in session) proves who they're paying
-// for. On success we redirect straight into PhonePe's hosted pay page.
+// for. On success we open Razorpay's embedded Checkout.js modal right on
+// this page, then hand off to the payment-status page to confirm.
 const PhoneOrderPayPage = () => {
     const { token } = useParams();
     const navigate = useNavigate();
@@ -26,9 +28,35 @@ const PhoneOrderPayPage = () => {
         (async () => {
             try {
                 const response = await customerApi.resolvePhoneOrderPayLink(token);
-                const redirectUrl = response?.data?.result?.redirectUrl;
-                if (!redirectUrl) throw new Error("Unable to start payment");
-                if (!cancelled) window.location.href = redirectUrl;
+                const checkout = response?.data?.result;
+                if (!checkout?.razorpayOrderId) throw new Error("Unable to start payment");
+                if (cancelled) return;
+
+                await openRazorpayCheckout({
+                    razorpayOrderId: checkout.razorpayOrderId,
+                    amount: checkout.amount,
+                    currency: checkout.currency,
+                    keyId: checkout.keyId,
+                    onSuccess: ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+                        navigate(
+                            `/payment-status?razorpayOrderId=${encodeURIComponent(razorpayOrderId)}` +
+                                `&razorpayPaymentId=${encodeURIComponent(razorpayPaymentId)}` +
+                                `&razorpaySignature=${encodeURIComponent(razorpaySignature)}` +
+                                `&payLinkToken=${encodeURIComponent(token)}`,
+                            { replace: true },
+                        );
+                    },
+                    onFailure: (err) => {
+                        if (cancelled) return;
+                        setStatus("error");
+                        setError(err?.description || "Payment failed. Please try again.");
+                    },
+                    onDismiss: () => {
+                        if (cancelled) return;
+                        setStatus("error");
+                        setError("Payment cancelled.");
+                    },
+                });
             } catch (err) {
                 if (cancelled) return;
                 setStatus("error");

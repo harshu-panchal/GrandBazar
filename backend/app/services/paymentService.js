@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
-import { StandardCheckoutClient, Env, StandardCheckoutPayRequest } from "@phonepe-pg/pg-sdk-node";
 import jwt from "jsonwebtoken";
 
 import Order from "../models/order.js";
@@ -20,46 +19,20 @@ import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import { computeSellerPendingExpiry } from "./orderSchedulingService.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
 import { releaseCouponUsageForOrder } from "./couponUsageService.js";
-import { processSubscriptionPhonePeWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
-import { processCodRemittancePhonePeWebhook, isCodRemittanceMerchantOrderId } from "./codRemittanceService.js";
+import { processSubscriptionRazorpayWebhook, isSubscriptionMerchantOrderId } from "./subscriptionPaymentService.js";
+import { processCodRemittanceRazorpayWebhook, isCodRemittanceMerchantOrderId } from "./codRemittanceService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { buildKey, invalidate } from "./cacheService.js";
+import {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  verifyRazorpayWebhookSignature,
+  mapRazorpayStatusToInternal,
+  razorpayCheckoutConfig,
+} from "./razorpay/razorpayCheckoutClient.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
-
-// PhonePe Checkout (Pay API) — official SDK, OAuth client-credentials auth.
-// This was a hand-rolled v1 Standard Checkout checksum call (X-VERIFY over
-// merchantId+clientSecret) from 2026-09-24 to 2026-10-26, which is the WRONG
-// API for client_id/client_secret-style credentials: PhonePe rejected every
-// request with "KEY_NOT_CONFIGURED — Key not found for the merchant" because
-// these credentials were never provisioned with a v1 salt key. Restored to
-// the SDK this project used successfully for two months before that change
-// (see services/codRemittanceService.js / sellerCodCommissionService.js for
-// a genuinely different PhonePe product — Payouts — that legitimately still
-// uses checksum auth; do not conflate the two).
-let phonePeClient = null;
-function getPhonePeClient() {
-  if (phonePeClient) return phonePeClient;
-
-  const clientId = String(process.env.PHONEPE_CLIENT_ID || process.env.PHONEPE_MERCHANT_ID || "").trim();
-  const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
-  const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
-  const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
-
-  if (!clientId || !clientSecret) {
-    throw new Error("PhonePe credentials not configured");
-  }
-
-  phonePeClient = StandardCheckoutClient.getInstance(
-    clientId,
-    clientSecret,
-    clientVersion,
-    isProd ? Env.PRODUCTION : Env.SANDBOX,
-  );
-
-  return phonePeClient;
-}
 
 function sanitizeGatewayPayload(payload = {}) {
   return {
@@ -251,14 +224,6 @@ function getPayableAmountPaise(target) {
     throw err;
   }
   return Math.round(amountRupees * 100);
-}
-
-function mapPhonePeStatusToInternal(state) {
-  const normalized = String(state || "").toUpperCase();
-  if (normalized === "COMPLETED") return PAYMENT_STATUS.CAPTURED;
-  if (normalized === "FAILED") return PAYMENT_STATUS.FAILED;
-  if (normalized === "PENDING" || normalized === "CREATED") return PAYMENT_STATUS.PENDING;
-  return PAYMENT_STATUS.PENDING;
 }
 
 function paymentStatusToOrderPaymentStatus(status) {
@@ -544,12 +509,11 @@ export async function createPaymentOrderForOrderRef({
   userId,
   idempotencyKey = null,
   correlationId = null,
-  // Only ever passed by resolvePhoneOrderPayLink. Threaded into the PhonePe
-  // return URL so the customer's still-anonymous browser can authenticate
-  // the fast client-side verify call on redirect-back (see verifyPaymentStatus
-  // in paymentController.js) instead of relying solely on the async webhook.
-  // A normal logged-in customer's checkout never passes this, so their
-  // redirect URL is unchanged.
+  // Only ever passed by resolvePhoneOrderPayLink. Threaded through so the
+  // customer's still-anonymous browser can authenticate the Checkout.js
+  // success-verify call (see verifyRazorpayPaymentStatus in
+  // paymentController.js) instead of relying solely on the async webhook.
+  // A normal logged-in customer's checkout never passes this.
   payLinkToken = null,
 }) {
   const target = await resolvePaymentTarget(orderRef);
@@ -559,17 +523,23 @@ export async function createPaymentOrderForOrderRef({
     ? { checkoutGroupId: target.checkoutGroupId }
     : { order: primaryOrder._id };
 
+  const toCheckoutPayload = (payment) => ({
+    payment,
+    razorpayOrderId: payment.gatewayOrderId,
+    merchantOrderId: payment.rawGatewayResponse?.merchantOrderId,
+    amount: payment.amount,
+    currency: payment.currency,
+    keyId: razorpayCheckoutConfig().keyId,
+    payLinkToken,
+  });
+
   if (idempotencyKey) {
     const existingForKey = await Payment.findOne({
       ...paymentScopeQuery,
       idempotencyKey,
     });
     if (existingForKey) {
-      return {
-        payment: existingForKey,
-        redirectUrl: existingForKey.rawGatewayResponse?.redirectUrl,
-        duplicate: true,
-      };
+      return { ...toCheckoutPayload(existingForKey), duplicate: true };
     }
   }
 
@@ -580,12 +550,8 @@ export async function createPaymentOrderForOrderRef({
     },
   }).sort({ createdAt: -1 });
 
-  if (existingOpenPayment && existingOpenPayment.rawGatewayResponse?.redirectUrl) {
-    return {
-      payment: existingOpenPayment,
-      redirectUrl: existingOpenPayment.rawGatewayResponse.redirectUrl,
-      duplicate: true,
-    };
+  if (existingOpenPayment && existingOpenPayment.gatewayOrderId) {
+    return { ...toCheckoutPayload(existingOpenPayment), duplicate: true };
   }
 
   const amountPaise = getPayableAmountPaise(target);
@@ -596,19 +562,16 @@ export async function createPaymentOrderForOrderRef({
     attemptCount,
   );
 
-  const client = getPhonePeClient();
-  const redirectUrl = payLinkToken
-    ? `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}&payLinkToken=${encodeURIComponent(payLinkToken)}`
-    : `${process.env.FRONTEND_URL}/payment-status?merchantOrderId=${merchantOrderId}`;
-
-  const request = StandardCheckoutPayRequest.builder()
-    .merchantOrderId(merchantOrderId)
-    .amount(amountPaise)
-    .redirectUrl(redirectUrl)
-    .build();
-
-  const response = await client.pay(request);
-  const redirectUrlResult = response.redirectUrl;
+  const razorpayOrder = await createRazorpayOrder({
+    amountPaise,
+    currency,
+    receipt: merchantOrderId,
+    notes: {
+      merchantOrderId,
+      checkoutGroupId: target.checkoutGroupId || "",
+      publicOrderId: target.publicOrderRef || "",
+    },
+  });
 
   const paymentData = {
     order: primaryOrder._id,
@@ -616,8 +579,8 @@ export async function createPaymentOrderForOrderRef({
     checkoutGroupId: target.checkoutGroupId || null,
     publicOrderId: target.publicOrderRef,
     customer: primaryOrder.customer,
-    gatewayName: PAYMENT_GATEWAY.PHONEPE,
-    gatewayOrderId: merchantOrderId,
+    gatewayName: PAYMENT_GATEWAY.RAZORPAY,
+    gatewayOrderId: razorpayOrder.razorpayOrderId,
     amount: amountPaise,
     currency,
     status: PAYMENT_STATUS.PENDING,
@@ -625,8 +588,8 @@ export async function createPaymentOrderForOrderRef({
     idempotencyKey: idempotencyKey || undefined,
     correlationId,
     rawGatewayResponse: {
-      redirectUrl: redirectUrlResult,
-      merchantOrderId: merchantOrderId,
+      merchantOrderId,
+      razorpayOrderId: razorpayOrder.razorpayOrderId,
       amount: amountPaise,
     },
     statusHistory: [
@@ -634,7 +597,7 @@ export async function createPaymentOrderForOrderRef({
         fromStatus: PAYMENT_STATUS.CREATED,
         toStatus: PAYMENT_STATUS.PENDING,
         source: PAYMENT_EVENT_SOURCE.SYSTEM,
-        reason: "PhonePe checkout initiated",
+        reason: "Razorpay checkout initiated",
       },
     ],
   };
@@ -651,11 +614,10 @@ export async function createPaymentOrderForOrderRef({
       paymentId: payment._id.toString(),
       gatewayOrderId: payment.gatewayOrderId,
       amount: payment.amount,
-      redirectUrl: redirectUrlResult,
     }),
   );
 
-  return { payment, redirectUrl: redirectUrlResult, duplicate: false };
+  return { ...toCheckoutPayload(payment), duplicate: false };
 }
 
 const PHONE_ORDER_PAY_LINK_PURPOSE = "phone_order_pay_link";
@@ -697,7 +659,7 @@ export function verifyPhoneOrderPayLinkToken(token) {
   return { orderRef: decoded.orderRef, customerId: decoded.customerId };
 }
 
-// Resolves an anonymous pay-link click (no session) into the same PhonePe
+// Resolves an anonymous pay-link click (no session) into the same Razorpay
 // checkout an authenticated customer would get. The token's own customerId
 // (verified, never taken from the request) stands in for req.user.id so
 // createPaymentOrderForOrderRef's existing ownership check keeps working
@@ -709,19 +671,45 @@ export async function resolvePhoneOrderPayLink(token) {
     orderRef,
     userId: customerId,
     idempotencyKey: `phonelink:${orderRef}`,
-    // Threaded into the PhonePe return URL so the redirect-back verify call
-    // (still from this same anonymous browser) can authenticate itself the
-    // same way — see verifyPaymentStatus in paymentController.js.
+    // Threaded through so the Checkout.js success-verify call (still from
+    // this same anonymous browser) can authenticate itself the same way —
+    // see verifyRazorpayPaymentStatus in paymentController.js.
     payLinkToken: token,
   });
 }
 
-export async function verifyPhonePePaymentStatus({
-  merchantOrderId,
+// Plain DB read of a payment's current status — no gateway call. Used by the
+// status page as a passive fallback/refresh (e.g. to pick up a result the
+// webhook already resolved) alongside the real verify call below, which is
+// what actually confirms a payment right after the Checkout.js modal closes.
+export async function getPaymentRecordStatus({ gatewayOrderId, userId }) {
+  const payment = await Payment.findOne({ gatewayOrderId });
+  if (!payment) {
+    const err = new Error("Payment attempt not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (userId && String(payment.customer) !== String(userId)) {
+    const err = new Error("Not authorized to view this payment");
+    err.statusCode = 403;
+    throw err;
+  }
+  return { payment, status: payment.status };
+}
+
+// Verifies the razorpay_order_id/payment_id/signature Checkout.js's success
+// handler returns to the client immediately after payment, and captures the
+// order's side effects. The webhook (processRazorpayWebhook) is the
+// authoritative async fallback for any payment whose browser never calls
+// back (closed tab, network drop, etc.).
+export async function verifyRazorpayPaymentStatus({
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
   userId,
   correlationId = null,
 }) {
-  const payment = await Payment.findOne({ gatewayOrderId: merchantOrderId });
+  const payment = await Payment.findOne({ gatewayOrderId: razorpayOrderId });
   if (!payment) {
     const err = new Error("Payment attempt not found");
     err.statusCode = 404;
@@ -735,25 +723,25 @@ export async function verifyPhonePePaymentStatus({
       throw err;
   }
 
-  const client = getPhonePeClient();
-  const response = await client.getOrderStatus(merchantOrderId);
-  const nextStatus = mapPhonePeStatusToInternal(response.state);
-  // Latest payment attempt's detail — getOrderStatus(id) without `details:true`
-  // returns only the most recent attempt under paymentDetails[0].
-  const latestAttempt = response.paymentDetails?.[0];
+  const signatureValid = verifyRazorpaySignature({
+    orderId: razorpayOrderId,
+    paymentId: razorpayPaymentId,
+    signature: razorpaySignature,
+  });
+  const nextStatus = signatureValid ? PAYMENT_STATUS.CAPTURED : PAYMENT_STATUS.FAILED;
 
   await transitionPaymentState(payment, {
     nextStatus,
     source: PAYMENT_EVENT_SOURCE.CLIENT_VERIFY,
-    reason: `PhonePe status check: ${response.state}`,
-    gatewayPaymentId: latestAttempt?.transactionId,
-    rawGatewayResponse: response,
+    reason: signatureValid ? "Razorpay signature verified" : "Razorpay signature verification failed",
+    gatewayPaymentId: razorpayPaymentId,
+    rawGatewayResponse: { razorpayOrderId, razorpayPaymentId },
   });
 
   await handleOrderSideEffectsFromPaymentStatus(
     payment,
     nextStatus,
-    latestAttempt?.errorCode || response.state,
+    signatureValid ? "CAPTURED" : "SIGNATURE_MISMATCH",
   );
 
   payment.correlationId = correlationId || payment.correlationId;
@@ -765,7 +753,7 @@ export async function verifyPhonePePaymentStatus({
       ts: new Date().toISOString(),
       event: "payment_status_verified",
       correlationId,
-      merchantOrderId,
+      razorpayOrderId,
       status: nextStatus,
     }),
   );
@@ -776,58 +764,40 @@ export async function verifyPhonePePaymentStatus({
   };
 }
 
-export async function processPhonePeWebhook({
+export async function processRazorpayWebhook({
   rawBody,
-  authorization,
+  signatureHeader,
   correlationId = null,
 }) {
-  const client = getPhonePeClient();
-  // v2 webhooks POST the event JSON directly as the body (no base64 "response"
-  // wrapper — that was the old v1 shape). The SDK's own Basic-Auth-style
-  // check (sha256(username:password) === Authorization) is what the merchant
-  // dashboard's webhook username/password are for; it throws on a mismatch
-  // rather than returning false.
-  const webhookUsername = String(process.env.PHONEPE_WEBHOOK_USERNAME || "").trim();
-  const webhookPassword = String(process.env.PHONEPE_WEBHOOK_SECRET || "").trim();
-  if (!webhookUsername || !webhookPassword) {
-    throw new Error("PhonePe webhook credentials not configured");
-  }
-
-  let callback;
-  try {
-    callback = client.validateCallback(
-      webhookUsername,
-      webhookPassword,
-      authorization,
-      rawBody.toString('utf8'),
-    );
-  } catch {
+  const bodyString = Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody || "");
+  if (!verifyRazorpayWebhookSignature(bodyString, signatureHeader)) {
     const err = new Error("Invalid webhook signature");
     err.statusCode = 401;
     throw err;
   }
 
-  const callbackData = callback.payload;
-  // Flattened to the shape the rest of this function (and the subscription /
-  // COD-remittance handlers it dispatches to) has always expected —
-  // transactionId/responseCode live under paymentDetails[0] on the real SDK
-  // response, not flat on the payload.
-  const latestAttempt = callbackData.paymentDetails?.[0];
+  const event = JSON.parse(bodyString);
+  const paymentEntity = event.payload?.payment?.entity || {};
+  const orderEntity = event.payload?.order?.entity || {};
   const payload = {
-    ...callbackData,
-    transactionId: latestAttempt?.transactionId,
-    responseCode: latestAttempt?.errorCode,
+    event: event.event,
+    razorpayOrderId: paymentEntity.order_id || orderEntity.id,
+    razorpayPaymentId: paymentEntity.id,
+    amount: paymentEntity.amount ?? orderEntity.amount,
+    status: paymentEntity.status,
+    errorCode: paymentEntity.error_code,
+    errorDescription: paymentEntity.error_description,
+    merchantOrderId: paymentEntity.notes?.merchantOrderId || orderEntity.notes?.merchantOrderId,
   };
 
-  const eventId = payload.transactionId || crypto.randomUUID();
-  const payloadHash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-  const eventType = payload.state || "unknown";
+  const eventId = paymentEntity.id || event.event + ":" + (payload.razorpayOrderId || crypto.randomUUID());
+  const payloadHash = crypto.createHash("sha256").update(bodyString).digest("hex");
 
   try {
     await PaymentWebhookEvent.create({
       eventId,
-      gatewayName: PAYMENT_GATEWAY.PHONEPE,
-      eventType,
+      gatewayName: PAYMENT_GATEWAY.RAZORPAY,
+      eventType: event.event || "unknown",
       payloadHash,
     });
   } catch (error) {
@@ -840,24 +810,24 @@ export async function processPhonePeWebhook({
   const merchantOrderId = payload.merchantOrderId;
 
   if (isSubscriptionMerchantOrderId(merchantOrderId)) {
-    return processSubscriptionPhonePeWebhook({ payload, correlationId });
+    return processSubscriptionRazorpayWebhook({ payload, correlationId });
   }
 
   if (isCodRemittanceMerchantOrderId(merchantOrderId)) {
-    return processCodRemittancePhonePeWebhook({ payload, correlationId });
+    return processCodRemittanceRazorpayWebhook({ payload, correlationId });
   }
 
-  const payment = await Payment.findOne({ gatewayOrderId: merchantOrderId });
+  const payment = await Payment.findOne({ gatewayOrderId: payload.razorpayOrderId });
   if (!payment) {
     return { accepted: true, ignored: true, reason: "Payment attempt not found" };
   }
 
-  const nextStatus = mapPhonePeStatusToInternal(payload.state);
+  const nextStatus = mapRazorpayStatusToInternal(event.event || payload.status);
   await transitionPaymentState(payment, {
     nextStatus,
     source: PAYMENT_EVENT_SOURCE.WEBHOOK,
-    reason: `PhonePe webhook: ${payload.state}`,
-    gatewayPaymentId: payload.transactionId,
+    reason: `Razorpay webhook: ${event.event}`,
+    gatewayPaymentId: payload.razorpayPaymentId,
     rawGatewayResponse: payload,
   });
 
@@ -874,7 +844,7 @@ export async function processPhonePeWebhook({
     },
   );
 
-  await handleOrderSideEffectsFromPaymentStatus(payment, nextStatus, payload.responseCode || payload.state);
+  await handleOrderSideEffectsFromPaymentStatus(payment, nextStatus, payload.errorCode || payload.status);
 
   return {
     accepted: true,
@@ -882,13 +852,4 @@ export async function processPhonePeWebhook({
     paymentStatus: nextStatus,
     publicOrderId: payment.publicOrderId,
   };
-}
-
-// Placeholder for Razorpay compatibility if needed by other services
-export async function verifyClientPaymentCallback(data) {
-    return verifyPhonePePaymentStatus({
-        merchantOrderId: data.gatewayOrderId || data.merchantOrderId,
-        userId: data.userId,
-        correlationId: data.correlationId
-    });
 }

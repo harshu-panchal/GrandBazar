@@ -68,7 +68,7 @@ export const sellerApi = {
     getWalletSummary: () => axiosInstance.get('/seller/wallet/summary'),
     getCodCommissionSummary: () => axiosInstance.get('/seller/cod-commission/summary'),
     initiateCodCommissionPayment: (data) => axiosInstance.post('/seller/cod-commission/initiate', data),
-    checkCodCommissionStatus: (merchantOrderId) => axiosInstance.get(`/seller/cod-commission/status/${merchantOrderId}`),
+    verifyCodCommissionPayment: (data) => axiosInstance.post('/seller/cod-commission/verify', data),
     getBulkSettlements: (params) => axiosInstance.get('/seller/finance/bulk-settlements', { params }),
     getProfile: () => axiosInstance.get('/seller/profile'),
     getDeliverySettings: () => axiosInstance.get('/seller/delivery-settings'),
@@ -134,8 +134,8 @@ export const sellerApi = {
     getSubscriptionPlans: () => axiosInstance.get('/seller/subscription/plans'),
     getSubscriptionStatus: () => axiosInstance.get('/seller/subscription/status'),
     initiateSubscriptionPayment: (data) => axiosInstance.post('/seller/subscription/pay', data),
-    verifySubscriptionPayment: (merchantOrderId) =>
-        axiosInstance.get('/seller/subscription/payment/verify', { params: { merchantOrderId } }),
+    verifySubscriptionPayment: (data) =>
+        axiosInstance.post('/seller/subscription/payment/verify', data),
     submitSubscriptionPayment: (formData) =>
         axiosInstance.post('/seller/subscription/payment-request', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },

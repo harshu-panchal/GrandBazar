@@ -42,7 +42,6 @@
   "dependencies": {
     "@googlemaps/google-maps-services-js": "latest",
     "@mapbox/polyline": "latest",
-    "@phonepe-pg/pg-sdk-node": "latest",
     "archiver": "^7.0.1",
     "axios": "latest",
     "bcrypt": "latest",

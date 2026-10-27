@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-// PhonePe SDK removed due to class-transformer crash
 import DeliveryCodRemittance from "../models/deliveryCodRemittance.js";
 import Order from "../models/order.js";
 import {
@@ -9,30 +8,15 @@ import {
 } from "../constants/payment.js";
 import { reconcileCodCash } from "./finance/orderFinanceService.js";
 import { roundCurrency } from "../utils/money.js";
+import {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  mapRazorpayStatusToInternal,
+  razorpayCheckoutConfig,
+} from "./razorpay/razorpayCheckoutClient.js";
 
 const MAX_MERCHANT_ORDER_ID_LENGTH = 63;
 const COD_MERCHANT_PREFIX = "COD-";
-
-import crypto from "crypto";
-import axios from "axios";
-
-// Manual HTTP setup for PhonePe to bypass broken pg-sdk-node plainToClass crash
-function getPhonePeConfig() {
-  const merchantId = String(process.env.PHONEPE_MERCHANT_ID || process.env.PHONEPE_CLIENT_ID || "").trim();
-  const clientSecret = String(process.env.PHONEPE_CLIENT_SECRET || "").trim();
-  const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || "1", 10);
-  const isProd = String(process.env.PHONEPE_ENV || "").toUpperCase() === "PRODUCTION";
-
-  if (!merchantId || !clientSecret) {
-    throw new Error("PhonePe credentials not configured");
-  }
-
-  const baseUrl = isProd 
-    ? "https://api.phonepe.com/apis/hermes"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
-
-  return { merchantId, clientSecret, clientVersion, baseUrl, clientId: String(process.env.PHONEPE_CLIENT_ID || merchantId).trim() };
-}
 
 export function isCodRemittanceMerchantOrderId(merchantOrderId) {
   return String(merchantOrderId || "")
@@ -53,15 +37,6 @@ function buildCodRemittanceMerchantOrderId(deliveryBoyId, attemptCount = 1) {
   const base = `${COD_MERCHANT_PREFIX}${sanitizePart(deliveryBoyId)}`;
   const maxBaseLength = MAX_MERCHANT_ORDER_ID_LENGTH - suffix.length;
   return `${base.slice(0, Math.max(8, maxBaseLength))}${suffix}`;
-}
-
-function mapPhonePeStatusToInternal(state) {
-  const normalized = String(state || "").toUpperCase();
-  if (normalized === "COMPLETED" || normalized === "SUCCESS") return PAYMENT_STATUS.CAPTURED;
-  if (normalized === "FAILED") return PAYMENT_STATUS.FAILED;
-  if (normalized === "CANCELLED" || normalized === "CANCELED") return PAYMENT_STATUS.CANCELLED;
-  if (normalized === "PENDING") return PAYMENT_STATUS.PENDING;
-  return PAYMENT_STATUS.PENDING;
 }
 
 async function transitionRemittancePaymentState(payment, { nextStatus, gatewayPaymentId, rawGatewayResponse }) {
@@ -123,7 +98,7 @@ async function handleRemittancePaymentCaptured(payment) {
       {
         actorId: null,
         metadata: {
-          source: "phonepe_cod_remittance",
+          source: "razorpay_cod_remittance",
           gatewayOrderId: payment.gatewayOrderId,
         },
       },
@@ -155,10 +130,13 @@ export async function createCodRemittanceCheckout({ deliveryBoyId, amount }) {
     status: { $in: [PAYMENT_STATUS.CREATED, PAYMENT_STATUS.PENDING] },
   }).sort({ createdAt: -1 });
 
-  if (existingOpen?.rawGatewayResponse?.redirectUrl && existingOpen.amount === amount) {
+  if (existingOpen?.gatewayOrderId && existingOpen.amount === amount) {
     return {
       payment: existingOpen,
-      redirectUrl: existingOpen.rawGatewayResponse.redirectUrl,
+      razorpayOrderId: existingOpen.gatewayOrderId,
+      amount: existingOpen.amount,
+      currency: existingOpen.currency,
+      keyId: razorpayCheckoutConfig().keyId,
       duplicate: true,
     };
   }
@@ -166,70 +144,44 @@ export async function createCodRemittanceCheckout({ deliveryBoyId, amount }) {
   const attemptCount = (await DeliveryCodRemittance.countDocuments({ deliveryBoy: deliveryBoyId })) + 1;
   const merchantOrderId = buildCodRemittanceMerchantOrderId(deliveryBoyId, attemptCount);
 
-  const config = getPhonePeConfig();
-  const redirectUrl = `${process.env.FRONTEND_URL}/delivery/cod-payment-status?merchantOrderId=${merchantOrderId}`;
-
-  const payload = {
-    merchantId: config.merchantId,
-    merchantTransactionId: merchantOrderId,
-    merchantUserId: String(deliveryBoyId),
-    amount: amountPaise,
-    redirectUrl: redirectUrl,
-    redirectMode: "REDIRECT",
-    paymentInstrument: {
-      type: "PAY_PAGE"
-    }
-  };
-
-  const payloadString = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signString = payloadString + "/pg/v1/pay" + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
-
-  let redirectUrlResult = null;
-  
-  try {
-    const apiRes = await axios.post(
-      `${config.baseUrl}/pg/v1/pay`,
-      { request: payloadString },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-        },
-      }
-    );
-    redirectUrlResult = apiRes.data?.data?.instrumentResponse?.redirectInfo?.url;
-    if (!redirectUrlResult) throw new Error("No redirect url in response");
-  } catch (err) {
-    const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-    const error = new Error(detail);
-    error.statusCode = 502;
-    throw error;
-  }
+  const razorpayOrder = await createRazorpayOrder({
+    amountPaise,
+    currency: "INR",
+    receipt: merchantOrderId,
+    notes: { merchantOrderId, deliveryBoyId: String(deliveryBoyId) },
+  });
 
   const payment = await DeliveryCodRemittance.create({
     deliveryBoy: deliveryBoyId,
-    gatewayName: PAYMENT_GATEWAY.PHONEPE,
-    gatewayOrderId: merchantOrderId,
+    gatewayName: PAYMENT_GATEWAY.RAZORPAY,
+    gatewayOrderId: razorpayOrder.razorpayOrderId,
     amount: amount,
     currency: "INR",
     status: PAYMENT_STATUS.PENDING,
     rawGatewayResponse: {
-      redirectUrl: redirectUrlResult,
       merchantOrderId,
+      razorpayOrderId: razorpayOrder.razorpayOrderId,
       amount: amountPaise,
     },
   });
 
   return {
     payment,
-    redirectUrl: redirectUrlResult,
+    razorpayOrderId: razorpayOrder.razorpayOrderId,
+    amount: amountPaise,
+    currency: "INR",
+    keyId: razorpayCheckoutConfig().keyId,
     duplicate: false,
   };
 }
 
-export async function verifyCodRemittancePhonePePayment({ merchantOrderId, deliveryBoyId }) {
-  const payment = await DeliveryCodRemittance.findOne({ gatewayOrderId: merchantOrderId });
+export async function verifyCodRemittanceRazorpayPayment({
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+  deliveryBoyId,
+}) {
+  const payment = await DeliveryCodRemittance.findOne({ gatewayOrderId: razorpayOrderId });
   if (!payment) {
     const err = new Error("COD remittance payment not found");
     err.statusCode = 404;
@@ -246,34 +198,17 @@ export async function verifyCodRemittancePhonePePayment({ merchantOrderId, deliv
     return { payment, status: payment.status, alreadyCaptured: true };
   }
 
-  const config = getPhonePeConfig();
-  const endpoint = `/pg/v1/status/${config.merchantId}/${merchantOrderId}`;
-  const signString = endpoint + config.clientSecret;
-  const checksum = crypto.createHash("sha256").update(signString).digest("hex") + "###" + config.clientVersion;
-
-  let responseData = null;
-  try {
-    const apiRes = await axios.get(
-      `${config.baseUrl}${endpoint}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-VERIFY": checksum,
-          "X-MERCHANT-ID": config.merchantId,
-        },
-      }
-    );
-    responseData = apiRes.data || {};
-  } catch (err) {
-    responseData = err.response?.data || {};
-  }
-
-  const nextStatus = mapPhonePeStatusToInternal(responseData?.code || responseData?.data?.state || "PENDING");
+  const signatureValid = verifyRazorpaySignature({
+    orderId: razorpayOrderId,
+    paymentId: razorpayPaymentId,
+    signature: razorpaySignature,
+  });
+  const nextStatus = signatureValid ? PAYMENT_STATUS.CAPTURED : PAYMENT_STATUS.FAILED;
 
   await transitionRemittancePaymentState(payment, {
     nextStatus,
-    gatewayPaymentId: responseData?.data?.transactionId,
-    rawGatewayResponse: responseData,
+    gatewayPaymentId: razorpayPaymentId,
+    rawGatewayResponse: { razorpayOrderId, razorpayPaymentId },
   });
 
   if (nextStatus === PAYMENT_STATUS.CAPTURED) {
@@ -283,21 +218,21 @@ export async function verifyCodRemittancePhonePePayment({ merchantOrderId, deliv
   return { payment, status: nextStatus };
 }
 
-export async function processCodRemittancePhonePeWebhook({ payload, correlationId = null }) {
+export async function processCodRemittanceRazorpayWebhook({ payload, correlationId = null }) {
   const merchantOrderId = payload.merchantOrderId;
   if (!isCodRemittanceMerchantOrderId(merchantOrderId)) {
     return { accepted: false, ignored: true };
   }
 
-  const payment = await DeliveryCodRemittance.findOne({ gatewayOrderId: merchantOrderId });
+  const payment = await DeliveryCodRemittance.findOne({ gatewayOrderId: payload.razorpayOrderId });
   if (!payment) {
     return { accepted: true, ignored: true, reason: "COD remittance payment not found" };
   }
 
-  const nextStatus = mapPhonePeStatusToInternal(payload.state);
+  const nextStatus = mapRazorpayStatusToInternal(payload.event || payload.status);
   await transitionRemittancePaymentState(payment, {
     nextStatus,
-    gatewayPaymentId: payload.transactionId,
+    gatewayPaymentId: payload.razorpayPaymentId,
     rawGatewayResponse: payload,
   });
 

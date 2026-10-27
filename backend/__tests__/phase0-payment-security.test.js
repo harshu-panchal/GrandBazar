@@ -16,44 +16,21 @@ const mockHandleOnlineOrderFinance = jest.fn();
 const mockAfterPlaceOrderV2 = jest.fn();
 const mockReleaseReservedStockForOrder = jest.fn();
 
-const mockPhonePePay = jest.fn();
-const mockPhonePeGetOrderStatus = jest.fn();
-const mockPhonePeValidateCallback = jest.fn();
+const mockCreateRazorpayOrder = jest.fn();
+const mockVerifyRazorpaySignature = jest.fn();
+const mockVerifyRazorpayWebhookSignature = jest.fn();
 
-jest.unstable_mockModule("@phonepe-pg/pg-sdk-node", () => ({
-  Env: {
-    PRODUCTION: "PRODUCTION",
-    SANDBOX: "SANDBOX",
+jest.unstable_mockModule("../app/services/razorpay/razorpayCheckoutClient.js", () => ({
+  createRazorpayOrder: mockCreateRazorpayOrder,
+  verifyRazorpaySignature: mockVerifyRazorpaySignature,
+  verifyRazorpayWebhookSignature: mockVerifyRazorpayWebhookSignature,
+  mapRazorpayStatusToInternal: (status) => {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "captured" || normalized === "payment.captured") return "CAPTURED";
+    if (normalized === "failed" || normalized === "payment.failed") return "FAILED";
+    return "PENDING";
   },
-  StandardCheckoutClient: {
-    getInstance: jest.fn(() => ({
-      pay: mockPhonePePay,
-      getOrderStatus: mockPhonePeGetOrderStatus,
-      validateCallback: mockPhonePeValidateCallback,
-    })),
-  },
-  StandardCheckoutPayRequest: {
-    builder: jest.fn(() => {
-      const request = {};
-      return {
-        merchantOrderId(value) {
-          request.merchantOrderId = value;
-          return this;
-        },
-        amount(value) {
-          request.amount = value;
-          return this;
-        },
-        redirectUrl(value) {
-          request.redirectUrl = value;
-          return this;
-        },
-        build() {
-          return request;
-        },
-      };
-    }),
-  },
+  razorpayCheckoutConfig: () => ({ keyId: "rzp_test_key", keySecret: "rzp_test_secret", webhookSecret: "rzp_wh_secret" }),
 }));
 
 jest.unstable_mockModule("../app/models/order.js", () => ({
@@ -95,7 +72,7 @@ jest.unstable_mockModule("../app/services/stockService.js", () => ({
 
 const {
   createPaymentOrderForOrderRef,
-  processPhonePeWebhook,
+  processRazorpayWebhook,
 } = await import("../app/services/paymentService.js");
 
 describe("Phase 0 payment hardening", () => {
@@ -103,12 +80,7 @@ describe("Phase 0 payment hardening", () => {
     jest.clearAllMocks();
     process.env.RAZORPAY_KEY_ID = "rzp_test_key";
     process.env.RAZORPAY_KEY_SECRET = "rzp_test_secret";
-    process.env.RAZORPAY_WEBHOOK_SECRET = "rzp_wh_secret";
-    process.env.PHONEPE_CLIENT_ID = "phonepe-client";
-    process.env.PHONEPE_CLIENT_SECRET = "phonepe-secret";
-    process.env.PHONEPE_CLIENT_VERSION = "1";
-    process.env.PHONEPE_WEBHOOK_USERNAME = "webhook-user";
-    process.env.PHONEPE_WEBHOOK_SECRET = "webhook-secret";
+    process.env.RAZORPAY_CHECKOUT_WEBHOOK_SECRET = "rzp_wh_secret";
     process.env.FRONTEND_URL = "https://frontend.test";
 
     mockPaymentFindOne.mockImplementation((query) => {
@@ -133,23 +105,23 @@ describe("Phase 0 payment hardening", () => {
       paymentBreakdown: { grandTotal: 499 },
     });
     mockPaymentCountDocuments.mockResolvedValue(0);
-    mockPhonePePay.mockResolvedValue({
-      orderId: "phonepe-order-1",
-      state: "PENDING",
-      expireAt: Date.now() + 600000,
-      redirectUrl: "https://pay.test/checkout",
+    mockCreateRazorpayOrder.mockResolvedValue({
+      razorpayOrderId: "order_gateway_1",
+      amount: 49900,
+      currency: "INR",
+      status: "created",
     });
     mockPaymentCreate.mockResolvedValue({
       _id: "payment-1",
       publicOrderId: "ORD-20260325-ABC123",
-      gatewayName: "PHONEPE",
+      gatewayName: "RAZORPAY",
       gatewayOrderId: "order_gateway_1",
       amount: 49900,
       currency: "INR",
       status: "PENDING",
       attemptCount: 1,
       rawGatewayResponse: {
-        redirectUrl: "https://pay.test/checkout",
+        razorpayOrderId: "order_gateway_1",
       },
     });
 
@@ -160,7 +132,7 @@ describe("Phase 0 payment hardening", () => {
       correlationId: "corr-1",
     });
 
-    expect(mockPhonePePay).toHaveBeenCalled();
+    expect(mockCreateRazorpayOrder).toHaveBeenCalled();
     expect(result.payment.amount).toBe(49900);
   });
 
@@ -202,34 +174,43 @@ describe("Phase 0 payment hardening", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  it("treats duplicate webhook event id as idempotent", async () => {
-    mockWebhookEventCreate.mockRejectedValueOnce({ code: 11000 });
+  it("rejects a webhook with an invalid signature", async () => {
+    mockVerifyRazorpayWebhookSignature.mockReturnValue(false);
 
-    // v2 webhooks POST the event JSON directly (no base64 "response" wrapper
-    // — that was the old v1 shape). validateCallback itself is mocked here,
-    // so its real signature check is exercised separately by the SDK, not by
-    // this unit test — only the shape it hands back to the rest of the
-    // function matters.
-    mockPhonePeValidateCallback.mockReturnValue({
-      payload: {
-        state: "COMPLETED",
-        merchantOrderId: "gateway-order-1",
-        paymentDetails: [{ transactionId: "pay_1" }],
-      },
-    });
+    const rawBody = Buffer.from(JSON.stringify({ event: "payment.captured", payload: {} }));
+
+    await expect(
+      processRazorpayWebhook({
+        rawBody,
+        signatureHeader: "bad-signature",
+        correlationId: "corr-webhook",
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it("treats duplicate webhook event id as idempotent", async () => {
+    mockVerifyRazorpayWebhookSignature.mockReturnValue(true);
+    mockWebhookEventCreate.mockRejectedValueOnce({ code: 11000 });
 
     const rawBody = Buffer.from(
       JSON.stringify({
-        state: "COMPLETED",
-        merchantOrderId: "gateway-order-1",
-        transactionId: "pay_1",
+        event: "payment.captured",
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_1",
+              order_id: "order_gateway_1",
+              status: "captured",
+              notes: { merchantOrderId: "gateway-order-1" },
+            },
+          },
+        },
       }),
     );
 
-    const result = await processPhonePeWebhook({
+    const result = await processRazorpayWebhook({
       rawBody,
-      authorization: "mock-authorization-header",
-      eventId: "event-duplicate-1",
+      signatureHeader: "mock-valid-signature",
       correlationId: "corr-webhook",
     });
 

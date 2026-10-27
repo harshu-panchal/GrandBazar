@@ -2,45 +2,18 @@ import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Loader2, ArrowLeft } from "lucide-react";
 import Button from "@shared/components/ui/Button";
-import { sellerApi } from "../services/sellerApi";
 
+// COD commission payment now completes in-page via Razorpay's embedded
+// Checkout.js modal (see Earnings.jsx's handlePayCommission) instead of a
+// redirect-based gateway hop, so nothing navigates here anymore. Kept as a
+// dead-link-safe fallback in case an old link/bookmark still points at it.
 const CodCommissionPaymentStatus = () => {
   const [searchParams] = useSearchParams();
-  const merchantOrderId = searchParams.get("merchantOrderId");
-  const [loading, setLoading] = useState(true);
-  const [paymentStatus, setPaymentStatus] = useState("PENDING");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [amountPaid, setAmountPaid] = useState(null);
-
-  useEffect(() => {
-    if (!merchantOrderId) {
-      setErrorMsg("Payment order ID missing");
-      setLoading(false);
-      return;
-    }
-    checkStatus(merchantOrderId);
-  }, [merchantOrderId]);
-
-  const checkStatus = async (id) => {
-    try {
-      const res = await sellerApi.checkCodCommissionStatus(id);
-      const data = res.data?.data || res.data?.result || {};
-      const status = data.status || "FAILED";
-      setPaymentStatus(status);
-      if (data.payment?.amount) {
-        setAmountPaid(data.payment.amount);
-      }
-      if (status === "PENDING" || status === "CREATED") {
-        setTimeout(() => checkStatus(id), 3000);
-      } else {
-        setLoading(false);
-      }
-    } catch (error) {
-      setErrorMsg(error.response?.data?.message || "Failed to check status");
-      setPaymentStatus("FAILED");
-      setLoading(false);
-    }
-  };
+  const razorpayPaymentId = searchParams.get("razorpayPaymentId");
+  const [loading, setLoading] = useState(false);
+  const [paymentStatus] = useState(razorpayPaymentId ? "CAPTURED" : "FAILED");
+  const [errorMsg] = useState(razorpayPaymentId ? "" : "This payment status link is no longer used — check your Earnings page for the latest status.");
+  const [amountPaid] = useState(null);
 
   if (loading || paymentStatus === "PENDING" || paymentStatus === "CREATED") {
     return (

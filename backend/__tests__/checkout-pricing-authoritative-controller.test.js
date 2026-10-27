@@ -25,7 +25,7 @@ jest.unstable_mockModule("../app/services/orderPlacementService.js", () => ({
 }));
 
 jest.unstable_mockModule("../app/services/paymentService.js", () => ({
-  verifyClientPaymentCallback: jest.fn(),
+  getPaymentRecordStatus: jest.fn(),
 }));
 
 jest.unstable_mockModule("../app/services/checkoutPricingService.js", () => ({

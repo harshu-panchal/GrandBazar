@@ -1131,14 +1131,14 @@ export const validateDeliveryOtp = async (req, res) => {
     }
 };
 
-export const initiateCodRemittancePhonePe = async (req, res) => {
+export const initiateCodRemittanceRazorpay = async (req, res) => {
     try {
         const rawId = req.user?.id ?? req.user?._id;
         if (!rawId) return handleResponse(res, 401, "Unauthorized");
-        
+
         const deliveryBoyId = new mongoose.Types.ObjectId(String(rawId));
         const requestedRaw = req.body?.amount;
-        
+
         if (!requestedRaw || !Number.isFinite(Number(requestedRaw)) || requestedRaw <= 0) {
             return handleResponse(res, 400, "Enter a valid amount to submit");
         }
@@ -1150,7 +1150,10 @@ export const initiateCodRemittancePhonePe = async (req, res) => {
         });
 
         return handleResponse(res, 200, "Initiated successfully", {
-            redirectUrl: result.redirectUrl,
+            razorpayOrderId: result.razorpayOrderId,
+            amount: result.amount,
+            currency: result.currency,
+            keyId: result.keyId,
             duplicate: result.duplicate,
             paymentId: result.payment._id,
         });
@@ -1159,17 +1162,21 @@ export const initiateCodRemittancePhonePe = async (req, res) => {
     }
 };
 
-export const checkCodRemittancePhonePeStatus = async (req, res) => {
+export const verifyCodRemittanceRazorpay = async (req, res) => {
     try {
         const rawId = req.user?.id ?? req.user?._id;
         if (!rawId) return handleResponse(res, 401, "Unauthorized");
-        
-        const merchantOrderId = req.params.merchantOrderId;
-        if (!merchantOrderId) return handleResponse(res, 400, "Missing merchantOrderId");
 
-        const { verifyCodRemittancePhonePePayment } = await import('../services/codRemittanceService.js');
-        const result = await verifyCodRemittancePhonePePayment({
-            merchantOrderId,
+        const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+            return handleResponse(res, 400, "razorpayOrderId, razorpayPaymentId and razorpaySignature are required");
+        }
+
+        const { verifyCodRemittanceRazorpayPayment } = await import('../services/codRemittanceService.js');
+        const result = await verifyCodRemittanceRazorpayPayment({
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature,
             deliveryBoyId: rawId,
         });
 
