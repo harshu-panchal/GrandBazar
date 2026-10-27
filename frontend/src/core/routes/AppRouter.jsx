@@ -17,6 +17,8 @@ import ScrollToTop from '../../modules/customer/components/shared/ScrollToTop';
 
 // Public Pages
 import Auth from '../../modules/seller/pages/Auth';
+import SellerTermsPage from '../../modules/seller/pages/SellerTermsPage';
+import SellerPrivacyPage from '../../modules/seller/pages/SellerPrivacyPage';
 import ApplicationPending from '../../modules/seller/pages/ApplicationPending';
 import ChooseBusinessModel from '../../modules/seller/pages/ChooseBusinessModel';
 import AdminAuth from '../../modules/admin/pages/AdminAuth';
@@ -116,6 +118,14 @@ const router = createBrowserRouter([
                 {
                     path: 'seller/auth',
                     element: <Auth />,
+                },
+                {
+                    path: 'seller/terms',
+                    element: <SellerTermsPage />,
+                },
+                {
+                    path: 'seller/privacy',
+                    element: <SellerPrivacyPage />,
                 },
                 {
                     path: 'seller/pending-approval',

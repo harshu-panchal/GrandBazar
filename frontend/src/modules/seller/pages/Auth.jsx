@@ -1090,8 +1090,8 @@ const Auth = () => {
                         />
                         <label htmlFor="terms" className="text-xs text-slate-600 leading-relaxed cursor-pointer text-left">
                           I agree to the{" "}
-                          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Terms of Service</a> and{" "}
-                          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Privacy Policy</a>.
+                          <a href="/seller/terms" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Terms of Service</a> and{" "}
+                          <a href="/seller/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-900 font-bold hover:underline">Privacy Policy</a>.
                         </label>
                       </div>
                     )}
