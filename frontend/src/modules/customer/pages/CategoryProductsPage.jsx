@@ -71,6 +71,20 @@ const CategoryProductsPage = () => {
     // category itself changes, not on every subcategory tap.
     useEffect(() => {
         let cancelled = false;
+        // "all" is a reserved slug meaning "every product, no category filter"
+        // (every "See all" button on Home links to /category/all, and the
+        // backend's getProducts already treats a literal categoryId of "all"
+        // as "no filter" — see productController.js). It must win over a real
+        // category even if one happens to be named/slugged "all" too — an
+        // admin created exactly that once, which silently hijacked this page
+        // into filtering by that (empty) category instead of showing
+        // everything, and "See all" always landed on "Not available in your
+        // area". Skip category-tree matching for it entirely.
+        if (String(catId || "").trim().toLowerCase() === "all") {
+            setCategory(null);
+            setSubCategories([{ id: 'all', name: 'All', icon: CATEGORY_PLACEHOLDER_IMAGE }]);
+            return undefined;
+        }
         customerApi.getCategories({ tree: true })
             .then(async (catRes) => {
                 if (cancelled || !catRes.data.success) return;
@@ -181,9 +195,13 @@ const CategoryProductsPage = () => {
                     return;
                 }
 
+                // catId "all" never resolves a `category` (see the tree-matching
+                // effect above) — resolvedCategoryId then falls through to the
+                // literal "all", which the backend treats as no filter. Still
+                // omitted here rather than relied on, so this page can't regress
+                // to filtering by a stray real category named "all" again.
                 const resolvedCategoryId = category?._id || category?.id || catId;
                 const params = {
-                    categoryId: resolvedCategoryId,
                     lat: currentLocation.latitude,
                     lng: currentLocation.longitude,
                     limit: 100,
@@ -191,6 +209,9 @@ const CategoryProductsPage = () => {
                     // the query) — sorted client-side below instead.
                     sort: sortBy === 'distance' ? 'newest' : sortBy,
                 };
+                if (resolvedCategoryId && String(resolvedCategoryId).toLowerCase() !== 'all') {
+                    params.categoryId = resolvedCategoryId;
+                }
                 if (selectedSubCategory !== 'all') {
                     params.subcategoryId = selectedSubCategory;
                 }
