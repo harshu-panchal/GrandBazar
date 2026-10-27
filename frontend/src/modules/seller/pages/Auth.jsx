@@ -905,7 +905,7 @@ const Auth = () => {
                         autoComplete="email"
                         placeholder="Business Email"
                         disabled={!isLogin && inviteState.valid}
-                        className="w-full pl-12 pr-28 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 disabled:opacity-70 disabled:cursor-not-allowed"
+                        className={`w-full pl-12 py-4 bg-slate-50 border-2 border-transparent rounded-lg text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-slate-200 transition-all placeholder:text-slate-300 disabled:opacity-70 disabled:cursor-not-allowed ${isLogin ? "pr-6" : "pr-28"}`}
                         value={formData.email}
                         onChange={handleChange}
                       />
