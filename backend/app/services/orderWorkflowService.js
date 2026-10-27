@@ -17,6 +17,7 @@ import {
   SELLER_ACCEPT_DEADLINE_MS,
 } from "../constants/orderWorkflow.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
+import { resolveSiblingStoreIds } from "./storeService.js";
 import {
   sellerTimeoutQueue,
   deliveryTimeoutQueue,
@@ -873,13 +874,18 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   orderId = await requireCanonicalOrderId(orderId);
   const legacy = String(nextLegacyStatus || "").toLowerCase();
 
-  const candidateSellerIds = [sellerId];
-  if (mongoose.Types.ObjectId.isValid(sellerId)) {
-    const stores = await Store.find({
-      $or: [{ _id: sellerId }, { ownerId: sellerId }],
-    }).select("_id").lean();
-    stores.forEach((s) => candidateSellerIds.push(String(s._id)));
-  }
+  // sellerId here is the caller's ACTIVE store (req.user.id after
+  // resolveActiveStore — see authMiddleware.js), not necessarily the store
+  // that actually owns this order. A seller with several stores gets new-order
+  // alerts for ALL of them (fetchSellerOrdersPage/getSellerOrders resolve the
+  // order LIST across every store under the same owner account), so accept/
+  // reject/etc. here must accept that same breadth — otherwise an order that
+  // came in on a non-active store 404s as "Order not found" the moment the
+  // seller tries to act on it, even though it exists and they do own it.
+  // (The previous `{ ownerId: sellerId }` branch below never matched anything:
+  // ownerId points at the SELLER account, never at another Store's _id, so it
+  // silently left candidateSellerIds as just the one active store.)
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
 
   const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
@@ -890,6 +896,13 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
   if (Number(order.workflowVersion) < 2) {
     return null; // caller falls back to legacy path
   }
+
+  // From here on, operate on the order's ACTUAL owning store — sellerId may
+  // be a sibling store that merely shares the same owner account. Using the
+  // wrong store would both re-introduce the same "not found" 404 on every
+  // single-store-scoped mutation below, and (for accept) resolve the WRONG
+  // store's fulfillment/delivery settings.
+  const effectiveSellerId = String(order.seller);
 
   const ws = String(order.workflowStatus || "").toUpperCase();
   const method = String(
@@ -911,7 +924,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     if (alreadyAccepted) {
       return order; // idempotent
     }
-    return sellerAcceptAtomic(sellerId, orderId);
+    return sellerAcceptAtomic(effectiveSellerId, orderId);
   }
 
   if (legacy === "cancelled") {
@@ -923,7 +936,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     }
 
     if (ws === WORKFLOW_STATUS.SELLER_PENDING) {
-      return sellerRejectAtomic(sellerId, orderId, trimmedReason);
+      return sellerRejectAtomic(effectiveSellerId, orderId, trimmedReason);
     }
 
     // Order already accepted / in progress — seller can no longer cancel it
@@ -949,7 +962,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     const updatedRequest = await Order.findOneAndUpdate(
       {
         orderId,
-        seller: sellerId,
+        seller: effectiveSellerId,
         deliveryBoy: null,
         status: { $nin: ["cancelled", "delivered"] },
       },
@@ -1024,8 +1037,8 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     // delegate to the dedicated service instead of a bare status $set, which
     // previously left the order looking "ready for pickup" with no verifiable
     // code ever generated (customer and seller both saw an empty OTP box).
-    const pickupResult = await markOrderReadyForCustomerPickup(sellerId, orderId);
-    const updatedOrder = await Order.findOne({ orderId, seller: sellerId })
+    const pickupResult = await markOrderReadyForCustomerPickup(effectiveSellerId, orderId);
+    const updatedOrder = await Order.findOne({ orderId, seller: effectiveSellerId })
       .populate("customer", "name phone")
       .populate("seller", "shopName address name location serviceRadius");
     if (!updatedOrder) {
@@ -1186,12 +1199,17 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
  */
 export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
   orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  // Same multi-store breadth as sellerUpdateStatusAtomic above — sellerId is
+  // the caller's active store, which may not be the one this order actually
+  // sits on.
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;
     throw err;
   }
+  const effectiveSellerId = String(order.seller);
 
   const ws = String(order.workflowStatus || "").toUpperCase();
   const packableStatuses = [
@@ -1209,7 +1227,7 @@ export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
 
   const now = new Date();
   const updated = await Order.findOneAndUpdate(
-    { orderId, seller: sellerId, workflowStatus: ws },
+    { orderId, seller: effectiveSellerId, workflowStatus: ws },
     { $set: { sellerPackedAt: now, status: "packed", orderStatus: "packed" } },
     { new: true },
   );

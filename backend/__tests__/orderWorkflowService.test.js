@@ -30,8 +30,23 @@ jest.unstable_mockModule("../app/models/orderOtp.js", () => ({
 
 jest.unstable_mockModule("../app/models/store.js", () => ({
   default: {
+    // Supports both call shapes used across the services under test:
+    // Store.findById(id).lean() (sellerAcceptAtomic's own store fetch) and
+    // Store.findById(id).select(...).lean() (resolveSiblingStoreIds).
     findById: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({ _id: "store2", shopName: "Shop" }),
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "store2", ownerId: "owner1" }),
+      }),
+    }),
+    // resolveSiblingStoreIds' second lookup (via loadOwnerStores, which
+    // chains .sort().lean()) — no siblings by default so existing
+    // single-store test expectations (seller: sellerId matching exactly
+    // "store2") keep holding.
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      }),
     }),
   },
 }));
@@ -104,8 +119,9 @@ jest.unstable_mockModule("../app/config/redis.js", () => ({
   getRedisClient: jest.fn(() => null),
 }));
 
-const { sellerAcceptAtomic, sellerMarkPackedSignalAtomic } = await import("../app/services/orderWorkflowService.js");
+const { sellerAcceptAtomic, sellerMarkPackedSignalAtomic, sellerUpdateStatusAtomic } = await import("../app/services/orderWorkflowService.js");
 const { WORKFLOW_STATUS } = await import("../app/constants/orderWorkflow.js");
+const Store = (await import("../app/models/store.js")).default;
 
 describe("orderWorkflowService sellerAcceptAtomic", () => {
   beforeEach(() => {
@@ -207,6 +223,63 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
       { sellerPackedAt: now, status: "packed" },
       "cust3",
       "store3",
+    );
+  });
+
+  // Regression test for the "Order not found" bug on accept/decline: a
+  // seller's active store (req.user.id) isn't necessarily the store an
+  // incoming order actually belongs to — the seller's order list/new-order
+  // alerts are aggregated across every store they own (see
+  // fetchSellerOrdersPage), so acting on one must look across all of them
+  // too, not just whichever store happens to be active right now.
+  it("finds and declines an order sitting on a sibling store, not just the caller's active store", async () => {
+    // Caller's active store is "store1"; the order actually belongs to
+    // "store2" — a sibling store under the same owner account.
+    Store.findById.mockReturnValueOnce({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "store1", ownerId: "owner1" }),
+      }),
+    });
+    Store.find.mockReturnValueOnce({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([{ _id: "store1" }, { _id: "store2" }]),
+      }),
+    });
+
+    const pendingOrder = {
+      orderId: "ORD-400",
+      seller: "store2",
+      workflowVersion: 2,
+      workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
+    };
+    mockOrderFindOne.mockResolvedValue(pendingOrder);
+
+    const cancelledOrder = {
+      orderId: "ORD-400",
+      seller: "store2",
+      customer: "cust4",
+      workflowStatus: WORKFLOW_STATUS.CANCELLED,
+    };
+    mockOrderFindOneAndUpdate.mockReturnValue({ then: (resolve) => resolve(cancelledOrder) });
+
+    const result = await sellerUpdateStatusAtomic("store1", "ORD-400", "cancelled", {
+      cancelReason: "Out of stock for this item",
+    });
+
+    expect(result.workflowStatus).toBe(WORKFLOW_STATUS.CANCELLED);
+    // The order lookup itself must have searched across both stores, not
+    // just the caller's single active one.
+    expect(mockOrderFindOne).toHaveBeenCalledWith({
+      orderId: "ORD-400",
+      seller: { $in: ["store1", "store2"] },
+    });
+    // The mutation that actually cancels it must target the order's REAL
+    // owning store ("store2"), not the caller's active store ("store1") —
+    // matching seller: "store1" here is exactly what used to 404.
+    expect(mockOrderFindOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: "ORD-400", seller: "store2" }),
+      expect.anything(),
+      expect.anything(),
     );
   });
 });

@@ -166,6 +166,27 @@ export async function loadOwnerStores(ownerId) {
   return Store.find({ ownerId }).sort({ createdAt: 1 }).lean();
 }
 
+// For a session scoped to one store's id (the usual shape of req.user.id —
+// see authMiddleware.js's resolveActiveStore), resolves every store id under
+// that SAME owner account, the active store's own id included. A seller
+// with several stores gets new-order alerts/listings across all of them
+// (see fetchSellerOrdersPage in orderQueryService.js), so any write action
+// scoped to just the caller's single active store misses orders sitting on a
+// sibling store — this is the one place that breadth is resolved from a
+// store id, so both sides stay in sync.
+export async function resolveSiblingStoreIds(storeId) {
+  const ids = [String(storeId)];
+  if (!storeId) return ids;
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store?.ownerId) return ids;
+  const siblings = await loadOwnerStores(store.ownerId);
+  for (const s of siblings) {
+    const id = String(s._id);
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 export function parseStoreCategoriesInput(body = {}) {
   let raw = body.categories;
 
