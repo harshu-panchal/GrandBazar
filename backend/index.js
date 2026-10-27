@@ -254,9 +254,11 @@ async function startHttpServer() {
     logger.warn('Inline queue worker enabled - not recommended for production');
     const { registerOrderQueueProcessors, registerLifecycleQueueProcessors } = await import("./app/queues/orderQueueProcessors.js");
     const { registerPricingQueueProcessors } = await import("./app/queues/pricingQueueProcessors.js");
+    const { registerNotificationQueueProcessors } = await import("./app/modules/notifications/notification.worker.js");
     registerOrderQueueProcessors();
     registerLifecycleQueueProcessors();
     registerPricingQueueProcessors();
+    registerNotificationQueueProcessors();
   }
   
   return new Promise((resolve) => {
@@ -280,19 +282,23 @@ async function startQueueWorkers() {
   const { registerRewardQueueProcessors } = await import("./app/modules/rewards/reward.worker.js");
   const { registerPricingQueueProcessors } = await import("./app/queues/pricingQueueProcessors.js");
   const { customerPriceRecalcQueue } = await import("./app/queues/pricingQueues.js");
+  const { registerNotificationQueueProcessors } = await import("./app/modules/notifications/notification.worker.js");
+  const { notificationQueue } = await import("./app/modules/notifications/notification.queue.js");
 
   registerOrderQueueProcessors();
   registerLifecycleQueueProcessors();
   registerRewardQueueProcessors();
   registerPricingQueueProcessors();
+  registerNotificationQueueProcessors();
 
   // Register queues for graceful shutdown
   registerBullQueue(sellerTimeoutQueue);
   registerBullQueue(deliveryTimeoutQueue);
   registerBullQueue(customerPriceRecalcQueue);
+  registerBullQueue(notificationQueue);
 
   logger.info('Queue workers started', {
-    queues: ['seller-timeout', 'delivery-timeout', 'customer-price-recalc'],
+    queues: ['seller-timeout', 'delivery-timeout', 'customer-price-recalc', 'notifications'],
     role: getProcessRole()
   });
 }

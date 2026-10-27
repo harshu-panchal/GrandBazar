@@ -192,7 +192,7 @@ export const loginSeller = async (req, res) => {
             return handleResponse(res, 400, "Email and password are required");
         }
 
-        const seller = await Seller.findOne({ email }).select("+password");
+        const seller = await Seller.findOne({ email: String(email).trim().toLowerCase() }).select("+password");
 
         if (!seller) {
             return handleResponse(res, 404, "Seller not found");
