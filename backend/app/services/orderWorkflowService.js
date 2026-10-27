@@ -1262,12 +1262,16 @@ export async function sellerMarkPackedSignalAtomic(sellerId, orderId) {
  */
 export async function sellerResendDeliverySearchAtomic(sellerId, orderId) {
   orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  // Same multi-store breadth as sellerUpdateStatusAtomic — sellerId is the
+  // caller's active store, which may not be the one this order sits on.
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;
     throw err;
   }
+  const effectiveSellerId = String(order.seller);
 
   if (order.workflowStatus !== WORKFLOW_STATUS.DELIVERY_SEARCH) {
     const err = new Error("This order isn't waiting on a delivery partner right now");
@@ -1279,7 +1283,7 @@ export async function sellerResendDeliverySearchAtomic(sellerId, orderId) {
   const meta = order.deliverySearchMeta || {};
 
   const updated = await Order.findOneAndUpdate(
-    { orderId, seller: sellerId, workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
+    { orderId, seller: effectiveSellerId, workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH },
     {
       $set: {
         skippedBy: [],

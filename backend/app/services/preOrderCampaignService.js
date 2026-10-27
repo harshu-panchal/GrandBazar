@@ -15,6 +15,7 @@ import { afterPlaceOrderV2 } from "./orderWorkflowService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { compensateOrderCancellation } from "./orderCompensation.js";
+import { resolveSiblingStoreIds } from "./storeService.js";
 import {
   parseCustomerCoordinates,
   getNearbySellerIdsForCustomer,
@@ -645,8 +646,11 @@ export async function updatePreOrderCampaign(sellerId, campaignId, updates = {})
     }
   }
 
+  // sellerId is the caller's active store — a campaign they created under a
+  // sibling store (then switched away from) must still be reachable here.
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
   const campaign = await PreOrderCampaign.findOneAndUpdate(
-    { campaignId, seller: sellerId, status: { $nin: ["cancelled", "completed"] } },
+    { campaignId, seller: { $in: candidateSellerIds }, status: { $nin: ["cancelled", "completed"] } },
     { $set: allowed },
     { new: true },
   );
@@ -908,8 +912,9 @@ export async function validatePreorderPlacement({
 }
 
 export async function cancelPreOrderCampaign(sellerId, campaignId, reason = "") {
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
   return cancelPreOrderCampaignByQuery(
-    { campaignId, seller: sellerId },
+    { campaignId, seller: { $in: candidateSellerIds } },
     reason || "Pre-order campaign cancelled",
   );
 }

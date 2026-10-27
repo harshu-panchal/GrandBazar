@@ -16,6 +16,7 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { resolveWorkflowStatus } from "./orderWorkflowService.js";
 import { isPastCutoff } from "../utils/scheduleDateUtils.js";
+import { resolveSiblingStoreIds } from "./storeService.js";
 
 function canReschedule(order) {
   if (!order) return { allowed: false, reason: "Order not found" };
@@ -329,7 +330,11 @@ export async function adminRescheduleOnBehalf(adminId, orderId, { deliveryDate, 
 
 export async function sellerRescheduleOnBehalf(sellerId, orderId, { deliveryDate, windowLabel, note }) {
   orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  // sellerId is the caller's active store, which may not be the one this
+  // order actually belongs to — see sellerUpdateStatusAtomic in
+  // orderWorkflowService.js for the full story.
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;

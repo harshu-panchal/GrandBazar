@@ -7,6 +7,7 @@ import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.const
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 import { applyDeliveredSettlement } from "./orderSettlement.js";
+import { resolveSiblingStoreIds } from "./storeService.js";
 
 const OTP_EXPIRY_MS = () =>
   parseInt(process.env.CUSTOMER_PICKUP_OTP_EXPIRY_MS || String(24 * 60 * 60 * 1000), 10);
@@ -27,7 +28,11 @@ function generateQrToken() {
 
 export async function markOrderReadyForCustomerPickup(sellerId, orderId) {
   orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  // sellerId may be the caller's active store, not necessarily the store
+  // this order actually belongs to — see the matching comment in
+  // orderWorkflowService.js's sellerUpdateStatusAtomic for the full story.
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;
@@ -88,7 +93,8 @@ export async function markOrderReadyForCustomerPickup(sellerId, orderId) {
  */
 export async function resendPickupOtpBySeller(sellerId, orderId) {
   orderId = await requireCanonicalOrderId(orderId);
-  const order = await Order.findOne({ orderId, seller: sellerId });
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
+  const order = await Order.findOne({ orderId, seller: { $in: candidateSellerIds } });
   if (!order) {
     const err = new Error("Order not found");
     err.statusCode = 404;
