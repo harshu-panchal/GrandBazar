@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import DeliveryCodRemittance from "../models/deliveryCodRemittance.js";
 import Order from "../models/order.js";
+import Transaction from "../models/transaction.js";
+import Wallet from "../models/wallet.js";
 import {
   PAYMENT_GATEWAY,
   PAYMENT_STATUS,
@@ -63,8 +65,53 @@ async function transitionRemittancePaymentState(payment, { nextStatus, gatewayPa
   return payment;
 }
 
+async function recordRemittanceSettlement(payment, deliveryBoyId, settledOrders) {
+  const reconciledAmount = roundCurrency(
+    settledOrders.reduce((sum, order) => sum + Number(order.amount || 0), 0),
+  );
+  const unappliedAmount = roundCurrency(
+    Math.max(Number(payment.amount || 0) - reconciledAmount, 0),
+  );
+  payment.reconciledAmount = reconciledAmount;
+  payment.unappliedAmount = unappliedAmount;
+  await payment.save();
+
+  await Transaction.findOneAndUpdate(
+    { reference: `COD-REM-${payment._id}` },
+    {
+      $set: {
+        amount: -reconciledAmount,
+        status: "Settled",
+        meta: {
+          source: "razorpay_cod_remittance",
+          gatewayOrderId: payment.gatewayOrderId,
+          capturedAmount: roundCurrency(payment.amount || 0),
+          orders: settledOrders,
+          unappliedAmount,
+        },
+      },
+      $setOnInsert: {
+        user: deliveryBoyId,
+        userModel: "Delivery",
+        type: "Cash Settlement",
+        reference: `COD-REM-${payment._id}`,
+      },
+    },
+    { upsert: true, new: true },
+  );
+}
+
 async function handleRemittancePaymentCaptured(payment) {
-  if (payment.ordersReconciled && payment.ordersReconciled.length > 0) {
+  if (
+    payment.reconciliationCompleted ||
+    (payment.ordersReconciled && payment.ordersReconciled.length > 0)
+  ) {
+    payment.reconciliationCompleted = true;
+    await recordRemittanceSettlement(
+      payment,
+      payment.deliveryBoy,
+      payment.ordersReconciled,
+    );
     return payment; // Already reconciled
   }
 
@@ -112,25 +159,61 @@ async function handleRemittancePaymentCaptured(payment) {
   }
 
   payment.ordersReconciled = settledOrders;
-  await payment.save();
+  payment.reconciliationCompleted = true;
+  await recordRemittanceSettlement(payment, deliveryBoyId, settledOrders);
   return payment;
 }
 
 export async function createCodRemittanceCheckout({ deliveryBoyId, amount }) {
-  if (!amount || amount <= 0) {
+  const normalizedAmount = roundCurrency(amount);
+  if (!Number.isFinite(Number(amount)) || normalizedAmount <= 0) {
     const err = new Error("Invalid remittance amount");
     err.statusCode = 400;
     throw err;
   }
 
-  const amountPaise = Math.round(Number(amount) * 100);
+  const [collectedOrders, wallet] = await Promise.all([
+    Order.find({
+      deliveryBoy: deliveryBoyId,
+      paymentMode: "COD",
+      status: { $ne: "cancelled" },
+      orderStatus: { $ne: "cancelled" },
+      "financeFlags.codMarkedCollected": true,
+      "paymentBreakdown.codPendingAmount": { $gt: 0 },
+    })
+      .select("paymentBreakdown.codPendingAmount")
+      .lean(),
+    Wallet.findOne({
+      ownerType: "DELIVERY_PARTNER",
+      ownerId: deliveryBoyId,
+    })
+      .select("cashInHand")
+      .lean(),
+  ]);
+  const readyToRemit = roundCurrency(
+    collectedOrders.reduce(
+      (sum, order) => sum + Number(order.paymentBreakdown?.codPendingAmount || 0),
+      0,
+    ),
+  );
+  const availableCash = roundCurrency(wallet?.cashInHand || 0);
+  const maxRemittance = Math.min(readyToRemit, availableCash);
+  if (normalizedAmount > maxRemittance) {
+    const err = new Error(
+      `Remittance cannot exceed collected COD cash of ${maxRemittance.toFixed(2)}`,
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const amountPaise = Math.round(normalizedAmount * 100);
 
   const existingOpen = await DeliveryCodRemittance.findOne({
     deliveryBoy: deliveryBoyId,
     status: { $in: [PAYMENT_STATUS.CREATED, PAYMENT_STATUS.PENDING] },
   }).sort({ createdAt: -1 });
 
-  if (existingOpen?.gatewayOrderId && existingOpen.amount === amount) {
+  if (existingOpen?.gatewayOrderId && existingOpen.amount === normalizedAmount) {
     return {
       payment: existingOpen,
       razorpayOrderId: existingOpen.gatewayOrderId,
@@ -155,13 +238,13 @@ export async function createCodRemittanceCheckout({ deliveryBoyId, amount }) {
     deliveryBoy: deliveryBoyId,
     gatewayName: PAYMENT_GATEWAY.RAZORPAY,
     gatewayOrderId: razorpayOrder.razorpayOrderId,
-    amount: amount,
+    amount: normalizedAmount,
     currency: "INR",
     status: PAYMENT_STATUS.PENDING,
     rawGatewayResponse: {
       merchantOrderId,
       razorpayOrderId: razorpayOrder.razorpayOrderId,
-      amount: amountPaise,
+      amount: normalizedAmount,
     },
   });
 
@@ -195,6 +278,7 @@ export async function verifyCodRemittanceRazorpayPayment({
   }
 
   if (payment.status === PAYMENT_STATUS.CAPTURED) {
+    await handleRemittancePaymentCaptured(payment);
     return { payment, status: payment.status, alreadyCaptured: true };
   }
 

@@ -78,6 +78,15 @@ const OrderMoneyBreakdown = ({ order }) => {
 
     const isCod = order?.paymentMode === 'COD';
     const isReturned = Number(order?.returnRefundAmount || 0) > 0 || order?.returnStatus === 'refund_completed';
+    const codGrossCollected =
+        Number(pb.codGrossCollectedAmount || 0) ||
+        (Number(pb.codCollectedAmount || 0) > 0
+            ? Number(pb.codCollectedAmount) + Number(pb.riderPayoutTotal || 0)
+            : Number(pb.grandTotal || 0));
+    const codRiderCommissionRetained =
+        Number(pb.codGrossCollectedAmount || 0) > 0
+            ? Number(pb.codRiderCommissionRetained || 0)
+            : Math.max(codGrossCollected - Number(pb.codCollectedAmount || 0), 0);
 
     const surchargeTotal =
         Number(pb.customerSurchargeAmount || 0) +
@@ -254,7 +263,15 @@ const OrderMoneyBreakdown = ({ order }) => {
                             {isCod && (
                                 <>
                                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-                                        <p className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-1"><Banknote className="h-3 w-3" /> Cash Collected</p>
+                                        <p className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-1"><Banknote className="h-3 w-3" /> Gross Cash Collected</p>
+                                        <p className="text-xs font-black text-amber-800 mt-0.5">{inr(codGrossCollected)}</p>
+                                    </div>
+                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+                                        <p className="text-[9px] font-bold text-amber-600 uppercase">Rider Commission Kept</p>
+                                        <p className="text-xs font-black text-amber-800 mt-0.5">{inr(codRiderCommissionRetained)}</p>
+                                    </div>
+                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+                                        <p className="text-[9px] font-bold text-amber-600 uppercase">Platform Cash Collected (Net)</p>
                                         <p className="text-xs font-black text-amber-800 mt-0.5">{inr(pb.codCollectedAmount)}</p>
                                     </div>
                                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
@@ -262,7 +279,7 @@ const OrderMoneyBreakdown = ({ order }) => {
                                         <p className="text-xs font-black text-amber-800 mt-0.5">{inr(pb.codRemittedAmount)}</p>
                                     </div>
                                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-                                        <p className="text-[9px] font-bold text-amber-600 uppercase">Still Pending</p>
+                                        <p className="text-[9px] font-bold text-amber-600 uppercase">Net Cash Still Pending</p>
                                         <p className="text-xs font-black text-amber-800 mt-0.5">{inr(pb.codPendingAmount)}</p>
                                     </div>
                                 </>

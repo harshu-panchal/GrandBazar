@@ -34,7 +34,10 @@ export const settleRiderCash = async (req, res) => {
     return handleResponse(res, 201, "Cash settled successfully", settlement);
   } catch (error) {
     const statusCode =
-      error.message === "Missing riderId or invalid amount" ? 400 : 500;
+      error.message === "Missing riderId or invalid amount" ||
+      error.message.startsWith("Settlement cannot exceed collected COD cash")
+        ? 400
+        : 500;
     return handleResponse(res, statusCode, error.message);
   }
 };

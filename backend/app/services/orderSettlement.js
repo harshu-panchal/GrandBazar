@@ -1,6 +1,7 @@
 import Transaction from "../models/transaction.js";
 import Order from "../models/order.js";
 import {
+  isCodOrder,
   handleCodOrderFinance,
   settleDeliveredOrder,
 } from "./finance/orderFinanceService.js";
@@ -23,19 +24,44 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
 
   if (!settled.deliveryBoy) return;
 
-  const method = (settled.payment?.method || "").toLowerCase();
-  const isCod = settled.paymentMode === "COD" || method === "cash" || method === "cod";
+  const isCod = isCodOrder(settled);
 
   // roundCurrency (paise precision), not Math.round (whole rupee) — the live
   // "new order" popup shows riderPayoutTotal at paise precision too, so
   // rounding it differently here made the settled earning disagree with what
   // the rider was shown when the order came in.
   const deliveryEarning = roundCurrency(settled.paymentBreakdown?.riderPayoutTotal || 0);
+  const cashCollectedGross = roundCurrency(
+    settled.paymentBreakdown?.codGrossCollectedAmount ||
+      settled.paymentBreakdown?.grandTotal ||
+      settled.pricing?.total ||
+      0,
+  );
+  const cashRemittable = roundCurrency(
+    settled.paymentBreakdown?.codCollectedAmount ??
+      Math.max(
+        cashCollectedGross -
+          roundCurrency(settled.paymentBreakdown?.riderPayoutTotal || 0),
+        0,
+      ),
+  );
+  const riderCommissionRetained = roundCurrency(
+    settled.paymentBreakdown?.codRiderCommissionRetained ||
+      Math.min(
+        deliveryEarning,
+        Math.max(
+          cashCollectedGross -
+            Number(settled.paymentBreakdown?.codCollectedAmount || 0),
+          0,
+        ),
+      ),
+  );
   const deliveryMeta = {
     tipAmount: roundCurrency(settled.paymentBreakdown?.riderTipAmount || 0),
     payoutBase: roundCurrency(settled.paymentBreakdown?.riderPayoutBase || 0),
     payoutDistance: roundCurrency(settled.paymentBreakdown?.riderPayoutDistance || 0),
     payoutBonus: roundCurrency(settled.paymentBreakdown?.riderPayoutBonus || 0),
+    codPaidInCash: isCod,
   };
   await Transaction.findOneAndUpdate(
     { reference: `DEL-ERN-${orderIdString}` },
@@ -43,7 +69,12 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
       $set: {
         amount: deliveryEarning,
         status: "Settled",
-        meta: deliveryMeta,
+        meta: {
+          ...deliveryMeta,
+          grossCashCollected: cashCollectedGross,
+          riderCommissionRetained,
+          netCashHeldForPlatform: cashRemittable,
+        },
       },
       $setOnInsert: {
         user: settled.deliveryBoy,
@@ -65,9 +96,14 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
           userModel: "Delivery",
           order: settled._id,
           type: "Cash Collection",
-          amount: settled.paymentBreakdown?.grandTotal || settled.pricing?.total || 0,
+          amount: cashRemittable,
           status: "Settled",
           reference: `CASH-COL-${orderIdString}`,
+          meta: {
+            grossCashCollected: cashCollectedGross,
+            riderCommissionRetained,
+            netCashHeldForPlatform: cashRemittable,
+          },
         },
       },
       { upsert: true, new: true },
@@ -79,12 +115,11 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
  * Financial side effects when order becomes delivered (mirrors orderController).
  */
 export async function applyDeliveredSettlement(order, orderIdString) {
-  const settled = await settleDeliveredOrder(order._id);
+  let settled = await settleDeliveredOrder(order._id);
 
-  const method = (order.payment?.method || "").toLowerCase();
-  const isCod = settled.paymentMode === "COD" || method === "cash" || method === "cod";
+  const isCod = isCodOrder(settled);
   if (isCod && settled.deliveryBoy && !settled.financeFlags?.codMarkedCollected) {
-    await handleCodOrderFinance(settled._id, {
+    settled = await handleCodOrderFinance(settled._id, {
       deliveryPartnerId: settled.deliveryBoy,
     });
   } else if (
@@ -190,6 +225,7 @@ export async function applyDeliveredSettlement(order, orderIdString) {
           $set: {
             "financeFlags.codMarkedCollected": true,
             "paymentBreakdown.codCollectedAmount": totalCashCollected,
+            "paymentBreakdown.codGrossCollectedAmount": totalCashCollected,
             "paymentBreakdown.codCommissionDue": Math.max(0, roundCurrency(adminCommission - offsetAmount)),
             paymentStatus: "CASH_COLLECTED",
           },

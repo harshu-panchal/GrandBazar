@@ -137,7 +137,7 @@ export const getDeliveryEarnings = async (req, res) => {
         const transactions = await Transaction.find(txQuery)
             .sort({ createdAt: -1 })
             .limit(200)
-            .populate("order", "orderId pricing paymentBreakdown");
+            .populate("order", "orderId pricing paymentBreakdown paymentMode");
         const wallet = await Wallet.findOne({
             ownerType: "DELIVERY_PARTNER",
             ownerId: deliveryBoyId,
@@ -187,7 +187,12 @@ export const getDeliveryEarnings = async (req, res) => {
         // Including it here would let a rider withdraw against COD cash they
         // haven't remitted yet, i.e. money that isn't theirs.
         const settledBalance = transactions
-            .filter(t => t.status === 'Settled' && t.type !== 'Cash Collection' && t.type !== 'Cash Settlement')
+            .filter(t =>
+                t.status === 'Settled' &&
+                t.type !== 'Cash Collection' &&
+                t.type !== 'Cash Settlement' &&
+                !(t.type === 'Delivery Earning' && (t.meta?.codPaidInCash || t.order?.paymentMode === "COD"))
+            )
             .reduce((acc, t) => acc + t.amount, 0);
         const pendingWithdrawals = transactions
             .filter(t => (t.status === 'Pending' || t.status === 'Processing') && t.type === 'Withdrawal')
@@ -312,8 +317,10 @@ export const getDeliveryCodCashSummary = async (req, res) => {
             // remainder (see addItemsToOrder) — the amount due is the tracked
             // remainder itself, not the order's full (already-paid) grandTotal.
             const isExtraCashOnly = order.paymentMode === "ONLINE" && order.financeFlags?.hasExtraCashDue;
+            const hasAdjustedCodAmount =
+                order.paymentMode === "COD" && order.financeFlags?.hasExtraCashDue;
             const codMarkedCollected = isExtraCashOnly ? false : Boolean(order.financeFlags?.codMarkedCollected);
-            const gross = isExtraCashOnly
+            const gross = isExtraCashOnly || hasAdjustedCodAmount
                 ? roundCurrency(order.paymentBreakdown?.codPendingAmount ?? 0)
                 : roundCurrency(order.paymentBreakdown?.grandTotal ?? order.pricing?.total ?? 0);
             const riderCommission = isExtraCashOnly
@@ -347,6 +354,14 @@ export const getDeliveryCodCashSummary = async (req, res) => {
         const toRemit = normalized
             .filter((row) => row.codMarkedCollected && Number(row.amountNetPending || 0) > 0)
             .slice(0, 50);
+        const readyToRemit = roundCurrency(
+            normalized.reduce(
+                (sum, row) =>
+                    sum +
+                    (row.codMarkedCollected ? Number(row.amountNetPending || 0) : 0),
+                0,
+            ),
+        );
 
         const toCollect = normalized
             .filter((row) => !row.codMarkedCollected && Number(row.amountNetExpected || 0) > 0)
@@ -354,6 +369,7 @@ export const getDeliveryCodCashSummary = async (req, res) => {
 
         return handleResponse(res, 200, "COD cash summary fetched", {
             systemFloatCOD,
+            readyToRemit,
             cashInHand: roundCurrency(wallet?.cashInHand || 0),
             toRemit,
             toCollect,
@@ -613,7 +629,12 @@ export const requestWithdrawal = async (req, res) => {
         // the rider's earnings), not money owed to the rider. See the
         // matching comment in getDeliveryEarnings for the full rationale.
         const settledBalance = transactions
-            .filter(t => t.status === 'Settled' && t.type !== 'Cash Collection' && t.type !== 'Cash Settlement')
+            .filter(t =>
+                t.status === 'Settled' &&
+                t.type !== 'Cash Collection' &&
+                t.type !== 'Cash Settlement' &&
+                !(t.type === 'Delivery Earning' && t.meta?.codPaidInCash)
+            )
             .reduce((acc, t) => acc + t.amount, 0);
 
         const pendingPayouts = transactions

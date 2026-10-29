@@ -20,6 +20,7 @@ const CodCash = () => {
   const [payAmount, setPayAmount] = React.useState("");
   const [data, setData] = React.useState({
     systemFloatCOD: 0,
+    readyToRemit: 0,
     cashInHand: 0,
     toCollect: [],
     toRemit: [],
@@ -38,11 +39,13 @@ const CodCash = () => {
         );
         setData({
           systemFloatCOD: safeMoney(result.systemFloatCOD),
+          readyToRemit: safeMoney(result.readyToRemit),
           cashInHand: safeMoney(result.cashInHand),
           toCollect: Array.isArray(result.toCollect) ? result.toCollect : [],
           toRemit: nextToRemit,
         });
-        setPayAmount(nextPayable > 0 ? String(nextPayable) : "");
+        const amountReady = safeMoney(result.readyToRemit ?? nextPayable);
+        setPayAmount(amountReady > 0 ? String(amountReady) : "");
       }
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load COD cash");
@@ -69,7 +72,7 @@ const CodCash = () => {
   const pendingOrdersCount =
     (Array.isArray(data.toCollect) ? data.toCollect.length : 0) +
     (Array.isArray(data.toRemit) ? data.toRemit.length : 0);
-  const payableNowAmount = data.systemFloatCOD; // Allow paying up to float!
+  const payableNowAmount = data.readyToRemit;
   const enteredPayAmount = safeMoney(payAmount);
 
   const handlePayNow = async () => {
@@ -103,12 +106,21 @@ const CodCash = () => {
         description: "COD cash remittance",
         onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
           try {
-            await deliveryApi.verifyCodRemittanceRazorpay({
+            const verification = await deliveryApi.verifyCodRemittanceRazorpay({
               razorpayOrderId,
               razorpayPaymentId,
               razorpaySignature,
             });
-            toast.success("Payment successful");
+            const unappliedAmount = safeMoney(
+              verification.data?.result?.payment?.unappliedAmount,
+            );
+            if (unappliedAmount > 0) {
+              toast.warning(
+                `Payment received. ${RUPEE}${unappliedAmount.toLocaleString()} is awaiting reconciliation.`,
+              );
+            } else {
+              toast.success("Payment successful");
+            }
           } catch {
             toast.success("Payment received — confirming shortly");
           }
@@ -166,11 +178,11 @@ const CodCash = () => {
                 </p>
                 <p className="text-3xl font-extrabold text-gray-900">
                   {RUPEE}
-                  {safeMoney(data.systemFloatCOD).toLocaleString()}
+                  {safeMoney(data.readyToRemit).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                  This is the platform money you are holding for COD orders.
-                  It is calculated after your delivery commission.
+                  This is the collected COD cash still due to the platform,
+                  after your delivery commission.
                 </p>
               </div>
               <div className="p-3 rounded-xl bg-orange-50 text-orange-600">

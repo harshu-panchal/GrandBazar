@@ -57,6 +57,18 @@ const deliveryCodRemittanceSchema = new mongoose.Schema(
         amount: Number,
       }
     ],
+    reconciledAmount: {
+      type: Number,
+      default: 0,
+    },
+    unappliedAmount: {
+      type: Number,
+      default: 0,
+    },
+    reconciliationCompleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

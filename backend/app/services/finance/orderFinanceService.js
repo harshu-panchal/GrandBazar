@@ -41,6 +41,14 @@ function toOrderIdQuery(orderOrId) {
   return { orderId: String(orderOrId) };
 }
 
+export function isCodOrder(order) {
+  const paymentMode = String(order?.paymentMode || "").trim().toUpperCase();
+  if (paymentMode) return paymentMode === "COD";
+
+  const paymentMethod = String(order?.payment?.method || "").trim().toLowerCase();
+  return paymentMethod === "cash" || paymentMethod === "cod";
+}
+
 async function findOrderForUpdate(orderOrId, session) {
   const query = toOrderIdQuery(orderOrId);
   if (!query) {
@@ -162,8 +170,7 @@ export async function createPendingSellerPayout(order, { session, actorId } = {}
     return null;
   }
 
-  const method = (order.payment?.method || "").toLowerCase();
-  const isCod = order.paymentMode === "COD" || method === "cash" || method === "cod";
+  const isCod = isCodOrder(order);
   const isSellerFulfilled = order.fulfillmentMethod === "seller_delivery" || (!order.deliveryBoy && !order.deliveryPartner);
 
   if (isCod && isSellerFulfilled) {
@@ -261,6 +268,18 @@ export async function createPendingRiderPayout(order, { session, actorId } = {})
   }
   if (order.financeFlags?.riderPayoutQueued) return null;
 
+  const isCod = isCodOrder(order);
+  if (isCod) {
+    // The rider keeps this commission from the physical COD cash collected
+    // from the customer. Do not also create a wallet payout for the same
+    // earning; handleCodOrderFinance marks it completed when cash is recorded.
+    order.settlementStatus = {
+      ...(order.settlementStatus || {}),
+      riderPayout: "PENDING",
+    };
+    return null;
+  }
+
   const amount = roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
   if (amount <= 0) {
     order.settlementStatus = {
@@ -298,7 +317,7 @@ export async function creditAdminEarning(order, { session, actorId } = {}) {
 
   // Requirement: For COD orders, do not recognize/credit admin earning at delivery time.
   // COD inflows are tracked via remittance (system float) instead.
-  if (order.paymentMode === "COD") {
+  if (isCodOrder(order)) {
     order.settlementStatus = {
       ...(order.settlementStatus || {}),
       adminEarningCredited: true,
@@ -378,7 +397,7 @@ export async function handleOnlineOrderFinance(
     session.startTransaction();
     const order = await findOrderForUpdate(orderOrId, session);
 
-    if (order.paymentMode !== "ONLINE") {
+    if (isCodOrder(order)) {
       order.paymentMode = "ONLINE";
     }
 
@@ -532,8 +551,11 @@ export async function handleCodOrderFinance(
     const deliveryPartnerCommission = isExtraCashOnlyCollection && order.paymentMode === "ONLINE"
       ? 0
       : roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
+    const riderCommissionRetained = roundCurrency(
+      Math.min(codAmountGross, deliveryPartnerCommission),
+    );
     const codAmountNet = roundCurrency(
-      Math.max(codAmountGross - deliveryPartnerCommission, 0),
+      codAmountGross - riderCommissionRetained,
     );
 
     await updateCashInHand({
@@ -553,6 +575,13 @@ export async function handleCodOrderFinance(
       : order.paymentBreakdown || {};
     order.paymentBreakdown = {
       ...currentBreakdown,
+      codGrossCollectedAmount: roundCurrency(
+        (currentBreakdown.codGrossCollectedAmount || 0) + codAmountGross,
+      ),
+      codRiderCommissionRetained: roundCurrency(
+        (currentBreakdown.codRiderCommissionRetained || 0) +
+          riderCommissionRetained,
+      ),
       codCollectedAmount: roundCurrency(
         (currentBreakdown.codCollectedAmount || 0) + codAmountNet,
       ),
@@ -587,6 +616,14 @@ export async function handleCodOrderFinance(
       order.financeFlags = {
         ...(order.financeFlags || {}),
         codMarkedCollected: true,
+        riderPayoutQueued: true,
+      };
+      order.settlementStatus = {
+        ...(order.settlementStatus || {}),
+        riderPayout:
+          roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0) > 0
+            ? "COMPLETED"
+            : "NOT_APPLICABLE",
       };
     }
 
@@ -605,6 +642,11 @@ export async function handleCodOrderFinance(
         direction: LEDGER_DIRECTION.CREDIT,
         amount: codAmountNet,
         paymentMode: "COD",
+        metadata: {
+          grossCashCollected: codAmountGross,
+          riderCommissionRetained,
+          netCashHeldForPlatform: codAmountNet,
+        },
         description: "COD cash added to system float (net of rider commission)",
         reference: order.orderId,
       },
@@ -620,6 +662,7 @@ export async function handleCodOrderFinance(
         metadata: {
           amountGross: codAmountGross,
           deliveryPartnerCommission,
+          riderCommissionRetained,
           amountNet: codAmountNet,
           deliveryPartnerId: String(partnerId),
         },

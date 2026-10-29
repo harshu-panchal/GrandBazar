@@ -116,6 +116,31 @@ describe("deliveryController COD cash-float exclusion from withdrawable balance"
     expect(payload.availableBalance).toBe(50);
   });
 
+  it("does not make COD commission already kept in cash withdrawable again", async () => {
+    mockTransactionFind.mockReturnValue({
+      sort: () => ({
+        limit: () => ({
+          populate: () => Promise.resolve([
+            makeTxn({
+              type: "Delivery Earning",
+              amount: 50,
+              meta: { codPaidInCash: true },
+            }),
+            makeTxn({ type: "Delivery Earning", amount: 20 }),
+          ]),
+        }),
+      }),
+    });
+
+    const req = { user: { id: "rider-1" }, query: {} };
+    const res = makeRes();
+    await getDeliveryEarnings(req, res);
+
+    const payload = res.json.mock.calls[0][0].result;
+    expect(payload.totalEarnings).toBe(70);
+    expect(payload.availableBalance).toBe(20);
+  });
+
   it("requestWithdrawal rejects a withdrawal funded by un-remitted COD cash", async () => {
     mockTransactionFind.mockResolvedValue([
       makeTxn({ type: "Delivery Earning", amount: 50 }),

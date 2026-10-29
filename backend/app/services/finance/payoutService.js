@@ -306,6 +306,7 @@ export async function queueRiderPayouts({ orderIds = [] } = {}) {
     status: "delivered",
     "settlementStatus.riderPayout": { $ne: "COMPLETED" },
     deliveryBoy: { $ne: null },
+    paymentMode: { $ne: "COD" },
   };
   if (Array.isArray(orderIds) && orderIds.length > 0) {
     query._id = { $in: orderIds };

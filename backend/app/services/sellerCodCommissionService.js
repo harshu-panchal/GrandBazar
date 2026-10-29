@@ -70,7 +70,12 @@ export async function getSellerCodCommissionSummary(sellerId) {
       orderId: o.orderId,
       shortOrderId: o.shortOrderId,
       createdAt: o.createdAt,
-      totalCashCollected: roundCurrency(o.paymentBreakdown?.codCollectedAmount || o.paymentBreakdown?.grandTotal || 0),
+      totalCashCollected: roundCurrency(
+        o.paymentBreakdown?.codGrossCollectedAmount ||
+          o.paymentBreakdown?.codCollectedAmount ||
+          o.paymentBreakdown?.grandTotal ||
+          0,
+      ),
       commissionAmount: roundCurrency(o.paymentBreakdown?.platformTotalEarning ?? o.paymentBreakdown?.adminProductCommissionTotal ?? 0),
       codCommissionDue: roundCurrency(o.paymentBreakdown?.codCommissionDue || 0),
     })),

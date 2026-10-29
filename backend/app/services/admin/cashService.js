@@ -1,6 +1,10 @@
 import Delivery from "../../models/delivery.js";
+import Order from "../../models/order.js";
 import Transaction from "../../models/transaction.js";
 import Notification from "../../models/notification.js";
+import Wallet from "../../models/wallet.js";
+import { reconcileCodCash } from "../finance/orderFinanceService.js";
+import { roundCurrency } from "../../utils/money.js";
 
 export async function getDeliveryCashBalancesData({ page, limit, skip }) {
   const ridersPipeline = [
@@ -43,13 +47,64 @@ export async function getDeliveryCashBalancesData({ page, limit, skip }) {
             },
             initialValue: 0,
             in: {
-              $cond: [
-                { $eq: ["$$this.type", "Cash Collection"] },
-                { $add: ["$$value", "$$this.amount"] },
-                {
-                  $subtract: ["$$value", { $abs: "$$this.amount" }],
+              $let: {
+                vars: {
+                  order: {
+                    $first: {
+                      $filter: {
+                        input: "$allOrders",
+                        as: "order",
+                        cond: { $eq: ["$$order._id", "$$this.order"] },
+                      },
+                    },
+                  },
                 },
-              ],
+                in: {
+                  $cond: [
+                    { $eq: ["$$this.type", "Cash Collection"] },
+                    {
+                      $add: [
+                        "$$value",
+                        {
+                          $ifNull: [
+                            "$$this.meta.netCashHeldForPlatform",
+                            {
+                              $cond: [
+                                {
+                                  $gt: [
+                                    "$$order.paymentBreakdown.codCollectedAmount",
+                                    0,
+                                  ],
+                                },
+                                "$$order.paymentBreakdown.codCollectedAmount",
+                                {
+                                  $max: [
+                                    {
+                                      $subtract: [
+                                        "$$this.amount",
+                                        {
+                                          $ifNull: [
+                                            "$$order.paymentBreakdown.riderPayoutTotal",
+                                            0,
+                                          ],
+                                        },
+                                      ],
+                                    },
+                                    0,
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      $subtract: ["$$value", { $abs: "$$this.amount" }],
+                    },
+                  ],
+                },
+              },
             },
           },
         },
@@ -177,7 +232,8 @@ export async function getDeliveryCashBalancesData({ page, limit, skip }) {
 }
 
 export async function settleRiderCashEntry({ riderId, amount, method }) {
-  if (!riderId || !amount || amount <= 0) {
+  const requestedAmount = roundCurrency(amount);
+  if (!riderId || !Number.isFinite(Number(amount)) || requestedAmount <= 0) {
     throw new Error("Missing riderId or invalid amount");
   }
 
@@ -186,14 +242,65 @@ export async function settleRiderCashEntry({ riderId, amount, method }) {
     return null;
   }
 
+  const orders = await Order.find({
+    deliveryBoy: riderId,
+    paymentMode: "COD",
+    status: { $ne: "cancelled" },
+    orderStatus: { $ne: "cancelled" },
+    "financeFlags.codMarkedCollected": true,
+    "paymentBreakdown.codPendingAmount": { $gt: 0 },
+  })
+    .select("orderId paymentBreakdown.codPendingAmount")
+    .sort({ createdAt: 1 })
+    .lean();
+  const totalPending = roundCurrency(
+    orders.reduce(
+      (sum, order) => sum + Number(order.paymentBreakdown?.codPendingAmount || 0),
+      0,
+    ),
+  );
+  const wallet = await Wallet.findOne({
+    ownerType: "DELIVERY_PARTNER",
+    ownerId: riderId,
+  })
+    .select("cashInHand")
+    .lean();
+  const availableToSettle = Math.min(totalPending, roundCurrency(wallet?.cashInHand || 0));
+  if (requestedAmount > availableToSettle) {
+    throw new Error(
+      `Settlement cannot exceed collected COD cash of ${availableToSettle.toFixed(2)}`,
+    );
+  }
+
+  let remaining = requestedAmount;
+  const settledOrders = [];
+  for (const order of orders) {
+    if (remaining <= 0) break;
+    const pending = roundCurrency(order.paymentBreakdown?.codPendingAmount || 0);
+    if (pending <= 0) continue;
+    const settleAmount = roundCurrency(Math.min(pending, remaining));
+    await reconcileCodCash(order._id, settleAmount, riderId, {
+      metadata: {
+        source: "admin_cash_collection",
+        initiatedBy: "admin",
+      },
+    });
+    remaining = roundCurrency(remaining - settleAmount);
+    settledOrders.push({ orderId: order.orderId, amount: settleAmount });
+  }
+
   const settlement = await Transaction.create({
     user: riderId,
     userModel: "Delivery",
     type: "Cash Settlement",
-    amount: -Math.abs(amount),
+    amount: -requestedAmount,
     status: "Settled",
     reference: `CSH-SET-${Date.now()}`,
     notes: `Method: ${method || "Cash"}`,
+    meta: {
+      source: "admin_cash_collection",
+      orders: settledOrders,
+    },
   });
 
   await Notification.create({
@@ -214,19 +321,43 @@ export async function getRiderCashDetailsData(riderId) {
     userModel: "Delivery",
     type: "Cash Collection",
   })
-    .populate("order", "orderId pricing createdAt")
+    .populate("order", "orderId pricing paymentBreakdown createdAt")
     .sort({ createdAt: -1 })
     .limit(20);
 
-  return transactions.map((transaction) => ({
-    id: transaction.order?.orderId || transaction.reference || "N/A",
-    amount: transaction.amount,
-    time: new Date(transaction.createdAt).toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    date: transaction.createdAt,
-  }));
+  return transactions.map((transaction) => {
+    const breakdown = transaction.order?.paymentBreakdown || {};
+    const hasGrossAccounting =
+      transaction.meta?.grossCashCollected != null ||
+      Number(breakdown.codGrossCollectedAmount || 0) > 0;
+    const legacyGross = Number(transaction.amount || 0);
+    const legacyNet = Number(breakdown.codCollectedAmount || 0);
+    const gross = hasGrossAccounting
+      ? transaction.meta?.grossCashCollected ?? breakdown.codGrossCollectedAmount
+      : Number(transaction.order?.pricing?.total || 0) || legacyGross;
+    const net =
+      transaction.meta?.netCashHeldForPlatform ??
+      (legacyNet > 0
+        ? legacyNet
+        : Math.max(legacyGross - Number(breakdown.riderPayoutTotal || 0), 0));
+    const retained =
+      transaction.meta?.riderCommissionRetained ??
+      (hasGrossAccounting
+        ? breakdown.codRiderCommissionRetained
+        : Math.max(legacyGross - legacyNet, 0));
+
+    return {
+      id: transaction.order?.orderId || transaction.reference || "N/A",
+      amount: roundCurrency(gross),
+      amountNet: roundCurrency(net),
+      riderCommissionRetained: roundCurrency(retained),
+      time: new Date(transaction.createdAt).toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      date: transaction.createdAt,
+    };
+  });
 }
 
 export async function getCashSettlementHistoryData({ page, limit, skip }) {
@@ -246,6 +377,7 @@ export async function getCashSettlementHistoryData({ page, limit, skip }) {
     id: (entry.reference || entry._id).toString(),
     rider: entry.user?.name || "Unknown Rider",
     amount: Math.abs(entry.amount),
+    unappliedAmount: roundCurrency(entry.meta?.unappliedAmount || 0),
     date: entry.createdAt,
     method: entry.notes?.replace("Method: ", "") || "Cash Submission",
     status: "completed",

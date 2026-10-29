@@ -281,6 +281,8 @@ const orderSchema = new mongoose.Schema(
       platformLogisticsMargin: { type: Number, default: 0 },
       platformTotalEarning: { type: Number, default: 0 },
       codCollectedAmount: { type: Number, default: 0 },
+      codGrossCollectedAmount: { type: Number, default: 0 },
+      codRiderCommissionRetained: { type: Number, default: 0 },
       codRemittedAmount: { type: Number, default: 0 },
       codPendingAmount: { type: Number, default: 0 },
       walletAmount: { type: Number, default: 0 },

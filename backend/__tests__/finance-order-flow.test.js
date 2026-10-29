@@ -256,6 +256,8 @@ describe("finance order flow", () => {
     expect(updated.paymentStatus).toBe(ORDER_PAYMENT_STATUS.CASH_COLLECTED);
     expect(updated.financeFlags.codMarkedCollected).toBe(true);
     // Net of rider commission (grandTotal 300 - riderPayoutTotal 50)
+    expect(updated.paymentBreakdown.codGrossCollectedAmount).toBe(300);
+    expect(updated.paymentBreakdown.codRiderCommissionRetained).toBe(50);
     expect(updated.paymentBreakdown.codCollectedAmount).toBe(250);
     expect(updated.paymentBreakdown.codPendingAmount).toBe(250);
     expect(mockUpdateCashInHand).toHaveBeenCalledWith(
@@ -335,7 +337,7 @@ describe("finance order flow", () => {
     expect(currentSession.commitTransaction).toHaveBeenCalled();
   });
 
-  it("settles delivered orders by queueing payouts and admin earning", async () => {
+  it("treats an explicit ONLINE mode as authoritative over a stale cash method", async () => {
     currentOrder.paymentMode = "ONLINE";
     currentOrder.financeFlags = { onlinePaymentCaptured: true };
     currentOrder.status = "pending";
@@ -348,6 +350,33 @@ describe("finance order flow", () => {
     expect(updated.financeFlags.deliveredSettlementApplied).toBe(true);
     expect(updated.settlementStatus.adminEarningCredited).toBe(true);
     expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it("settles a COD rider commission through collected cash instead of a second payout", async () => {
+    currentOrder.paymentMode = "COD";
+    currentOrder.status = "pending";
+    currentOrder.orderStatus = "pending";
+
+    const delivered = await settleDeliveredOrder(
+      { _id: "order-1" },
+      { actorId: "admin-1" },
+    );
+
+    expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledTimes(1);
+    expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ payoutType: PAYOUT_TYPE.SELLER }),
+      expect.any(Object),
+    );
+    expect(delivered.settlementStatus.riderPayout).toBe("PENDING");
+
+    const collected = await handleCodOrderFinance(
+      { _id: "order-1" },
+      { deliveryPartnerId: "rider-1" },
+    );
+
+    expect(collected.settlementStatus.riderPayout).toBe("COMPLETED");
+    expect(collected.financeFlags.riderPayoutQueued).toBe(true);
+    expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledTimes(1);
   });
 
   it("backfills paymentBreakdown snapshots when missing", async () => {

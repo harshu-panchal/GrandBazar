@@ -360,7 +360,14 @@ const CashCollection = () => {
                                     <tr key={log.id} className="group hover:bg-slate-50/40 transition-all">
                                         <td className="px-6 py-5 pl-8 text-[10px] font-black text-slate-400 uppercase tracking-tighter">{log.id}</td>
                                         <td className="px-6 py-5 text-sm font-bold text-slate-900">{log.rider}</td>
-                                        <td className="px-6 py-5 text-center text-sm font-black text-brand-600">₹{log.amount.toLocaleString()}</td>
+                                        <td className="px-6 py-5 text-center text-sm font-black text-brand-600">
+                                            ₹{log.amount.toLocaleString()}
+                                            {Number(log.unappliedAmount || 0) > 0 && (
+                                                <span className="block text-[10px] font-bold text-amber-700">
+                                                    ₹{Number(log.unappliedAmount).toLocaleString()} unallocated
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-5">
                                             <Badge variant="secondary" className="text-[9px] font-black px-2 py-0.5 uppercase">
                                                 {log.method}
@@ -460,7 +467,15 @@ const CashCollection = () => {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <span className="text-sm font-black text-slate-700">₹{item.amount.toLocaleString()}</span>
+                                            <div className="text-right">
+                                                <span className="text-sm font-black text-slate-700">₹{item.amount.toLocaleString()}</span>
+                                                <p className="text-[9px] font-bold text-slate-400">
+                                                    Remit ₹{Number(item.amountNet ?? item.amount ?? 0).toLocaleString()}
+                                                    {Number(item.riderCommissionRetained || 0) > 0
+                                                        ? ` · Rider ₹${Number(item.riderCommissionRetained).toLocaleString()}`
+                                                        : ""}
+                                                </p>
+                                            </div>
                                         </div>
                                     ))
                                 ) : (
