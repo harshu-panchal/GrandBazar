@@ -54,7 +54,7 @@
     "dotenv": "latest",
     "exceljs": "^4.4.0",
     "express": "latest",
-    "firebase-admin": "14.3.0",
+    "firebase-admin": "13.10.0",
     "helmet": "latest",
     "ioredis": "latest",
     "joi": "latest",
