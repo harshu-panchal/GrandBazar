@@ -20,7 +20,7 @@ import { NOTIFICATION_EVENTS } from "./notification.constants.js";
 import { deliverNotificationById } from "./notification.worker.js";
 
 function resolveRole(req) {
-  return normalizeNotificationRole(req?.user?.role);
+  return normalizeNotificationRole(req?.user?.role, req?.user?.scope);
 }
 
 const BROADCAST_AUDIENCES = Object.freeze({

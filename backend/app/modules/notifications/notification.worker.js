@@ -26,6 +26,25 @@ function failedCodeOf(responseItem) {
   return String(responseItem?.error?.code || "").trim();
 }
 
+function failureReasonForResponses(responses = []) {
+  const failures = responses
+    .filter((response) => !response?.success)
+    .map((response) => {
+      const code = failedCodeOf(response) || "messaging/unknown-error";
+      const message = String(response?.error?.message || "").trim();
+      return message ? `${code}: ${message}` : code;
+    });
+
+  const uniqueFailures = [...new Set(failures)];
+  if (!uniqueFailures.length) {
+    return "FCM delivery failed without a provider error";
+  }
+
+  // Keep the database field useful without allowing an unexpectedly large
+  // provider response to inflate every notification document.
+  return `FCM delivery failed: ${uniqueFailures.join(" | ")}`.slice(0, 1000);
+}
+
 function shouldRetryForResponses(responses = []) {
   if (!responses.length) return true;
   for (const response of responses) {
@@ -192,9 +211,10 @@ export async function deliverNotificationById(notificationId) {
   const responses = fcmResponse?.responses || [];
   const invalidTokens = await deactivateInvalidTokens(tokens, responses);
   const status = sent > 0 ? "sent" : "failed";
+  const providerFailureReason = failureReasonForResponses(responses);
   const update = {
     status,
-    failureReason: status === "failed" ? "Failed to deliver notification" : "",
+    failureReason: status === "failed" ? providerFailureReason : "",
     deliveryStats: {
       attempted,
       sent,
@@ -214,7 +234,9 @@ export async function deliverNotificationById(notificationId) {
   });
 
   if (sent === 0 && shouldRetryForResponses(responses)) {
-    throw new Error("All notification sends failed");
+    const error = new Error(providerFailureReason);
+    error.code = "fcm/all-sends-failed";
+    throw error;
   }
 }
 

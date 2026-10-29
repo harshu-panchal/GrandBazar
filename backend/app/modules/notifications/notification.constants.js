@@ -117,13 +117,19 @@ export const INVALID_FCM_TOKEN_CODES = new Set([
   "messaging/registration-token-not-registered",
 ]);
 
-export function normalizeNotificationRole(role) {
+export function normalizeNotificationRole(role, scope = "") {
   const value = String(role || "").trim().toLowerCase();
+  const normalizedScope = String(scope || "").trim().toLowerCase();
+  // Admin JWTs carry scope="admin" even when their role is a dynamic staff
+  // role (for example accountant, assistant, or a custom role name).
+  if (normalizedScope === "admin") return NOTIFICATION_ROLES.ADMIN;
   if (value === "user") return NOTIFICATION_ROLES.CUSTOMER;
   if (value === "customer") return NOTIFICATION_ROLES.CUSTOMER;
   if (value === "seller") return NOTIFICATION_ROLES.SELLER;
   if (value === "delivery") return NOTIFICATION_ROLES.DELIVERY;
-  if (value === "admin") return NOTIFICATION_ROLES.ADMIN;
+  if (["admin", "superadmin", "accountant", "assistant"].includes(value)) {
+    return NOTIFICATION_ROLES.ADMIN;
+  }
   return null;
 }
 

@@ -82,8 +82,8 @@ describe("notification worker invalid token cleanup", () => {
     mockPushTokenFind.mockReturnValue({
       sort: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([
-          { _id: "token-1", token: "token-good" },
-          { _id: "token-2", token: "token-bad" },
+          { _id: "token-1", token: "token-good", platform: "web" },
+          { _id: "token-2", token: "token-bad", platform: "app" },
         ]),
       }),
     });
@@ -126,6 +126,39 @@ describe("notification worker invalid token cleanup", () => {
       expect.objectContaining({
         $set: expect.objectContaining({
           status: "sent",
+        }),
+      }),
+    );
+  });
+
+  test("persists the Firebase error code and message when every send fails", async () => {
+    mockSendFCM.mockResolvedValue({
+      successCount: 0,
+      failureCount: 1,
+      responses: [
+        {
+          success: false,
+          error: {
+            code: "messaging/invalid-argument",
+            message: "Invalid JSON payload received.",
+          },
+        },
+      ],
+    });
+
+    await expect(
+      processNotificationJob({ data: { notificationId: "notif-1" } }),
+    ).rejects.toThrow(
+      "FCM delivery failed: messaging/invalid-argument: Invalid JSON payload received.",
+    );
+
+    expect(mockNotificationUpdateOne).toHaveBeenCalledWith(
+      { _id: "notif-1" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: "failed",
+          failureReason:
+            "FCM delivery failed: messaging/invalid-argument: Invalid JSON payload received.",
         }),
       }),
     );

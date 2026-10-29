@@ -88,7 +88,11 @@ export async function sendFCM(tokens = [], payload = {}) {
   for (const chunk of chunks) {
     const result = await messaging.sendEachForMulticast({
       tokens: chunk,
-      collapseKey,
+      // collapseKey is an AndroidConfig field. Putting it at the message root
+      // makes the FCM v1 API reject the entire payload as invalid JSON.
+      android: {
+        collapseKey,
+      },
       notification: {
         title,
         body,

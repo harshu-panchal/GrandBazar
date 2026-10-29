@@ -130,11 +130,11 @@ const DashboardLayout = ({ children, navItems, title }) => {
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                 toast.success('New-order alerts enabled');
             }
-        } catch (error) {
-            console.warn('[push] Manual registration failed:', error?.message || error);
-        } finally {
             setShowNotifyBanner(false);
             sessionStorage.setItem('seller_notify_banner_dismissed', '1');
+        } catch (error) {
+            console.warn('[push] Manual registration failed:', error?.message || error);
+            toast.error(error?.message || 'Could not enable notifications. Please try again.');
         }
     };
 
