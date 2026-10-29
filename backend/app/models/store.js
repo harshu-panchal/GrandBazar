@@ -149,6 +149,15 @@ const storeSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    fssaiLicenseNumber: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    fssaiLicenseExpiry: {
+      type: Date,
+      default: null,
+    },
     accountHolder: {
       type: String,
       trim: true,

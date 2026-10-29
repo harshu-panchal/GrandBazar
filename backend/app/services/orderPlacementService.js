@@ -115,6 +115,7 @@ async function resolveFulfillmentMethodsForCheckout({
     if (!store) continue;
     const resolved = await resolveChosenFulfillmentMethod({
       store,
+      productIds: grouped.get(sellerId).map((item) => item.productId),
       requestedMethod: payload.fulfillmentMethod,
       customerLocation: address?.location,
       fulfillmentType,

@@ -808,7 +808,7 @@ export async function hydrateOrderItems(
 
   const productQuery = Product.find({ _id: { $in: productIds } })
     .select(
-      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule gstSlabOverride packagingCharge isPreorderEligible",
+      "_id name salePrice price mainImage headerId categoryId subcategoryId sellerId status approvalStatus variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule gstSlabOverride gstStatus packagingCharge isPreorderEligible minOrderQuantity maxOrderQuantity handlingFlags deliveryOptions",
     )
     .lean();
   if (session) productQuery.session(session);
@@ -845,6 +845,20 @@ export async function hydrateOrderItems(
     }
 
     const quantity = normalizeLineQuantity(item.quantity);
+    const minimumQuantity = Math.max(1, Number(product.minOrderQuantity || 1));
+    const maximumQuantity = product.maxOrderQuantity == null
+      ? null
+      : Number(product.maxOrderQuantity);
+    if (quantity < minimumQuantity) {
+      const err = new Error(`${product.name} requires a minimum quantity of ${minimumQuantity}`);
+      err.statusCode = 400;
+      throw err;
+    }
+    if (maximumQuantity !== null && quantity > maximumQuantity) {
+      const err = new Error(`${product.name} allows a maximum quantity of ${maximumQuantity}`);
+      err.statusCode = 400;
+      throw err;
+    }
     // `salePrice || price` would charge the sale price even when it is ABOVE
     // the base price, so a mis-entered sale price billed the customer more
     // than the cart showed them. effectiveUnitPrice ignores a sale price that
@@ -901,6 +915,9 @@ export async function hydrateOrderItems(
         product.gstSlabOverride === null || product.gstSlabOverride === undefined
           ? null
           : Number(product.gstSlabOverride),
+      gstStatus: product.gstStatus || "",
+      handlingFlags: product.handlingFlags || {},
+      deliveryOptions: product.deliveryOptions || { mode: "inherit" },
       // Optional seller-set packaging charge for this specific product. null
       // = not set, falls back to the category-hierarchy packing fee (see
       // calculatePackingFee) instead of being treated as "free packaging".
@@ -1063,7 +1080,7 @@ export async function generateOrderPaymentBreakdown({
   const storeId = sellerIds[0];
   const { owner } = await loadStoreOwnerBusinessModel(storeId, { session });
   const storePackagingQuery = Store.findById(storeId)
-    .select("packagingCharge packagingChargeEnabled shopName city state applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
+    .select("packagingCharge packagingChargeEnabled shopName city state gstNumber gstExempt applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule")
     .lean();
   if (session) storePackagingQuery.session(session);
   const storeDoc = await storePackagingQuery;
@@ -1277,12 +1294,14 @@ export async function generateOrderPaymentBreakdown({
       commission.adminCommission,
     );
 
-    const gstResolution = resolveGstSlabForLineItem({
+    const gstResolution = storeDoc?.gstExempt || !String(storeDoc?.gstNumber || "").trim()
+      ? { gstSlab: 0, source: "seller_gst_status" }
+      : resolveGstSlabForLineItem({
       productGstSlabOverride: item.gstSlabOverride,
       headerCategory,
       level2Category,
       subcategory,
-    });
+      });
     const lineGst = calculateLineItemGst(
       commission.itemSubtotal,
       gstResolution.gstSlab,

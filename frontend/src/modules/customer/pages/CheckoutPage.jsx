@@ -1567,6 +1567,7 @@ const CheckoutPage = () => {
 
             <FulfillmentMethodPicker
               sellerId={primarySellerId}
+              productIds={cart.map((item) => item.productId?._id || item.productId || item.id || item._id).filter(Boolean).map(String)}
               fulfillmentType={fulfillmentType}
               customerLocation={currentLocation}
               value={fulfillmentMethod}

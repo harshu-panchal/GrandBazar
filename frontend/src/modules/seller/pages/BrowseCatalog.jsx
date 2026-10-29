@@ -168,6 +168,7 @@ const BrowseCatalog = () => {
     const items = catalogItems
       .filter(item => selectedItems.includes(item._id || item.id))
       .map(item => ({
+        canonical: item,
         catalogProductId: item._id || item.id,
         name: item.name,
         mainImage: item.mainImage,
@@ -828,6 +829,14 @@ const BrowseCatalog = () => {
                         </div>
                       )}
                     </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-600">
+                      <span className="rounded bg-white px-2 py-1">HSN: {selectedProduct.hsnCode || "—"}</span>
+                      <span className="rounded bg-white px-2 py-1">GST: {selectedProduct.gstStatus || "—"}{selectedProduct.gstSlabOverride != null ? ` · ${selectedProduct.gstSlabOverride}%` : ""}</span>
+                      <span className="rounded bg-white px-2 py-1">Unit: {selectedProduct.netQuantity || "—"} {selectedProduct.unit || ""}</span>
+                      <span className="rounded bg-white px-2 py-1">Origin: {selectedProduct.legal?.countryOfOrigin || "—"}</span>
+                      <span className="rounded bg-white px-2 py-1">FSSAI: {selectedProduct.legal?.fssaiLicenseNumber || (selectedProduct.legal?.inheritStoreFssai ? "Store licence" : "—")}</span>
+                      <span className="rounded bg-white px-2 py-1">Search names: {(selectedProduct.alternativeNames || selectedProduct.searchSynonyms || []).join(", ") || "—"}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1313,6 +1322,18 @@ const BrowseCatalog = () => {
                         </>
                       )}
                     </div>
+
+                    <details className="rounded-lg bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
+                      <summary className="cursor-pointer font-bold uppercase tracking-wide">Catalogue legal, search &amp; tax snapshot</summary>
+                      <div className="mt-2 grid gap-1 sm:grid-cols-3">
+                        <span>HSN: {item.canonical?.hsnCode || "—"}</span>
+                        <span>GST: {item.canonical?.gstStatus || "—"}{item.canonical?.gstSlabOverride != null ? ` · ${item.canonical.gstSlabOverride}%` : ""}</span>
+                        <span>Unit: {item.canonical?.netQuantity || "—"} {item.canonical?.unit || ""}</span>
+                        <span>Origin: {item.canonical?.legal?.countryOfOrigin || "—"}</span>
+                        <span>FSSAI: {item.canonical?.legal?.fssaiLicenseNumber || (item.canonical?.legal?.inheritStoreFssai ? "Store licence" : "—")}</span>
+                        <span>Names: {(item.canonical?.alternativeNames || item.canonical?.searchSynonyms || []).join(", ") || "—"}</span>
+                      </div>
+                    </details>
 
                     {item.variants.length > 0 && (
                       <div className="space-y-2 pl-2 border-l-2 border-slate-100">

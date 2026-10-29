@@ -11,7 +11,7 @@ import {
 } from "../services/preOrderCampaignService.js";
 
 const CART_POPULATE_FIELDS =
-  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight productDisclaimer isCurrentlyAvailable isPublished isHidden";
+  "name slug price salePrice customerPrice customerSalePrice mainImage stock status headerId categoryId subcategoryId sellerId variants addons weight productDisclaimer isCurrentlyAvailable isPublished isHidden minOrderQuantity maxOrderQuantity preorderExpectedDate";
 
 const CUSTOMER_VISIBLE_PRODUCT_MATCH = {
   status: "active",
@@ -33,7 +33,7 @@ async function getCustomerVisibleProductById(productId) {
     _id: productId,
     ...CUSTOMER_VISIBLE_PRODUCT_MATCH,
   })
-    .select("_id name sellerId price salePrice customerPrice customerSalePrice stock variants")
+    .select("_id name sellerId price salePrice customerPrice customerSalePrice stock variants minOrderQuantity maxOrderQuantity")
     .lean();
 }
 
@@ -163,6 +163,10 @@ export const addToCart = async (req, res) => {
 
     // Reject out-of-stock adds server-side (client-side guard alone can be bypassed).
     const requestedQuantity = Math.max(1, Number(quantity) || 1);
+    const minimumQuantity = Math.max(1, Number(customerVisibleProduct.minOrderQuantity || 1));
+    const maximumQuantity = customerVisibleProduct.maxOrderQuantity == null
+      ? null
+      : Number(customerVisibleProduct.maxOrderQuantity);
     if (normalizedVariantSku) {
       const matchedVariant = Array.isArray(customerVisibleProduct.variants)
         ? customerVisibleProduct.variants.find(
@@ -240,15 +244,26 @@ export const addToCart = async (req, res) => {
     );
 
     if (itemIndex > -1) {
-      cart.items[itemIndex].quantity += quantity;
+      const nextQuantity = Number(cart.items[itemIndex].quantity || 0) + requestedQuantity;
+      if (nextQuantity < minimumQuantity || (maximumQuantity !== null && nextQuantity > maximumQuantity)) {
+        return handleResponse(res, 400, maximumQuantity !== null
+          ? `${customerVisibleProduct.name} allows ${minimumQuantity}-${maximumQuantity} per order`
+          : `${customerVisibleProduct.name} requires at least ${minimumQuantity} per order`);
+      }
+      cart.items[itemIndex].quantity = nextQuantity;
       cart.items[itemIndex].campaignId = incomingCampaignId;
       cart.items[itemIndex].priceSnapshot = incomingPriceSnapshot;
       cart.items[itemIndex].sellerId = incomingSellerId;
     } else {
+      if (requestedQuantity < minimumQuantity || (maximumQuantity !== null && requestedQuantity > maximumQuantity)) {
+        return handleResponse(res, 400, maximumQuantity !== null
+          ? `${customerVisibleProduct.name} allows ${minimumQuantity}-${maximumQuantity} per order`
+          : `${customerVisibleProduct.name} requires at least ${minimumQuantity} per order`);
+      }
       cart.items.push({
         productId,
         variantSku: normalizedVariantSku,
-        quantity,
+        quantity: requestedQuantity,
         campaignId: incomingCampaignId,
         priceSnapshot: incomingPriceSnapshot,
         sellerId: incomingSellerId,
@@ -318,6 +333,13 @@ export const updateQuantity = async (req, res) => {
         const product = await getCustomerVisibleProductById(cart.items[itemIndex].productId);
         if (!product) {
           return handleResponse(res, 404, "Product is no longer available");
+        }
+        const minimumQuantity = Math.max(1, Number(product.minOrderQuantity || 1));
+        const maximumQuantity = product.maxOrderQuantity == null ? null : Number(product.maxOrderQuantity);
+        if (requestedQuantity < minimumQuantity || (maximumQuantity !== null && requestedQuantity > maximumQuantity)) {
+          return handleResponse(res, 400, maximumQuantity !== null
+            ? `${product.name} allows ${minimumQuantity}-${maximumQuantity} per order`
+            : `${product.name} requires at least ${minimumQuantity} per order`);
         }
         if (normalizedVariantSku) {
           const matchedVariant = Array.isArray(product.variants)

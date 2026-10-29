@@ -11,6 +11,13 @@ import { enqueueProductIndex } from "../services/searchSyncService.js";
 import { computeCustomerPriceFieldsForWrite } from "../services/finance/customerPriceService.js";
 import { ensureDefaultVariant } from "../services/catalogClaimService.js";
 import { assertCanAddProduct } from "../services/subscriptionService.js";
+import {
+  normalizeProductFormPayload,
+  validateProductFormPayload,
+  catalogFieldsForProduct,
+  catalogSyncFields,
+} from "../services/productFormService.js";
+import { recordAuditLog } from "../services/auditTrailService.js";
 
 // Helper to auto-generate SKU prefix
 function makeProductSku(name, index = 1) {
@@ -160,6 +167,8 @@ async function applyCustomerPricing(product, overrides = {}) {
 export const createCatalogProduct = async (req, res) => {
   try {
     const productData = { ...req.body };
+    const useV2Validation = productData.formVersion === "v2" || productData.formVersion === 2;
+    const saveIntent = String(productData.saveIntent || "publish").toLowerCase();
     const files = req.files || [];
 
     // Upload files if present in multipart
@@ -223,19 +232,41 @@ export const createCatalogProduct = async (req, res) => {
           name: String(v.name || "").trim(),
           weight: String(v.weight || "").trim(),
           sku: String(v.sku || "").trim(),
+          barcode: String(v.barcode || "").trim(),
+          unit: String(v.unit || "").trim().toLowerCase(),
+          netQuantity: v.netQuantity === "" || v.netQuantity === undefined ? null : Number(v.netQuantity),
         }));
+    }
+
+    Object.assign(productData, normalizeProductFormPayload(productData));
+    if (Array.isArray(productData.searchSynonyms)) {
+      productData.alternativeNames = productData.searchSynonyms;
+      delete productData.searchSynonyms;
+    }
+
+    if (useV2Validation) {
+      if (saveIntent === "draft") productData.status = "inactive";
+      const validationErrors = validateProductFormPayload(productData, {
+        draft: saveIntent === "draft",
+        catalog: true,
+      });
+      if (Object.keys(validationErrors).length > 0) {
+        return handleResponse(res, 400, "Please complete the required catalogue fields", {
+          fieldErrors: validationErrors,
+        });
+      }
     }
 
     if (!productData.name) {
       return handleResponse(res, 400, "Catalog product name is required");
     }
-    if (!productData.description) {
+    if (!(useV2Validation && saveIntent === "draft") && !productData.description) {
       return handleResponse(res, 400, "Catalog product description is required");
     }
-    if (!productData.headerId || !productData.categoryId || !productData.subcategoryId) {
+    if (!(useV2Validation && saveIntent === "draft") && (!productData.headerId || !productData.categoryId || !productData.subcategoryId)) {
       return handleResponse(res, 400, "Category hierarchy (header, category, subcategory) is required");
     }
-    if (!productData.mainImage) {
+    if (!(useV2Validation && saveIntent === "draft") && !productData.mainImage) {
       return handleResponse(res, 400, "Catalog main image is required");
     }
     if (productDisclaimerTooLong(productData.productDisclaimer)) {
@@ -252,6 +283,8 @@ export const createCatalogProduct = async (req, res) => {
     }
 
     productData.createdBy = req.user.id;
+    delete productData.formVersion;
+    delete productData.saveIntent;
     Object.assign(productData, normalizeCatalogCommissionFields(productData));
 
     const catalogProduct = await CatalogProduct.create(productData);
@@ -275,7 +308,18 @@ export const createCatalogProductsBulk = async (req, res) => {
     const createdBy = req.user.id;
     const validatedProducts = [];
 
-    for (const item of products) {
+    for (const rawItem of products) {
+      const item = normalizeProductFormPayload(rawItem);
+      if (Array.isArray(item.searchSynonyms)) item.alternativeNames = item.searchSynonyms;
+      if (rawItem.formVersion === "v2" || rawItem.formVersion === 2) {
+        const validationErrors = validateProductFormPayload(item, { draft: false, catalog: true });
+        if (Object.keys(validationErrors).length > 0) {
+          return handleResponse(res, 400, `Validation failed for item: ${item.name || "Unnamed"}`, {
+            itemName: item.name || "Unnamed",
+            fieldErrors: validationErrors,
+          });
+        }
+      }
       if (!item.name || !item.description || !item.mainImage || !item.headerId || !item.categoryId || !item.subcategoryId) {
         return handleResponse(
           res,
@@ -304,6 +348,30 @@ export const createCatalogProductsBulk = async (req, res) => {
         productDisclaimer: normalizeProductDisclaimer(item.productDisclaimer),
         tags: Array.isArray(item.tags) ? item.tags : [],
         alternativeNames: Array.isArray(item.alternativeNames) ? item.alternativeNames : [],
+        localizedNames: Array.isArray(item.localizedNames) ? item.localizedNames : [],
+        unit: item.unit || "",
+        netQuantity: item.netQuantity ?? null,
+        barcode: item.barcode || "",
+        hsnCode: item.hsnCode || "",
+        foodType: item.foodType || "",
+        gstStatus: item.gstStatus || "",
+        gstSlabOverride: item.gstSlabOverride ?? null,
+        isTaxInclusive: false,
+        variableWeight: item.variableWeight === true,
+        legal: item.legal || {},
+        preparationTimeMinutes: item.preparationTimeMinutes ?? null,
+        dimensions: item.dimensions || {},
+        returnPolicy: item.returnPolicy || "inherit",
+        handlingFlags: item.handlingFlags || {},
+        deliveryOptions: item.deliveryOptions || {},
+        variants: Array.isArray(item.variants) ? item.variants.map((variant) => ({
+          name: variant.name,
+          weight: variant.weight || "",
+          sku: variant.sku || "",
+          barcode: variant.barcode || "",
+          unit: variant.unit || "",
+          netQuantity: variant.netQuantity ?? null,
+        })) : [],
         mainImage: item.mainImage,
         galleryImages: Array.isArray(item.galleryImages) ? item.galleryImages : [],
         headerId: item.headerId,
@@ -338,7 +406,13 @@ export const getCatalogProducts = async (req, res) => {
     }
 
     if (search) {
-      query.name = { $regex: search, $options: "i" };
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { brand: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+        { alternativeNames: { $regex: search, $options: "i" } },
+        { "localizedNames.name": { $regex: search, $options: "i" } },
+      ];
     }
     if (headerId && headerId !== "all") query.headerId = headerId;
     if (categoryId && categoryId !== "all") query.categoryId = categoryId;
@@ -445,6 +519,8 @@ export const updateCatalogProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const { syncToSellers, ...updateData } = req.body;
+    const useV2Validation = updateData.formVersion === "v2" || updateData.formVersion === 2;
+    const saveIntent = String(updateData.saveIntent || "publish").toLowerCase();
     const files = req.files || [];
 
     const catalogProduct = await CatalogProduct.findById(id);
@@ -508,8 +584,32 @@ export const updateCatalogProduct = async (req, res) => {
           name: String(v.name || "").trim(),
           weight: String(v.weight || "").trim(),
           sku: String(v.sku || "").trim(),
+          barcode: String(v.barcode || "").trim(),
+          unit: String(v.unit || "").trim().toLowerCase(),
+          netQuantity: v.netQuantity === "" || v.netQuantity === undefined ? null : Number(v.netQuantity),
         }));
     }
+
+    Object.assign(updateData, normalizeProductFormPayload(updateData));
+    if (Array.isArray(updateData.searchSynonyms)) {
+      updateData.alternativeNames = updateData.searchSynonyms;
+      delete updateData.searchSynonyms;
+    }
+
+    if (useV2Validation) {
+      if (saveIntent === "draft") updateData.status = "inactive";
+      const validationErrors = validateProductFormPayload(
+        { ...catalogProduct.toObject(), ...updateData },
+        { draft: saveIntent === "draft", catalog: true },
+      );
+      if (Object.keys(validationErrors).length > 0) {
+        return handleResponse(res, 400, "Please complete the required catalogue fields", {
+          fieldErrors: validationErrors,
+        });
+      }
+    }
+    delete updateData.formVersion;
+    delete updateData.saveIntent;
 
     if (updateData.productDisclaimer !== undefined) {
       if (productDisclaimerTooLong(updateData.productDisclaimer)) {
@@ -585,19 +685,7 @@ export const updateCatalogProduct = async (req, res) => {
 
     // Remaining catalogue fields (display/catalog data) still sync only when requested.
     if (syncToSellers === "true" || syncToSellers === true) {
-      Object.assign(fieldsToSync, {
-        name: updated.name,
-        description: updated.description,
-        brand: updated.brand,
-        weight: updated.weight,
-        productDisclaimer: updated.productDisclaimer || "",
-        tags: updated.tags,
-        mainImage: updated.mainImage,
-        galleryImages: updated.galleryImages,
-        headerId: updated.headerId,
-        categoryId: updated.categoryId,
-        subcategoryId: updated.subcategoryId,
-      });
+      Object.assign(fieldsToSync, catalogSyncFields(updated.toObject()));
     }
 
     if (Object.keys(fieldsToSync).length > 0) {
@@ -613,6 +701,18 @@ export const updateCatalogProduct = async (req, res) => {
         await enqueueProductIndex(prod._id.toString());
         await invalidate(`cache:catalog:product:${prod._id.toString()}`);
       }
+    }
+
+    if (syncToSellers === "true" || syncToSellers === true) {
+      void recordAuditLog({
+        actorId: req.user?.id || null,
+        action: "CATALOG_PRODUCT_SYNCED_TO_SELLERS",
+        targetType: "CatalogProduct",
+        targetId: id,
+        before: null,
+        after: fieldsToSync,
+        metadata: { syncedFields: Object.keys(fieldsToSync) },
+      });
     }
 
     try {
@@ -858,6 +958,9 @@ export const claimCatalogProduct = async (req, res) => {
 
     // Create the Product instance owned by the seller
     const newProduct = await Product.create({
+      ...catalogFieldsForProduct(
+        typeof catalogProduct.toObject === "function" ? catalogProduct.toObject() : catalogProduct,
+      ),
       catalogProductId: catalogProduct._id,
       sellerId,
       name: chosenName,
@@ -997,6 +1100,9 @@ export const bulkClaimCatalogProducts = async (req, res) => {
       }
 
       const newProduct = await Product.create({
+        ...catalogFieldsForProduct(
+          typeof catalogProduct.toObject === "function" ? catalogProduct.toObject() : catalogProduct,
+        ),
         catalogProductId: catalogProduct._id,
         sellerId,
         name: chosenName,

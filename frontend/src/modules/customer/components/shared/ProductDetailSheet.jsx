@@ -898,10 +898,10 @@ const ProductDetailSheet = () => {
                                                 <div className="grid grid-cols-2 gap-3 mt-1">
                                                     {[
                                                         { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh', emoji: '🏷️' },
-                                                        { label: 'Weight / Unit', value: selectedProduct?.weight || '1 unit', emoji: '⚖️' },
+                                                        { label: 'Weight / Unit', value: selectedProduct?.netQuantity ? `${selectedProduct.netQuantity} ${selectedProduct.unit || ''}` : (selectedProduct?.weight || '1 unit'), emoji: '⚖️' },
                                                         ...(selectedProduct?.shelfLife ? [{ label: 'Shelf Life', value: selectedProduct.shelfLife, emoji: '📅' }] : []),
-                                                        ...(selectedProduct?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.countryOfOrigin, emoji: '🇮🇳' }] : []),
-                                                        ...(selectedProduct?.fssaiLicense ? [{ label: 'FSSAI License', value: selectedProduct.fssaiLicense, emoji: '🛡️' }] : []),
+                                                        ...(selectedProduct?.legal?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.legal.countryOfOrigin, emoji: '🇮🇳' }] : []),
+                                                        ...((selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct?.legal?.fssaiLicenseNumber) ? [{ label: 'FSSAI License', value: selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct.legal.fssaiLicenseNumber, emoji: '🛡️' }] : []),
                                                         { label: 'Customer Care', value: supportEmail, emoji: '📧' }
                                                     ].map((d) => (
                                                         <div key={d.label} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 group hover:bg-white hover:shadow-sm transition-all">
@@ -1231,10 +1231,10 @@ const ProductDetailSheet = () => {
                                         <div className="grid grid-cols-2 gap-3 mt-1">
                                             {[
                                                 { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh' },
-                                                { label: 'Weight / Unit', value: selectedProduct?.weight || '1 unit' },
+                                                { label: 'Weight / Unit', value: selectedProduct?.netQuantity ? `${selectedProduct.netQuantity} ${selectedProduct.unit || ''}` : (selectedProduct?.weight || '1 unit') },
                                                 ...(selectedProduct?.shelfLife ? [{ label: 'Shelf Life', value: selectedProduct.shelfLife }] : []),
-                                                ...(selectedProduct?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.countryOfOrigin }] : []),
-                                                ...(selectedProduct?.fssaiLicense ? [{ label: 'FSSAI License', value: selectedProduct.fssaiLicense }] : []),
+                                                ...(selectedProduct?.legal?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.legal.countryOfOrigin }] : []),
+                                                ...((selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct?.legal?.fssaiLicenseNumber) ? [{ label: 'FSSAI License', value: selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct.legal.fssaiLicenseNumber }] : []),
                                                 { label: 'Customer Care', value: supportEmail }
                                             ].map((d) => (
                                                 <div key={d.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">

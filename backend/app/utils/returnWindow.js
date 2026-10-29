@@ -63,7 +63,7 @@ export async function resolveCategoryWindowOverrideHours(productIds = []) {
   ]);
 
   const products = await Product.find({ _id: { $in: ids } })
-    .select("_id name categoryId")
+    .select("_id name categoryId returnPolicy")
     .lean();
   const categoryIds = Array.from(
     new Set(products.map((p) => String(p.categoryId || "")).filter(Boolean)),
@@ -76,11 +76,20 @@ export async function resolveCategoryWindowOverrideHours(productIds = []) {
   const categoryById = new Map(categories.map((c) => [String(c._id), c]));
 
   const ineligibleProduct = products.find((p) => {
+    if (p.returnPolicy === "non_returnable") return true;
+    if (["returnable", "replace_only"].includes(p.returnPolicy)) return false;
     const cat = categoryById.get(String(p.categoryId || ""));
     return cat && cat.returnEligible === false;
   });
 
+  const inheritedCategoryIds = new Set(
+    products
+      .filter((p) => !p.returnPolicy || p.returnPolicy === "inherit")
+      .map((p) => String(p.categoryId || ""))
+      .filter(Boolean),
+  );
   const configuredWindows = categories
+    .filter((c) => inheritedCategoryIds.has(String(c._id)))
     .map((c) => c.refundWindowHours)
     // Number(null) is 0, not NaN — without this null/undefined check a
     // category that was explicitly saved with no window configured (as

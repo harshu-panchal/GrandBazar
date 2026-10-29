@@ -30,6 +30,8 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '@core/context/SettingsContext';
 import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
+import UnifiedProductForm from '@shared/components/product-form/UnifiedProductForm';
+import { toProductFormData } from '@shared/components/product-form/productFormModel';
 import {
     BulkRatesModal,
     EditableCell,
@@ -735,6 +737,27 @@ const ProductManagement = () => {
         return <Badge variant="success" className="text-[10px] px-1.5 py-0">Approved</Badge>;
     };
 
+    const saveUnifiedProduct = async (state, intent) => {
+        if (!editingItem && !state.sellerId) {
+            toast.error('Please select a seller / store');
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const payload = toProductFormData(state, { intent });
+            const response = editingItem
+                ? await adminApi.updateProduct(editingItem._id, payload)
+                : await adminApi.createProduct(payload);
+            toast.success(response?.data?.message || 'Product saved successfully');
+            setIsProductModalOpen(false);
+            fetchProducts(page);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to save product');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-2 duration-700 pb-16">
             {/* Page Header */}
@@ -1227,8 +1250,9 @@ const ProductManagement = () => {
             />
 
             {/* Super Detailed Modal */}
+            {isProductModalOpen && <div className="fixed inset-0 z-[1100] overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm md:p-8"><div className="mx-auto max-w-6xl"><UnifiedProductForm title={editingItem ? 'Edit store product' : 'Add store product'} initialData={editingItem || undefined} categories={categories} products={products} sellerOptions={sellers} admin linkedCatalog={Boolean(editingItem?.catalogProductId)} saving={isSaving} onCancel={() => setIsProductModalOpen(false)} onSave={saveUnifiedProduct} /></div></div>}
             <AnimatePresence>
-                {isProductModalOpen && (
+                {isProductModalOpen && editingItem?.__legacyForm === true && (
                     <div
                         className="fixed inset-0 z-[1000] flex items-center justify-center p-4 lg:p-12 overflow-hidden overscroll-contain touch-pan-y"
                         onWheelCapture={(e) => e.stopPropagation()}

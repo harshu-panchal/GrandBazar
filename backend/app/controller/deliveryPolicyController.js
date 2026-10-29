@@ -17,7 +17,7 @@ import { DEFAULT_DELIVERY_POLICY, DEFAULT_AVAILABILITY } from "../constants/deli
 
 export const getDeliveryOptionsForStore = async (req, res) => {
   try {
-    const { sellerId, lat, lng, fulfillmentType } = req.query;
+    const { sellerId, lat, lng, fulfillmentType, productIds } = req.query;
     if (!sellerId) {
       return handleResponse(res, 400, "sellerId is required");
     }
@@ -29,6 +29,7 @@ export const getDeliveryOptionsForStore = async (req, res) => {
 
     const result = await resolveDeliveryOptions({
       store,
+      productIds: String(productIds || "").split(",").map((id) => id.trim()).filter(Boolean),
       customerLocation,
       fulfillmentType: fulfillmentType || "instant",
     });

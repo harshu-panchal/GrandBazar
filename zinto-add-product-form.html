@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zinto – Add Product (sample)</title>
+<style>
+:root{--bg:#f3f4f8;--card:#fff;--ink:#151a2d;--mute:#6b7390;--line:#e3e6f0;--in:#f1f4f9;--red:#dc2626;--rs:#fdeeee;--ok:#059669;--warn:#d97706;--dark:#10172b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0f1d;--card:#131a2e;--ink:#e9edfa;--mute:#98a2c3;--line:#242d48;--in:#1a2240;--red:#f87171;--rs:#2a1a24;--ok:#34d399;--warn:#fbbf24;--dark:#e9edfa}}
+:root[data-theme="dark"]{--bg:#0b0f1d;--card:#131a2e;--ink:#e9edfa;--mute:#98a2c3;--line:#242d48;--in:#1a2240;--red:#f87171;--rs:#2a1a24;--ok:#34d399;--warn:#fbbf24;--dark:#e9edfa}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.app{max-width:1180px;margin:16px auto;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.hd{display:flex;gap:12px;align-items:center;padding:16px 22px;border-bottom:1px solid var(--line)}
+.logo{width:42px;height:42px;border-radius:12px;background:var(--dark);color:var(--card);display:grid;place-items:center;font-size:20px}
+.hd h1{margin:0;font-size:20px}.hd small{color:var(--mute);font-weight:600;letter-spacing:.05em;font-size:11px}
+.body{display:grid;grid-template-columns:270px 1fr}@media(max-width:820px){.body{grid-template-columns:1fr}}
+.side{padding:16px;border-right:1px solid var(--line);background:color-mix(in srgb,var(--in) 40%,var(--card))}
+.nav button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--mute);font:inherit;font-weight:600;padding:10px 12px;border-radius:12px;cursor:pointer}
+.nav button.on{background:var(--card);color:var(--red);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.sc{background:var(--rs);border:1px solid color-mix(in srgb,var(--red) 20%,transparent);border-radius:16px;padding:12px 14px;margin-top:12px}
+.sc label{display:flex;justify-content:space-between;align-items:center;color:var(--red);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.sc select{width:100%;margin-top:4px;background:transparent;border:0;color:var(--red);font:inherit;font-weight:800;font-size:15px}
+.ck{margin-top:12px;font-size:12px}.ck div{display:flex;gap:6px;padding:2px 0}.ck .y{color:var(--ok)}.ck .n{color:var(--red)}
+.bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ok);width:0}
+.main{padding:18px 22px;min-height:520px}.pn{display:none}.pn.on{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.g2{grid-template-columns:1fr}}
+.f{margin-bottom:14px}.f>label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mute);text-transform:uppercase;margin-bottom:5px}
+.f>label b{color:var(--red)}.f small{display:block;color:var(--mute);font-size:12px;margin-top:4px}
+input,select,textarea{width:100%;background:var(--in);border:1px solid transparent;color:var(--ink);border-radius:12px;padding:10px 12px;font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(--red) 40%,transparent)}
+textarea{min-height:80px;resize:vertical}input[type=checkbox],input[type=radio]{width:auto}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--rs);color:var(--red)}
+.box{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px}.box h3{margin:0 0 8px;font-size:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{background:var(--rs);color:var(--red);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}.chip button{border:0;background:none;color:inherit;cursor:pointer;margin-left:4px}
+.btn{border:0;border-radius:12px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer;background:var(--in);color:var(--ink)}
+.cta{background:var(--dark);color:var(--card);padding:13px 26px;border-radius:14px}
+.pv{background:var(--rs);border-radius:14px;padding:12px 14px}.pv b{font-size:20px}.kv{display:flex;justify-content:space-between;font-size:13px;padding:2px 0}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--red);font-weight:700}
+.ft{display:flex;justify-content:flex-end;gap:14px;align-items:center;padding:14px 22px;border-top:1px solid var(--line)}
+.ph{display:inline-grid;place-items:center;width:86px;height:86px;border:2px dashed var(--line);border-radius:14px;margin:0 8px 8px 0;font-size:11px;color:var(--mute);text-align:center}.ph.f{border-style:solid;background:var(--in);font-size:24px}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:var(--mute);font-size:11px;text-transform:uppercase;padding:6px}td{padding:4px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--dark);color:var(--card);padding:12px 18px;border-radius:12px;display:none;max-width:92%;z-index:9}
+.err{background:var(--rs);border:1px solid var(--red);color:var(--red);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:none}
+.note{color:var(--mute);font-size:12px}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="hd"><div class="logo">📦</div><div><h1>Add Product</h1><small>SYSTEM › PENDING SKU · <span id="code">ZNT-0000</span></small></div></div>
+<div class="body">
+<aside class="side">
+<div class="nav" id="nav"></div>
+<div class="sc"><label>Status</label><select id="status"><option>Draft</option><option>Pending review</option><option>Published</option><option>Paused</option></select></div>
+<div class="sc"><label>Featured <input type="checkbox" id="feat"></label></div>
+<div class="sc"><label>Future / Pre-order <input type="checkbox" id="pre"></label></div>
+<div class="ck"><b>Publish checklist</b> <span id="cc" class="note"></span><div class="bar"><i id="cb"></i></div><div id="cl" style="display:grid"></div></div>
+</aside>
+<section class="main">
+<div class="err" id="err"></div>
+
+<div class="pn" id="p-general">
+<div class="f"><label>Seller / Store <b>*</b></label><select id="seller"><option value="">Select the seller…</option><option value="u1">Fresh Basket · Unregistered (enrolment ✓)</option><option value="r1">Daily Dairy · GST registered</option><option value="u2">Green Mart · Unregistered (enrolment ✓)</option><option value="z">Zinto-owned product (platform)</option></select><small>Mandatory. Every product needs a legal seller, or must be marked as a Zinto-owned product.</small></div>
+<div class="g2"><div class="f"><label>Product title <b>*</b> <span class="note">(2–3 lines allowed)</span></label><textarea id="title" rows="3" placeholder="e.g. Premium Basmati Rice 5 kg"></textarea></div>
+<div class="f"><label>Web address</label><input id="slug" readonly placeholder="/product/premium-basmati-rice"></div></div>
+<div class="f"><label>About this item</label><textarea id="about" placeholder="Describe the item here…"></textarea></div>
+<div class="g2"><div class="f"><label>Category <b>*</b></label><select id="cat"></select></div><div class="f"><label>Sub-category <b>*</b></label><select id="sub"></select></div>
+<div class="f"><label>Food type <b>*</b></label><select id="vt"><option value="">Select…</option><option>Veg</option><option>Non-veg</option><option>Egg</option><option>Not a food item</option></select></div>
+<div class="f"><label>Brand name</label><input id="brand" placeholder="e.g. Amul"></div>
+<div class="f"><label>Link to master catalog product</label><input id="master" placeholder="Search master catalog (avoids duplicates, enables comparison)"></div>
+<div class="f"><label>Barcode (EAN / GTIN)</label><input id="ean" placeholder="Optional for loose items"></div>
+<div class="f"><label>Packaging charge (₹)</label><input id="pack" type="number" placeholder="Optional – leave blank for default"></div></div>
+<div class="f"><label>Product disclaimer (optional) <span class="note" id="dc">0/1000</span></label><textarea id="dis" maxlength="1000" placeholder="Shown to customers at the end of checkout when this product is in their cart."></textarea>
+<label class="row" style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink);margin-top:6px"><input type="checkbox" id="ack"> Customer must tick “I have read this” before continuing</label></div>
+</div>
+
+<div class="pn" id="p-search">
+<div class="box"><h3>Synonyms / regional names</h3><p class="note" style="margin:0 0 8px">Press Enter or comma to add. Example for “Rasagola”: Rosogulla, Rasgulla, Roshogola, Pahala Rasagola.</p><input id="synin" placeholder="Type a name and press Enter"><div class="chips" id="syn"></div></div>
+<div class="box"><h3>Names in other languages (native script)</h3><div id="langs"></div><button class="btn" onclick="addLang()">+ Add language</button></div>
+<div class="box"><h3>Search tags</h3><input id="tags" placeholder="e.g. festival sweet, for fasting, sugar syrup"></div>
+<div class="box"><h3>🔎 Test the search</h3><input id="ts" placeholder="Type what a customer would search, e.g. rasgulla"><p id="tr" class="note" style="margin:8px 0 0"></p></div>
+</div>
+
+<div class="pn" id="p-price">
+<div class="g2"><div class="f"><label>MRP (₹) <b>*</b></label><input id="mrp" type="number" min="0"></div><div class="f"><label>Selling price (₹) <b>*</b></label><input id="price" type="number" min="0"></div>
+<div class="f"><label>HSN code <b>*</b></label><input id="hsn" placeholder="e.g. 1006 (rice)"><small>Used for tax filing. An AI suggestion can be added later.</small></div>
+<div class="f"><label>Seller GST status</label><input id="sgst" readonly value="Select a seller first"></div>
+<div class="f"><label>GST status <b>*</b></label><select id="gs"><option value="">Select…</option><option>Taxable</option><option>Exempt</option><option>Nil-rated</option><option>Non-GST</option></select></div>
+<div class="f"><label>GST rate (%)</label><select id="gr"><option>0</option><option>5</option><option>12</option><option>18</option><option>28</option></select></div></div>
+<label class="row"><input type="checkbox" id="incl" checked> Selling price already includes GST</label><p class="note">If the seller is unregistered, GST is not charged (0%) and nothing is collected for tax.</p>
+<div class="pv" style="margin:12px 0"><div class="note">What the customer sees</div><b id="pvp">₹0</b> <span class="note" id="pvn"></span><div class="kv"><span>Price before GST</span><span id="pb">₹0</span></div><div class="kv"><span>GST</span><span id="pg">₹0</span></div><div class="kv"><span>Discount vs MRP</span><span id="pd">0%</span></div></div>
+<div class="box"><h3>Product commission <span class="tag">Admin only</span></h3><label class="row"><input type="checkbox" id="cc1"> Apply product commission (overrides category commission)</label>
+<div class="g2" style="margin-top:10px"><div class="f"><label>Type</label><select><option>Percentage</option><option>Fixed ₹</option></select></div><div class="f"><label>Admin commission</label><input type="number" placeholder="e.g. 10"></div><div class="f"><label>Reason <b>*</b></label><input placeholder="Mandatory when overriding"></div><div class="f"><label>Effective from</label><input type="date"></div></div><p class="note" style="margin:0">Hidden from sellers and operators. Every change is logged.</p></div>
+</div>
+
+<div class="pn" id="p-stock">
+<div class="g2"><div class="f"><label>Unit <b>*</b></label><select id="unit"><option value="">Select…</option><option>kg</option><option>g</option><option>L</option><option>ml</option><option>piece</option><option>pack</option></select></div><div class="f"><label>Net quantity <b>*</b></label><input id="netq" type="number" placeholder="e.g. 5"></div>
+<div class="f"><label>Stock quantity <b>*</b></label><input id="stock" type="number" min="0"></div><div class="f"><label>Low-stock alert at</label><input type="number" placeholder="e.g. 5"></div>
+<div class="f"><label>Minimum per order</label><input type="number" placeholder="1"></div><div class="f"><label>Maximum per order</label><input type="number" placeholder="e.g. 10"></div>
+<div class="f"><label>Available from – to</label><div class="row"><input type="time" style="width:46%"><input type="time" style="width:46%"></div></div><div class="f"><label>Pre-order: expected date</label><input type="date"></div></div>
+<label class="row"><input type="checkbox"> Variable weight (may vary by ±5%)</label>
+</div>
+
+<div class="pn" id="p-food">
+<p class="note">Food fields are mandatory when the food type is Veg, Non-veg or Egg.</p>
+<div class="g2"><div class="f"><label>FSSAI licence no.</label><input id="fssai"></div><div class="f"><label>Licence expiry</label><input type="date"></div>
+<div class="f"><label>Manufacture date</label><input type="date"></div><div class="f"><label>Best before / expiry date</label><input id="fexp" type="date"></div>
+<div class="f"><label>Batch number</label><input></div><div class="f"><label>Country of origin <b>*</b></label><input id="coo" value="India"></div>
+<div class="f"><label>Manufacturer / packer name and address</label><input id="mfr"></div><div class="f"><label>Storage instructions</label><input placeholder="e.g. Keep refrigerated"></div></div>
+<div class="f"><label>Ingredients</label><textarea id="ingr" placeholder="List ingredients"></textarea></div>
+<div class="f"><label>Allergens</label><div class="row"><label class="row"><input type="checkbox"> Milk</label><label class="row"><input type="checkbox"> Nuts</label><label class="row"><input type="checkbox"> Gluten</label><label class="row"><input type="checkbox"> Soy</label><label class="row"><input type="checkbox"> Egg</label></div></div>
+<label class="row"><input type="checkbox"> Age-restricted or prescription-only product</label>
+</div>
+
+<div class="pn" id="p-deliv">
+<div class="g2"><div class="f"><label>Preparation time (minutes) <b>*</b></label><input id="prep" type="number" placeholder="e.g. 45"></div><div class="f"><label>Weight (kg) and size (cm)</label><input placeholder="e.g. 5 kg · 30×20×10"></div>
+<div class="f"><label>Return / replacement policy <b>*</b></label><select id="ret"><option value="">Select…</option><option>Non-returnable</option><option>Replace only</option><option>Returnable</option></select><small>Complaints can be raised within 24 hours of delivery.</small></div>
+<div class="f"><label>Marketing flag</label><select><option>None</option><option>⭐ Signature product</option><option>🔥 Hot deal</option><option>👍 Best seller</option></select></div></div>
+<div class="f"><label>Handling</label><div class="row"><label class="row"><input type="checkbox"> Perishable</label><label class="row"><input type="checkbox"> Fragile</label><label class="row"><input type="checkbox"> Keep cold</label></div></div>
+<div class="f"><label>Allowed delivery options</label><div class="row"><label class="row"><input type="checkbox" checked> Self pickup</label><label class="row"><input type="checkbox" checked> Seller delivery</label><label class="row"><input type="checkbox" checked> Platform delivery</label></div></div>
+<div class="f"><label>Goes well with (suggested products)</label><input placeholder="Search products to pair"></div>
+</div>
+
+<div class="pn" id="p-var"><div class="box"><h3>Item variants</h3><table><thead><tr><th>Variant</th><th>Price ₹</th><th>Stock</th><th>SKU / barcode</th></tr></thead><tbody id="vb"></tbody></table><button class="btn" style="margin-top:8px" onclick="addVar()">+ Add variant</button><p class="note">Example: 1 kg, 5 kg, 10 kg. Each variant has its own price, stock and barcode.</p></div></div>
+<div class="pn" id="p-add"><div class="box"><h3>Add-ons</h3><p class="note">Optional extras sold with this item, each with its own price (for example gift wrap).</p></div></div>
+<div class="pn" id="p-grp"><div class="box"><h3>Groups</h3><p class="note">Group products for menus, combos and bundles.</p></div></div>
+<div class="pn" id="p-photo"><div class="box"><h3>Photos <b class="bad">*</b></h3><p class="note">At least one real photo is required. Fresh items should use a live photo.</p><div id="ph"></div><button class="btn" onclick="addPh()">+ Add photo</button><p class="note">Auto text on the product page: “Photos are for reference only.”</p></div></div>
+</section></div>
+<div class="ft"><button class="btn" onclick="toast('Closed (sample)')">CLOSE</button><button class="btn cta" onclick="create()">CREATE PRODUCT</button></div>
+</div>
+<div id="toast"></div>
+<script>
+const $=i=>document.getElementById(i);
+const TABS=[['general','🏷 General Info'],['search','🔎 Search & Names'],['price','₹ Price & Tax'],['stock','📦 Stock & Unit'],['food','🥛 Food & Legal'],['deliv','🛵 Delivery & Policy'],['var','🧩 Item Variants'],['add','➕ Add-ons'],['grp','🗂 Groups'],['photo','🖼 Photos']];
+const CATS={'Grocery':['Rice & Grains','Oils','Spices'],'Sweets & Dairy':['Bengali Sweets','Milk','Curd'],'Fresh Produce':['Vegetables','Fruits'],'Meat & Eggs':['Chicken','Eggs'],'Other':['Other']};
+const LANGS=['Odia','Bengali','Hindi','Telugu','Tamil','Kannada'];
+let syn=[],lg=[],photos=0,vars=0,tab='general';
+$('code').textContent='ZNT-'+Math.floor(10000+Math.random()*89999);
+$('nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+function go(t){tab=t;document.querySelectorAll('.pn').forEach(p=>p.classList.toggle('on',p.id=='p-'+t));document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t))}
+$('cat').innerHTML='<option value="">Select…</option>'+Object.keys(CATS).map(c=>`<option>${c}</option>`).join('');
+$('cat').onchange=()=>{$('sub').innerHTML='<option value="">Select…</option>'+(CATS[$('cat').value]||[]).map(s=>`<option>${s}</option>`).join('');upd()};$('sub').innerHTML='<option value="">Select category first</option>';
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',4500)}
+function chips(){$('syn').innerHTML=syn.map((s,i)=>`<span class="chip">${s}<button onclick="syn.splice(${i},1);chips();upd()">×</button></span>`).join('')}
+$('synin').addEventListener('keydown',e=>{if(e.key=='Enter'||e.key==','){e.preventDefault();const v=e.target.value.trim();if(v&&!syn.includes(v)){syn.push(v);chips()}e.target.value='';upd()}});
+function addLang(){lg.push({l:'Odia',v:''});langs()}
+function langs(){$('langs').innerHTML=lg.map((x,i)=>`<div class="row" style="margin-bottom:8px"><select style="width:140px" onchange="lg[${i}].l=this.value">${LANGS.map(l=>`<option ${l==x.l?'selected':''}>${l}</option>`).join('')}</select><input style="flex:1" value="${x.v}" placeholder="Name in that language" oninput="lg[${i}].v=this.value;upd()"><button class="btn" onclick="lg.splice(${i},1);langs();upd()">✕</button></div>`).join('')}
+function addPh(){if(photos<6){photos++;rph()}}
+function rph(){$('ph').innerHTML=Array.from({length:Math.max(photos,1)+(photos<6?1:0)},(_,i)=>i<photos?`<span class="ph f">🖼<br><span style="font-size:10px">${i?'Angle '+(i+1):'Main'}</span></span>`:'<span class="ph">+ photo</span>').join('');upd()}
+function addVar(){vars++;$('vb').insertAdjacentHTML('beforeend',`<tr><td><input placeholder="e.g. ${vars} kg"></td><td><input type="number"></td><td><input type="number"></td><td><input></td></tr>`)}
+const fx=n=>'₹'+(+n.toFixed(2)).toLocaleString('en-IN');
+const sellerGst=()=>{const v=$('seller').value;return v==''?'':v[0]=='u'?'U':v[0]=='r'?'R':'Z'};
+function tax(){const g=sellerGst(),p=+$('price').value||0,m=+$('mrp').value||0;let r=+$('gr').value;
+const noGst=g=='U'||$('gs').value&&$('gs').value!='Taxable';
+$('sgst').value=g==''?'Select a seller first':g=='U'?'Unregistered · enrolment number on file':g=='R'?'GST registered':'Zinto (platform)';
+if(g=='U'){$('gr').value='0'}$('gr').disabled=g=='U'||noGst&&$('gs').value!='';r=noGst?0:+$('gr').value;
+const incl=$('incl').checked,base=incl?p/(1+r/100):p,gst=incl?p-base:p*r/100,fin=base+gst;
+$('pvp').textContent=fx(fin);$('pvn').textContent=r?(incl?'incl. GST '+r+'%':'+ GST '+r+'%'):(g=='U'?'No GST charged (seller unregistered)':'No GST');
+$('pb').textContent=fx(base);$('pg').textContent=fx(gst);$('pd').textContent=(m>0&&fin<=m?Math.round((1-fin/m)*100):0)+'%'}
+function slugify(t){return t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+function search(){const q=$('ts').value.trim().toLowerCase();if(!q){$('tr').textContent='';return}
+const all=[$('title').value,...syn,...lg.map(x=>x.v),$('tags').value].join(' ').toLowerCase();
+const hit=all.includes(q)||[$('title').value,...syn,...lg.map(x=>x.v)].some(n=>n&&(q.includes(n.toLowerCase())||n.toLowerCase().includes(q)));
+$('tr').innerHTML=hit?'<span class="ok">✓ Customer will find this product.</span>':'<span class="bad">✗ Not found. Add this spelling as a synonym.</span>'}
+function checks(){const food=['Veg','Non-veg','Egg'].includes($('vt').value),g=sellerGst();
+const L=[['Seller selected',!!$('seller').value],['Title',$('title').value.trim().length>2],['Category and sub-category',!!$('cat').value&&!!$('sub').value],['Food type chosen',!!$('vt').value],['Unit and net quantity',!!$('unit').value&&+$('netq').value>0],
+['MRP and selling price',+$('mrp').value>0&&+$('price').value>0],['HSN code',$('hsn').value.trim().length>=4],['GST status',!!$('gs').value],['Stock quantity',$('stock').value!==''],['At least one photo',photos>0],['Return policy',!!$('ret').value],['Preparation time',+$('prep').value>0],['Country of origin',$('coo').value.trim().length>1]];
+if(food)L.push(['FSSAI number',$('fssai').value.trim().length>5],['Expiry date',!!$('fexp').value],['Ingredients',$('ingr').value.trim().length>2]);return L}
+function upd(){$('slug').value=$('title').value?'/product/'+slugify($('title').value):'';$('dc').textContent=$('dis').value.length+'/1000';tax();search();
+const L=checks(),n=L.filter(x=>x[1]).length;$('cl').innerHTML=L.map(x=>`<div class="${x[1]?'y':'n'}">${x[1]?'✓':'✗'} ${x[0]}</div>`).join('');$('cc').textContent=n+'/'+L.length;$('cb').style.width=(n/L.length*100)+'%'}
+function create(){const m=checks().filter(x=>!x[1]).map(x=>x[0]),st=$('status').value,e=$('err');
+if(m.length&&st!='Draft'){e.style.display='block';e.innerHTML='<b>Cannot set status to “'+st+'”.</b> Missing: '+m.join(', ')+'. Save as Draft or complete the checklist.';e.scrollIntoView({block:'center'});return}
+e.style.display='none';toast(m.length?'Saved as Draft. '+m.length+' item(s) still missing.':'✅ Product created as '+st+'. (Sample, nothing is saved.)')}
+document.addEventListener('input',upd);document.addEventListener('change',upd);
+go('general');rph();addLang();addVar();upd();
+</script>
+</body>
+</html>

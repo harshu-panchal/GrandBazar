@@ -26,6 +26,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import axiosInstance from '@core/api/axios'; // Direct import for uploading images to media upload
 import { getProductImageUrl, handleProductImageError } from '@core/utils/imageUtils';
 import { BulkRatesModal, EditableCell, parsePercent } from "../components/RateControls";
+import UnifiedProductForm from "@shared/components/product-form/UnifiedProductForm";
+import { productPayload } from "@shared/components/product-form/productFormModel";
 
 const WEIGHT_UNITS = ["kg", "gm", "pack", "lit", "ml", "box"];
 const PRODUCT_DISCLAIMER_MAX = 1000;
@@ -66,6 +68,15 @@ const formatWeightField = (value, unit) => {
   const safeUnit = WEIGHT_UNITS.includes(unit) ? unit : "kg";
   return `${amount} ${safeUnit}`;
 };
+
+const makeBulkRow = () => ({
+  id: Date.now() + Math.random(), name: "", description: "", brand: "", productDisclaimer: "",
+  weightValue: "", weightUnit: "kg", unit: "", netQuantity: "", barcode: "", foodType: "",
+  tags: "", searchSynonyms: "", localizedNames: "", hsnCode: "", gstStatus: "taxable", gstSlabOverride: "",
+  legal: { inheritStoreFssai: true, fssaiLicenseNumber: "", fssaiLicenseExpiry: "", manufactureDate: "", expiryDate: "", batchNumber: "", countryOfOrigin: "India", manufacturerPacker: "", storageInstructions: "", ingredients: "", allergens: "", ageRestricted: false, prescriptionOnly: false },
+  headerId: "", categoryId: "", subcategoryId: "", mainImage: "", galleryImages: [],
+  applyCommission: false, adminCommission: "", isUploadingMain: false, isUploadingGallery: false,
+});
 
 const CatalogManagement = () => {
   const [catalogItems, setCatalogItems] = useState([]);
@@ -112,26 +123,7 @@ const CatalogManagement = () => {
   });
 
   // Bulk Products Rows
-  const [bulkRows, setBulkRows] = useState([
-    {
-      id: Date.now(),
-      name: "",
-      description: "",
-      brand: "",
-      weightValue: "",
-      weightUnit: "kg",
-      tags: "",
-      headerId: "",
-      categoryId: "",
-      subcategoryId: "",
-      mainImage: "",
-      galleryImages: [],
-      applyCommission: false,
-      adminCommission: "",
-      isUploadingMain: false,
-      isUploadingGallery: false,
-    }
-  ]);
+  const [bulkRows, setBulkRows] = useState([makeBulkRow()]);
 
   const fetchCategories = async () => {
     try {
@@ -338,24 +330,7 @@ const CatalogManagement = () => {
   const addBulkRow = () => {
     setBulkRows(prev => [
       ...prev,
-      {
-        id: Date.now(),
-        name: "",
-        description: "",
-        brand: "",
-        weightValue: "",
-        weightUnit: "kg",
-        tags: "",
-        headerId: "",
-        categoryId: "",
-        subcategoryId: "",
-        mainImage: "",
-        galleryImages: [],
-        applyCommission: false,
-        adminCommission: "",
-        isUploadingMain: false,
-        isUploadingGallery: false,
-      }
+      makeBulkRow()
     ]);
   };
 
@@ -376,6 +351,12 @@ const CatalogManagement = () => {
       }
       return row;
     }));
+  };
+
+  const updateBulkLegalField = (rowId, field, value) => {
+    setBulkRows(prev => prev.map(row => row.id === rowId
+      ? { ...row, legal: { ...row.legal, [field]: value } }
+      : row));
   };
 
   // Upload main image for specific bulk row
@@ -418,6 +399,21 @@ const CatalogManagement = () => {
           brand: r.brand.trim(),
           productDisclaimer: (r.productDisclaimer || "").trim(),
           weight: formatWeightField(r.weightValue, r.weightUnit),
+          unit: r.unit,
+          netQuantity: Number(r.netQuantity),
+          barcode: r.barcode.trim(),
+          foodType: r.foodType,
+          searchSynonyms: r.searchSynonyms.split(",").map(v => v.trim()).filter(Boolean),
+          alternativeNames: r.searchSynonyms.split(",").map(v => v.trim()).filter(Boolean),
+          localizedNames: r.localizedNames.split(",").map(value => {
+            const [languageCode, ...name] = value.split(":");
+            return { languageCode: languageCode.trim(), name: name.join(":").trim() };
+          }).filter(value => value.languageCode && value.name),
+          hsnCode: r.hsnCode.trim(),
+          gstStatus: r.gstStatus,
+          gstSlabOverride: r.gstSlabOverride === "" ? null : Number(r.gstSlabOverride),
+          isTaxInclusive: false,
+          legal: { ...r.legal, allergens: r.legal.allergens.split(",").map(v => v.trim()).filter(Boolean) },
           tags: r.tags.split(",").map(t => t.trim()).filter(Boolean),
           mainImage: r.mainImage,
           galleryImages: r.galleryImages,
@@ -491,26 +487,7 @@ const CatalogManagement = () => {
         adminCommission: "",
         syncToSellers: false,
       });
-      setBulkRows([
-        {
-          id: Date.now(),
-          name: "",
-          description: "",
-          brand: "",
-          weightValue: "",
-          weightUnit: "kg",
-          tags: "",
-          headerId: "",
-          categoryId: "",
-          subcategoryId: "",
-          mainImage: "",
-          galleryImages: [],
-          applyCommission: false,
-          adminCommission: "",
-          isUploadingMain: false,
-          isUploadingGallery: false,
-        }
-      ]);
+      setBulkRows([makeBulkRow()]);
       setEditingItem(null);
       setActiveTab("single");
     }
@@ -541,6 +518,32 @@ const CatalogManagement = () => {
     const matchedCat = currentCategoriesList.find(c => c._id === formData.categoryId);
     return matchedCat?.children || [];
   }, [formData.categoryId, currentCategoriesList]);
+
+  const saveUnifiedCatalogProduct = async (state, intent) => {
+    setIsSaving(true);
+    try {
+      const mainImage = state.mainImageFile ? await uploadImageFile(state.mainImageFile) : state.mainImage;
+      const uploadedGallery = await Promise.all(state.galleryFiles.map(uploadImageFile));
+      const payload = productPayload({
+        ...state,
+        mainImage,
+        galleryImages: [...state.galleryImages, ...uploadedGallery],
+        mainImageFile: null,
+        galleryFiles: [],
+      }, { catalog: true, intent });
+      delete payload.mainImageFile;
+      delete payload.galleryFiles;
+      if (editingItem) await adminApi.updateCatalogProduct(editingItem._id || editingItem.id, payload);
+      else await adminApi.createCatalogProduct(payload);
+      toast.success(editingItem ? "Catalog product updated" : "Catalog product created");
+      setIsModalOpen(false);
+      fetchCatalog(page);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save catalog product");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-16">
@@ -776,8 +779,9 @@ const CatalogManagement = () => {
       />
 
       {/* Main Creation/Edit Modal */}
+      {isModalOpen && activeTab === "single" && <div className="fixed inset-0 z-[1100] overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm md:p-8"><div className="mx-auto max-w-6xl"><UnifiedProductForm title={editingItem ? "Edit catalogue product" : "Add catalogue product"} initialData={editingItem || undefined} categories={categories} products={catalogItems} catalog admin saving={isSaving} onCancel={() => setIsModalOpen(false)} onSave={saveUnifiedCatalogProduct} /></div></div>}
       <AnimatePresence>
-        {isModalOpen && (
+        {isModalOpen && activeTab === "bulk" && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 lg:p-12 overflow-hidden overscroll-contain">
             <motion.div
               initial={{ opacity: 0 }}
@@ -1274,6 +1278,25 @@ const CatalogManagement = () => {
                                 />
                               </div>
                             </div>
+
+                            <details className="rounded-lg border border-slate-200 bg-white p-3" open>
+                              <summary className="cursor-pointer text-xs font-bold uppercase tracking-wider text-slate-600">Legal, search and tax fields</summary>
+                              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Food type<select value={row.foodType} onChange={(e) => updateBulkRowField(row.id, "foodType", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700"><option value="">Select…</option><option value="veg">Veg</option><option value="non_veg">Non-veg</option><option value="egg">Egg</option><option value="non_food">Non-food</option></select></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Unit<select value={row.unit} onChange={(e) => updateBulkRowField(row.id, "unit", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700"><option value="">Select…</option>{["kg","g","l","ml","piece","pack","packet","other"].map(unit => <option key={unit}>{unit}</option>)}</select></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Net quantity<input type="number" value={row.netQuantity} onChange={(e) => updateBulkRowField(row.id, "netQuantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Barcode / GTIN<input value={row.barcode} onChange={(e) => updateBulkRowField(row.id, "barcode", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">HSN code<input value={row.hsnCode} onChange={(e) => updateBulkRowField(row.id, "hsnCode", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">GST status<select value={row.gstStatus} onChange={(e) => updateBulkRowField(row.id, "gstStatus", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700"><option value="taxable">Taxable</option><option value="exempt">Exempt</option><option value="nil_rated">Nil-rated</option><option value="non_gst">Non-GST</option></select></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">GST rate<select value={row.gstSlabOverride} onChange={(e) => updateBulkRowField(row.id, "gstSlabOverride", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700"><option value="">Inherit</option>{[0,5,12,18,28].map(rate => <option key={rate} value={rate}>{rate}%</option>)}</select></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400 md:col-span-2">Search synonyms<input value={row.searchSynonyms} onChange={(e) => updateBulkRowField(row.id, "searchSynonyms", e.target.value)} placeholder="Comma separated" className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400 md:col-span-3">Localized names<input value={row.localizedNames} onChange={(e) => updateBulkRowField(row.id, "localizedNames", e.target.value)} placeholder="hi:नाम, or:ନାମ" className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                {[['fssaiLicenseNumber','FSSAI licence'],['batchNumber','Batch number'],['countryOfOrigin','Country of origin'],['manufacturerPacker','Manufacturer / packer'],['storageInstructions','Storage instructions']].map(([field,label]) => <label key={field} className="text-[10px] font-bold uppercase text-slate-400">{label}<input value={row.legal[field]} onChange={(e) => updateBulkLegalField(row.id, field, e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>)}
+                                {[['fssaiLicenseExpiry','FSSAI expiry'],['manufactureDate','Manufacture date'],['expiryDate','Best before / expiry']].map(([field,label]) => <label key={field} className="text-[10px] font-bold uppercase text-slate-400">{label}<input type="date" value={row.legal[field]} onChange={(e) => updateBulkLegalField(row.id, field, e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>)}
+                                <label className="text-[10px] font-bold uppercase text-slate-400 md:col-span-2">Ingredients<textarea value={row.legal.ingredients} onChange={(e) => updateBulkLegalField(row.id, "ingredients", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Allergens<input value={row.legal.allergens} onChange={(e) => updateBulkLegalField(row.id, "allergens", e.target.value)} placeholder="milk, nuts" className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-700" /></label>
+                              </div>
+                            </details>
 
                             <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
                               <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">

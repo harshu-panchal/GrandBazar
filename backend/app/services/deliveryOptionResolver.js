@@ -1,4 +1,5 @@
 import Store from "../models/store.js";
+import Product from "../models/product.js";
 import { getPlatformDeliveryProvider } from "./finance/financeSettingsService.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import {
@@ -174,6 +175,7 @@ function isWithinServiceRadius(store, customerLocation) {
  */
 export async function resolveDeliveryOptions({
   store,
+  productIds = [],
   customerLocation = null,
   fulfillmentType = "instant",
   now = new Date(),
@@ -185,7 +187,21 @@ export async function resolveDeliveryOptions({
   }
 
   const platformProvider = await getPlatformDeliveryProvider();
-  const policy = resolveStoreDeliveryPolicy(store);
+  const storePolicy = resolveStoreDeliveryPolicy(store);
+  const ids = [...new Set((productIds || []).map(String).filter(Boolean))];
+  const productPolicies = ids.length
+    ? await Product.find({ _id: { $in: ids } }).select("deliveryOptions").lean()
+    : [];
+  const permits = (field) => productPolicies.length === 0 || productPolicies.every((product) => {
+    const override = product.deliveryOptions;
+    return override?.mode === "override" ? override[field] === true : storePolicy[field] === true;
+  });
+  const policy = {
+    ...storePolicy,
+    customerPickup: permits("customerPickup"),
+    sellerDelivery: permits("sellerDelivery"),
+    platformLogistics: permits("platformLogistics"),
+  };
 
   const operational = isStoreOperationallyOpen(store, now);
   const withinRadius =
@@ -287,6 +303,7 @@ export async function resolveDeliveryOptions({
  */
 export async function resolveChosenFulfillmentMethod({
   store,
+  productIds = [],
   requestedMethod,
   customerLocation = null,
   fulfillmentType = "instant",
@@ -294,6 +311,7 @@ export async function resolveChosenFulfillmentMethod({
 }) {
   const resolved = await resolveDeliveryOptions({
     store,
+    productIds,
     customerLocation,
     fulfillmentType,
     now,

@@ -25,7 +25,7 @@ const productSchema = new mongoose.Schema(
         },
         price: {
             type: Number,
-            required: true,
+            default: 0,
             min: 0,
         },
         salePrice: {
@@ -74,6 +74,32 @@ const productSchema = new mongoose.Schema(
             type: String,
             trim: true,
         },
+        unit: {
+            type: String,
+            enum: ["kg", "g", "l", "ml", "piece", "pack", "packet", "other", ""],
+            default: "",
+            trim: true,
+        },
+        netQuantity: {
+            type: Number,
+            default: null,
+            min: 0,
+        },
+        barcode: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+        hsnCode: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+        foodType: {
+            type: String,
+            enum: ["veg", "non_veg", "egg", "non_food", ""],
+            default: "",
+        },
         // Snapshot of CatalogProduct.productDisclaimer taken when the seller claims
         // the catalogue item; shown at the end of the customer's checkout.
         productDisclaimer: {
@@ -86,6 +112,14 @@ const productSchema = new mongoose.Schema(
             type: String,
             trim: true,
         }],
+        searchSynonyms: [{
+            type: String,
+            trim: true,
+        }],
+        localizedNames: [{
+            languageCode: { type: String, trim: true, lowercase: true },
+            name: { type: String, trim: true },
+        }],
         mainImage: {
             type: String, // Cloudinary URL
         },
@@ -95,17 +129,17 @@ const productSchema = new mongoose.Schema(
         headerId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
-            required: true,
+            default: null,
         },
         categoryId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
-            required: true,
+            default: null,
         },
         subcategoryId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Category",
-            required: true,
+            default: null,
         },
         sellerId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -167,6 +201,9 @@ const productSchema = new mongoose.Schema(
                 },
                 stock: Number,
                 sku: String,
+                barcode: { type: String, trim: true, default: "" },
+                unit: { type: String, trim: true, default: "" },
+                netQuantity: { type: Number, default: null, min: 0 },
                 applyCommission: {
                     type: Boolean,
                     default: false,
@@ -267,6 +304,95 @@ const productSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        preorderExpectedDate: {
+            type: Date,
+            default: null,
+        },
+        minOrderQuantity: {
+            type: Number,
+            default: 1,
+            min: 1,
+        },
+        maxOrderQuantity: {
+            type: Number,
+            default: null,
+            min: 1,
+        },
+        variableWeight: {
+            type: Boolean,
+            default: false,
+        },
+        gstStatus: {
+            type: String,
+            enum: ["taxable", "exempt", "nil_rated", "non_gst", ""],
+            default: "",
+        },
+        // The current checkout flow treats entered prices as tax-exclusive and
+        // adds the resolved GST at checkout. Kept explicit for the form/API so
+        // that behavior is visible and cannot be accidentally inverted.
+        isTaxInclusive: {
+            type: Boolean,
+            default: false,
+        },
+        legal: {
+            fssaiLicenseNumber: { type: String, trim: true, default: "" },
+            fssaiLicenseExpiry: { type: Date, default: null },
+            manufactureDate: { type: Date, default: null },
+            batchNumber: { type: String, trim: true, default: "" },
+            countryOfOrigin: { type: String, trim: true, default: "India" },
+            manufacturerPacker: { type: String, trim: true, default: "" },
+            storageInstructions: { type: String, trim: true, default: "" },
+            ingredients: { type: String, trim: true, default: "" },
+            allergens: [{ type: String, trim: true, lowercase: true }],
+            ageRestricted: { type: Boolean, default: false },
+            prescriptionOnly: { type: Boolean, default: false },
+            inheritStoreFssai: { type: Boolean, default: true },
+        },
+        preparationTimeMinutes: {
+            type: Number,
+            default: null,
+            min: 0,
+        },
+        dimensions: {
+            weightKg: { type: Number, default: null, min: 0 },
+            lengthCm: { type: Number, default: null, min: 0 },
+            widthCm: { type: Number, default: null, min: 0 },
+            heightCm: { type: Number, default: null, min: 0 },
+        },
+        returnPolicy: {
+            type: String,
+            enum: ["inherit", "non_returnable", "replace_only", "returnable"],
+            default: "inherit",
+        },
+        handlingFlags: {
+            perishable: { type: Boolean, default: false },
+            fragile: { type: Boolean, default: false },
+            keepCold: { type: Boolean, default: false },
+        },
+        deliveryOptions: {
+            mode: { type: String, enum: ["inherit", "override"], default: "inherit" },
+            customerPickup: { type: Boolean, default: false },
+            sellerDelivery: { type: Boolean, default: false },
+            platformLogistics: { type: Boolean, default: true },
+        },
+        relatedProducts: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Product",
+        }],
+        marketingFlag: {
+            type: String,
+            enum: ["none", "signature", "hot_deal", "best_seller"],
+            default: "none",
+        },
+        commissionOverrideReason: {
+            type: String,
+            trim: true,
+            default: "",
+        },
+        commissionEffectiveFrom: {
+            type: Date,
+            default: null,
+        },
         availability: {
             dailyStartTime: {
                 type: String,
@@ -307,6 +433,11 @@ productSchema.index({ sellerId: 1, displayOrder: 1, createdAt: -1 });
 productSchema.index({ sellerId: 1, isPublished: 1, status: 1 });
 productSchema.index({ isCurrentlyAvailable: 1, status: 1 });
 productSchema.index({ status: 1, customerPrice: 1 });
-productSchema.index({ name: "text", tags: "text" }); // For better search if regex is too slow
+productSchema.index({
+    name: "text",
+    tags: "text",
+    searchSynonyms: "text",
+    "localizedNames.name": "text",
+});
 
 export default mongoose.model("Product", productSchema);

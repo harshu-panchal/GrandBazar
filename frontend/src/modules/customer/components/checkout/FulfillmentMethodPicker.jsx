@@ -22,6 +22,7 @@ const METHOD_META = {
 
 export default function FulfillmentMethodPicker({
   sellerId,
+  productIds = [],
   fulfillmentType = "instant",
   customerLocation,
   value,
@@ -41,6 +42,7 @@ export default function FulfillmentMethodPicker({
         const params = {
           sellerId,
           fulfillmentType,
+          productIds: productIds.join(","),
         };
         if (customerLocation?.lat && customerLocation?.lng) {
           params.lat = customerLocation.lat;
@@ -68,7 +70,7 @@ export default function FulfillmentMethodPicker({
     return () => {
       cancelled = true;
     };
-  }, [sellerId, fulfillmentType, customerLocation?.lat, customerLocation?.lng]);
+  }, [sellerId, fulfillmentType, productIds.join(","), customerLocation?.lat, customerLocation?.lng]);
 
   if (!sellerId) return null;
 

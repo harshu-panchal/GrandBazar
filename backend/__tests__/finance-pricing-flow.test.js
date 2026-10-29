@@ -81,7 +81,7 @@ describe("finance pricing flow", () => {
     mockProductFind.mockReturnValue(createQueryChain([]));
     mockStoreFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1", city: "Indore" }),
+      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1", city: "Indore", gstNumber: "23ABCDE1234F1Z5", gstExempt: false }),
     });
     mockSellerFindById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -626,6 +626,27 @@ describe("finance pricing flow", () => {
     // GST (10%) is charged on the 120 the customer pays, not the seller's 100.
     expect(breakdown.cgstTotal).toBe(6);
     expect(breakdown.sgstTotal).toBe(6);
+  });
+
+  it("charges zero product GST when the shop is not GST registered", async () => {
+    mockStoreFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: "seller-1", ownerId: "owner-1", city: "Indore", gstNumber: "", gstExempt: false }),
+    });
+    mockCategoryFind.mockReturnValue(createQueryChain([{ _id: "sub-tax", name: "Taxed", gstSlab: 18 }]));
+    mockGetOrCreateFinanceSettings.mockResolvedValue({
+      deliveryPricingMode: "fixed_price", fixedDeliveryFee: 0, riderBasePayout: 0,
+      handlingFeeStrategy: "highest_category_fee", codEnabled: true, onlineEnabled: true,
+    });
+
+    const breakdown = await generateOrderPaymentBreakdown({
+      preHydratedItems: [{ productId: "prod-tax", productName: "Taxed item", quantity: 1, price: 100, headerCategoryId: "cat-1", subcategoryId: "sub-tax", sellerId: "seller-1" }],
+      skipDeliveryFee: true,
+    });
+
+    expect(breakdown.cgstTotal).toBe(0);
+    expect(breakdown.sgstTotal).toBe(0);
+    expect(breakdown.lineItems[0].gstSlabSource).toBe("seller_gst_status");
   });
 
   it("applies the bulk order commission rate override on top of seller price", async () => {

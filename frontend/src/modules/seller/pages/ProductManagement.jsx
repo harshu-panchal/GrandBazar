@@ -34,6 +34,8 @@ import { sellerApi } from "../services/sellerApi";
 import { toast } from "sonner";
 import Pagination from "@shared/components/ui/Pagination";
 import StoreCatalogImportPanel from "../components/StoreCatalogImportPanel";
+import UnifiedProductForm from "@shared/components/product-form/UnifiedProductForm";
+import { toProductFormData } from "@shared/components/product-form/productFormModel";
 
 const ProductManagement = () => {
   const navigate = useNavigate();
@@ -133,6 +135,7 @@ const ProductManagement = () => {
   const [viewingVariants, setViewingVariants] = useState(null);
   const [isVariantsViewModalOpen, setIsVariantsViewModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [unifiedSaving, setUnifiedSaving] = useState(false);
   const [suggestedAddons, setSuggestedAddons] = useState([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [modalTab, setModalTab] = useState("general");
@@ -698,6 +701,24 @@ const ProductManagement = () => {
     }
     setModalTab("general");
     setIsProductModalOpen(true);
+  };
+
+  const saveUnifiedProduct = async (state, intent) => {
+    setUnifiedSaving(true);
+    try {
+      const payload = toProductFormData(state, { intent });
+      const response = editingItem
+        ? await sellerApi.updateProduct(editingItem._id || editingItem.id, payload)
+        : await sellerApi.createProduct(payload);
+      toast.success(response?.data?.message || "Product saved successfully");
+      setIsProductModalOpen(false);
+      setEditingItem(null);
+      fetchProducts(page);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save product");
+    } finally {
+      setUnifiedSaving(false);
+    }
   };
 
   return (
@@ -1391,8 +1412,9 @@ const ProductManagement = () => {
       </div>
 
       {/* Edit Modal (Copy from Admin) */}
+      {isProductModalOpen && <div className="fixed inset-0 z-[1000] overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm md:p-8"><div className="mx-auto max-w-6xl"><UnifiedProductForm title={editingItem ? "Edit product" : "Add product"} initialData={editingItem || undefined} categories={categories} products={products} linkedCatalog={Boolean(editingItem?.catalogProductId)} saving={unifiedSaving} onCancel={() => setIsProductModalOpen(false)} onSave={saveUnifiedProduct} /></div></div>}
       <AnimatePresence>
-        {isProductModalOpen && (
+        {isProductModalOpen && editingItem?.__legacyForm === true && (
           <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 lg:p-12 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0 }}

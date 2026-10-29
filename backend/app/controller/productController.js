@@ -45,6 +45,11 @@ import {
 import { recordAuditLog } from "../services/auditTrailService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance } from "../services/deliveryEtaService.js";
 import { assertCanAddProduct, assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
+import {
+  normalizeProductFormPayload,
+  stripAdminOnlyProductFields,
+  validateProductFormPayload,
+} from "../services/productFormService.js";
 
 function buildProductListKey(queryParams) {
   const sorted = Object.keys(queryParams)
@@ -89,6 +94,29 @@ function stripCommissionFields(data = {}) {
   delete data.adminCommissionType;
   delete data.adminCommissionValue;
   delete data.adminCommissionFixedRule;
+}
+
+async function enforceSellerTaxStatus(productData, storeId) {
+  if (!storeId) return;
+  const store = await Store.findById(storeId).select("gstNumber gstExempt").lean();
+  if (!store) return;
+  if (store.gstExempt === true) {
+    productData.gstStatus = "exempt";
+    productData.gstSlabOverride = 0;
+  } else if (!String(store.gstNumber || "").trim()) {
+    productData.gstStatus = "non_gst";
+    productData.gstSlabOverride = 0;
+  }
+}
+
+function isV2ProductForm(data = {}) {
+  return data.formVersion === "v2" || data.formVersion === 2;
+}
+
+function removeTransportFields(data = {}) {
+  delete data.formVersion;
+  delete data.saveIntent;
+  delete data.retainedGalleryImages;
 }
 
 function parseSellerIdFilters({ sellerId, sellerIds }) {
@@ -190,7 +218,9 @@ function parseImageList(input) {
   return single ? [single] : [];
 }
 
-function applyMediaFields(productData) {
+function applyMediaFields(productData, { preserveAbsent = false } = {}) {
+  const hadGalleryInput = Object.prototype.hasOwnProperty.call(productData, "galleryImages") ||
+    Object.prototype.hasOwnProperty.call(productData, "images");
   const explicitMainImage = normalizeUrl(productData.mainImage || productData.mainImageUrl);
   const galleryImages = parseImageList(productData.galleryImages);
   const genericImages = parseImageList(productData.images);
@@ -207,7 +237,7 @@ function applyMediaFields(productData) {
 
   if (mergedGallery.length > 0) {
     productData.galleryImages = mergedGallery;
-  } else if (!Array.isArray(productData.galleryImages)) {
+  } else if (!preserveAbsent || hadGalleryInput) {
     productData.galleryImages = [];
   }
 }
@@ -432,6 +462,8 @@ export const getProducts = async (req, res) => {
         { name: { $regex: search, $options: "i" } },
         { brand: { $regex: search, $options: "i" } },
         { tags: { $regex: search, $options: "i" } },
+        { searchSynonyms: { $regex: search, $options: "i" } },
+        { "localizedNames.name": { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } }
       ];
 
@@ -593,7 +625,7 @@ export const getProducts = async (req, res) => {
       const [rawProducts, total] = await Promise.all([
         Product.find(finalQuery)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock brand weight unit netQuantity barcode hsnCode foodType searchSynonyms localizedNames productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible preorderExpectedDate displayOrder variants addons packagingCharge minOrderQuantity maxOrderQuantity variableWeight gstStatus gstSlabOverride isTaxInclusive legal preparationTimeMinutes dimensions returnPolicy handlingFlags deliveryOptions relatedProducts marketingFlag createdAt",
           )
           // No .populate() — names resolved via cache-backed entityNameCache
           .sort(sortQuery)
@@ -1063,7 +1095,7 @@ export const getSellerProducts = async (req, res) => {
     ] = await Promise.all([
       Product.find(query)
         .select(
-          "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons packagingCharge importSource isPublished catalogProductId createdAt",
+          "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight unit netQuantity barcode hsnCode foodType searchSynonyms localizedNames productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible preorderExpectedDate displayOrder variants addons packagingCharge importSource isPublished catalogProductId minOrderQuantity maxOrderQuantity variableWeight gstStatus gstSlabOverride isTaxInclusive legal preparationTimeMinutes dimensions returnPolicy handlingFlags deliveryOptions relatedProducts marketingFlag createdAt",
         )
         .populate("headerId", "name")
         .populate("categoryId", "name")
@@ -1213,6 +1245,14 @@ export const createProduct = async (req, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
     const productData = { ...req.body };
+    const useV2Validation = isV2ProductForm(productData);
+    const saveIntent = String(productData.saveIntent || "publish").toLowerCase();
+    if (useV2Validation && saveIntent === "draft") {
+      productData.status = "inactive";
+      productData.isPublished = false;
+    } else if (useV2Validation) {
+      productData.isPublished = true;
+    }
     stripRestrictedModerationFields(productData);
 
     if (role === "admin") {
@@ -1334,6 +1374,7 @@ export const createProduct = async (req, res) => {
     }
 
     applyMediaFields(productData);
+    Object.assign(productData, normalizeProductFormPayload(productData));
 
     // Handle tags if string
     if (typeof productData.tags === "string") {
@@ -1364,6 +1405,7 @@ export const createProduct = async (req, res) => {
       Object.assign(productData, normalizeProductCommissionFields(productData));
     } else {
       stripCommissionFields(productData);
+      stripAdminOnlyProductFields(productData);
     }
 
     // Handle variants if string (multipart/form-data sends as string)
@@ -1394,6 +1436,21 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    await enforceSellerTaxStatus(productData, productData.sellerId);
+
+    if (useV2Validation) {
+      const validationErrors = validateProductFormPayload(productData, {
+        draft: saveIntent === "draft" || productData.status === "inactive",
+        catalog: false,
+      });
+      if (Object.keys(validationErrors).length > 0) {
+        return handleResponse(res, 400, "Please complete the required product fields", {
+          fieldErrors: validationErrors,
+        });
+      }
+    }
+    removeTransportFields(productData);
+
     const createSalePriceError = findInvertedSalePrice(productData);
     if (createSalePriceError) {
       return handleResponse(res, 400, createSalePriceError);
@@ -1422,6 +1479,26 @@ export const createProduct = async (req, res) => {
     }
 
     const product = await Product.create(productData);
+
+    if ((role === "admin" || role === "superadmin") && productData.applyCommission) {
+      void recordAuditLog({
+        actorId: req.user?.id || null,
+        action: "PRODUCT_COMMISSION_CREATED",
+        targetType: "Product",
+        targetId: product._id,
+        before: null,
+        after: {
+          applyCommission: product.applyCommission,
+          adminCommissionType: product.adminCommissionType,
+          adminCommissionValue: product.adminCommissionValue,
+          adminCommissionFixedRule: product.adminCommissionFixedRule,
+        },
+        metadata: {
+          reason: product.commissionOverrideReason || "",
+          effectiveFrom: product.commissionEffectiveFrom || null,
+        },
+      });
+    }
 
     if (addonMappingsToSync !== null) {
       await syncProductAddonMappings(product._id, addonMappingsToSync);
@@ -1464,6 +1541,16 @@ export const updateProduct = async (req, res) => {
     const sellerId = req.user.id;
     const role = String(req.user.role || "").toLowerCase();
     const productData = { ...req.body };
+    const useV2Validation = isV2ProductForm(productData);
+    const saveIntent = String(productData.saveIntent || "publish").toLowerCase();
+    if (useV2Validation && saveIntent === "draft") {
+      productData.status = "inactive";
+      productData.isPublished = false;
+    } else if (useV2Validation && saveIntent === "publish") {
+      productData.isPublished = true;
+    }
+    const retainedGalleryImages = parseImageList(productData.retainedGalleryImages);
+    let hasExplicitGallerySelection = Object.prototype.hasOwnProperty.call(productData, "retainedGalleryImages");
     stripRestrictedModerationFields(productData);
     if (Object.prototype.hasOwnProperty.call(productData, "sellerId")) {
       delete productData.sellerId;
@@ -1568,21 +1655,33 @@ export const updateProduct = async (req, res) => {
     }
 
     // Admin bypasses sellerId check
-    const query = role === "admin" ? { _id: id } : { _id: id, sellerId };
+    const query = ["admin", "superadmin"].includes(role) ? { _id: id } : { _id: id, sellerId };
     const product = await Product.findOne(query);
 
     if (!product) {
       return handleResponse(res, 404, "Product not found or unauthorized");
     }
 
+    // A claimed catalogue listing is a seller-owned pricing/stock snapshot,
+    // but its core identity remains catalogue-authoritative. Enforce the same
+    // read-only rule server-side so an older client cannot bypass the v2 UI.
+    if (!["admin", "superadmin"].includes(role) && product.catalogProductId) {
+      for (const field of ["name", "description", "headerId", "categoryId", "subcategoryId", "mainImage", "galleryImages"]) {
+        delete productData[field];
+      }
+      newGalleryUrls = [];
+      hasExplicitGallerySelection = false;
+    }
+
     // Newly uploaded gallery photos are ADDED to the existing gallery, never
     // used to replace it — the edit UI only ever submits freshly-picked files,
     // so replacing here would silently delete every previously-saved photo.
     if (newGalleryUrls.length > 0) {
-      productData.galleryImages = [
-        ...(Array.isArray(product.galleryImages) ? product.galleryImages : []),
-        ...newGalleryUrls,
-      ];
+      productData.galleryImages = hasExplicitGallerySelection
+        ? [...retainedGalleryImages, ...newGalleryUrls]
+        : [...(Array.isArray(product.galleryImages) ? product.galleryImages : []), ...newGalleryUrls];
+    } else if (hasExplicitGallerySelection) {
+      productData.galleryImages = retainedGalleryImages;
     }
 
     if (productData.name) {
@@ -1605,7 +1704,8 @@ export const updateProduct = async (req, res) => {
       productData.sku = product.sku || makeProductSku(skuBaseName, 1);
     }
 
-    applyMediaFields(productData);
+    applyMediaFields(productData, { preserveAbsent: true });
+    Object.assign(productData, normalizeProductFormPayload(productData));
 
     if (typeof productData.tags === "string") {
       productData.tags = productData.tags.split(",").map((tag) => tag.trim());
@@ -1635,6 +1735,7 @@ export const updateProduct = async (req, res) => {
       Object.assign(productData, normalizeProductCommissionFields(productData));
     } else {
       stripCommissionFields(productData);
+      stripAdminOnlyProductFields(productData);
     }
 
     if (typeof productData.variants === "string") {
@@ -1664,6 +1765,27 @@ export const updateProduct = async (req, res) => {
         );
       }
     }
+
+    await enforceSellerTaxStatus(productData, product.sellerId);
+
+    if (useV2Validation) {
+      const mergedForValidation = {
+        ...product.toObject(),
+        ...productData,
+        variants: Array.isArray(productData.variants) ? productData.variants : product.variants,
+        mainImage: productData.mainImage || product.mainImage,
+      };
+      const validationErrors = validateProductFormPayload(mergedForValidation, {
+        draft: saveIntent === "draft" || productData.status === "inactive",
+        catalog: false,
+      });
+      if (Object.keys(validationErrors).length > 0) {
+        return handleResponse(res, 400, "Please complete the required product fields", {
+          fieldErrors: validationErrors,
+        });
+      }
+    }
+    removeTransportFields(productData);
 
     const updateSalePriceError = findInvertedSalePrice(productData, product);
     if (updateSalePriceError) {
@@ -1709,6 +1831,26 @@ export const updateProduct = async (req, res) => {
       { $set: productData },
       { new: true, runValidators: true },
     );
+
+    const commissionKeys = [
+      "applyCommission",
+      "adminCommissionType",
+      "adminCommissionValue",
+      "adminCommissionFixedRule",
+      "commissionOverrideReason",
+      "commissionEffectiveFrom",
+    ];
+    if ((role === "admin" || role === "superadmin") && commissionKeys.some((key) => Object.prototype.hasOwnProperty.call(productData, key))) {
+      void recordAuditLog({
+        actorId: req.user?.id || null,
+        action: "PRODUCT_COMMISSION_UPDATED",
+        targetType: "Product",
+        targetId: id,
+        before: commissionKeys.reduce((acc, key) => ({ ...acc, [key]: product[key] }), {}),
+        after: commissionKeys.reduce((acc, key) => ({ ...acc, [key]: updatedProduct?.[key] }), {}),
+        metadata: { reason: productData.commissionOverrideReason || "" },
+      });
+    }
 
     if (addonMappingsToSync !== null) {
       await syncProductAddonMappings(id, addonMappingsToSync);
@@ -1971,7 +2113,7 @@ export const getProductById = async (req, res) => {
       async () =>
         Product.findById(id)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight unit netQuantity barcode hsnCode foodType searchSynonyms localizedNames productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible preorderExpectedDate displayOrder variants addons applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule commissionOverrideReason commissionEffectiveFrom packagingCharge minOrderQuantity maxOrderQuantity variableWeight gstStatus gstSlabOverride isTaxInclusive legal preparationTimeMinutes dimensions returnPolicy handlingFlags deliveryOptions relatedProducts marketingFlag catalogProductId createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")
@@ -2142,7 +2284,7 @@ export const getModerationProducts = async (req, res) => {
       await Promise.all([
         Product.find(moderatedQuery)
           .select(
-            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible displayOrder variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule packagingCharge gstSlabOverride createdAt",
+            "name slug description sku price salePrice customerPrice customerSalePrice stock lowStockAlert brand weight unit netQuantity barcode hsnCode foodType searchSynonyms localizedNames productDisclaimer mainImage galleryImages headerId categoryId subcategoryId sellerId status approvalStatus approvalRequestedAt approvalReviewedAt approvalReviewedBy approvalNote lastSubmittedByRole isFeatured isSignatureProduct isPreorderEligible preorderExpectedDate displayOrder variants applyCommission adminCommission adminCommissionType adminCommissionValue adminCommissionFixedRule commissionOverrideReason commissionEffectiveFrom packagingCharge minOrderQuantity maxOrderQuantity variableWeight gstStatus gstSlabOverride isTaxInclusive legal preparationTimeMinutes dimensions returnPolicy handlingFlags deliveryOptions relatedProducts marketingFlag catalogProductId createdAt",
           )
           .populate("headerId", "name")
           .populate("categoryId", "name")

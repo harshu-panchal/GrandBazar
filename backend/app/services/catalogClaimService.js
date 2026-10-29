@@ -1,5 +1,6 @@
 import Product from "../models/product.js";
 import { slugify } from "../utils/slugify.js";
+import { catalogFieldsForProduct } from "./productFormService.js";
 
 export function makeProductSku(name, index = 1) {
   const prefix = String(name || "")
@@ -101,6 +102,9 @@ export async function createProductFromCatalog({
   });
 
   return Product.create({
+    ...catalogFieldsForProduct(
+      typeof catalogProduct.toObject === "function" ? catalogProduct.toObject() : catalogProduct,
+    ),
     catalogProductId: catalogProduct._id,
     sellerId,
     name,
