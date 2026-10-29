@@ -11,7 +11,10 @@ import mongoose from 'mongoose';
 import dns from 'dns';
 import { getProcessRole, isComponentEnabled, validateProcessRole } from './processRole.js';
 import { isRedisEnabled, getRedisClient, waitForRedis } from '../config/redis.js';
-import { createAllIndexes } from '../services/databaseIndexManager.js';
+import {
+  createAllIndexes,
+  syncPayoutIdempotencyIndex,
+} from '../services/databaseIndexManager.js';
 import { startSearchIndexWorker } from '../services/searchSyncService.js';
 import { ensureReviewIndexes } from '../models/review.js';
 
@@ -306,6 +309,11 @@ async function startup() {
       throw new Error('Startup validation failed: ' + validation.errors.join('; '));
     }
     
+    // Payout settlement cannot safely run with the legacy unique sparse
+    // idempotency index: explicit null keys collide on every later payout.
+    // Treat its migration as a startup prerequisite, unlike optional indexes.
+    await syncPayoutIdempotencyIndex();
+
     // Step 6: Create database indexes
     try {
       await createAllIndexes();

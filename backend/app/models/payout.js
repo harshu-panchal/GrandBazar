@@ -101,7 +101,7 @@ const payoutSchema = new mongoose.Schema(
     webhookStatus: { type: String, default: "" },
     // One key per settlement/bulk settlement so a retried or double-clicked pay
     // request can't create a second payout (BRD "Do make payment idempotent").
-    idempotencyKey: { type: String, default: null },
+    idempotencyKey: { type: String, default: undefined },
     // Shared bulk reference (BS-YYMM-NNN) when this payout is part of a bulk
     // settlement; links back to SellerBulkSettlement.refNo.
     bulkRef: { type: String, default: "", index: true },
@@ -111,6 +111,12 @@ const payoutSchema = new mongoose.Schema(
 
 payoutSchema.index({ beneficiaryId: 1, payoutType: 1, status: 1 });
 payoutSchema.index({ relatedOrderIds: 1 });
-payoutSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
+payoutSchema.index(
+  { idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  },
+);
 
 export default mongoose.model("Payout", payoutSchema);

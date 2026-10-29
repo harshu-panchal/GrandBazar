@@ -348,6 +348,8 @@ const orderSchema = new mongoose.Schema(
       // collected as cash at delivery, same as a COD order, even though
       // paymentMode stays "ONLINE" for the original portion.
       hasExtraCashDue: { type: Boolean, default: false },
+      deliverySettlementRetryCount: { type: Number, default: 0 },
+      deliverySettlementRetryAt: { type: Date, default: null },
     },
     status: {
       type: String,

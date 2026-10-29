@@ -31,6 +31,10 @@ import { registerScheduledJob, startScheduledJobs } from "./app/services/distrib
 import { getOrderAutoCancelJobHandler, getOrderAutoCancelJobInterval } from "./app/jobs/orderAutoCancelJob.js";
 import { getReturnWindowReleaseJobHandler, getReturnWindowReleaseJobInterval } from "./app/jobs/returnWindowReleaseJob.js";
 import {
+  getDeliveredSettlementReconciliationJobHandler,
+  getDeliveredSettlementReconciliationJobInterval,
+} from "./app/jobs/deliveredSettlementReconciliationJob.js";
+import {
   getSubscriptionExpiryJobHandler,
   getSubscriptionExpiryJobInterval,
 } from "./app/jobs/subscriptionExpiryJob.js";
@@ -319,6 +323,12 @@ async function startScheduler() {
     'returnWindowReleaseJob',
     getReturnWindowReleaseJobInterval(),
     getReturnWindowReleaseJobHandler()
+  );
+
+  registerScheduledJob(
+    'deliveredSettlementReconciliationJob',
+    getDeliveredSettlementReconciliationJobInterval(),
+    getDeliveredSettlementReconciliationJobHandler()
   );
 
   registerScheduledJob(

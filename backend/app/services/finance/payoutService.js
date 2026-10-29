@@ -93,14 +93,8 @@ export async function createPendingPayoutForOrder({
         walletId: wallet._id,
         actorType: ownerType,
         actorId: beneficiaryId,
-        // LEDGER_TRANSACTION_TYPE.PAYOUT_QUEUED does not exist (never did —
-        // confirmed via runtime lookup) — this silently evaluated to
-        // `type: undefined`, which fails LedgerEntry's required-field
-        // validation on every single call, throwing inside this function's
-        // own transaction and aborting it. Concretely: every seller/rider
-        // payout creation on order delivery (settleDeliveredOrder ->
-        // createPendingSellerPayout/createPendingRiderPayout -> here) has
-        // been throwing, not just failing silently.
+        // Use the payout-specific pending ledger types so both payout kinds
+        // remain distinguishable in wallet history.
         type:
           payoutType === PAYOUT_TYPE.SELLER
             ? LEDGER_TRANSACTION_TYPE.SELLER_PAYOUT_PENDING

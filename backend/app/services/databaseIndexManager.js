@@ -65,6 +65,64 @@ export async function syncCouponIndexes() {
   logger.info("[DatabaseIndexManager] Coupon indexes synced");
 }
 
+export async function syncPayoutIdempotencyIndex() {
+  const collection = mongoose.connection.collection("payouts");
+  const field = "idempotencyKey";
+  const matches = (await collection.indexes()).filter(
+    (index) =>
+      index.key &&
+      Object.keys(index.key).length === 1 &&
+      index.key[field] === 1,
+  );
+  const isCorrect = (index) =>
+    index.unique === true &&
+    index.sparse !== true &&
+    index.partialFilterExpression?.[field]?.$type === "string";
+
+  if (matches.some(isCorrect)) return;
+
+  const duplicateKeys = await collection
+    .aggregate([
+      { $match: { [field]: { $type: "string" } } },
+      { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+      { $limit: 1 },
+    ])
+    .toArray();
+  if (duplicateKeys.length > 0) {
+    throw new Error(
+      `Duplicate payout idempotency key found; refusing index rebuild: ${duplicateKeys[0]._id}`,
+    );
+  }
+
+  for (const index of matches) {
+    try {
+      await collection.dropIndex(index.name);
+      logger.info(`[DatabaseIndexManager] Dropped legacy payout index "${index.name}"`);
+    } catch (error) {
+      if (error.code !== 27 && error.codeName !== "IndexNotFound") throw error;
+    }
+  }
+
+  const remaining = (await collection.indexes()).some(
+    (index) =>
+      index.key &&
+      Object.keys(index.key).length === 1 &&
+      index.key[field] === 1 &&
+      isCorrect(index),
+  );
+  if (!remaining) {
+    await collection.createIndex(
+      { [field]: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { [field]: { $type: "string" } },
+      },
+    );
+    logger.info("[DatabaseIndexManager] Created corrected payout idempotency index");
+  }
+}
+
 /**
  * Create all required indexes across all collections
  * @returns {Promise<void>}
@@ -89,6 +147,18 @@ export async function createAllIndexes() {
       results.errors.push({
         collection: "coupons",
         index: "code_sellerId_compound",
+        error: error.message,
+      });
+    }
+
+    try {
+      await syncPayoutIdempotencyIndex();
+    } catch (error) {
+      logger.error("[DatabaseIndexManager] Failed to sync payout idempotency index:", error);
+      results.failed++;
+      results.errors.push({
+        collection: "payouts",
+        index: "idempotencyKey",
         error: error.message,
       });
     }
