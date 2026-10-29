@@ -462,6 +462,16 @@ const DashboardLayout = ({ children, navItems, title }) => {
         });
 
         const unsubscribeOrderStatus = onOrderStatusUpdate(getToken, (payload) => {
+            if (payload?.returnStatus) {
+                if (
+                    newReturnAlertRef.current?.orderId === payload.orderId
+                    && payload.returnStatus !== 'return_requested'
+                ) {
+                    setNewReturnAlert(null);
+                    newReturnAlertRef.current = null;
+                }
+                if (fetchPendingReturnsRef.current) fetchPendingReturnsRef.current();
+            }
             if (payload?.orderId && (payload?.itemAdditionRequested || payload?.workflowStatus === 'SELLER_PENDING')) {
                 handleIncomingOrder(payload);
                 if (fetchOrdersRef.current) fetchOrdersRef.current();

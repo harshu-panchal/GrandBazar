@@ -22,7 +22,7 @@ import {
   validateReturnDropOtp,
   getActiveReturnDropOtp,
 } from "../services/deliveryOtpService.js";
-import { emitToCustomer, emitToSeller, emitOrderStatusUpdate, getIo } from "../services/orderSocketEmitter.js";
+import { emitToCustomer, emitToSeller, emitReturnStatusUpdate, getIo } from "../services/orderSocketEmitter.js";
 import { sendSmsIndiaHubOtp } from "../services/smsIndiaHubService.js";
 import { creditWallet } from "../services/finance/walletService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -321,7 +321,7 @@ export const verifyReturnPickupOtp = async (req, res) => {
     order.returnStatus = "return_in_transit";
     order.returnPickedAt = new Date();
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     // POPULATE before response to ensure frontend consistency
     await order.populate([
@@ -400,7 +400,7 @@ export const requestReturnDropOtp = async (req, res) => {
 
     // Update to return_drop_pending
     await Order.updateOne({ _id: order._id }, { $set: { returnStatus: "return_drop_pending" } });
-    emitOrderStatusUpdate(order.orderId, { returnStatus: "return_drop_pending" }, order.customer);
+    emitReturnStatusUpdate(order, { returnStatus: "return_drop_pending" });
 
     const storeId = order.seller?.toString();
     let sellerPhone = "";
@@ -516,7 +516,7 @@ export const verifyReturnDropOtp = async (req, res) => {
     order.returnDropVerifiedAt = new Date();
     order.returnDropVerifiedBy = userId;
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     // Notify seller + admin. RETURN_COMPLETED only reaches the seller — without a
     // separate admin-targeted event here, nobody is ever prompted to run QC, so the

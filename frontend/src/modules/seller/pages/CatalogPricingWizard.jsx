@@ -80,7 +80,7 @@ const CatalogPricingWizard = () => {
       setPricingMap(
         items.reduce((acc, product) => {
           const id = String(product._id || product.id);
-          acc[id] = { price: "", salePrice: "", stock: "0" };
+          acc[id] = { price: "", salePrice: "", stock: "" };
           return acc;
         }, {}),
       );
@@ -233,7 +233,7 @@ const CatalogPricingWizard = () => {
               <tbody className="divide-y divide-slate-50">
                 {products.map((product) => {
                   const productId = String(product._id || product.id);
-                  const pricing = pricingMap[productId] || { price: "", salePrice: "", stock: "0" };
+                  const pricing = pricingMap[productId] || { price: "", salePrice: "", stock: "" };
                   return (
                     <tr key={productId}>
                       <td className="px-4 py-3" data-label="Select">
@@ -286,6 +286,7 @@ const CatalogPricingWizard = () => {
                           value={pricing.stock}
                           onChange={(e) => updatePricing(productId, "stock", e.target.value)}
                           className="w-24 px-3 py-2 rounded-lg bg-slate-50 text-sm font-semibold outline-none"
+                          placeholder="0"
                         />
                       </td>
                       <td className="px-4 py-3" data-label="You receive">

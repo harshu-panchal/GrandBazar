@@ -5,6 +5,7 @@ import ScrollToTop from "@shared/components/ScrollToTop";
 import { useSupportUnread } from "@core/context/SupportUnreadContext";
 import { useAuth } from "@core/context/AuthContext";
 import { adminApi } from "../services/adminApi";
+import { onOrderStatusUpdate } from "@core/services/orderSocket";
 import {
   LayoutDashboard,
   Tag,
@@ -469,9 +470,18 @@ const AdminRoutes = () => {
     };
     fetchPendingReturnCount();
     const poll = setInterval(fetchPendingReturnCount, 60000);
+    const getToken = () => localStorage.getItem("auth_admin");
+    let refreshTimer = null;
+    const unsubscribe = onOrderStatusUpdate(getToken, (payload) => {
+      if (!payload?.returnStatus) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(fetchPendingReturnCount, 250);
+    });
     return () => {
       cancelled = true;
       clearInterval(poll);
+      clearTimeout(refreshTimer);
+      unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdminOrAdmin]);

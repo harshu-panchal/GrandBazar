@@ -10,7 +10,9 @@ const mockStoreBundleImportCreate = jest.fn();
 const mockStoreFindById = jest.fn();
 const mockCatalogProductFind = jest.fn();
 const mockProductFindOne = jest.fn();
+const mockProductCountDocuments = jest.fn();
 const mockCreateProductFromCatalog = jest.fn();
+const mockAssertCanAddProduct = jest.fn();
 
 jest.unstable_mockModule("../app/models/category.js", () => ({
   default: { find: mockCategoryFind, findOne: jest.fn() },
@@ -41,7 +43,11 @@ jest.unstable_mockModule("../app/models/catalogProduct.js", () => ({
 }));
 
 jest.unstable_mockModule("../app/models/product.js", () => ({
-  default: { findOne: mockProductFindOne },
+  default: { findOne: mockProductFindOne, countDocuments: mockProductCountDocuments },
+}));
+
+jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
+  assertCanAddProduct: mockAssertCanAddProduct,
 }));
 
 jest.unstable_mockModule("../app/services/catalogClaimService.js", () => ({
@@ -66,6 +72,7 @@ const {
 describe("catalogBundleService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockProductCountDocuments.mockResolvedValue(0);
   });
 
   it("resolveStoreHeaderIds maps store category names to header docs", async () => {
@@ -178,5 +185,41 @@ describe("catalogBundleService", () => {
       }),
     );
     expect(mockStoreBundleImportCreate).toHaveBeenCalled();
+    expect(mockAssertCanAddProduct).toHaveBeenCalledWith("store-1", 1);
+  });
+
+  it("rejects the whole bundle before creating products when the plan limit is exceeded", async () => {
+    mockStoreFindById.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        _id: "store-1",
+        categories: ["Grocery"],
+        isVerified: true,
+        applicationStatus: "approved",
+      }),
+    });
+    mockCategoryFind.mockReturnValue({
+      lean: jest.fn().mockResolvedValue([{ _id: "header-1", name: "Grocery" }]),
+    });
+    mockCatalogBundleFind.mockReturnValue({
+      lean: jest.fn().mockResolvedValue([{
+        _id: "bundle-1",
+        name: "Large bundle",
+        headerId: "header-1",
+        catalogProductIds: ["cat-1", "cat-2", "cat-3"],
+        isActive: true,
+      }]),
+    });
+    mockStoreBundleImportFindOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    mockAssertCanAddProduct.mockRejectedValueOnce(
+      Object.assign(new Error("Product limit reached for this shop (2)."), { statusCode: 403 }),
+    );
+
+    await expect(importBundlesForStore({
+      storeId: "store-1",
+      bundleIds: ["bundle-1"],
+      accountId: "owner-1",
+    })).rejects.toThrow("Product limit reached");
+    expect(mockCreateProductFromCatalog).not.toHaveBeenCalled();
+    expect(mockStoreBundleImportCreate).not.toHaveBeenCalled();
   });
 });

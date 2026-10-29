@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Store, CheckCircle, Clock, CreditCard } from "lucide-react";
+import { Loader2, Store, CheckCircle, Clock } from "lucide-react";
 import Card from "@shared/components/ui/Card";
 import Button from "@shared/components/ui/Button";
 import { sellerApi } from "../services/sellerApi";
@@ -164,41 +164,30 @@ const SellerSubscription = () => {
           <p className="text-sm text-slate-500 mb-4">Pay with Razorpay to extend or change your plan.</p>
           <div className="grid md:grid-cols-2 gap-3">
             {plans.map((plan) => (
-              <button
+              <Card
                 key={plan._id}
-                type="button"
                 onClick={() => setSelectedPlanId(plan._id)}
-                className={`text-left p-4 rounded-xl border ${
+                className={`text-left p-4 rounded-xl border cursor-pointer ${
                   selectedPlanId === plan._id ? "border-primary-400 ring-2 ring-primary-100" : "border-slate-200"
                 }`}
               >
                 <p className="font-bold">{plan.name}</p>
                 <p className="text-sm text-slate-500">{plan.durationDays} days · {plan.shopCount} shops</p>
                 <p className="text-lg font-bold text-primary-600 mt-2">{currency}{plan.price}</p>
-              </button>
+                <Button
+                  className="w-full mt-4"
+                  disabled={isPaying}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedPlanId(plan._id);
+                    handlePayWithRazorpay(plan._id);
+                  }}
+                >
+                  {isPaying && selectedPlanId === plan._id ? "Opening Razorpay..." : "Pay with Razorpay"}
+                </Button>
+              </Card>
             ))}
           </div>
-          {selectedPlanId && (() => {
-            const selectedPlan = plans.find((p) => String(p._id) === String(selectedPlanId));
-            const currentPrice = Number(activeSubscription?.planSnapshot?.price || 0);
-            const currentSort = Number(activeSubscription?.planSnapshot?.sortOrder || 0);
-            const selectedPrice = Number(selectedPlan?.price || 0);
-            const selectedSort = Number(selectedPlan?.sortOrder || 0);
-            const isUpgrade = selectedPrice > currentPrice || selectedSort > currentSort;
-            return (
-              <Button
-                className="mt-4"
-                disabled={isPaying}
-                onClick={handlePayWithRazorpay}
-              >
-                {isPaying
-                  ? "Opening Razorpay..."
-                  : isUpgrade
-                    ? "Upgrade with Razorpay"
-                    : "Renew with Razorpay"}
-              </Button>
-            );
-          })()}
         </Card>
       </div>
     );
@@ -261,28 +250,21 @@ const SellerSubscription = () => {
               <li>• 0% commission on sales</li>
             </ul>
             <p className="text-2xl font-bold text-primary-600">{currency}{plan.price}</p>
+            <Button
+              className="w-full mt-4"
+              disabled={isPaying}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedPlanId(plan._id);
+                handlePayWithRazorpay(plan._id);
+              }}
+            >
+              {isPaying && selectedPlanId === plan._id ? "Opening Razorpay..." : "Pay with Razorpay"}
+            </Button>
           </Card>
         ))}
       </div>
 
-      {selectedPlanId && !pendingRazorpayPayment && (
-        <Card className="p-5 -mx-4 sm:mx-0 sm:rounded-xl rounded-none border-x-0 sm:border-x border-t border-b sm:border border-slate-200">
-          <div className="flex items-center gap-3 mb-4">
-            <CreditCard className="h-5 w-5 text-primary-600" />
-            <h2 className="font-bold text-slate-900">Pay with Razorpay</h2>
-          </div>
-          <p className="text-sm text-slate-500 mb-4">
-            Pay securely with Razorpay. Subscription activates automatically once payment succeeds.
-          </p>
-          <Button
-            disabled={isPaying}
-            onClick={() => handlePayWithRazorpay()}
-            className="w-full md:w-auto"
-          >
-            {isPaying ? "Opening Razorpay..." : "Pay with Razorpay"}
-          </Button>
-        </Card>
-      )}
     </div>
   );
 };

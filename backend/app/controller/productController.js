@@ -44,7 +44,7 @@ import {
 } from "../services/productAddonService.js";
 import { recordAuditLog } from "../services/auditTrailService.js";
 import { getDeliveryEtaSettings, computeEtaFromDistance } from "../services/deliveryEtaService.js";
-import { assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
+import { assertCanAddProduct, assertCanCreateFreeTierProduct } from "../services/subscriptionService.js";
 
 function buildProductListKey(queryParams) {
   const sorted = Object.keys(queryParams)
@@ -1230,6 +1230,7 @@ export const createProduct = async (req, res) => {
     // the actual gate for commission-model sellers, not just the separate
     // draft-publish flow.
     try {
+      await assertCanAddProduct(productData.sellerId, 1);
       await assertCanCreateFreeTierProduct(productData.sellerId);
     } catch (limitError) {
       return handleResponse(res, limitError.statusCode || 403, limitError.message);

@@ -38,6 +38,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 import { useCart } from "../context/CartContext";
 import { toast } from "sonner";
 import { subscribeToOrderLocation, subscribeToOrderTrail, subscribeToOrderRoute } from "@/core/services/trackingClient";
@@ -373,6 +374,9 @@ const OrderDetailPage = () => {
     };
 
     const offStatus = onOrderStatusUpdate(getToken, (payload) => {
+      if (payload?.returnStatus) {
+        setOrder((prev) => prev ? { ...prev, returnStatus: payload.returnStatus } : prev);
+      }
       // Immediately update order state from socket payload — no waiting for API re-fetch
       const ws = String(payload?.workflowStatus || "").toUpperCase();
       if (ws) {
@@ -885,11 +889,34 @@ const OrderDetailPage = () => {
       const response = await customerApi.createPaymentOrder({
         orderRef: paymentRef,
       });
-      if (response.data.success && response.data.result?.redirectUrl) {
-        window.location.href = response.data.result.redirectUrl;
-      } else {
+      const checkout = response.data?.result;
+      if (!response.data.success || !checkout?.razorpayOrderId) {
         toast.error(response.data.message || "Failed to initiate payment");
+        return;
       }
+
+      await openRazorpayCheckout({
+        razorpayOrderId: checkout.razorpayOrderId,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        keyId: checkout.keyId,
+        description: `Order #${order.orderId}`,
+        onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+          try {
+            await customerApi.verifyPaymentStatus(razorpayOrderId, {
+              razorpayPaymentId,
+              razorpaySignature,
+            });
+            toast.success("Payment successful");
+          } catch {
+            toast.success("Payment received — confirming shortly");
+          }
+          refreshOrder();
+        },
+        onFailure: (error) => {
+          toast.error(error?.description || "Payment failed. Please try again.");
+        },
+      });
     } catch (err) {
       console.error("[OrderDetailPage] Retry payment error:", err);
       toast.error(

@@ -19,6 +19,11 @@ jest.unstable_mockModule("../app/services/cacheService.js", () => ({
   buildKey: jest.fn((...parts) => parts.join(":")),
 }));
 
+jest.unstable_mockModule("../app/services/subscriptionService.js", () => ({
+  assertCanPublishProduct: jest.fn(),
+  assertCanCreateFreeTierProduct: jest.fn(),
+}));
+
 const {
   publishProductPricing,
   bulkPublishProductPricing,
@@ -54,6 +59,8 @@ describe("productPublishService", () => {
       sellerId: "store-1",
       isPublished: false,
       approvalStatus: "approved",
+      stock: 0,
+      variants: [{ name: "Standard", price: 0, salePrice: 0, stock: 0 }],
       save,
     };
     mockProductFindOne.mockResolvedValue(product);
@@ -67,6 +74,12 @@ describe("productPublishService", () => {
     });
 
     expect(result.price).toBe(120);
+    expect(result.stock).toBe(10);
+    expect(result.variants[0]).toEqual(expect.objectContaining({
+      price: 120,
+      salePrice: 99,
+      stock: 10,
+    }));
     expect(result.status).toBe("active");
     expect(result.isPublished).toBe(true);
     expect(save).toHaveBeenCalled();

@@ -16,7 +16,7 @@ import { MagicCard } from "@/components/ui/magic-card";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
-import { onReturnDropOtp } from "@core/services/orderSocket";
+import { onOrderStatusUpdate, onReturnDropOtp } from "@core/services/orderSocket";
 import NotifyRidersModal from "../components/NotifyRidersModal";
 
 const Returns = () => {
@@ -96,9 +96,9 @@ const Returns = () => {
         }
     };
 
-    const fetchReturns = async () => {
+    const fetchReturns = async ({ silent = false } = {}) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const res = await sellerApi.getReturns();
             const payload = res.data.result || {};
             const items = Array.isArray(payload.items)
@@ -129,7 +129,7 @@ const Returns = () => {
             console.error("Failed to fetch returns", error);
             showToast("Failed to fetch return requests", "error");
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -147,8 +147,27 @@ const Returns = () => {
             showToast(`Rider arrived for Return #${orderId}. OTP: ${otp}`, "info");
         });
 
+        let refreshTimer = null;
+        const unsubscribeStatus = onOrderStatusUpdate(getToken, (payload) => {
+            if (!payload?.orderId || !payload?.returnStatus) return;
+            setReturns((previous) => previous.map((order) =>
+                order.orderId === payload.orderId
+                    ? { ...order, returnStatus: payload.returnStatus }
+                    : order
+            ));
+            setSelectedReturn((previous) =>
+                previous?.orderId === payload.orderId
+                    ? { ...previous, returnStatus: payload.returnStatus }
+                    : previous
+            );
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => fetchReturns({ silent: true }), 300);
+        });
+
         return () => {
             if (typeof unsubscribe === "function") unsubscribe();
+            if (typeof unsubscribeStatus === "function") unsubscribeStatus();
+            clearTimeout(refreshTimer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

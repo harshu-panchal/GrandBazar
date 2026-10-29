@@ -5,6 +5,8 @@ const mockSellerFind = jest.fn();
 const mockSellerFindById = jest.fn();
 const mockStoreUpdateMany = jest.fn();
 const mockStoreCountDocuments = jest.fn();
+const mockStoreFindById = jest.fn();
+const mockProductCountDocuments = jest.fn();
 const mockProductUpdateMany = jest.fn();
 const mockSubscriptionCreate = jest.fn();
 const mockSubscriptionFindOne = jest.fn();
@@ -27,6 +29,7 @@ jest.unstable_mockModule("../app/models/seller.js", () => ({
 jest.unstable_mockModule("../app/models/store.js", () => ({
   default: {
     find: mockStoreFind,
+    findById: mockStoreFindById,
     countDocuments: mockStoreCountDocuments,
     updateMany: mockStoreUpdateMany.mockResolvedValue({}),
   },
@@ -34,7 +37,7 @@ jest.unstable_mockModule("../app/models/store.js", () => ({
 
 jest.unstable_mockModule("../app/models/product.js", () => ({
   default: {
-    countDocuments: jest.fn().mockResolvedValue(0),
+    countDocuments: mockProductCountDocuments,
     updateMany: mockProductUpdateMany.mockResolvedValue({}),
     find: jest.fn().mockReturnValue({
       sort: jest.fn().mockReturnValue({
@@ -81,6 +84,7 @@ jest.unstable_mockModule("../app/models/subscriptionPaymentRequest.js", () => ({
 const {
   approvePaymentRequest,
   assertCanCreateStore,
+  assertCanAddProduct,
   expireDueSubscriptions,
   activateSubscriptionFromPaymentRequest,
   enforceSubscriptionLimits,
@@ -92,12 +96,37 @@ describe("subscriptionService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockStoreCountDocuments.mockResolvedValue(0);
+    mockProductCountDocuments.mockResolvedValue(0);
     mockStoreFind.mockReturnValue({
       sort: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           lean: jest.fn().mockResolvedValue([]),
         }),
       }),
+    });
+  });
+
+  it("blocks adding products when a subscription shop limit would be exceeded", async () => {
+    mockStoreFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ ownerId: "seller1" }),
+    });
+    mockSellerFindById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ businessModel: "subscription" }),
+    });
+    mockSubscriptionFindOne.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({
+        sellerId: "seller1",
+        planSnapshot: { productCountPerShop: 2 },
+      }),
+    });
+    mockProductCountDocuments.mockResolvedValue(1);
+
+    await expect(assertCanAddProduct("store1", 2)).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringContaining("Product limit reached"),
     });
   });
 

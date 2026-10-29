@@ -111,7 +111,7 @@ export const importCatalogBundles = async (req, res) => {
       result,
     );
   } catch (error) {
-    const status = error.message.includes("approved") ? 403 : 400;
+    const status = error.statusCode || (error.message.includes("approved") ? 403 : 400);
     return handleResponse(res, status, error.message);
   }
 };

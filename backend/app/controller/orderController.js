@@ -13,6 +13,7 @@ import Payout from "../models/payout.js";
 import OrderOtp from "../models/orderOtp.js";
 import handleResponse, { isAdminScopedUser } from "../utils/helper.js";
 import { maskOrderForViewer, maskOrdersForViewer } from "../services/orderMaskingService.js";
+import { redactDeliveredCustomerDetails } from "../services/deliveryOrderPrivacyService.js";
 import getPagination from "../utils/pagination.js";
 import { WORKFLOW_STATUS, DEFAULT_SELLER_TIMEOUT_MS } from "../constants/orderWorkflow.js";
 import { ORDER_PAYMENT_STATUS } from "../constants/finance.js";
@@ -64,12 +65,14 @@ import {
   emitToSeller,
   emitToDelivery,
   emitOrderStatusUpdate,
+  emitReturnStatusUpdate,
 } from "../services/orderSocketEmitter.js";
 import * as walletService from "../services/finance/walletService.js";
 import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } from "../constants/finance.js";
 import { processPayout } from "../services/finance/payoutService.js";
 import { createLedgerEntry } from "../services/finance/ledgerService.js";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
+import { resolveSiblingStoreIds } from "../services/storeService.js";
 
 function validateWithJoi(schema, payload) {
   const { error, value } = schema.validate(payload, {
@@ -308,8 +311,9 @@ export const getSellerReturns = async (req, res) => {
 
     const query = {};
 
-    if (role !== "admin") {
-      query.seller = userId;
+    if (!isAdminScopedUser(req.user)) {
+      const storeIds = await resolveSiblingStoreIds(userId);
+      query.seller = { $in: storeIds };
     }
 
     query.returnStatus = { $ne: "none" };
@@ -699,7 +703,8 @@ export const getOrderDetails = async (req, res) => {
       order = sanitizeCommissionFieldsForSeller(order);
     }
 
-    return handleResponse(res, 200, "Order details fetched", maskOrderForViewer(attachDisplayStatus(order), req.user));
+    const viewerSafeOrder = redactDeliveredCustomerDetails(order, req.user);
+    return handleResponse(res, 200, "Order details fetched", maskOrderForViewer(attachDisplayStatus(viewerSafeOrder), req.user));
   } catch (error) {
     console.error(`[ORDER_ERROR] Error fetching order details:`, error);
     return handleResponse(res, 500, error.message);
@@ -1035,17 +1040,7 @@ export const requestReturn = async (req, res) => {
 
     const adminIds = (await Admin.find().select("_id").lean()).map((a) => a?._id).filter(Boolean);
 
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
-    emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REQUESTED, {
-      orderId: order.orderId,
-      customerId: order.customer,
-      sellerId: order.seller,
-      adminIds,
-      data: {
-        reason: order.returnReason,
-        reasonDetail: order.returnReasonDetail,
-      },
-    });
+    emitReturnStatusUpdate(order);
     // Fetch customer name/phone to enrich the seller popup
     let customerName = order.address?.name || "";
     let customerPhone = order.address?.phone || "";
@@ -1057,27 +1052,39 @@ export const requestReturn = async (req, res) => {
       }
     } catch { /* non-critical */ }
 
-    emitToSeller(order.seller?.toString(), {
-      event: "return:requested",
-      payload: {
+    const sellerAlertPayload = {
+      orderId: order.orderId,
+      returnStatus: order.returnStatus,
+      returnReason: order.returnReason,
+      returnReasonDetail: order.returnReasonDetail,
+      returnRequestedAt: order.returnRequestedAt,
+      customerName,
+      customerPhone,
+      returnItems: (order.returnItems || []).map((item) => ({
+        name: item.name || "",
+        quantity: item.quantity,
+        price: item.price,
+        image: item.image || "",
+        variantSlot: item.variantSlot || "",
+      })),
+    };
+
+    await Promise.all([
+      emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REQUESTED, {
         orderId: order.orderId,
-        returnStatus: order.returnStatus,
-        returnReason: order.returnReason,
-        returnReasonDetail: order.returnReasonDetail,
-        returnRequestedAt: order.returnRequestedAt,
-        // Customer details
-        customerName,
-        customerPhone,
-        // Return items (selected products)
-        returnItems: (order.returnItems || []).map((item) => ({
-          name: item.name || "",
-          quantity: item.quantity,
-          price: item.price,
-          image: item.image || "",
-          variantSlot: item.variantSlot || "",
-        })),
-      },
-    });
+        customerId: order.customer,
+        sellerId: order.seller,
+        adminIds,
+        data: {
+          reason: order.returnReason,
+          reasonDetail: order.returnReasonDetail,
+        },
+      }),
+      emitToSeller(order.seller?.toString(), {
+        event: "return:requested",
+        payload: sellerAlertPayload,
+      }),
+    ]);
 
     return handleResponse(
       res,
@@ -1525,7 +1532,7 @@ export const approveReturnRequest = async (req, res) => {
 
     await order.save();
 
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_APPROVED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -1659,7 +1666,7 @@ export const rejectReturnRequest = async (req, res) => {
 
     await order.save();
 
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REJECTED, {
       orderId: order.orderId,
       customerId: order.customer,
@@ -1718,7 +1725,7 @@ export const updateReturnQcStatus = async (req, res) => {
     order.returnQcNote = note ? String(note).trim().slice(0, 500) : undefined;
 
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     if (qcStatus === "qc_passed") {
       const updated = await completeReturnAndRefund(order);
@@ -1824,7 +1831,7 @@ export const assignReturnDelivery = async (req, res) => {
     order.returnStatus = "return_pickup_assigned";
 
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     // Fetch seller + customer info for enriched broadcast payloads
     let assignSellerInfo = null;
@@ -1963,7 +1970,7 @@ export const acceptReturnPickup = async (req, res) => {
       order.returnDeliveryBoy = userId;
       order.returnStatus = "return_pickup_assigned";
       await order.save();
-      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+      emitReturnStatusUpdate(order);
 
       // Retract broadcast so other riders stop seeing this task
       try {
@@ -2031,7 +2038,7 @@ export const rejectReturnPickup = async (req, res) => {
     }
     order.returnStatus = "return_approved";
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     // Notify seller
     emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REJECTED, {
@@ -2172,7 +2179,7 @@ export const completeReturnAndRefund = async (order) => {
   });
   order.returnStatus = "refund_initiated";
   await order.save();
-  emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+  emitReturnStatusUpdate(order);
   emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_INITIATED, {
     orderId: order.orderId,
     customerId: order.customer,
@@ -2391,7 +2398,7 @@ export const completeReturnAndRefund = async (order) => {
   refundRecord.status = "completed";
   refundRecord.completedAt = new Date();
   await refundRecord.save();
-  emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+  emitReturnStatusUpdate(order);
   emitNotificationEvent(NOTIFICATION_EVENTS.REFUND_COMPLETED, {
     orderId: order.orderId,
     customerId: order.customer,
@@ -2476,7 +2483,7 @@ export const updateReturnStatus = async (req, res) => {
         order.returnPickedAt = now;
       }
       await order.save();
-      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+      emitReturnStatusUpdate(order);
       return handleResponse(res, 200, "Return status updated", order);
     }
 
@@ -2486,7 +2493,7 @@ export const updateReturnStatus = async (req, res) => {
         order.returnDeliveredBackAt = now;
       }
       await order.save();
-      emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+      emitReturnStatusUpdate(order);
 
       try {
         const adminIds = (await Admin.find().select("_id").lean()).map((a) => a?._id).filter(Boolean);
@@ -2505,7 +2512,7 @@ export const updateReturnStatus = async (req, res) => {
 
     order.returnStatus = returnStatus;
     await order.save();
-    emitOrderStatusUpdate(order.orderId, { returnStatus: order.returnStatus }, order.customer);
+    emitReturnStatusUpdate(order);
 
     return handleResponse(res, 200, "Return status updated", order);
   } catch (error) {

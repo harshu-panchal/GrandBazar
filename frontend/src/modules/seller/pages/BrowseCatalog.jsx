@@ -1320,8 +1320,11 @@ const BrowseCatalog = () => {
                           Price the variants you sell. Variants left without a price are not added.
                         </p>
                         {item.variants.map((v) => (
-                          <div key={v.id} className="flex items-end gap-2">
-                            <div className="flex-1 min-w-0">
+                          <div
+                            key={v.id}
+                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_6rem_5rem_auto]"
+                          >
+                            <div className="col-span-4 min-w-0 sm:col-span-1">
                               <label className="text-[10px] font-bold text-slate-400 uppercase">Variant</label>
                               <input
                                 type="text"
@@ -1331,7 +1334,7 @@ const BrowseCatalog = () => {
                                 className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                               />
                             </div>
-                            <div className="w-24">
+                            <div className="min-w-0">
                               <label className="text-[10px] font-bold text-slate-400 uppercase">Price</label>
                               <input
                                 type="number"
@@ -1342,7 +1345,7 @@ const BrowseCatalog = () => {
                                 className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                               />
                             </div>
-                            <div className="w-24">
+                            <div className="min-w-0">
                               <label className="text-[10px] font-bold text-slate-400 uppercase">Discount</label>
                               <input
                                 type="number"
@@ -1353,7 +1356,7 @@ const BrowseCatalog = () => {
                                 className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
                               />
                             </div>
-                            <div className="w-20">
+                            <div className="min-w-0">
                               <label className="text-[10px] font-bold text-slate-400 uppercase">Stock</label>
                               <input
                                 type="number"

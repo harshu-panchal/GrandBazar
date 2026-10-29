@@ -10,6 +10,7 @@ import { invalidate, buildKey } from "../services/cacheService.js";
 import { enqueueProductIndex } from "../services/searchSyncService.js";
 import { computeCustomerPriceFieldsForWrite } from "../services/finance/customerPriceService.js";
 import { ensureDefaultVariant } from "../services/catalogClaimService.js";
+import { assertCanAddProduct } from "../services/subscriptionService.js";
 
 // Helper to auto-generate SKU prefix
 function makeProductSku(name, index = 1) {
@@ -790,6 +791,8 @@ export const claimCatalogProduct = async (req, res) => {
       return handleResponse(res, 400, "You have already added this catalog product to your store.");
     }
 
+    await assertCanAddProduct(sellerId, 1);
+
     // Fetch Catalog Product details
     const catalogProduct = await CatalogProduct.findById(catalogProductId);
     if (!catalogProduct || catalogProduct.status !== "active") {
@@ -906,7 +909,7 @@ export const claimCatalogProduct = async (req, res) => {
     if (error.code === 11000) {
       return handleResponse(res, 400, "Slug or SKU already exists for your store listings.");
     }
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 
@@ -921,6 +924,15 @@ export const bulkClaimCatalogProducts = async (req, res) => {
     if (!Array.isArray(products) || products.length === 0) {
       return handleResponse(res, 400, "An array of products is required for bulk claim.");
     }
+
+    const requestedCatalogIds = [...new Set(
+      products.map((product) => String(product.catalogProductId || "")).filter(Boolean),
+    )];
+    const existingClaims = await Product.countDocuments({
+      sellerId,
+      catalogProductId: { $in: requestedCatalogIds },
+    });
+    await assertCanAddProduct(sellerId, Math.max(0, requestedCatalogIds.length - existingClaims));
 
     const claimedCount = [];
     const errors = [];
@@ -1032,6 +1044,6 @@ export const bulkClaimCatalogProducts = async (req, res) => {
     return handleResponse(res, 201, `${claimedCount.length} products added to your store.`, { claimed: claimedCount, errors });
   } catch (error) {
     console.error("Bulk Claim Product Error:", error);
-    return handleResponse(res, 500, error.message);
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };

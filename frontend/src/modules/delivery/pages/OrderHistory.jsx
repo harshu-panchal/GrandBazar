@@ -12,6 +12,7 @@ import Card from "@/shared/components/ui/Card";
 import { deliveryApi } from "../services/deliveryApi";
 import { toast } from "sonner";
 import { getLegacyStatusFromOrder, getOrderStatusLabel } from "@/shared/utils/orderStatus";
+import { onOrderStatusUpdate } from "@core/services/orderSocket";
 
 /** Real rider earning for this order (delivery commission + tip), not a flat % guess. */
 const resolveOrderEarnings = (order) =>
@@ -133,6 +134,33 @@ const OrderHistory = () => {
     };
   }, [filter]);
 
+  useEffect(() => {
+    const getToken = () => localStorage.getItem("auth_delivery");
+    let refreshTimer = null;
+    const unsubscribe = onOrderStatusUpdate(getToken, (payload) => {
+      if (!payload?.orderId || !payload?.returnStatus) return;
+      setOrders((previous) => previous.map((order) =>
+        order.orderId === payload.orderId
+          ? { ...order, returnStatus: payload.returnStatus }
+          : order
+      ));
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(async () => {
+        try {
+          const response = await deliveryApi.getOrderHistory({ status: filter });
+          const list = response.data?.results ?? response.data?.result ?? [];
+          setOrders(Array.isArray(list) ? list : []);
+        } catch {
+          // Keep the immediate socket patch; the normal recovery path retries later.
+        }
+      }, 300);
+    });
+    return () => {
+      unsubscribe();
+      clearTimeout(refreshTimer);
+    };
+  }, [filter]);
+
   const initialLoading = loading && orders.length === 0;
   const refreshing = loading && orders.length > 0;
 
@@ -170,7 +198,7 @@ const OrderHistory = () => {
             />
             <input
               type="text"
-              placeholder="Search Order ID, Customer..."
+              placeholder="Search Order ID or store..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all border border-transparent focus:border-primary/20"
@@ -270,17 +298,19 @@ const OrderHistory = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-start">
-                        <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 mr-2 flex-shrink-0 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
-                        <div>
-                          <p className="ds-caption text-gray-500 mb-0.5">
-                            Customer
-                          </p>
-                          <p className="text-sm font-medium text-gray-800 line-clamp-1">
-                            {order.customer?.name || "Customer"}
-                          </p>
+                      {legacyStatus !== "delivered" && order.customer?.name && (
+                        <div className="flex items-start">
+                          <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 mr-2 flex-shrink-0 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+                          <div>
+                            <p className="ds-caption text-gray-500 mb-0.5">
+                              Customer
+                            </p>
+                            <p className="text-sm font-medium text-gray-800 line-clamp-1">
+                              {order.customer.name}
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center text-xs text-gray-500">

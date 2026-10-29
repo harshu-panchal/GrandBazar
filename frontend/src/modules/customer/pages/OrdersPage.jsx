@@ -6,6 +6,7 @@ import { customerApi } from '../services/customerApi';
 import { useCart } from '../context/CartContext';
 import { getOrderStatusLabel, getLegacyStatusFromOrder } from '@/shared/utils/orderStatus';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
+import { onOrderStatusUpdate } from '@/core/services/orderSocket';
 
 const OrdersPage = () => {
     const navigate = useNavigate();
@@ -76,6 +77,24 @@ const OrdersPage = () => {
         };
 
         fetchOrders();
+
+        const getToken = () => localStorage.getItem('auth_customer');
+        let refreshTimer = null;
+        const unsubscribe = onOrderStatusUpdate(getToken, (payload) => {
+            if (!payload?.orderId || !payload?.returnStatus) return;
+            setOrders((previous) => previous.map((order) =>
+                order.orderId === payload.orderId
+                    ? { ...order, returnStatus: payload.returnStatus }
+                    : order
+            ));
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(fetchOrders, 300);
+        });
+
+        return () => {
+            unsubscribe();
+            clearTimeout(refreshTimer);
+        };
     }, []);
 
     if (loading) {

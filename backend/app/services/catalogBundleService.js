@@ -9,6 +9,7 @@ import { isStoreApplicationApproved } from "./storeService.js";
 import { getStoreCategoryList } from "./storeService.js";
 import { createProductFromCatalog } from "./catalogClaimService.js";
 import { invalidate, buildKey } from "./cacheService.js";
+import { assertCanAddProduct } from "./subscriptionService.js";
 
 export async function resolveStoreHeaderIds(store) {
   const headerNames = getStoreCategoryList(store);
@@ -259,6 +260,33 @@ export async function importBundlesForStore({
   if (!bundles.length) {
     throw new Error("No valid active bundles found");
   }
+
+  // Check the entire selection before creating anything. Bundle products are
+  // drafts initially, but they still occupy this shop's subscription capacity.
+  for (const bundle of bundles) {
+    if (!allowedHeaderIds.has(String(bundle.headerId))) {
+      throw new Error(`Bundle "${bundle.name}" does not match this store's header categories`);
+    }
+    const existingImport = await StoreBundleImport.findOne({
+      storeId,
+      bundleId: bundle._id,
+    }).lean();
+    if (existingImport) {
+      throw new Error(`Bundle "${bundle.name}" has already been imported for this store`);
+    }
+  }
+
+  const requestedCatalogIds = [...new Set(
+    bundles.flatMap((bundle) => (bundle.catalogProductIds || []).map(String)),
+  )];
+  const alreadyClaimedCount = await Product.countDocuments({
+    sellerId: storeId,
+    catalogProductId: { $in: requestedCatalogIds },
+  });
+  await assertCanAddProduct(
+    storeId,
+    Math.max(0, requestedCatalogIds.length - alreadyClaimedCount),
+  );
 
   const results = [];
   const productIds = [];

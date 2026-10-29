@@ -47,7 +47,7 @@ function normalizeDeliveryId(deliveryId) {
  * and optionally to the customer’s personal room so the app updates even before
  * opening order details (e.g. checkout success overlay).
  */
-export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
+export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId, deliveryIds = []) {
   const s = getIo();
   if (!s) return;
   const body = {
@@ -55,7 +55,7 @@ export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
     ...payload,
     at: new Date().toISOString(),
   };
-  s.to(`order:${orderId}`).emit("order:status:update", body);
+  const rooms = new Set([`order:${orderId}`, "admin:orders"]);
   const cid =
     customerId != null &&
     typeof customerId === "object" &&
@@ -63,7 +63,7 @@ export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
       ? customerId.toString()
       : customerId;
   if (cid) {
-    s.to(`customer:${cid}`).emit("order:status:update", body);
+    rooms.add(`customer:${cid}`);
   }
   // Optional — most emitOrderStatusUpdate call sites are seller-initiated
   // (the seller's own UI already has the result), so this is only passed at
@@ -77,13 +77,29 @@ export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId) {
       ? sellerId.toString()
       : sellerId;
   if (sid) {
-    s.to(`seller:${sid}`).emit("order:status:update", body);
+    rooms.add(`seller:${sid}`);
   }
   // Every admin socket auto-joins "admin:orders" on connect (see
   // socketManager.js) — admins need live visibility across ALL orders, not
   // just ones they've opened (unlike customer/seller, who only care about
   // their own order/room).
-  s.to("admin:orders").emit("order:status:update", body);
+  for (const deliveryId of Array.isArray(deliveryIds) ? deliveryIds : [deliveryIds]) {
+    const did = normalizeDeliveryId(deliveryId);
+    if (did) rooms.add(`delivery:${did}`);
+  }
+  s.to([...rooms]).emit("order:status:update", body);
+}
+
+/** Broadcast a return transition to customer, seller, admin and rider apps. */
+export function emitReturnStatusUpdate(order, payload = {}) {
+  if (!order?.orderId) return;
+  emitOrderStatusUpdate(
+    order.orderId,
+    { returnStatus: payload.returnStatus || order.returnStatus, ...payload },
+    order.customer,
+    order.seller,
+    [order.deliveryBoy, order.returnDeliveryBoy].filter(Boolean),
+  );
 }
 
 export async function emitToSeller(sellerId, { event, payload }) {

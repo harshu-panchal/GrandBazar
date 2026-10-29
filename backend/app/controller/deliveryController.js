@@ -14,6 +14,7 @@ import { applyDeliveredSettlement } from "../services/orderSettlement.js";
 import { roundCurrency } from "../utils/money.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { redactDeliveredCustomerDetailsList } from "../services/deliveryOrderPrivacyService.js";
 
 const LOC_MIN_INTERVAL_MS = () =>
   parseInt(process.env.LOCATION_MIN_INTERVAL_MS || "3000", 10);
@@ -581,7 +582,12 @@ export const getMyDeliveryOrders = async (req, res) => {
             .populate("customer", "name phone")
             .lean();
 
-        return handleResponse(res, 200, "Delivery orders fetched", orders);
+        return handleResponse(
+            res,
+            200,
+            "Delivery orders fetched",
+            redactDeliveredCustomerDetailsList(orders, req.user),
+        );
     } catch (error) {
         return handleResponse(res, 500, error.message);
     }

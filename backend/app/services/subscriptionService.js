@@ -198,6 +198,40 @@ export async function assertCanPublishProduct(storeId, additionalCount = 1) {
 }
 
 /**
+ * Enforces a subscription plan's per-shop capacity when products enter a
+ * seller's inventory. Draft bundle imports count too, so importing cannot be
+ * used to bypass the plan and leave an oversized hidden catalogue.
+ */
+export async function assertCanAddProduct(storeId, additionalCount = 1) {
+  const store = await Store.findById(storeId).select("ownerId").lean();
+  if (!store?.ownerId) return;
+
+  const seller = await Seller.findById(store.ownerId).select("businessModel").lean();
+  if (seller?.businessModel !== BUSINESS_MODEL.SUBSCRIPTION) return;
+
+  const active = await getActiveSubscriptionForSeller(store.ownerId);
+  if (!active) {
+    const err = new Error("Active subscription required to add products");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const perShop = Number(active.planSnapshot?.productCountPerShop || 0);
+  if (perShop <= 0) return;
+
+  const productCount = await Product.countDocuments({ sellerId: storeId });
+  const requestedCount = Math.max(0, Number(additionalCount) || 0);
+  if (productCount + requestedCount > perShop) {
+    const remaining = Math.max(0, perShop - productCount);
+    const err = new Error(
+      `Product limit reached for this shop (${perShop}). You can add ${remaining} more product${remaining === 1 ? "" : "s"}. Upgrade your subscription plan.`,
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
+/**
  * Free-tier product cap for commission-model sellers (checklist items 92-94).
  * Unlike `assertCanPublishProduct` (subscription-tier, hard block), this
  * limit's enforcement is itself admin-configurable via

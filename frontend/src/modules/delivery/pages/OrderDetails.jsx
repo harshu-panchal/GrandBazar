@@ -212,6 +212,9 @@ const OrderDetails = () => {
     joinOrderRoom(orderId, getToken);
 
     const off = onOrderStatusUpdate(getToken, (payload) => {
+      if (payload?.returnStatus) {
+        setOrder((prev) => prev ? { ...prev, returnStatus: payload.returnStatus } : prev);
+      }
       const ws = String(payload?.workflowStatus || "").toUpperCase();
       if (ws === "DELIVERED") {
         setStep(4);

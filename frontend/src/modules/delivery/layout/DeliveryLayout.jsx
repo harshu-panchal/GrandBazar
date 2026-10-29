@@ -9,6 +9,7 @@ import { deliveryApi } from "../services/deliveryApi";
 import { useAuth } from "@core/context/AuthContext";
 import {
   getOrderSocket,
+  onOrderStatusUpdate,
   onDeliveryBroadcast,
   onDeliveryBroadcastWithdrawn,
 } from "@/core/services/orderSocket";
@@ -382,6 +383,30 @@ const DeliveryLayout = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    const getToken = () => localStorage.getItem("auth_delivery");
+    let refreshTimer = null;
+    const unsubscribe = onOrderStatusUpdate(getToken, (payload) => {
+      if (!payload?.returnStatus) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(async () => {
+        try {
+          const res = await fetchAvailableOrders();
+          if (res?.data?.success) {
+            const availableOrders = res.data.results || res.data.result || [];
+            applyAvailableOrdersList(Array.isArray(availableOrders) ? availableOrders : []);
+          }
+        } catch {
+          // The regular recovery poll will retry.
+        }
+      }, 250);
+    });
+    return () => {
+      unsubscribe();
+      clearTimeout(refreshTimer);
+    };
+  }, [applyAvailableOrdersList, fetchAvailableOrders]);
 
   const fetchNotifications = useCallback(async () => {
     if (notificationsRequestRef.current.inFlight) return null;

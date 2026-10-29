@@ -13,7 +13,7 @@ import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
  * backend's "already reviewed" error surface gracefully — this component
  * doesn't try to pre-detect that, it just reacts to it.
  */
-function ItemRatingRow({ item, orderId, onRated }) {
+function ItemRatingRow({ item, orderId }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -40,7 +40,6 @@ function ItemRatingRow({ item, orderId, onRated }) {
         comment: comment.trim() || "Great product!",
       });
       setDone(true);
-      onRated?.();
     } catch (error) {
       const message = error?.response?.data?.message || "";
       if (message.toLowerCase().includes("already reviewed")) {
@@ -124,7 +123,6 @@ export default function RateOrderItems({ order }) {
           key={item.product?._id || item.product || idx}
           item={item}
           orderId={order.orderId || order._id}
-          onRated={() => setRatedCount((c) => c + 1)}
         />
       ))}
     </div>
