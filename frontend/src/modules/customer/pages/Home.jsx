@@ -206,6 +206,7 @@ const Home = () => {
   const { settings } = useSettings();
   const navigate = useNavigate();
   const quickCatsRef = useRef(null);
+  const homeRequestIdRef = useRef(0);
   const cachedHomePageData = getCachedHomePageData(currentLocation);
 
   const { ref: particleContainerRef, isVisible: particlesVisible } = useInViewAnimation();
@@ -266,9 +267,9 @@ const Home = () => {
     setCategories(data.categories || [ALL_CATEGORY]);
     setQuickCategories(data.quickCategories || []);
     setProducts(data.products || []);
-    setExperienceSections(data.experienceSections || []);
-    setOfferSections(data.offerSections || []);
-    setRecommendedStores(data.recommendedStores || []);
+    if (Array.isArray(data.experienceSections)) setExperienceSections(data.experienceSections);
+    if (Array.isArray(data.offerSections)) setOfferSections(data.offerSections);
+    if (Array.isArray(data.recommendedStores)) setRecommendedStores(data.recommendedStores);
     if (data.heroConfig) setHeroConfig(data.heroConfig);
     setActiveCategory((prev) => {
       const stored = window.sessionStorage.getItem("experienceReturn");
@@ -291,6 +292,7 @@ const Home = () => {
 
   const fetchData = async ({ forceRefresh = false } = {}) => {
     if (!hasHydratedLocation) return;
+    const requestId = ++homeRequestIdRef.current;
     const activeHeaderId = activeCategory && activeCategory._id !== ALL_CATEGORY._id ? activeCategory._id : undefined;
     const cacheKey = getHomePageDataCacheKey(currentLocation, activeHeaderId);
     if (!forceRefresh) {
@@ -313,25 +315,29 @@ const Home = () => {
       if (activeHeaderId) {
         productParams.headerId = activeHeaderId;
       }
-      const [catRes, prodRes, expRes, sectionsRes, recommendedStoresRes] = await Promise.all([
+      const secondaryDataPromise = Promise.all([
+        (hasValidLocation
+          ? customerApi.getExperienceSections({ pageType: "home", lat: currentLocation.latitude, lng: currentLocation.longitude })
+          : customerApi.getExperienceSections({ pageType: "home" })
+        ).catch(() => null),
+        (hasValidLocation
+          ? customerApi.getOfferSections({ lat: currentLocation.latitude, lng: currentLocation.longitude })
+          : Promise.resolve({ data: { results: [] } })
+        ).catch(() => ({ data: {} })),
+        (hasValidLocation
+          ? customerApi.getRecommendedStores({ lat: currentLocation.latitude, lng: currentLocation.longitude })
+          : customerApi.getRecommendedStores()
+        ).catch(() => ({ data: {} })),
+      ]);
+      const [catRes, prodRes] = await Promise.all([
         customerApi.getCategories(),
         hasValidLocation ? customerApi.getProducts(productParams) : Promise.resolve({ data: { success: true, result: { items: [] } } }),
-        hasValidLocation
-          ? customerApi.getExperienceSections({ pageType: "home", lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => null)
-          : customerApi.getExperienceSections({ pageType: "home" }).catch(() => null),
-        hasValidLocation ? customerApi.getOfferSections({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} })) : Promise.resolve({ data: { results: [] } }),
-        hasValidLocation
-          ? customerApi.getRecommendedStores({ lat: currentLocation.latitude, lng: currentLocation.longitude }).catch(() => ({ data: {} }))
-          : customerApi.getRecommendedStores().catch(() => ({ data: {} })),
       ]);
       const nextHomeData = {
         categories: [ALL_CATEGORY],
         activeCategory: ALL_CATEGORY,
         products: [],
         quickCategories: [],
-        experienceSections: [],
-        offerSections: [],
-        recommendedStores: [],
         categoryMap: {},
         subcategoryMap: {},
         formattedHeaders: [],
@@ -362,13 +368,42 @@ const Home = () => {
         const dbProds = Array.isArray(prodRes.data.results) ? prodRes.data.results : Array.isArray(rawResult?.items) ? rawResult.items : Array.isArray(rawResult) ? rawResult : [];
         nextHomeData.products = dbProds.map((p) => ({ ...p, id: p._id, image: p.mainImage || p.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400", price: p.customerSalePrice ?? p.customerPrice ?? p.salePrice ?? p.price, originalPrice: p.customerPrice ?? p.price, weight: p.weight || "1 unit", deliveryTime: p.deliveryEta?.label || "8-15 mins" }));
       }
-      if (expRes?.data?.success) nextHomeData.experienceSections = Array.isArray(expRes.data.result || expRes.data.results) ? (expRes.data.result || expRes.data.results) : [];
-      const sectionsList = sectionsRes?.data?.results || sectionsRes?.data?.result || sectionsRes?.data;
-      nextHomeData.offerSections = Array.isArray(sectionsList) ? sectionsList : [];
-      const recommendedStoresList = recommendedStoresRes?.data?.results || recommendedStoresRes?.data?.result;
-      nextHomeData.recommendedStores = Array.isArray(recommendedStoresList) ? recommendedStoresList : [];
+      if (requestId !== homeRequestIdRef.current) return;
       applyHomePageData(nextHomeData, { cacheKey });
-    } catch (error) { console.error("Error:", error); setHasFetchError(true); } finally { setIsLoading(false); }
+      setIsLoading(false);
+
+      const [expRes, sectionsRes, recommendedStoresRes] = await secondaryDataPromise;
+      if (requestId !== homeRequestIdRef.current) return;
+      const experienceSections = expRes?.data?.success
+        ? Array.isArray(expRes.data.result || expRes.data.results)
+          ? expRes.data.result || expRes.data.results
+          : []
+        : [];
+      const sectionsList = sectionsRes?.data?.results || sectionsRes?.data?.result || sectionsRes?.data;
+      const offerSections = Array.isArray(sectionsList) ? sectionsList : [];
+      const recommendedStoresList = recommendedStoresRes?.data?.results || recommendedStoresRes?.data?.result;
+      const recommendedStores = Array.isArray(recommendedStoresList) ? recommendedStoresList : [];
+
+      setExperienceSections(experienceSections);
+      setOfferSections(offerSections);
+      setRecommendedStores(recommendedStores);
+      const cachedData = homePageDataCache.get(cacheKey);
+      if (cachedData) {
+        homePageDataCache.set(cacheKey, {
+          ...cachedData,
+          experienceSections,
+          offerSections,
+          recommendedStores,
+        });
+      }
+    } catch (error) {
+      if (requestId === homeRequestIdRef.current) {
+        console.error("Error:", error);
+        setHasFetchError(true);
+      }
+    } finally {
+      if (requestId === homeRequestIdRef.current) setIsLoading(false);
+    }
   };
 
   const hydrateSelectedSectionProducts = async (sections = []) => {
