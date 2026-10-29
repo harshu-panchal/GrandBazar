@@ -42,6 +42,7 @@ import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocket";
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const ORDER_EDITABLE_STATUSES = new Set([
     'pending',
@@ -57,12 +58,6 @@ const ORDER_EDITABLE_STATUSES = new Set([
 function orderStatusControlShowsOwnBadge(order) {
     const normalizedStatus = String(order?.status || '').toLowerCase();
     return !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
-}
-
-function formatShortOrderId(orderId) {
-    if (!orderId) return '';
-    const s = String(orderId);
-    return s.length > 8 ? s.slice(-8).toUpperCase() : s;
 }
 
 function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDeliveredForSelfDelivery = false }) {
@@ -412,6 +407,7 @@ const Orders = () => {
 
             const formattedOrders = (rawOrders || []).map(order => ({
                 id: order.orderId,
+                shortOrderId: order.shortOrderId,
                 _id: order._id,
                 customer: {
                     name: order.customer?.name || 'Unknown',
@@ -496,17 +492,19 @@ const Orders = () => {
     useEffect(() => {
         const getToken = () => localStorage.getItem("auth_seller");
         const unsubscribe = onSellerOrderNew(getToken, (payload) => {
-            const orderId = payload?.orderId || payload?.payload?.orderId;
+            const orderEvent = payload?.payload || payload;
+            const orderId = orderEvent?.orderId;
+            const displayOrderId = formatOrderId(orderEvent);
             if (payload?.reassigned || payload?.payload?.reassigned) {
                 showToast(
                     orderId
-                        ? `Order #${formatShortOrderId(orderId)} was reassigned to your store`
+                        ? `Order #${displayOrderId} was reassigned to your store`
                         : "An order was reassigned to your store",
                     "info",
                 );
             } else {
                 showToast(
-                    orderId ? `New order #${formatShortOrderId(orderId)} received` : "New order received",
+                    orderId ? `New order #${displayOrderId} received` : "New order received",
                     "info",
                 );
             }
@@ -1653,7 +1651,7 @@ const Orders = () => {
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1" onClick={() => handleViewDetails(order)}>
-                                                    <p className="text-xs font-black text-slate-900 truncate" title={`#${order.id}`}>#{formatShortOrderId(order.id)}</p>
+                                                    <p className="text-xs font-black text-slate-900 truncate" title={`#${order.id}`}>#{formatOrderId(order)}</p>
                                                     <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
                                                         <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
                                                         {order.date} • {order.time}
@@ -1795,7 +1793,7 @@ const Orders = () => {
                                                     <td className="px-4 lg:px-6 py-3 lg:py-4">
                                                         <div>
                                                             <span className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors cursor-pointer" onClick={() => handleViewDetails(order)} title={`#${order.id}`}>
-                                                                #{formatShortOrderId(order.id)}
+                                                                #{formatOrderId(order)}
                                                             </span>
                                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mt-1">
                                                                 <HiOutlineCalendarDays className="h-3 w-3" />
@@ -2637,7 +2635,7 @@ const Orders = () => {
                                                             Reassigned
                                                         </Badge>
                                                     )}
-                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest" title={`#${selectedOrder.id}`}>#{formatShortOrderId(selectedOrder.id)}</span>
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest" title={`#${selectedOrder.id}`}>#{formatOrderId(selectedOrder)}</span>
                                                 </div>
                                                 {selectedOrder.storeReassignment && (
                                                     <p className="text-[11px] font-bold text-violet-700 mt-1.5">

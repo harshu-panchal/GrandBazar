@@ -19,6 +19,7 @@ import Button from "@/shared/components/ui/Button";
 import Card from "@/shared/components/ui/Card";
 import { toast } from "sonner";
 import { deliveryApi } from "../services/deliveryApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 import { Loader2 } from "lucide-react";
 import DeliveryTrackingMap from "../components/DeliveryTrackingMap";
 import DeliverySlideButton from "../components/DeliverySlideButton";
@@ -585,8 +586,7 @@ const OrderDetails = () => {
 
   if (!order) return null;
 
-  const orderShortId =
-    typeof order.orderId === "string" ? order.orderId.slice(-8) : order.orderId;
+  const orderShortId = formatOrderId(order);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white pb-28 font-sans">

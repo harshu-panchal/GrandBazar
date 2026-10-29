@@ -6,6 +6,7 @@ import Card from "@/shared/components/ui/Card";
 import Button from "@/shared/components/ui/Button";
 import { deliveryApi } from "../services/deliveryApi";
 import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const RUPEE = "\u20B9";
 
@@ -285,7 +286,7 @@ const CodCash = () => {
                   className="flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50/40 p-3"
                 >
                   <div>
-                    <p className="text-sm font-bold text-gray-900">Order #{row.orderId}</p>
+                    <p className="text-sm font-bold text-gray-900">Order #{formatOrderId(row)}</p>
                     <p className="text-xs text-gray-600">
                       Collect {RUPEE}
                       {safeMoney(row.amountGross).toLocaleString()} (gross)
@@ -321,7 +322,7 @@ const CodCash = () => {
                   className="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-3"
                 >
                   <div>
-                    <p className="text-sm font-bold text-gray-900">Order #{row.orderId}</p>
+                    <p className="text-sm font-bold text-gray-900">Order #{formatOrderId(row)}</p>
                     <p className="text-xs text-gray-500">Submit to platform (net)</p>
                   </div>
                   <p className="text-sm font-extrabold text-gray-900">

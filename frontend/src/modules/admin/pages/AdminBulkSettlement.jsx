@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { adminApi } from "../services/adminApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const fx = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const DOT_COLOR = { g: "#12a150", a: "#d99100", r: "#dc2626" };
@@ -107,7 +108,7 @@ export default function AdminBulkSettlement() {
                     </td>
                     <td className="px-2 py-2">{o.date ? new Date(o.date).toLocaleDateString() : "—"}</td>
                     <td className="px-2 py-2">
-                      #{o.orderId}
+                      #{formatOrderId(o)}
                       {o.complaintId && <div className="text-[11px] text-slate-500">Complaint {o.complaintId}</div>}
                     </td>
                     <td className="px-2 py-2">{o.customerName}</td>
@@ -167,7 +168,7 @@ export default function AdminBulkSettlement() {
             <tbody>
               {review.rows.map((r) => (
                 <tr key={r.orderId} className="border-b last:border-0">
-                  <td className="px-2 py-1">#{r.orderId}</td>
+                  <td className="px-2 py-1">#{formatOrderId(r)}</td>
                   <td className="px-2 py-1">{r.customerName}</td>
                   {[r.delivered, r.razorpay, r.noComplaint, r.noPenalty].map((ok, i) => (
                     <td key={i} className={`px-2 py-1 text-center ${ok ? "text-emerald-600" : "text-red-600"}`}>{ok ? "✓" : "✗"}</td>

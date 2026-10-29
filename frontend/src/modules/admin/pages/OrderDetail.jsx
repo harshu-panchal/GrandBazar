@@ -54,6 +54,7 @@ import {
 } from '@/shared/utils/orderStatus';
 import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/services/orderSocket';
 import OrderMoneyBreakdown from '../components/orders/OrderMoneyBreakdown';
+import { formatOrderId } from '@/shared/utils/orderId';
 
 const REASSIGNABLE_WORKFLOW = new Set([
     'SELLER_PENDING',
@@ -806,7 +807,7 @@ const OrderDetail = () => {
                     </button>
                     <div>
                         <div className="flex items-center gap-3 flex-wrap">
-                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight" title={order.orderId}>Order #{order.shortOrderId || order.orderId}</h1>
+                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight" title={order.orderId}>Order #{formatOrderId(order)}</h1>
                             <div className="relative inline-block w-44">
                                 <select
                                     value={legacyStatus}
@@ -1976,7 +1977,7 @@ const OrderDetail = () => {
                                     <div style={{ fontSize: "28px", fontWeight: "900", color: "#0f172a" }}>INVOICE</div>
                                 </td>
                                 <td width="50%" align="right" style={{ verticalAlign: "bottom" }}>
-                                    <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "4px" }}>Reference: <span style={{ color: "#2563eb" }}>#{order.orderId}</span></div>
+                                    <div style={{ fontSize: "12px", fontWeight: "700", marginBottom: "4px" }}>Reference: <span style={{ color: "#2563eb" }}>#{formatOrderId(order)}</span></div>
                                     <div style={{ fontSize: "10px", color: "#64748b", fontWeight: "700" }}>Issued: {new Date(order.createdAt).toLocaleDateString()}</div>
                                 </td>
                             </tr>

@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@core/context/AuthContext";
 import { adminApi } from "../services/adminApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const formatTime = (value) =>
@@ -282,7 +283,7 @@ const OperationsConsole = () => {
               approvals.items.map((a) => (
                 <li key={a._id} className="flex items-center justify-between px-4 py-3 text-sm gap-3">
                   <div className="flex-1">
-                    <b>{formatMoney(a.amount)}</b> {a.type} · #{a.orderId?.shortOrderId || a.orderId}
+                    <b>{formatMoney(a.amount)}</b> {a.type} · #{formatOrderId(a.orderId)}
                     <div className="text-slate-400 text-xs">{a.reason} · requested by {a.requestedBy?.name}</div>
                   </div>
                   <div className="flex gap-2">
@@ -308,7 +309,7 @@ const OperationsConsole = () => {
               <li key={log._id} className="flex items-center justify-between px-4 py-3 text-sm gap-3">
                 <div>
                   <b>{log.actorId?.name || "Unknown"}</b>
-                  <span className="text-slate-400"> · {log.action.replace(/_/g, " ")} {log.orderId ? `· #${log.orderId.shortOrderId || log.orderId}` : ""}</span>
+                  <span className="text-slate-400"> · {log.action.replace(/_/g, " ")} {log.orderId ? `· #${formatOrderId(log.orderId)}` : ""}</span>
                   {log.reason && <div className="text-slate-400 text-xs">{log.reason}</div>}
                 </div>
                 <span className="text-slate-400 flex items-center gap-1 whitespace-nowrap"><HiOutlineClock className="w-3.5 h-3.5" />{formatTime(log.createdAt)}</span>

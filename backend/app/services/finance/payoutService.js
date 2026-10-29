@@ -16,6 +16,7 @@ import { getOrCreateWallet } from "./walletService.js";
 import { createLedgerEntry } from "./ledgerService.js";
 import { computeOverallSettlement } from "../../utils/settlementStatus.js";
 import { roundCurrency } from "../../utils/money.js";
+import { resolveRiderPayoutAmount } from "./riderPayoutService.js";
 
 function payoutTypeToOwnerType(payoutType) {
   if (payoutType === PAYOUT_TYPE.SELLER) return OWNER_TYPE.SELLER;
@@ -319,7 +320,7 @@ export async function queueRiderPayouts({ orderIds = [] } = {}) {
       order,
       payoutType: PAYOUT_TYPE.DELIVERY_PARTNER,
       beneficiaryId: order.deliveryBoy,
-      amount: order.paymentBreakdown?.riderPayoutTotal || 0,
+      amount: resolveRiderPayoutAmount(order),
       metadata: { trigger: "queueRiderPayouts" },
     });
     if (payout) created.push(payout);

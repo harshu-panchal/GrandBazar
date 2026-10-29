@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext';
 import { getOrderStatusLabel, getLegacyStatusFromOrder } from '@/shared/utils/orderStatus';
 import { applyCloudinaryTransform } from '@/core/utils/imageUtils';
 import { onOrderStatusUpdate } from '@/core/services/orderSocket';
+import { formatOrderId } from '@/shared/utils/orderId';
 
 const OrdersPage = () => {
     const navigate = useNavigate();
@@ -160,7 +161,7 @@ const OrdersPage = () => {
                                     </div>
                                     <div className="min-w-0">
                                         <h3 className="font-semibold text-slate-900 text-sm tracking-tight leading-snug">
-                                            Order #{order.orderId.slice(-6)}
+                                            Order #{formatOrderId(order)}
                                         </h3>
                                         <p className="mt-0.5 text-[11px] text-slate-500 font-medium leading-tight">
                                             {new Date(order.createdAt).toLocaleDateString('en-IN', {
@@ -246,4 +247,3 @@ const OrdersPage = () => {
 };
 
 export default OrdersPage;
-

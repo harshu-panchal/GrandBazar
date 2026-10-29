@@ -33,6 +33,7 @@ import {
   retractDeliveryBroadcastForOrder,
 } from "./orderSocketEmitter.js";
 import { distanceMeters } from "../utils/geoUtils.js";
+import { resolveRiderPayoutAmount } from "./finance/riderPayoutService.js";
 import { applyDeliveredSettlement } from "./orderSettlement.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
@@ -162,26 +163,14 @@ export function deliveryBroadcastPayloadFromOrder(order, extra = {}) {
     ? (distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`)
     : (distanceKm != null ? `${distanceKm} km` : "Nearby");
 
-  const rawEarnings = Number(order.paymentBreakdown?.riderPayoutTotal);
-  let earningsEstimate;
-  if (Number.isFinite(rawEarnings) && rawEarnings > 0) {
-    earningsEstimate = rawEarnings;
-  } else {
-    const snapshotBase = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.riderBasePayout);
-    const orderRiderEarnings = Number(order.riderEarnings);
-    if (Number.isFinite(snapshotBase) && snapshotBase > 0) {
-      earningsEstimate = snapshotBase;
-    } else if (Number.isFinite(orderRiderEarnings) && orderRiderEarnings > 0) {
-      earningsEstimate = orderRiderEarnings;
-    } else {
-      earningsEstimate = 30;
-    }
-    const perKm = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.deliveryPartnerRatePerKm || 5);
-    const baseDist = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.baseDistanceCapacityKm || 0.5);
-    if (distanceKm && distanceKm > baseDist) {
-      earningsEstimate += Math.ceil(distanceKm - baseDist) * perKm;
-    }
-  }
+  const earningsEstimate = resolveRiderPayoutAmount({
+    ...order,
+    deliveryBoy: order.deliveryBoy || "preview",
+    paymentBreakdown: {
+      ...order.paymentBreakdown,
+      distanceKmActual: order.paymentBreakdown?.distanceKmActual ?? distanceKm,
+    },
+  });
 
   const items = Array.isArray(order.items)
     ? order.items.map((i) => ({
@@ -354,6 +343,7 @@ export async function afterPlaceOrderV2(orderDoc) {
     event: "order:new",
     payload: {
       orderId,
+      shortOrderId: orderDoc.shortOrderId,
       workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
       sellerPendingExpiresAt: orderDoc.sellerPendingExpiresAt,
     },
@@ -2625,4 +2615,3 @@ export async function resendDeliveryOtpBySeller(sellerId, orderId) {
 
   return { orderId, success: true, message: "Delivery OTP resent to customer" };
 }
-

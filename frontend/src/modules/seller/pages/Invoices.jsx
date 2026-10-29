@@ -5,6 +5,7 @@ import Pagination from "@shared/components/ui/Pagination";
 import { Receipt, Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { sellerApi } from "../services/sellerApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const formatDate = (value) =>
@@ -155,7 +156,7 @@ const Invoices = () => {
                 filteredOrders.map((order) => (
                   <tr key={order._id || order.orderId} className="hover:bg-slate-50/40 transition-colors">
                     <td className="px-5 py-4" data-label="Order ID">
-                      <span className="text-sm font-bold text-slate-900">{order.orderId}</span>
+                      <span className="text-sm font-bold text-slate-900">{formatOrderId(order)}</span>
                     </td>
                     <td className="px-5 py-4" data-label="Customer">
                       <span className="text-sm text-slate-600">{order.customer?.name || "Customer"}</span>

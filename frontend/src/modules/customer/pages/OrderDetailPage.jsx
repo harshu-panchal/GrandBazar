@@ -41,6 +41,7 @@ import { customerApi } from "../services/customerApi";
 import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 import { useCart } from "../context/CartContext";
 import { toast } from "sonner";
+import { formatOrderId } from "@/shared/utils/orderId";
 import { subscribeToOrderLocation, subscribeToOrderTrail, subscribeToOrderRoute } from "@/core/services/trackingClient";
 import {
   getOrderSocket,
@@ -900,7 +901,7 @@ const OrderDetailPage = () => {
         amount: checkout.amount,
         currency: checkout.currency,
         keyId: checkout.keyId,
-        description: `Order #${order.orderId}`,
+        description: `Order #${formatOrderId(order)}`,
         onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
           try {
             await customerApi.verifyPaymentStatus(razorpayOrderId, {
@@ -1021,7 +1022,7 @@ const OrderDetailPage = () => {
         </button>
         <div className="flex-1 text-center">
           <h1 className="text-base font-bold text-slate-800">Order</h1>
-          <p className="text-xs text-slate-500 font-medium">#{order.orderId.slice(-8)}</p>
+          <p className="text-xs text-slate-500 font-medium">#{formatOrderId(order)}</p>
         </div>
         <div className="w-10" />
       </div>

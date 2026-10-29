@@ -266,7 +266,7 @@ export const getMyOrders = async (req, res) => {
       maxLimit: 100,
     });
 
-    const cacheKey = buildKey("orders", "customer", `${customerId}:p${page}:l${limit}`);
+    const cacheKey = buildKey("orders", "customer", `${customerId}:v2:p${page}:l${limit}`);
 
     const result = await getOrSet(
       cacheKey,
@@ -274,7 +274,7 @@ export const getMyOrders = async (req, res) => {
         const [orders, total] = await Promise.all([
           Order.find({ customer: customerId })
             .select(
-              "orderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus disputeRef timeSlot createdAt refundAmount returnRefundAmount walletAmountUsed refundStatus",
+              "orderId shortOrderId checkoutGroupId customer seller items address payment pricing status workflowStatus workflowVersion cancellationRequest returnStatus disputeRef timeSlot createdAt refundAmount returnRefundAmount walletAmountUsed refundStatus",
             )
             .sort({ createdAt: -1, _id: -1 })
             .skip(skip)

@@ -81,6 +81,7 @@ export async function previewBulk({ sellerId, orderIds }, actor) {
 
   const rows = enriched.map(({ order, checks, settled }) => ({
     orderId: order.orderId,
+    shortOrderId: order.shortOrderId || null,
     customerName: order.customer?.name || "",
     delivered: checks.dots.find((d) => d.key === "delivered")?.dot === "g",
     razorpay: checks.dots.find((d) => d.key === "payment")?.dot === "g",
@@ -250,7 +251,7 @@ export async function listSellerUnsettledOrders(sellerId) {
     deliveredAt: { $ne: null },
     "sellerSettlement.lockedAt": null,
   })
-    .select("orderId deliveredAt customer items complaintRef settlementStatus financeFlags paymentStatus payment status workflowStatus sellerSettlement paymentBreakdown complaintWindowClosesAt")
+    .select("orderId shortOrderId deliveredAt customer items complaintRef settlementStatus financeFlags paymentStatus payment status workflowStatus sellerSettlement paymentBreakdown complaintWindowClosesAt")
     .populate("customer", "name")
     .sort({ deliveredAt: -1 })
     .lean();
@@ -266,6 +267,7 @@ export async function listSellerUnsettledOrders(sellerId) {
     const checks = computeChecks(o, complaint, windowHours);
     return {
       orderId: o.orderId,
+      shortOrderId: o.shortOrderId || null,
       date: o.deliveredAt,
       customerName: o.customer?.name || "",
       settlementAmount: computeSettled(o),

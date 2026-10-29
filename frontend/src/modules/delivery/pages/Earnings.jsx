@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import Button from "@/shared/components/ui/Button";
 import Card from "@/shared/components/ui/Card";
 import { deliveryApi } from "../services/deliveryApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const Earnings = () => {
   const [activeTab, setActiveTab] = useState("weekly");
@@ -239,7 +240,7 @@ const Earnings = () => {
                 >
                   <div>
                     <p className="text-sm font-bold text-gray-900">
-                      Order #{row.orderId}
+                      Order #{formatOrderId(row)}
                     </p>
                     <p className="text-xs text-gray-600">
                       Collect from customer • Gross {"\u20B9"}{Number(row.amountGross || 0).toLocaleString()}
@@ -258,7 +259,7 @@ const Earnings = () => {
                 >
                   <div>
                     <p className="text-sm font-bold text-gray-900">
-                      Order #{row.orderId}
+                      Order #{formatOrderId(row)}
                     </p>
                     <p className="text-xs text-gray-500">
                       Remit to platform â€¢ Net of commission

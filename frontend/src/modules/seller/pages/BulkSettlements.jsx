@@ -7,6 +7,7 @@ import Pagination from "@shared/components/ui/Pagination";
 import { HiOutlineCube, HiOutlineMagnifyingGlass, HiOutlineBanknotes, HiOutlineReceiptPercent, HiOutlineArchiveBoxArrowDown } from "react-icons/hi2";
 import { toast } from "sonner";
 import { sellerApi } from "../services/sellerApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const STATUS_OPTIONS = ["all", "PENDING", "COMPLETED", "CANCELLED"];
 const REASON_LABEL = {
@@ -152,7 +153,7 @@ const BulkSettlements = () => {
               ) : (
                 items.map((row) => (
                   <tr key={row._id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-3 px-4 text-sm font-bold text-gray-900" data-label="Order">{row.orderId}</td>
+                    <td className="py-3 px-4 text-sm font-bold text-gray-900" data-label="Order">{formatOrderId(row)}</td>
                     <td className="py-3 px-4 text-xs text-gray-500" data-label="Reason">{REASON_LABEL[row.bulkOrderReason] || "—"}</td>
                     <td className="py-3 px-4 text-sm font-bold text-gray-900" data-label="You Receive">{formatMoney(row.sellerPayoutAmount)}</td>
                     <td className="py-3 px-4 text-sm text-gray-700" data-label="Commission">{formatMoney(row.commissionAmount)}</td>

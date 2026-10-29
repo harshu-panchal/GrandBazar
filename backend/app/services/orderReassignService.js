@@ -873,6 +873,7 @@ export async function adminReassignOrderToStore({
     event: "order:new",
     payload: {
       orderId: updatedOrder.orderId,
+      shortOrderId: updatedOrder.shortOrderId,
       workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
       sellerPendingExpiresAt: updatedOrder.sellerPendingExpiresAt,
       reassigned: true,
@@ -884,6 +885,7 @@ export async function adminReassignOrderToStore({
       event: "order:new",
       payload: {
         orderId: updatedOrder.orderId,
+        shortOrderId: updatedOrder.shortOrderId,
         workflowStatus: WORKFLOW_STATUS.SELLER_PENDING,
         sellerPendingExpiresAt: updatedOrder.sellerPendingExpiresAt,
         reassigned: true,

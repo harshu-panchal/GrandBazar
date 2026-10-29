@@ -25,6 +25,7 @@ function sellerAcceptDeadlinePassed(order, now) {
 import { distanceMeters } from "../utils/geoUtils.js";
 import { attachDisplayStatusToList } from "./orderStatusResolver.js";
 import mongoose from "mongoose";
+import { resolveRiderPayoutAmount } from "./finance/riderPayoutService.js";
 
 function getPartnerRefId(partner) {
   if (!partner) return null;
@@ -571,26 +572,16 @@ function attachDistanceAndEarningsPreview(order) {
     ? (distanceM < 1000 ? `${distanceM} m` : `${(distanceM / 1000).toFixed(1)} km`)
     : (distanceKm != null ? `${distanceKm} km` : "Nearby");
 
-  let riderEarnings = order.isReturnPickup
-    ? (Number(order.returnDeliveryCommission) || 30)
-    : Number(order.paymentBreakdown?.riderPayoutTotal);
-
-  if (!Number.isFinite(riderEarnings) || riderEarnings <= 0) {
-    const snapshotBase = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.riderBasePayout);
-    const orderRiderEarnings = Number(order.riderEarnings);
-    if (Number.isFinite(snapshotBase) && snapshotBase > 0) {
-      riderEarnings = snapshotBase;
-    } else if (Number.isFinite(orderRiderEarnings) && orderRiderEarnings > 0) {
-      riderEarnings = orderRiderEarnings;
-    } else {
-      riderEarnings = 30;
-    }
-    const perKm = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.deliveryPartnerRatePerKm || 5);
-    const baseDist = Number(order.paymentBreakdown?.snapshots?.deliverySettings?.baseDistanceCapacityKm || 0.5);
-    if (distanceKm && distanceKm > baseDist) {
-      riderEarnings += Math.ceil(distanceKm - baseDist) * perKm;
-    }
-  }
+  const riderEarnings = order.isReturnPickup
+    ? Number(order.returnDeliveryCommission) || 30
+    : resolveRiderPayoutAmount({
+        ...order,
+        deliveryBoy: order.deliveryBoy || "preview",
+        paymentBreakdown: {
+          ...order.paymentBreakdown,
+          distanceKmActual: order.paymentBreakdown?.distanceKmActual ?? distanceKm,
+        },
+      });
 
   return {
     ...order,

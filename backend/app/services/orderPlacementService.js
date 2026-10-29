@@ -1007,6 +1007,7 @@ function httpError(message, statusCode = 400) {
       for (const order of orders) {
         emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_PLACED, {
           orderId: order.orderId,
+          shortOrderId: order.shortOrderId,
           checkoutGroupId,
           customerId,
           userId: customerId,
@@ -1014,6 +1015,7 @@ function httpError(message, statusCode = 400) {
         if (order.seller) {
           emitNotificationEvent(NOTIFICATION_EVENTS.NEW_ORDER, {
             orderId: order.orderId,
+            shortOrderId: order.shortOrderId,
             checkoutGroupId,
             sellerId: order.seller,
             customerId,

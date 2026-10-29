@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
 import { onOrderStatusUpdate } from "@core/services/orderSocket";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const Returns = () => {
   const { showToast } = useToast();
@@ -102,13 +103,11 @@ const Returns = () => {
       const items = Array.isArray(payload.items)
         ? payload.items
         : res.data.results || [];
-      // orderId is the full id string — shortOrderId (already returned by
-      // the backend, just never read here) is what every other admin order
-      // view displays; falls back to the full id for older records that
-      // predate shortOrderId.
+      // Keep the canonical orderId for actions and format it consistently
+      // with the other order views when older records lack a short ID.
       setReturns((items || []).map((item) => ({
         ...item,
-        shortOrderId: item.shortOrderId || item.orderId,
+        shortOrderId: item.shortOrderId || null,
       })));
     } catch (error) {
       console.error("Failed to fetch returns", error);
@@ -422,7 +421,7 @@ const Returns = () => {
                           onClick={() => openDetails(ret)}
                         >
                           <p className="text-xs font-black text-slate-900 truncate" title={ret.orderId}>
-                            #{ret.shortOrderId}
+                            #{formatOrderId(ret)}
                           </p>
                           <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
                             <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
@@ -503,7 +502,7 @@ const Returns = () => {
               <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0">
                 <div>
                   <h3 className="text-base font-black text-slate-900" title={selectedReturn.orderId}>
-                    Return for Order #{selectedReturn.shortOrderId || selectedReturn.orderId}
+                    Return for Order #{formatOrderId(selectedReturn)}
                   </h3>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <Badge

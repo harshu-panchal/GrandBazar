@@ -20,6 +20,7 @@ import { sellerApi } from "../services/sellerApi";
 import { useToast } from "@shared/components/ui/Toast";
 import { resolveDeliveryPartnerDisplay, getTrackingUiStatus, getTrackingStatusVariant } from "@/shared/utils/deliveryPartner";
 import { resolveFulfillmentMethod } from "@/shared/utils/orderFulfillment";
+import { formatOrderId } from "@/shared/utils/orderId";
 import { Loader2 } from "lucide-react";
 import Pagination from "@shared/components/ui/Pagination";
 
@@ -79,6 +80,7 @@ const DeliveryTracking = () => {
           return {
             id: order._id,
             orderId: order.orderId,
+            shortOrderId: order.shortOrderId,
             status: uiStatus,
             deliveryBoy: resolveDeliveryPartnerDisplay(normalizedOrder),
             fulfillmentMethod: normalizedOrder.fulfillmentMethod,
@@ -323,7 +325,7 @@ const DeliveryTracking = () => {
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                                 <span className="text-[10px] font-black text-slate-900 tracking-tight">
-                                  #{dlv.orderId}
+                                  #{formatOrderId(dlv)}
                                 </span>
                                 <Badge
                                   variant={getStatusVariant(dlv.status)}
@@ -407,4 +409,3 @@ const DeliveryTracking = () => {
 };
 
 export default DeliveryTracking;
-

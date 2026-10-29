@@ -352,6 +352,64 @@ describe("finance order flow", () => {
     expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledTimes(2);
   });
 
+  it("uses the same fallback rider payout shown in delivery previews when the saved amount is zero", async () => {
+    currentOrder.paymentMode = "ONLINE";
+    currentOrder.financeFlags = { onlinePaymentCaptured: true };
+    currentOrder.paymentBreakdown.riderPayoutTotal = 0;
+
+    await settleDeliveredOrder({ _id: "order-1" }, { actorId: "admin-1" });
+
+    expect(currentOrder.paymentBreakdown.riderPayoutTotal).toBe(30);
+    expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payoutType: PAYOUT_TYPE.DELIVERY_PARTNER,
+        amount: 30,
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("repairs a previously delivered online order whose rider payout was saved as zero", async () => {
+    currentOrder.paymentMode = "ONLINE";
+    currentOrder.financeFlags = {
+      onlinePaymentCaptured: true,
+      deliveredSettlementApplied: true,
+    };
+    currentOrder.paymentBreakdown.riderPayoutTotal = 0;
+
+    await settleDeliveredOrder({ _id: "order-1" }, { actorId: "admin-1" });
+
+    expect(currentOrder.paymentBreakdown.riderPayoutTotal).toBe(30);
+    expect(currentOrder.financeFlags.riderPayoutQueued).toBe(true);
+    expect(mockCreatePendingPayoutForOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payoutType: PAYOUT_TYPE.DELIVERY_PARTNER,
+        amount: 30,
+      }),
+      expect.any(Object),
+    );
+    expect(currentOrder.save).toHaveBeenCalled();
+  });
+
+  it("retains the fallback rider commission from COD cash when the saved payout is zero", async () => {
+    currentOrder.paymentMode = "COD";
+    currentOrder.status = "delivered";
+    currentOrder.orderStatus = "delivered";
+    currentOrder.paymentBreakdown.riderPayoutTotal = 0;
+
+    const collected = await handleCodOrderFinance(
+      { _id: "order-1" },
+      { deliveryPartnerId: "rider-1" },
+    );
+
+    expect(collected.paymentBreakdown.riderPayoutTotal).toBe(30);
+    expect(collected.paymentBreakdown.codGrossCollectedAmount).toBe(300);
+    expect(collected.paymentBreakdown.codCollectedAmount).toBe(270);
+    expect(mockUpdateCashInHand).toHaveBeenCalledWith(
+      expect.objectContaining({ deltaAmount: 270 }),
+    );
+  });
+
   it("settles a COD rider commission through collected cash instead of a second payout", async () => {
     currentOrder.paymentMode = "COD";
     currentOrder.status = "pending";

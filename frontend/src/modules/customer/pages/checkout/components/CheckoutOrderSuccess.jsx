@@ -1,6 +1,7 @@
 import React from "react";
 import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 /**
  * CheckoutOrderSuccess
@@ -37,7 +38,7 @@ const CheckoutOrderSuccess = React.memo(function CheckoutOrderSuccess({ orderId,
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
             className="text-slate-500 font-medium mb-8">
-            #{orderId?.slice(-6)} — waiting for the seller to accept (60s). If
+            #{formatOrderId(orderId)} — waiting for the seller to accept (60s). If
             they don&apos;t, the order will cancel automatically.
             <br />
             Redirecting to order details…

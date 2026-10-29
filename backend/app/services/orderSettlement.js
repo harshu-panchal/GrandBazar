@@ -5,6 +5,7 @@ import {
   handleCodOrderFinance,
   settleDeliveredOrder,
 } from "./finance/orderFinanceService.js";
+import { resolveRiderPayoutAmount } from "./finance/riderPayoutService.js";
 import { roundCurrency } from "../utils/money.js";
 
 /**
@@ -30,7 +31,7 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
   // "new order" popup shows riderPayoutTotal at paise precision too, so
   // rounding it differently here made the settled earning disagree with what
   // the rider was shown when the order came in.
-  const deliveryEarning = roundCurrency(settled.paymentBreakdown?.riderPayoutTotal || 0);
+  const deliveryEarning = resolveRiderPayoutAmount(settled);
   const cashCollectedGross = roundCurrency(
     settled.paymentBreakdown?.codGrossCollectedAmount ||
       settled.paymentBreakdown?.grandTotal ||
@@ -41,20 +42,16 @@ export async function syncLegacyDeliveryTransactions(settled, orderIdString) {
     settled.paymentBreakdown?.codCollectedAmount ??
       Math.max(
         cashCollectedGross -
-          roundCurrency(settled.paymentBreakdown?.riderPayoutTotal || 0),
+          deliveryEarning,
         0,
       ),
   );
   const riderCommissionRetained = roundCurrency(
     settled.paymentBreakdown?.codRiderCommissionRetained ||
-      Math.min(
-        deliveryEarning,
-        Math.max(
-          cashCollectedGross -
-            Number(settled.paymentBreakdown?.codCollectedAmount || 0),
-          0,
-        ),
-      ),
+      Math.min(deliveryEarning, Math.max(
+        cashCollectedGross - Number(settled.paymentBreakdown?.codCollectedAmount || 0),
+        0,
+      )),
   );
   const deliveryMeta = {
     tipAmount: roundCurrency(settled.paymentBreakdown?.riderTipAmount || 0),

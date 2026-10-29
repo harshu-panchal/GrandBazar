@@ -11,6 +11,7 @@ import { writeDeliveryLocation, appendTrailPoint } from "../services/firebaseSer
 import { getRedisClient } from "../config/redis.js";
 import { distanceMeters } from "../utils/geoUtils.js";
 import { applyDeliveredSettlement } from "../services/orderSettlement.js";
+import { resolveRiderPayoutAmount } from "../services/finance/riderPayoutService.js";
 import { roundCurrency } from "../utils/money.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
@@ -137,7 +138,7 @@ export const getDeliveryEarnings = async (req, res) => {
         const transactions = await Transaction.find(txQuery)
             .sort({ createdAt: -1 })
             .limit(200)
-            .populate("order", "orderId pricing paymentBreakdown paymentMode");
+            .populate("order", "orderId shortOrderId pricing paymentBreakdown paymentMode");
         const wallet = await Wallet.findOne({
             ownerType: "DELIVERY_PARTNER",
             ownerId: deliveryBoyId,
@@ -306,7 +307,7 @@ export const getDeliveryCodCashSummary = async (req, res) => {
             ],
         })
             .select(
-                "orderId status orderStatus paymentMode deliveredAt createdAt financeFlags paymentBreakdown pricing",
+                "orderId shortOrderId status orderStatus paymentMode deliveredAt createdAt financeFlags paymentBreakdown pricing",
             )
             .sort({ createdAt: -1 })
             .limit(200)
@@ -325,7 +326,7 @@ export const getDeliveryCodCashSummary = async (req, res) => {
                 : roundCurrency(order.paymentBreakdown?.grandTotal ?? order.pricing?.total ?? 0);
             const riderCommission = isExtraCashOnly
                 ? 0
-                : roundCurrency(order.paymentBreakdown?.riderPayoutTotal ?? 0);
+                : resolveRiderPayoutAmount(order);
 
             const estimatedNet = roundCurrency(Math.max(gross - riderCommission, 0));
             const pendingNet = roundCurrency(order.paymentBreakdown?.codPendingAmount ?? 0);
@@ -333,6 +334,7 @@ export const getDeliveryCodCashSummary = async (req, res) => {
 
             return {
                 orderId: order.orderId,
+                shortOrderId: order.shortOrderId || null,
                 status: order.status,
                 orderStatus: order.orderStatus,
                 deliveredAt: order.deliveredAt || null,
@@ -401,7 +403,7 @@ export const submitDeliveryCodCashToAdmin = async (req, res) => {
             "financeFlags.codMarkedCollected": true,
             "paymentBreakdown.codPendingAmount": { $gt: 0 },
         })
-            .select("orderId paymentBreakdown.codPendingAmount")
+            .select("orderId shortOrderId paymentBreakdown.codPendingAmount")
             .sort({ createdAt: 1 })
             .lean();
 

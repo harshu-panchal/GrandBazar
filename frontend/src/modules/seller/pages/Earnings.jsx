@@ -29,6 +29,7 @@ import { sellerApi } from "../services/sellerApi";
 import Pagination from "@shared/components/ui/Pagination";
 import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 import { getStatusVariant } from "@/shared/utils/orderStatus";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -514,7 +515,7 @@ const Earnings = () => {
                       </td>
                       <td className="px-4 py-4 sm:px-6 whitespace-nowrap align-top sm:text-left text-right" data-label="Order">
                         <p className="text-sm font-black text-slate-900" title={row.orderId || ""}>
-                          {row.orderId ? `#${row.shortOrderId || row.orderId.slice(-8)}` : row.ref || "—"}
+                          {row.orderId ? `#${formatOrderId(row)}` : row.ref || "—"}
                         </p>
                         <div className="mt-1 flex flex-wrap gap-1 sm:justify-start justify-end">
                           {row.orderStatus && (

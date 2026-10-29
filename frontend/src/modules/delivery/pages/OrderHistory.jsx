@@ -13,6 +13,7 @@ import { deliveryApi } from "../services/deliveryApi";
 import { toast } from "sonner";
 import { getLegacyStatusFromOrder, getOrderStatusLabel } from "@/shared/utils/orderStatus";
 import { onOrderStatusUpdate } from "@core/services/orderSocket";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 /** Real rider earning for this order (delivery commission + tip), not a flat % guess. */
 const resolveOrderEarnings = (order) =>
@@ -263,7 +264,7 @@ const OrderHistory = () => {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1 min-w-0 flex-wrap">
                           <span className="font-bold text-gray-900 text-sm group-hover:text-primary transition-colors break-all">
-                            #{order.orderId}
+                            #{formatOrderId(order)}
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${legacyStatus === "delivered"

@@ -27,6 +27,7 @@ import {
   updateCashInHand,
 } from "./walletService.js";
 import { createPendingPayoutForOrder } from "./payoutService.js";
+import { resolveRiderPayoutAmount } from "./riderPayoutService.js";
 import { computeOverallSettlement } from "../../utils/settlementStatus.js";
 import { buildKey, invalidate } from "../cacheService.js";
 
@@ -280,7 +281,7 @@ export async function createPendingRiderPayout(order, { session, actorId } = {})
     return null;
   }
 
-  const amount = roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
+  const amount = resolveRiderPayoutAmount(order);
   if (amount <= 0) {
     order.settlementStatus = {
       ...(order.settlementStatus || {}),
@@ -550,7 +551,7 @@ export async function handleCodOrderFinance(
     // exactly as in a normal COD delivery with no add-items involved.
     const deliveryPartnerCommission = isExtraCashOnlyCollection && order.paymentMode === "ONLINE"
       ? 0
-      : roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0);
+      : resolveRiderPayoutAmount(order);
     const riderCommissionRetained = roundCurrency(
       Math.min(codAmountGross, deliveryPartnerCommission),
     );
@@ -575,6 +576,13 @@ export async function handleCodOrderFinance(
       : order.paymentBreakdown || {};
     order.paymentBreakdown = {
       ...currentBreakdown,
+      riderPayoutTotal:
+        order.paymentMode !== "ONLINE" && deliveryPartnerCommission > 0
+          ? Math.max(
+              Number(currentBreakdown.riderPayoutTotal || 0),
+              deliveryPartnerCommission,
+            )
+          : currentBreakdown.riderPayoutTotal,
       codGrossCollectedAmount: roundCurrency(
         (currentBreakdown.codGrossCollectedAmount || 0) + codAmountGross,
       ),
@@ -621,7 +629,7 @@ export async function handleCodOrderFinance(
       order.settlementStatus = {
         ...(order.settlementStatus || {}),
         riderPayout:
-          roundCurrency(order.paymentBreakdown?.riderPayoutTotal || 0) > 0
+          deliveryPartnerCommission > 0
             ? "COMPLETED"
             : "NOT_APPLICABLE",
       };
@@ -721,7 +729,52 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
       throw new Error("Cannot settle delivered online order before payment capture");
     }
 
+    const riderPayoutAmount = resolveRiderPayoutAmount(order);
+    let riderPayoutRepaired = false;
+    if (
+      riderPayoutAmount > 0 &&
+      Number(order.paymentBreakdown?.riderPayoutTotal || 0) <= 0
+    ) {
+      const currentBreakdown = order.paymentBreakdown?.toObject
+        ? order.paymentBreakdown.toObject()
+        : order.paymentBreakdown || {};
+      order.paymentBreakdown = {
+        ...currentBreakdown,
+        riderPayoutTotal: riderPayoutAmount,
+      };
+      riderPayoutRepaired = true;
+    }
+
     if (order.financeFlags?.deliveredSettlementApplied) {
+      if (isCodOrder(order) && order.financeFlags?.codMarkedCollected) {
+        const alreadyMarkedCashPaid =
+          order.financeFlags?.riderPayoutQueued &&
+          order.settlementStatus?.riderPayout ===
+            (riderPayoutAmount > 0 ? "COMPLETED" : "NOT_APPLICABLE");
+        if (!alreadyMarkedCashPaid) {
+          order.financeFlags = {
+            ...(order.financeFlags || {}),
+            riderPayoutQueued: true,
+          };
+          order.settlementStatus = {
+            ...(order.settlementStatus || {}),
+            riderPayout: riderPayoutAmount > 0 ? "COMPLETED" : "NOT_APPLICABLE",
+          };
+          riderPayoutRepaired = true;
+        }
+      } else if (
+        !isCodOrder(order) &&
+        riderPayoutAmount > 0 &&
+        !order.financeFlags?.riderPayoutQueued
+      ) {
+        await createPendingRiderPayout(order, { session, actorId });
+        riderPayoutRepaired = true;
+      }
+
+      if (riderPayoutRepaired) {
+        order.settlementStatus = computeOverallSettlement(order);
+        await order.save({ session });
+      }
       await session.commitTransaction();
       return order;
     }

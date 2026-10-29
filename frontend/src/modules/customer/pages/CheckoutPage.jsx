@@ -84,6 +84,7 @@ import {
   getCustomerDisplayName,
   getCustomerPhoneForDisplay,
 } from "@/shared/utils/customerProfile";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const EMPTY_CHECKOUT_ADDRESS = {
   type: "Home",
@@ -1278,7 +1279,7 @@ const CheckoutPage = () => {
               amount: checkout.amount,
               currency: checkout.currency,
               keyId: checkout.keyId,
-              description: `Order #${mainOrderId}`,
+              description: `Order #${formatOrderId(mainOrder || mainOrderId)}`,
               prefill: {
                 name: user?.name || "",
                 email: user?.email || "",
@@ -1327,7 +1328,7 @@ const CheckoutPage = () => {
         // COD flow
         clearCart();
         showToast("Order placed — waiting for seller to accept.", "success");
-        setOrderId(mainOrderId);
+        setOrderId(mainOrder?.shortOrderId || mainOrderId);
         setShowSuccess(true);
 
         if (postOrderNavigateRef.current) {

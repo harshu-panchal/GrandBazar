@@ -33,6 +33,7 @@ import {
 } from '@/shared/utils/orderStatus';
 import { getFulfillmentDisplay, resolveFulfillmentMethod } from '@/shared/utils/orderFulfillment';
 import { onOrderStatusUpdate } from '@core/services/orderSocket';
+import { formatOrderId } from '@/shared/utils/orderId';
 
 const OrdersList = () => {
     const { status = 'all' } = useParams();
@@ -107,7 +108,7 @@ const OrdersList = () => {
                 const dbOrders = Array.isArray(payload.items) ? payload.items : (response.data.results || []);
                 const formatted = dbOrders.map(o => ({
                     id: o.orderId || 'UNSET',
-                    shortId: o.shortOrderId || '',
+                    shortId: formatOrderId(o),
                     _id: o._id,
                     customer: o.customer?.name || 'Unknown',
                     seller: o.seller?.shopName || 'Unknown',

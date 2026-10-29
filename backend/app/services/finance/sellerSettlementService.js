@@ -227,6 +227,7 @@ function buildRow(o, complaintMap, windowHours) {
   const phoneRaw = o.address?.phone || o.customer?.phone || "";
   return {
     orderId: o.orderId,
+    shortOrderId: o.shortOrderId || null,
     deliveredAt: o.deliveredAt,
     customerName: o.customer?.name || "",
     sellerName: o.seller?.shopName || "",
