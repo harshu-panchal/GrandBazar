@@ -397,7 +397,13 @@ export async function paySettlement(orderId, { mode = PAYOUT_MODE.AUTOMATIC, txn
   const settledAmount = computeSettled(order);
   if (!(settledAmount > 0)) throw httpError("Settled amount must be positive", 400);
 
-  const key = idempotencyKey || `settle:${order.orderId}:${Date.now()}`;
+  // Razorpay's X-Payout-Idempotency header only accepts letters, digits,
+  // hyphens, underscores and spaces. Keep it compact and deterministic enough
+  // for a single payment attempt; the database claim still prevents doubles.
+  const rawKey = idempotencyKey || `settle-${order.shortOrderId || String(order._id)}-${Date.now()}`;
+  const key = String(rawKey)
+    .replace(/[^A-Za-z0-9_ -]/g, "-")
+    .slice(0, 40);
 
   // Atomically claim the settlement so a double-click / retry can't start two
   // payouts. Only transitions a not-yet-paying order into PAYING + stamps key.
