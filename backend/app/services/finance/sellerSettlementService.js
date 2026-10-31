@@ -292,6 +292,20 @@ export async function getSettlementDetail(orderId, { includeMoney = true } = {})
     mode: order.sellerSettlement?.mode || null,
     failureReason: order.sellerSettlement?.failureReason || "",
     state: order.settlementStatus?.settlementState || null,
+    payoutProgress: {
+      razorpay: order.sellerSettlement?.mode === PAYOUT_MODE.AUTOMATIC
+        ? order.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED
+          ? "PROCESSED"
+          : order.settlementStatus?.settlementState === SETTLEMENT_STATE.FAILED
+            ? "FAILED"
+            : order.settlementStatus?.settlementState === SETTLEMENT_STATE.PAYING
+              ? "PROCESSING"
+              : "PENDING"
+        : "NOT_APPLICABLE",
+      settlement: order.sellerSettlement?.lockedAt || order.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED
+        ? "SETTLED"
+        : "PENDING",
+    },
     payoutHold: order.settlementStatus?.sellerPayout === "HOLD",
     manualHold: Boolean(order.financeFlags?.manualSettlementHold),
     holdReason: order.financeFlags?.manualSettlementHoldReason || "",

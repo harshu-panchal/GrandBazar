@@ -172,6 +172,26 @@ function CheckRow({ c }) {
   );
 }
 
+function PayoutStatusRow({ label, status, detail }) {
+  const complete = status === "PROCESSED" || status === "SETTLED";
+  const failed = status === "FAILED";
+  const active = status === "PROCESSING";
+  const colors = complete
+    ? "border-emerald-500 bg-emerald-50"
+    : failed
+      ? "border-red-500 bg-red-50"
+      : active
+        ? "border-amber-500 bg-amber-50"
+        : "border-slate-300 bg-slate-50";
+  const icon = complete ? "✓" : failed ? "✕" : active ? "⏳" : "○";
+  return (
+    <div className={`rounded-lg border border-l-4 ${colors} p-2`}>
+      <b>{icon} {label}</b>
+      <div className="text-xs text-slate-500">{detail}</div>
+    </div>
+  );
+}
+
 function SettlementWindow({ orderId, onClose }) {
   const [d, setD] = useState(null);
   const [issues, setIssues] = useState({});
@@ -258,6 +278,22 @@ function SettlementWindow({ orderId, onClose }) {
         {/* Checks */}
         <div className="space-y-2">
           {(d.checks || []).map((c) => <CheckRow key={c.key} c={c} />)}
+          <PayoutStatusRow
+            label="Processing from RazorpayX side"
+            status={d.payoutProgress?.razorpay || "PENDING"}
+            detail={
+              d.payoutProgress?.razorpay === "PROCESSED" ? "RazorpayX payout processed"
+                : d.payoutProgress?.razorpay === "PROCESSING" ? "Waiting for RazorpayX terminal webhook"
+                  : d.payoutProgress?.razorpay === "FAILED" ? (d.failureReason || "RazorpayX payout failed")
+                    : d.payoutProgress?.razorpay === "NOT_APPLICABLE" ? "Manual payment selected"
+                      : "Payout not started"
+            }
+          />
+          <PayoutStatusRow
+            label="Settled"
+            status={d.payoutProgress?.settlement || "PENDING"}
+            detail={d.payoutProgress?.settlement === "SETTLED" ? `Settlement completed${d.invoiceNo ? ` · ${d.invoiceNo}` : ""}` : "Waiting for successful payout completion"}
+          />
           {d.complaint && (
             <div className="text-xs text-slate-500">Complaint {d.complaint.complaintId} · {d.complaint.status} · deduct {fx(d.complaint.deduction)}</div>
           )}
