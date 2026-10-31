@@ -959,6 +959,7 @@ function eventData(eventType, payload = {}, role) {
     orderId,
     checkoutGroupId,
     link,
+    ...(payload.status ? { complaintStatus: payload.status } : {}),
     ...(payload.data || {}),
   };
 }

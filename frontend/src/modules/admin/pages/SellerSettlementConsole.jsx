@@ -122,13 +122,15 @@ export default function SellerSettlementConsole() {
                 <td className="px-2 py-2">
                   {r.settled ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Settled</span>
+                  ) : r.state === "PAYING" && r.mode === "AUTOMATIC" ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Processing</span>
                   ) : (
                     <button
                       disabled={!r.ready}
                       onClick={() => setOpenOrder(r.orderId)}
                       className={`rounded-lg px-3 py-1 text-xs font-bold text-white ${r.ready ? "bg-emerald-600" : "cursor-not-allowed bg-slate-300"}`}
                     >
-                      Settle Now
+                      {r.state === "FAILED" || r.state === "PAYING" ? "Retry Payment" : "Settle Now"}
                     </button>
                   )}
                 </td>
@@ -183,6 +185,7 @@ function SettlementWindow({ orderId, onClose }) {
       const det = res.data?.result;
       setD(det);
       setIssues({ ...det.deductions });
+      if (det.mode === "MANUAL" || det.mode === "AUTOMATIC") setMode(det.mode);
     }).catch((e) => setErr(e.response?.data?.message || "Failed to load"));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [orderId]);
@@ -211,11 +214,17 @@ function SettlementWindow({ orderId, onClose }) {
     setBusy(true); setErr("");
     try {
       if (!d.settled) await saveIssues();
-      await adminApi.paySettlement(orderId, { mode, txnNo });
+      const recoverable = d.state === "FAILED" || d.state === "PAYING";
+      const request = recoverable ? adminApi.retrySettlement : adminApi.paySettlement;
+      await request(orderId, { mode, txnNo });
       load();
     } catch (e) { setErr(e.response?.data?.message || "Payment failed"); }
     finally { setBusy(false); }
   };
+
+  const releaseHold = () => act(async () => {
+    await adminApi.releaseSellerPayout(orderId);
+  });
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-20 md:pt-24">
@@ -286,6 +295,22 @@ function SettlementWindow({ orderId, onClose }) {
 
         {err && <div className="rounded-lg bg-red-50 text-red-600 text-sm px-3 py-2">{err}</div>}
 
+        {d.payoutHold && !d.settled && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+            <div className="text-sm text-amber-900">
+              <b>Settlement is on hold</b>
+              <div className="text-xs">{d.holdReason || "The complaint/settlement hold must be released before payment."}</div>
+            </div>
+            <button
+              disabled={busy}
+              onClick={releaseHold}
+              className="shrink-0 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+            >
+              Release hold
+            </button>
+          </div>
+        )}
+
         {d.settled ? (
           <p className="text-sm text-emerald-700">
             Settled · {d.invoiceNo} · Txn {d.txnNo}{d.bulkRef ? ` · Bulk ${d.bulkRef}` : ""}
@@ -327,7 +352,7 @@ function SettlementWindow({ orderId, onClose }) {
                 onClick={pay}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
               >
-                Confirm &amp; Pay {fx(liveSettled)}
+                {d.state === "FAILED" || d.state === "PAYING" ? "Retry & Pay" : "Confirm & Pay"} {fx(liveSettled)}
               </button>
               {!d.ready && <p className="text-xs text-red-600">All four checks must be green to pay.</p>}
             </div>

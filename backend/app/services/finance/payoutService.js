@@ -163,12 +163,12 @@ export async function processPayout(payoutId, { remarks = "", adminId = null } =
           { "financeFlags.manualSettlementHold": true },
         ],
       })
-        .select("orderId")
+        .select("orderId shortOrderId")
         .session(session)
         .lean();
       if (heldOrder) {
         const err = new Error(
-          `Cannot process this payout — order ${heldOrder.orderId} is on settlement hold. Release the hold first.`,
+          `Cannot process this payout — order #${heldOrder.shortOrderId || heldOrder.orderId} is on settlement hold. Release the hold first.`,
         );
         err.statusCode = 409;
         throw err;

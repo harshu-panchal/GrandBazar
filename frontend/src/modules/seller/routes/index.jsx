@@ -1,11 +1,12 @@
 import React, { Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import ScrollToTop from "@shared/components/ScrollToTop";
 import { StoreProvider } from "../context/StoreContext";
 import QuickControlsFab from "../components/QuickControlsFab";
 import { useAuth } from "@core/context/AuthContext";
 import { hasSellerModuleAccess } from "../constants/sellerPermissions";
+import { sellerApi } from "../services/sellerApi";
 import {
   HiOutlineSquares2X2,
   HiOutlineCube,
@@ -144,6 +145,12 @@ const navItems = [
 
 const SellerRoutes = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const [openComplaintCount, setOpenComplaintCount] = React.useState(0);
+  const complaintSeenKey = React.useMemo(
+    () => `seller_complaints_seen_${user?.activeStoreId || user?._id || user?.id || "current"}`,
+    [user?.activeStoreId, user?._id, user?.id],
+  );
 
   const isOwner = React.useMemo(() => {
     return Boolean(user && !user?.subSellerId);
@@ -168,6 +175,40 @@ const SellerRoutes = () => {
     return hasSellerModuleAccess(user?.allowedPermissions || [], permissionKey, level);
   }, [isOwner, user]);
 
+  React.useEffect(() => {
+    if (location.pathname !== "/seller/complaints") return undefined;
+    localStorage.setItem(complaintSeenKey, new Date().toISOString());
+    setOpenComplaintCount(0);
+    return () => {
+      localStorage.setItem(complaintSeenKey, new Date().toISOString());
+    };
+  }, [location.pathname, complaintSeenKey]);
+
+  React.useEffect(() => {
+    if (!hasPermission("orders")) return undefined;
+    let cancelled = false;
+    const fetchOpenComplaintCount = async () => {
+      if (location.pathname === "/seller/complaints") {
+        if (!cancelled) setOpenComplaintCount(0);
+        return;
+      }
+      try {
+        const createdAfter = localStorage.getItem(complaintSeenKey) || undefined;
+        const res = await sellerApi.listComplaints({ open: true, createdAfter, page: 1, limit: 1 });
+        const total = Number(res?.data?.result?.total ?? 0);
+        if (!cancelled) setOpenComplaintCount(Number.isFinite(total) ? total : 0);
+      } catch {
+        // Non-fatal — complaint navigation remains available without a count.
+      }
+    };
+    fetchOpenComplaintCount();
+    const poll = setInterval(fetchOpenComplaintCount, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [hasPermission, location.pathname, complaintSeenKey]);
+
   const filteredNavItems = React.useMemo(() => {
     return navItems.filter((item) => {
       if (item.path === "/seller" || item.path === "/seller/profile" || item.path === "/seller/admin-messages") return true;
@@ -175,8 +216,12 @@ const SellerRoutes = () => {
       if (item.permission === "staff") return isOwner;
       if (isOwner) return true;
       return hasSellerModuleAccess(user?.allowedPermissions || [], item.permission, "read");
-    });
-  }, [user, isOwner]);
+    }).map((item) =>
+      item.path === "/seller/complaints" && openComplaintCount > 0
+        ? { ...item, badgeCount: openComplaintCount }
+        : item
+    );
+  }, [user, isOwner, openComplaintCount]);
 
   return (
     <StoreProvider>

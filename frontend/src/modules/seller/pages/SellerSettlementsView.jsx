@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { sellerApi } from "../services/sellerApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const fx = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const ISSUE_LABELS = {
@@ -55,12 +56,12 @@ export default function SellerSettlementsView() {
             )}
             {rows.map((r) => (
               <tr key={r.orderId} className="border-b last:border-0">
-                <td className="px-2 py-2 font-semibold">#{r.orderId}</td>
+                <td className="px-2 py-2 font-semibold" title={r.orderId}>#{formatOrderId(r)}</td>
                 <td className="px-2 py-2">{r.customerName}</td>
                 <td className="px-2 py-2">{r.date ? new Date(r.date).toLocaleDateString() : "—"}</td>
                 <td className="px-2 py-2">{fx(r.quotedAmount)}</td>
                 <td className={`px-2 py-2 font-bold ${r.settled ? "text-emerald-600" : "text-red-600"}`}>{fx(r.settledAmount)}</td>
-                <td className="px-2 py-2">{r.settled ? "Credited" : "Pending"}</td>
+                <td className="px-2 py-2">{r.status}</td>
                 <td className="px-2 py-2">
                   {r.settled ? (
                     <button className="text-indigo-600" onClick={() => openInvoice(r.orderId)}>
@@ -81,7 +82,7 @@ export default function SellerSettlementsView() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-black">Settlement invoice · {invoice.invoiceNo}</h2>
-                <div className="text-xs text-slate-500">{invoice.sellerName} · Order #{invoice.orderId}</div>
+                <div className="text-xs text-slate-500">{invoice.sellerName} · Order #{formatOrderId(invoice)}</div>
               </div>
               <button onClick={() => setInvoice(null)} className="text-slate-500">✕</button>
             </div>

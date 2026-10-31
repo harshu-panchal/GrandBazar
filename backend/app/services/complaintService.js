@@ -240,6 +240,7 @@ export async function raiseComplaintOrFeedback({
           emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_RAISED, {
             orderId: order.orderId,
             complaintId,
+            status: COMPLAINT_STATUS.NEW,
             userId: order.customer,
             customerId: order.customer,
             slaDays: config.slaDays,
@@ -424,10 +425,23 @@ export async function logCall({ complaintId, adminId, adminName = "", outcome, f
       // CMP-19: a message goes to the customer at EVERY status change — this
       // transition (NEW/UNDER_REVIEW -> CALL_DONE) previously sent none.
       if (order) {
+        if (complaint.status === COMPLAINT_STATUS.NEW) {
+          afterCommit.push(() =>
+            emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_UPDATE, {
+              orderId: order.orderId,
+              complaintId,
+              status: COMPLAINT_STATUS.UNDER_REVIEW,
+              userId: order.customer,
+              customerId: order.customer,
+              message: "Your complaint is now under review by our support team.",
+            }),
+          );
+        }
         afterCommit.push(() =>
           emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_UPDATE, {
             orderId: order.orderId,
             complaintId,
+            status: COMPLAINT_STATUS.CALL_DONE,
             userId: order.customer,
             customerId: order.customer,
             message: "We spoke with you and are checking with the concerned party.",
@@ -512,6 +526,7 @@ export async function assignCulprit({ complaintId, adminId, culprit, amount = 0,
         emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_UPDATE, {
           orderId: order.orderId,
           complaintId,
+          status: COMPLAINT_STATUS.ASSIGNED,
           userId: order.customer,
           customerId: order.customer,
           message: "Your complaint is being looked into.",
@@ -575,10 +590,15 @@ export async function sellerDecision({ complaintId, sellerStoreId, decision, amo
 
       if (approve && order) {
         // Record the complaint deduction on the order so the Phase 4 settlement
-        // engine subtracts it from the seller's settled amount.
+        // engine subtracts it from the seller's settled amount. Approval is the
+        // seller's resolution of the complaint, so also release the automatic
+        // complaint hold. A separate manual admin hold is intentionally kept.
+        const release = order.financeFlags?.manualSettlementHold
+          ? {}
+          : releaseSettlementUpdate(order, (await loadComplaintConfig()).windowHours);
         await Order.updateOne(
           { _id: order._id },
-          { $set: { "sellerSettlement.deductions.complaint": amt } },
+          { $set: { "sellerSettlement.deductions.complaint": amt, ...release } },
           { session },
         );
       }
@@ -588,6 +608,7 @@ export async function sellerDecision({ complaintId, sellerStoreId, decision, amo
           emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_UPDATE, {
             orderId: order.orderId,
             complaintId,
+            status: toStatus,
             userId: order.customer,
             customerId: order.customer,
             message: approve
@@ -726,6 +747,7 @@ export async function refundCustomer({ complaintId, adminId, ctx = {} }) {
         emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_REFUNDED, {
           orderId: order.orderId,
           complaintId,
+          status: COMPLAINT_STATUS.REFUNDED,
           userId: complaint.customer,
           customerId: complaint.customer,
           amount,
@@ -801,6 +823,7 @@ export async function closeComplaint({ complaintId, adminId, summary, ctx = {} }
           emitNotificationEvent(NOTIFICATION_EVENTS.COMPLAINT_CLOSED, {
             orderId: order.orderId,
             complaintId,
+            status: COMPLAINT_STATUS.CLOSED,
             userId: complaint.customer,
             customerId: complaint.customer,
             summary: finalSummary,
@@ -837,12 +860,19 @@ export async function getComplaintByOrder(orderId) {
   return getComplaintById(complaint.complaintId);
 }
 
-export async function listComplaints({ status, submitType, sellerId, overdue, page = 1, limit = 20 } = {}) {
+export async function listComplaints({ status, submitType, sellerId, overdue, open, createdAfter, page = 1, limit = 20 } = {}) {
   const query = {};
-  if (status) query.status = status;
+  if (String(open) === "true") {
+    query.status = { $in: OPEN_COMPLAINT_STATUSES };
+    query.submitType = COMPLAINT_SUBMIT_TYPE.COMPLAINT;
+  } else if (status) query.status = status;
   if (submitType) query.submitType = submitType;
   if (sellerId) query.seller = sellerId;
   if (String(overdue) === "true") query.isOverdue = true;
+  if (createdAfter) {
+    const seenAt = new Date(createdAfter);
+    if (!Number.isNaN(seenAt.getTime())) query.createdAt = { $gt: seenAt };
+  }
   const skip = (Math.max(1, Number(page)) - 1) * Number(limit);
   const [items, total] = await Promise.all([
     Complaint.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),

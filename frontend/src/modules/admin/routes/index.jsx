@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import DashboardLayout from "@shared/layout/DashboardLayout";
 import ScrollToTop from "@shared/components/ScrollToTop";
 import { useSupportUnread } from "@core/context/SupportUnreadContext";
@@ -370,10 +370,16 @@ const CityCommissions = React.lazy(() => import("../pages/CityCommissions"));
 const AdminRoutes = () => {
   const { totalUnread } = useSupportUnread();
   const { user } = useAuth();
+  const location = useLocation();
   const [pendingDeliveryCount, setPendingDeliveryCount] = React.useState(0);
   const [pendingSellerAdminCount, setPendingSellerAdminCount] = React.useState(0);
   const [pendingSellerShopCount, setPendingSellerShopCount] = React.useState(0);
   const [pendingReturnCount, setPendingReturnCount] = React.useState(0);
+  const [openComplaintCount, setOpenComplaintCount] = React.useState(0);
+  const complaintSeenKey = React.useMemo(
+    () => `admin_complaints_seen_${user?._id || user?.id || "current"}`,
+    [user?._id, user?.id],
+  );
 
   const isSuperAdminOrAdmin = React.useMemo(() => {
     // `user.role` is the top-level app-section role (always 'admin' here,
@@ -396,6 +402,40 @@ const AdminRoutes = () => {
     if (parent && allowed.includes(parent)) return true;
     return false;
   }, [isSuperAdminOrAdmin, user]);
+
+  React.useEffect(() => {
+    if (location.pathname !== "/admin/complaints") return undefined;
+    localStorage.setItem(complaintSeenKey, new Date().toISOString());
+    setOpenComplaintCount(0);
+    return () => {
+      localStorage.setItem(complaintSeenKey, new Date().toISOString());
+    };
+  }, [location.pathname, complaintSeenKey]);
+
+  React.useEffect(() => {
+    if (!hasPermission("orders")) return undefined;
+    let cancelled = false;
+    const fetchOpenComplaintCount = async () => {
+      if (location.pathname === "/admin/complaints") {
+        if (!cancelled) setOpenComplaintCount(0);
+        return;
+      }
+      try {
+        const createdAfter = localStorage.getItem(complaintSeenKey) || undefined;
+        const res = await adminApi.listComplaints({ open: true, createdAfter, page: 1, limit: 1 });
+        const total = Number(res?.data?.result?.total ?? 0);
+        if (!cancelled) setOpenComplaintCount(Number.isFinite(total) ? total : 0);
+      } catch {
+        // Non-fatal — the sidebar remains usable if the counter request fails.
+      }
+    };
+    fetchOpenComplaintCount();
+    const poll = setInterval(fetchOpenComplaintCount, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [hasPermission, location.pathname, complaintSeenKey]);
 
   React.useEffect(() => {
     if (!hasPermission("delivery")) return undefined;
@@ -520,10 +560,20 @@ const AdminRoutes = () => {
     const sellerShopCount = Number.isFinite(pendingSellerShopCount) ? pendingSellerShopCount : 0;
     const sellerCount = sellerAdminCount + sellerShopCount;
     const returnCount = Number.isFinite(pendingReturnCount) ? pendingReturnCount : 0;
+    const complaintCount = Number.isFinite(openComplaintCount) ? openComplaintCount : 0;
 
     return filteredItems.map((item) => {
-      if (item?.label === "Customer Support" && supportCount > 0) {
-        return { ...item, badgeCount: supportCount };
+      if (item?.label === "Customer Support" && supportCount + complaintCount > 0) {
+        return {
+          ...item,
+          badgeCount: supportCount + complaintCount,
+          badgePath: complaintCount > 0 ? "/admin/complaints" : "/admin/support-tickets",
+          children: item.children?.map((child) => {
+            if (child.path === "/admin/complaints") return { ...child, badgeCount: complaintCount };
+            if (child.path === "/admin/support-tickets") return { ...child, badgeCount: supportCount };
+            return child;
+          }),
+        };
       }
       if (item?.label === "Delivery Drivers" && deliveryCount > 0) {
         return { ...item, badgeCount: deliveryCount, badgePath: "/admin/delivery-boys/pending" };
@@ -562,7 +612,7 @@ const AdminRoutes = () => {
       }
       return item;
     });
-  }, [totalUnread, pendingDeliveryCount, pendingSellerAdminCount, pendingSellerShopCount, pendingReturnCount, user, isSuperAdminOrAdmin]);
+  }, [totalUnread, pendingDeliveryCount, pendingSellerAdminCount, pendingSellerShopCount, pendingReturnCount, openComplaintCount, user, isSuperAdminOrAdmin]);
 
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">

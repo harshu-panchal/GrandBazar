@@ -26,8 +26,12 @@ function dedupeKeyForNotification(eventType, notification, payload = {}) {
   ].includes(eventType);
   const otpCode = isOtpEvent ? (payload.data?.otp || payload.otp || Date.now()) : null;
 
+  const complaintStatusRef = payload.complaintId && payload.status
+    ? `${payload.complaintId}:${payload.status}`
+    : null;
   const orderRef =
     otpCode ||
+    complaintStatusRef ||
     payload.messageId ||
     payload.messageCreatedAt ||
     payload.ticketId ||

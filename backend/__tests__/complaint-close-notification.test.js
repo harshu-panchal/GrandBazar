@@ -7,6 +7,7 @@ describe("complaint close notification", () => {
       complaintId: "C-0002",
       orderId: "ORD-1",
       customerId: "customer-1",
+      status: "CLOSED",
       summary: "We verified the damaged item and completed your refund.",
     });
 
@@ -16,5 +17,6 @@ describe("complaint close notification", () => {
       title: "Complaint resolved",
     });
     expect(notification.body).toContain("We verified the damaged item and completed your refund.");
+    expect(notification.data.complaintStatus).toBe("CLOSED");
   });
 });

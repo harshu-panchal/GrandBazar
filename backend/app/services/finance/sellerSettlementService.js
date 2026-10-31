@@ -247,6 +247,7 @@ function buildRow(o, complaintMap, windowHours) {
     settledAmount: computeSettled(o),
     reviewed: Boolean(o.sellerSettlement?.reviewed),
     settled,
+    mode: o.sellerSettlement?.mode || null,
     state: o.settlementStatus?.settlementState || null,
     ready: checks.ready,
     dots: checks.dots,
@@ -288,7 +289,12 @@ export async function getSettlementDetail(orderId, { includeMoney = true } = {})
     settledAmount: computeSettled(order),
     reviewed: Boolean(order.sellerSettlement?.reviewed),
     settled: Boolean(order.sellerSettlement?.lockedAt),
+    mode: order.sellerSettlement?.mode || null,
+    failureReason: order.sellerSettlement?.failureReason || "",
     state: order.settlementStatus?.settlementState || null,
+    payoutHold: order.settlementStatus?.sellerPayout === "HOLD",
+    manualHold: Boolean(order.financeFlags?.manualSettlementHold),
+    holdReason: order.financeFlags?.manualSettlementHoldReason || "",
     checks: checks.dots,
     ready: checks.ready,
     complaint: complaint ? { complaintId: complaint.complaintId, status: complaint.status, deduction: complaint.amount } : null,
@@ -441,9 +447,20 @@ export async function paySettlement(orderId, { mode = PAYOUT_MODE.AUTOMATIC, txn
       await failSettlement(order._id, "Transaction number required");
       throw httpError("A transaction number is required for manual payment", 400);
     }
-    await processPayout(payout._id, { remarks: `Manual settlement · ${txnNo}`, adminId: actor?.id });
-    await finalizeSettlement(order._id, { payoutId: payout._id, txnNo, mode });
-    return getSettlementDetail(orderId);
+    try {
+      await processPayout(payout._id, { remarks: `Manual settlement · ${txnNo}`, adminId: actor?.id });
+      await finalizeSettlement(order._id, { payoutId: payout._id, txnNo, mode });
+      return getSettlementDetail(orderId);
+    } catch (error) {
+      // Do not leave a failed manual attempt permanently stuck in PAYING with
+      // its idempotency key claimed. A retry will cancel/reconcile the still
+      // pending payout before creating the replacement.
+      const latestPayout = await Payout.findById(payout._id).select("status").lean();
+      if (latestPayout?.status !== "COMPLETED") {
+        await failSettlement(order._id, error.message || "Manual payout failed");
+      }
+      throw error;
+    }
   }
 
   // AUTOMATIC: call RazorpayX; completion arrives via the webhook.
@@ -589,11 +606,31 @@ export async function retrySettlement(orderId, { mode, txnNo, idempotencyKey }, 
   orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({ orderId }).select("settlementStatus sellerSettlement orderId");
   if (!order) throw httpError("Order not found", 404);
-  if (order.settlementStatus?.settlementState !== SETTLEMENT_STATE.FAILED) {
-    throw httpError("Only a FAILED settlement can be retried", 409);
+  const state = order.settlementStatus?.settlementState;
+  const recoverableManualPaying =
+    state === SETTLEMENT_STATE.PAYING && order.sellerSettlement?.mode === PAYOUT_MODE.MANUAL;
+  if (state !== SETTLEMENT_STATE.FAILED && !recoverableManualPaying) {
+    throw httpError("Only a failed manual settlement can be retried", 409);
+  }
+  if (recoverableManualPaying) {
+    const inFlight = await Payout.findOne({
+      relatedOrderIds: order._id,
+      status: { $in: ["PENDING", "FAILED", "CANCELLED"] },
+    }).lean();
+    if (!inFlight) {
+      throw httpError("This payment may already be processing. Refresh before retrying.", 409);
+    }
   }
   // Clear the failed claim so paySettlement can re-run idempotently.
-  await Order.updateOne({ _id: order._id }, { $set: { "sellerSettlement.idempotencyKey": null } });
+  await Order.updateOne(
+    { _id: order._id },
+    {
+      $set: {
+        "sellerSettlement.idempotencyKey": null,
+        "settlementStatus.settlementState": SETTLEMENT_STATE.REVIEWED,
+      },
+    },
+  );
   return paySettlement(orderId, { mode: mode || order.sellerSettlement?.mode, txnNo, idempotencyKey }, actor);
 }
 
@@ -603,21 +640,32 @@ export async function retrySettlement(orderId, { mode, txnNo, idempotencyKey }, 
 // customer phone (SLV-04/05, SEC-01).
 export async function listSellerSettlements(sellerStoreId, { page = 1, limit = 50 } = {}) {
   const orders = await Order.find({ seller: sellerStoreId, deliveredAt: { $ne: null } })
-    .select("orderId deliveredAt customer items sellerSettlement settlementStatus paymentBreakdown")
+    .select("orderId shortOrderId deliveredAt customer items sellerSettlement settlementStatus paymentBreakdown")
     .populate("customer", "name")
     .sort({ deliveredAt: -1 })
     .lean();
 
   const items = orders.map((o) => {
-    const settled = Boolean(o.sellerSettlement?.lockedAt);
+    const settled = Boolean(
+      o.sellerSettlement?.lockedAt || o.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED,
+    );
+    const state = o.settlementStatus?.settlementState;
+    const status = settled
+      ? "Credited"
+      : state === SETTLEMENT_STATE.PAYING
+        ? "Processing"
+        : state === SETTLEMENT_STATE.FAILED
+          ? "Payment failed"
+          : "Pending";
     return {
       orderId: o.orderId,
+      shortOrderId: o.shortOrderId || null,
       date: o.deliveredAt,
       customerName: o.customer?.name || "",
       quotedAmount: getQuoted(o),
       settledAmount: computeSettled(o),
       settled,
-      status: settled ? "Credited" : "Pending",
+      status,
       invoiceNo: o.sellerSettlement?.invoiceNo || "",
       txnNo: o.sellerSettlement?.txnNo || "",
       bulkRef: o.sellerSettlement?.bulkRef || "",
@@ -641,6 +689,7 @@ export async function getSellerSettlementInvoice(orderId, sellerStoreId) {
   return {
     invoiceNo: order.sellerSettlement.invoiceNo,
     orderId: order.orderId,
+    shortOrderId: order.shortOrderId || null,
     sellerName: order.seller?.shopName || "",
     quotedAmount: getQuoted(order),
     deductions: order.sellerSettlement.deductions || {},
@@ -661,6 +710,7 @@ export async function getSettlementInvoice(orderId) {
   return {
     invoiceNo: order.sellerSettlement.invoiceNo,
     orderId: order.orderId,
+    shortOrderId: order.shortOrderId || null,
     sellerName: order.seller?.shopName || "",
     quotedAmount: getQuoted(order),
     deductions: order.sellerSettlement.deductions || {},
