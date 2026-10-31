@@ -22,6 +22,7 @@ export const WORKFLOW_STATUS = {
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
   PICKUP_READY: "PICKUP_READY",
+  HANDED_OVER_TO_LOGISTICS: "HANDED_OVER_TO_LOGISTICS",
   CUSTOMER_PICKUP_READY: "CUSTOMER_PICKUP_READY",
   OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
   DELIVERED: "DELIVERED",
@@ -33,6 +34,7 @@ const LEGACY_ENUM = new Set([
   "pending",
   "confirmed",
   "packed",
+  "handed_over_to_logistics",
   "ready_for_pickup",
   "out_for_delivery",
   "delivered",
@@ -75,6 +77,8 @@ function legacyFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.PICKUP_READY:
       return "packed";
+    case WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS:
+      return "handed_over_to_logistics";
     case WORKFLOW_STATUS.CUSTOMER_PICKUP_READY:
       return "ready_for_pickup";
     case WORKFLOW_STATUS.OUT_FOR_DELIVERY:
@@ -121,7 +125,7 @@ export function getLegacyStatusFromOrder(order) {
     return explicit;
   }
 
-  if (order.sellerPackedAt && !["cancelled", "delivered", "out_for_delivery"].includes(explicit)) {
+  if (order.sellerPackedAt && !["cancelled", "delivered", "out_for_delivery", "handed_over_to_logistics"].includes(explicit)) {
     return "packed";
   }
 
@@ -131,6 +135,7 @@ export function getLegacyStatusFromOrder(order) {
     if (workflowStatus === WORKFLOW_STATUS.OUT_FOR_DELIVERY) return "out_for_delivery";
     if (workflowStatus === WORKFLOW_STATUS.DELIVERED) return "delivered";
     if (workflowStatus === WORKFLOW_STATUS.PICKUP_READY) return "packed";
+    if (workflowStatus === WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS) return "handed_over_to_logistics";
     if (
       workflowStatus === WORKFLOW_STATUS.DELIVERY_ASSIGNED ||
       workflowStatus === WORKFLOW_STATUS.DELIVERY_SEARCH ||
@@ -223,6 +228,7 @@ const DISPLAY_LABELS = {
   pending: "Pending",
   confirmed: "Confirmed",
   packed: "Packed",
+  handed_over_to_logistics: "Handed over to logistics",
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
@@ -250,7 +256,7 @@ export function canSellerManuallyUpdateStatus(order) {
   if (!order) return false;
   if (isScheduledHoldOrder(order)) return false;
   const ws = String(order?.workflowStatus || "").toUpperCase();
-  if (ws === WORKFLOW_STATUS.PREORDER_HOLD) return false;
+  if (ws === WORKFLOW_STATUS.PREORDER_HOLD || ws === WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS) return false;
   return true;
 }
 
@@ -266,6 +272,7 @@ export function canSellerSplitOrReplace(order) {
     [
       WORKFLOW_STATUS.CANCELLED,
       WORKFLOW_STATUS.DELIVERED,
+      WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
       WORKFLOW_STATUS.OUT_FOR_DELIVERY,
       WORKFLOW_STATUS.DISPUTED,
       WORKFLOW_STATUS.PREORDER_HOLD,
@@ -276,7 +283,7 @@ export function canSellerSplitOrReplace(order) {
 
   const legacy = String(getLegacyStatusFromOrder(order) || "").toLowerCase();
   if (
-    ["delivered", "cancelled", "out_for_delivery", "returned", "refunded"].includes(
+    ["delivered", "cancelled", "handed_over_to_logistics", "out_for_delivery", "returned", "refunded"].includes(
       legacy,
     )
   ) {
@@ -298,6 +305,7 @@ export function canCustomerAddItems(order) {
   if (
     [
       WORKFLOW_STATUS.PICKUP_READY,
+      WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
       WORKFLOW_STATUS.CUSTOMER_PICKUP_READY,
       WORKFLOW_STATUS.OUT_FOR_DELIVERY,
       WORKFLOW_STATUS.DELIVERED,
@@ -313,6 +321,7 @@ export function canCustomerAddItems(order) {
   if (
     [
       "packed",
+      "handed_over_to_logistics",
       "ready_for_pickup",
       "out_for_delivery",
       "delivered",
@@ -430,6 +439,7 @@ export function getStatusVariant(legacyStatus) {
     case "pending": return "warning";
     case "confirmed": return "info";
     case "packed": return "primary";
+    case "handed_over_to_logistics": return "info";
     case "ready_for_pickup": return "primary";
     case "out_for_delivery": return "secondary";
     case "delivered": return "success";
@@ -440,7 +450,7 @@ export function getStatusVariant(legacyStatus) {
   }
 }
 
-// Mirrors the 0-6 tracker position previously locked inside customer's
+// Canonical 0-7 tracker position shared by every order module.
 // OrderProgressTracker.jsx (WORKFLOW_STAGE_INDEX/legacyStageIndex) and
 // backend/app/services/orderStatusResolver.js's identical table — moved
 // here so every module (including delivery, which had no tracker concept
@@ -456,15 +466,17 @@ const WORKFLOW_STAGE_INDEX = {
   EXTERNAL_LOGISTICS_PENDING: 2,
   DELIVERY_ASSIGNED: 3,
   PICKUP_READY: 4,
+  HANDED_OVER_TO_LOGISTICS: 5,
   CUSTOMER_PICKUP_READY: 4,
-  OUT_FOR_DELIVERY: 5,
-  DELIVERED: 6,
-  DISPUTED: 6,
+  OUT_FOR_DELIVERY: 6,
+  DELIVERED: 7,
+  DISPUTED: 7,
 };
 
 function legacyStageIndex(order, legacyStatus) {
-  if (legacyStatus === "delivered" || legacyStatus === "disputed") return 6;
-  if (legacyStatus === "out_for_delivery") return 5;
+  if (legacyStatus === "delivered" || legacyStatus === "disputed") return 7;
+  if (legacyStatus === "out_for_delivery") return 6;
+  if (legacyStatus === "handed_over_to_logistics") return 5;
   if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
   if (order?.deliveryBoy || order?.assignedAt) return 3;
   if (legacyStatus === "confirmed") return 2;
@@ -491,7 +503,7 @@ export function adminRouteMatchesOrder(routeStatus, order) {
   if (routeStatus === "all") return true;
   if (routeStatus === "pending") return legacy === "pending" || legacy === "preorder_confirmed";
   if (routeStatus === "processed") {
-    return ["confirmed", "packed", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
+    return ["confirmed", "packed", "handed_over_to_logistics", "rescheduled", "reschedule_requested", "awaiting_extra_payment", "price_revised", "partial_cancelled", "partial_updated", "customer_confirmation", "preparing", "completed", "refunded"].includes(legacy);
   }
   // "scheduled" was never a legal legacy-status value (see legacyFromWorkflow
   // above) — isScheduledHoldOrder reads workflowStatus directly instead of

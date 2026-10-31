@@ -61,6 +61,7 @@ const OrdersList = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
     const [reviewingCancelOrderId, setReviewingCancelOrderId] = useState('');
+    const [updatingOrderId, setUpdatingOrderId] = useState('');
 
     const handleCSVExport = () => {
         setIsExporting(true);
@@ -166,13 +167,29 @@ const OrdersList = () => {
     };
 
     const handleStatusUpdate = async (orderId, newStatus) => {
+        const targetOrder = orders.find((item) => item._id === orderId || item.id === orderId);
+        if (!targetOrder || targetOrder.status === newStatus || updatingOrderId) return;
+        if (
+            newStatus === 'delivered' &&
+            !window.confirm(
+                `Mark order #${targetOrder.shortId || targetOrder.id} as delivered? This will finalize delivery and update settlement${targetOrder.payment === 'COD' ? ' and COD collection' : ''}.`,
+            )
+        ) {
+            return;
+        }
+        setUpdatingOrderId(orderId);
         try {
-            await adminApi.updateOrderStatus(orderId, { status: newStatus });
-            showToast(`Order status updated to ${newStatus}`, "success");
+            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus });
+            showToast(
+                response.data?.message || (newStatus === 'delivered' ? 'Order marked as delivered' : `Order status updated to ${newStatus}`),
+                "success",
+            );
             fetchOrders(page); // Refresh in place — don't jump back to page 1
         } catch (error) {
             console.error("Failed to update status:", error);
-            showToast("Failed to update status", "error");
+            showToast(error?.response?.data?.message || "Failed to update status", "error");
+        } finally {
+            setUpdatingOrderId('');
         }
     };
 
@@ -269,6 +286,7 @@ const OrdersList = () => {
             case 'pending': return 'bg-amber-100 text-amber-600 border-amber-200';
             case 'confirmed': return 'bg-brand-100 text-brand-600 border-brand-200';
             case 'packed': return 'bg-brand-100 text-brand-600 border-brand-200';
+            case 'handed_over_to_logistics': return 'bg-purple-100 text-purple-700 border-purple-200';
             case 'out_for_delivery': return 'bg-purple-100 text-purple-600 border-purple-200';
             case 'delivered': return 'bg-brand-100 text-brand-600 border-brand-200';
             case 'cancelled': return 'bg-rose-100 text-rose-600 border-rose-200';
@@ -518,14 +536,17 @@ const OrdersList = () => {
                                             <select
                                                 value={order.status}
                                                 onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
+                                                disabled={updatingOrderId === order._id}
                                                 className={cn(
                                                     "w-full text-[10px] pl-3 pr-8 py-2 rounded-xl font-black uppercase tracking-wider border appearance-none cursor-pointer focus:ring-2 focus:ring-offset-1 transition-all outline-none shadow-sm",
-                                                    getStatusStyles(order.status)
+                                                    getStatusStyles(order.status),
+                                                    updatingOrderId === order._id && "cursor-wait opacity-60",
                                                 )}
                                             >
                                                 <option value="pending">Pending</option>
                                                 <option value="confirmed">Confirmed</option>
                                                 <option value="packed">Packed</option>
+                                                <option value="handed_over_to_logistics" disabled>Handed over to logistics</option>
                                                 <option value="out_for_delivery">Out for Delivery</option>
                                                 <option value="delivered">Delivered</option>
                                                 <option value="cancelled">Cancelled</option>
@@ -565,7 +586,7 @@ const OrdersList = () => {
                                                     MARK PACKED
                                                 </button>
                                             )}
-                                            {status === 'processed' && order.status === 'packed' && (
+                                            {status === 'processed' && order.status === 'packed' && order.fulfillmentMethod !== 'platform_logistics' && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -575,6 +596,19 @@ const OrdersList = () => {
                                                 >
                                                     <Truck className="h-3.5 w-3.5" />
                                                     DISPATCH
+                                                </button>
+                                            )}
+                                            {order.status === 'out_for_delivery' && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleStatusUpdate(order._id, 'delivered');
+                                                    }}
+                                                    disabled={updatingOrderId === order._id}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60 transition-all shadow-lg shadow-emerald-100"
+                                                >
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    {updatingOrderId === order._id ? 'UPDATING…' : 'MARK DELIVERED'}
                                                 </button>
                                             )}
                                             {order.cancellationRequestStatus === 'pending' && (

@@ -174,16 +174,22 @@ export async function updateCatalogBundle(bundleId, payload) {
   return formatBundleRecord(bundle.toObject());
 }
 
-export async function deactivateCatalogBundle(bundleId) {
-  const bundle = await CatalogBundle.findByIdAndUpdate(
-    bundleId,
-    { $set: { isActive: false } },
-    { new: true },
-  );
+export async function deleteCatalogBundle(bundleId) {
+  const bundle = await CatalogBundle.findByIdAndDelete(bundleId);
   if (!bundle) {
     throw new Error("Catalog bundle not found");
   }
-  return formatBundleRecord(bundle.toObject());
+
+  // Imported products are independent seller products and must remain. Only
+  // remove tracking records that reference the catalog bundle that no longer
+  // exists.
+  await StoreBundleImport.deleteMany({ bundleId: bundle._id });
+
+  return {
+    id: String(bundle._id),
+    name: bundle.name,
+    deleted: true,
+  };
 }
 
 export async function getAvailableBundlesForStore(storeId) {

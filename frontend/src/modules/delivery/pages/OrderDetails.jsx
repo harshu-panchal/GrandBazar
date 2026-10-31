@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Navigation,
   Package,
+  Truck,
   CheckCircle,
   Store,
   User,
@@ -36,18 +37,21 @@ import {
   leaveOrderRoom,
   onOrderStatusUpdate,
 } from "@/core/services/orderSocket";
-import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
+import { getLegacyStatusFromOrder, getOrderStatusLabel } from "@/shared/utils/orderStatus";
+import VerticalOrderStatusTimeline from "@/shared/components/order/VerticalOrderStatusTimeline";
 
-const getPublicStatusStage = (internalStep) => {
-  if (internalStep >= 4) return 3;
-  if (internalStep >= 3) return 2;
-  return 1;
-};
+const RETURN_PUBLIC_STATUS_STEPS = [
+  { id: 1, label: "Confirmed", icon: CheckCircle },
+  { id: 2, label: "Out for Delivery", icon: Truck },
+  { id: 3, label: "Delivered", icon: Package },
+];
 
-const PUBLIC_STATUS_STEPS = [
-  { id: 1, label: "Confirmed" },
-  { id: 2, label: "Out for Delivery" },
-  { id: 3, label: "Delivered" },
+const DELIVERY_PUBLIC_STATUS_STEPS = [
+  { id: 1, label: "Assigned", icon: User },
+  { id: 2, label: "At seller", icon: Store },
+  { id: 3, label: "Handed over to logistics", icon: Package },
+  { id: 4, label: "Out for delivery", icon: Truck },
+  { id: 5, label: "Delivered", icon: CheckCircle },
 ];
 
 // Maps a backend order to this component's rider-facing step (1-4, or 1-5
@@ -87,6 +91,7 @@ const getPersistedRiderStep = (order) => {
 
   if (riderStep >= 4 || legacyStatus === "delivered") return 4;
   if (riderStep >= 3 || legacyStatus === "out_for_delivery" || order.outForDeliveryAt) return 3;
+  if (legacyStatus === "handed_over_to_logistics") return 2;
   if (riderStep >= 2 || legacyStatus === "packed" || order.pickupReadyAt) return 2;
   return 1;
 };
@@ -223,6 +228,24 @@ const OrderDetails = () => {
       } else if (ws === "CANCELLED") {
         toast.error("This order was cancelled — it's no longer available for delivery.");
         navigate("/delivery/dashboard");
+      } else if (ws === "HANDED_OVER_TO_LOGISTICS") {
+        deliveryApi.getOrderDetails(orderId)
+          .then((response) => {
+            const updated = response.data?.result;
+            if (updated) setOrder(updated);
+            setStep(2);
+            toast.success("Seller confirmed the product handover. You can start delivery.");
+          })
+          .catch(() => {
+            setOrder((prev) => prev ? {
+              ...prev,
+              workflowStatus: "HANDED_OVER_TO_LOGISTICS",
+              status: "handed_over_to_logistics",
+            } : prev);
+          });
+      } else if (ws === "OUT_FOR_DELIVERY") {
+        setStep(3);
+        setOrder((prev) => prev ? { ...prev, status: "out_for_delivery", workflowStatus: "OUT_FOR_DELIVERY" } : prev);
       }
     });
 
@@ -291,7 +314,7 @@ const OrderDetails = () => {
       {
         id: 2,
         label: "At Store",
-        action: "PICKED UP ORDER",
+        action: "START DELIVERY",
         color: "bg-orange-500",
         bg: "bg-orange-50",
         text: "text-orange-600",
@@ -319,9 +342,16 @@ const OrderDetails = () => {
   // Steps 1-2 = Stage 1 (Return Assigned)
   // Steps 3-4 = Stage 2 (Out for Pickup)
   // Step 5    = Stage 3 (Return Received)
+  const workflowStatus = String(order?.workflowStatus || "").toUpperCase();
+  const isHandoverConfirmed = workflowStatus === "HANDED_OVER_TO_LOGISTICS";
+  const publicStatusSteps = isReturn ? RETURN_PUBLIC_STATUS_STEPS : DELIVERY_PUBLIC_STATUS_STEPS;
   const publicStatusStage = isReturn
     ? step >= 5 ? 3 : step >= 3 ? 2 : 1
-    : getPublicStatusStage(step);
+    : workflowStatus === "DELIVERED" ? 5
+      : workflowStatus === "OUT_FOR_DELIVERY" ? 4
+        : workflowStatus === "HANDED_OVER_TO_LOGISTICS" ? 3
+          : workflowStatus === "PICKUP_READY" ? 2
+            : 1;
   const cachedRiderLocation = getCachedDeliveryPartnerLocation(30 * 60 * 1000);
   const destinationLocation = order?.address?.location;
 
@@ -687,40 +717,11 @@ const OrderDetails = () => {
         </motion.div>
 
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center px-2 mb-2 relative">
-            <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -z-10 rounded-full" />
-            <motion.div
-              className="absolute top-1/2 left-0 h-1 bg-brand-500 -z-10 rounded-full"
-              initial={{ width: "0%" }}
-              animate={{
-                width: `${((publicStatusStage - 1) / (PUBLIC_STATUS_STEPS.length - 1)) * 100}%`,
-              }}
-              transition={{ duration: 0.5, ease: "easeInOut" }}
-            />
-            {PUBLIC_STATUS_STEPS.map(({ id, label }) => (
-              <motion.div
-                key={id}
-                initial={false}
-                animate={{
-                  scale: id === publicStatusStage ? 1.15 : 1,
-                  backgroundColor: id <= publicStatusStage ? "var(--primary)" : "#ffffff",
-                  borderColor: id <= publicStatusStage ? "var(--primary)" : "#e5e7eb",
-                  color: id <= publicStatusStage ? "#ffffff" : "#9ca3af",
-                }}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 z-10 shadow-sm"
-                aria-label={label}
-              >
-                {id < publicStatusStage ? <CheckCircle size={16} /> : id}
-              </motion.div>
-            ))}
-          </div>
-          <div className="flex justify-between mt-2 text-xs text-slate-500 font-medium px-1">
-            {PUBLIC_STATUS_STEPS.map(({ id, label }) => (
-              <span key={id} className="text-center">
-                {label}
-              </span>
-            ))}
-          </div>
+          <VerticalOrderStatusTimeline
+            steps={publicStatusSteps}
+            currentStepPosition={Math.max(0, publicStatusStage - 1)}
+            completeCurrent={publicStatusStage === publicStatusSteps.length}
+          />
         </div>
 
         <AnimatePresence mode="wait">
@@ -957,6 +958,31 @@ const OrderDetails = () => {
           </p>
         </motion.div>
 
+        {!isReturn && step === 2 && (
+          <div className={`rounded-3xl border p-5 shadow-sm ${isHandoverConfirmed ? "border-purple-200 bg-purple-50" : "border-amber-200 bg-amber-50"}`}>
+            <div className="flex items-start gap-3">
+              {isHandoverConfirmed
+                ? <CheckCircle className="mt-0.5 shrink-0 text-purple-600" size={22} />
+                : <Loader2 className="mt-0.5 shrink-0 animate-spin text-amber-600" size={22} />}
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-black ${isHandoverConfirmed ? "text-purple-900" : "text-amber-900"}`}>
+                  {isHandoverConfirmed ? getOrderStatusLabel(order) : "Waiting for seller handover"}
+                </p>
+                <p className={`mt-1 text-xs font-medium ${isHandoverConfirmed ? "text-purple-700" : "text-amber-700"}`}>
+                  {isHandoverConfirmed
+                    ? "Review the seller's product handover photo, then start delivery."
+                    : "The seller must upload the product handover photo before you can start delivery."}
+                </p>
+                {isHandoverConfirmed && order.pickupProofImages?.[0] && (
+                  <a href={order.pickupProofImages[0]} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-2xl border border-purple-200 bg-white">
+                    <img src={order.pickupProofImages[0]} alt="Product handover proof" className="h-52 w-full object-cover" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Return Step 2: Upload proof then request customer pickup OTP */}
         {isReturn && step === 2 && !showOtpInput && isAssignedRider && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
@@ -1078,7 +1104,7 @@ const OrderDetails = () => {
       </div>
 
       {/* Slide button: for returns shown at steps 1 and 3 (navigation steps); for standard shown at steps 1-2 */}
-      {((isReturn && (step === 1 || step === 3) && isAssignedRider) || (!isReturn && step <= 2)) && (
+      {((isReturn && (step === 1 || step === 3) && isAssignedRider) || (!isReturn && (step === 1 || (step === 2 && isHandoverConfirmed)))) && (
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)]">
           <div className="max-w-2xl mx-auto p-4">
             <div className="relative h-16 bg-slate-100 rounded-full overflow-hidden select-none">

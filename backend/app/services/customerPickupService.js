@@ -8,6 +8,7 @@ import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { FULFILLMENT_METHOD } from "../constants/deliveryPolicy.js";
 import { applyDeliveredSettlement } from "./orderSettlement.js";
 import { resolveSiblingStoreIds } from "./storeService.js";
+import { buildKey, invalidate } from "./cacheService.js";
 
 const OTP_EXPIRY_MS = () =>
   parseInt(process.env.CUSTOMER_PICKUP_OTP_EXPIRY_MS || String(24 * 60 * 60 * 1000), 10);
@@ -165,16 +166,36 @@ export async function resendPickupOtpBySeller(sellerId, orderId) {
 
 export async function verifyCustomerPickup({
   orderId,
-  customerId,
+  sellerId,
   otp,
-  qrToken,
-  orderNumber,
   verifiedBy = "customer",
+  handoverPhotoUrl,
 }) {
-  orderId = await requireCanonicalOrderId(orderId || orderNumber);
+  if (verifiedBy !== "seller" || !sellerId) {
+    const err = new Error("Only the seller can complete a customer pickup with OTP and handover photo");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const photoUrl = String(handoverPhotoUrl || "").trim();
+  if (!/^https:\/\//i.test(photoUrl)) {
+    const err = new Error("A product handover photo is required to complete customer pickup");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const enteredOtp = String(otp || "").trim();
+  if (!/^\d{4,6}$/.test(enteredOtp)) {
+    const err = new Error("A valid customer pickup OTP is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  orderId = await requireCanonicalOrderId(orderId);
+  const candidateSellerIds = await resolveSiblingStoreIds(sellerId);
   const order = await Order.findOne({
     orderId,
-    ...(customerId ? { customer: customerId } : {}),
+    seller: { $in: candidateSellerIds },
   });
   if (!order) {
     const err = new Error("Order not found");
@@ -199,15 +220,9 @@ export async function verifyCustomerPickup({
     throw err;
   }
 
-  const otpOk = otp && pickup.otpHash === hashToken(otp);
-  const qrOk = qrToken && pickup.qrTokenHash === hashToken(qrToken);
-  const orderIdOk =
-    orderNumber &&
-    String(order.orderId).toLowerCase() === String(orderNumber).toLowerCase() &&
-    (otpOk || qrOk);
-
-  if (!otpOk && !qrOk && !orderIdOk) {
-    const err = new Error("Invalid pickup verification");
+  const otpOk = pickup.otpHash === hashToken(enteredOtp);
+  if (!otpOk) {
+    const err = new Error("Invalid customer pickup OTP");
     err.statusCode = 401;
     throw err;
   }
@@ -216,10 +231,12 @@ export async function verifyCustomerPickup({
   order.status = legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERED);
   order.orderStatus = legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERED);
   order.deliveredAt = new Date();
+  order.deliveryProofImages = [photoUrl];
   order.customerPickup = {
     ...pickup,
     verifiedAt: new Date(),
     verifiedBy,
+    handoverPhotoUrl: photoUrl,
   };
   await order.save();
 
@@ -231,10 +248,22 @@ export async function verifyCustomerPickup({
   // download even though the order was genuinely delivered.
   await applyDeliveredSettlement(order, orderId);
 
+  try {
+    await invalidate(buildKey("orders", "customer", `${order.customer}:*`));
+  } catch (error) {
+    console.warn("[customerPickup] customer order cache invalidation failed:", error.message);
+  }
+
   emitOrderStatusUpdate(
     orderId,
-    { workflowStatus: WORKFLOW_STATUS.DELIVERED, pickupVerified: true },
+    {
+      workflowStatus: WORKFLOW_STATUS.DELIVERED,
+      status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERED),
+      pickupVerified: true,
+      handoverProofAvailable: true,
+    },
     order.customer,
+    order.seller,
   );
   emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
     orderId,

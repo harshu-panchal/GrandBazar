@@ -30,6 +30,7 @@ import { createPendingPayoutForOrder } from "./payoutService.js";
 import { resolveRiderPayoutAmount } from "./riderPayoutService.js";
 import { computeOverallSettlement } from "../../utils/settlementStatus.js";
 import { buildKey, invalidate } from "../cacheService.js";
+import { WORKFLOW_STATUS } from "../../constants/orderWorkflow.js";
 
 function toOrderIdQuery(orderOrId) {
   if (!orderOrId) return null;
@@ -695,12 +696,29 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
     session.startTransaction();
     const order = await findOrderForUpdate(orderOrId, session);
 
+    let deliveryStateChanged = false;
     if (order.status !== "delivered") {
       order.status = "delivered";
+      deliveryStateChanged = true;
     }
-    order.orderStatus = "delivered";
+    if (order.orderStatus !== "delivered") {
+      order.orderStatus = "delivered";
+      deliveryStateChanged = true;
+    }
+    if (
+      (Number(order.workflowVersion) >= 2 || order.workflowStatus) &&
+      order.workflowStatus !== WORKFLOW_STATUS.DELIVERED
+    ) {
+      order.workflowStatus = WORKFLOW_STATUS.DELIVERED;
+      deliveryStateChanged = true;
+    }
+    if (Number(order.deliveryRiderStep || 0) < 4) {
+      order.deliveryRiderStep = 4;
+      deliveryStateChanged = true;
+    }
     if (!order.deliveredAt) {
       order.deliveredAt = new Date();
+      deliveryStateChanged = true;
     }
 
     if (!order.returnEligibleAt || !order.returnWindowExpiresAt) {
@@ -771,7 +789,7 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
         riderPayoutRepaired = true;
       }
 
-      if (riderPayoutRepaired) {
+      if (riderPayoutRepaired || deliveryStateChanged) {
         order.settlementStatus = computeOverallSettlement(order);
         await order.save({ session });
       }

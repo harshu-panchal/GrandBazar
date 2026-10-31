@@ -14,7 +14,7 @@ describe("resolveOrderStatus — v1/legacy orders (no workflowStatus)", () => {
     const result = resolveOrderStatus({ status: "delivered", workflowVersion: 1 });
     expect(result.legacyStatus).toBe("delivered");
     expect(result.label).toBe("Delivered");
-    expect(result.step).toBe(6);
+    expect(result.step).toBe(7);
   });
 
   it("falls back to a mid-flight step via deliveryBoy when status is only 'confirmed'", () => {
@@ -63,16 +63,23 @@ describe("resolveOrderStatus — v2 orders at each workflow state", () => {
     expect(resolveOrderStatus(v2(WORKFLOW_STATUS.CUSTOMER_PICKUP_READY)).legacyStatus).toBe("ready_for_pickup");
   });
 
-  it("OUT_FOR_DELIVERY -> out_for_delivery, step 5", () => {
+  it("OUT_FOR_DELIVERY -> out_for_delivery, step 6", () => {
     const result = resolveOrderStatus(v2(WORKFLOW_STATUS.OUT_FOR_DELIVERY));
     expect(result.legacyStatus).toBe("out_for_delivery");
-    expect(result.step).toBe(5);
+    expect(result.step).toBe(6);
   });
 
-  it("DELIVERED -> delivered, step 6", () => {
+  it("DELIVERED -> delivered, step 7", () => {
     const result = resolveOrderStatus(v2(WORKFLOW_STATUS.DELIVERED));
     expect(result.legacyStatus).toBe("delivered");
-    expect(result.step).toBe(6);
+    expect(result.step).toBe(7);
+  });
+
+  it("HANDED_OVER_TO_LOGISTICS has its own status, label, and step", () => {
+    const result = resolveOrderStatus(v2(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS));
+    expect(result.legacyStatus).toBe("handed_over_to_logistics");
+    expect(result.label).toBe("Handed over to logistics");
+    expect(result.step).toBe(5);
   });
 
   it("CANCELLED -> cancelled", () => {
@@ -83,7 +90,7 @@ describe("resolveOrderStatus — v2 orders at each workflow state", () => {
     const result = resolveOrderStatus(v2(WORKFLOW_STATUS.DISPUTED));
     expect(result.legacyStatus).toBe("disputed");
     expect(result.isDisputed).toBe(true);
-    expect(result.step).toBe(6);
+    expect(result.step).toBe(7);
   });
 
   it("AWAITING_EXTRA_PAYMENT -> awaiting_extra_payment", () => {

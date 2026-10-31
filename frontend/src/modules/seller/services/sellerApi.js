@@ -179,9 +179,7 @@ export const sellerApi = {
         axiosInstance.put(`/orders/${orderId}/split-delivery/${splitId}/status`, data),
     getOrderModificationHistory: (orderId) => axiosInstance.get(`/orders/${orderId}/modifications`),
     updateSelfLogistics: (orderId, data) => axiosInstance.put(`/orders/${orderId}/logistics/self`, data),
-    uploadMedia: (formData) => axiosInstance.post('/media/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    uploadMedia: (formData, config = {}) => axiosInstance.post('/media/upload', formData, config),
 
     // Complaint Window — seller sees complaints against their products and
     // approves an amount or rejects (BRD CMP-13 / SLV-07).

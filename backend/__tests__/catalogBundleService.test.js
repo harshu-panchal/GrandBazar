@@ -4,9 +4,11 @@ const mockCategoryFind = jest.fn();
 const mockCatalogBundleFind = jest.fn();
 const mockCatalogBundleFindOne = jest.fn();
 const mockCatalogBundleCreate = jest.fn();
+const mockCatalogBundleFindByIdAndDelete = jest.fn();
 const mockStoreBundleImportFind = jest.fn();
 const mockStoreBundleImportFindOne = jest.fn();
 const mockStoreBundleImportCreate = jest.fn();
+const mockStoreBundleImportDeleteMany = jest.fn();
 const mockStoreFindById = jest.fn();
 const mockCatalogProductFind = jest.fn();
 const mockProductFindOne = jest.fn();
@@ -23,6 +25,7 @@ jest.unstable_mockModule("../app/models/catalogBundle.js", () => ({
     find: mockCatalogBundleFind,
     findOne: mockCatalogBundleFindOne,
     create: mockCatalogBundleCreate,
+    findByIdAndDelete: mockCatalogBundleFindByIdAndDelete,
   },
 }));
 
@@ -31,6 +34,7 @@ jest.unstable_mockModule("../app/models/storeBundleImport.js", () => ({
     find: mockStoreBundleImportFind,
     findOne: mockStoreBundleImportFindOne,
     create: mockStoreBundleImportCreate,
+    deleteMany: mockStoreBundleImportDeleteMany,
   },
 }));
 
@@ -67,6 +71,7 @@ const {
   resolveStoreHeaderIds,
   getAvailableBundlesForStore,
   importBundlesForStore,
+  deleteCatalogBundle,
 } = await import("../app/services/catalogBundleService.js");
 
 describe("catalogBundleService", () => {
@@ -86,6 +91,24 @@ describe("catalogBundleService", () => {
 
     expect(headers).toHaveLength(1);
     expect(String(headers[0]._id)).toBe("header-1");
+  });
+
+  it("permanently deletes a bundle and its import tracking records", async () => {
+    mockCatalogBundleFindByIdAndDelete.mockResolvedValue({
+      _id: "bundle-1",
+      name: "Grocery Starter",
+    });
+    mockStoreBundleImportDeleteMany.mockResolvedValue({ deletedCount: 2 });
+
+    const result = await deleteCatalogBundle("bundle-1");
+
+    expect(mockCatalogBundleFindByIdAndDelete).toHaveBeenCalledWith("bundle-1");
+    expect(mockStoreBundleImportDeleteMany).toHaveBeenCalledWith({ bundleId: "bundle-1" });
+    expect(result).toEqual({
+      id: "bundle-1",
+      name: "Grocery Starter",
+      deleted: true,
+    });
   });
 
   it("getAvailableBundlesForStore excludes already imported bundles", async () => {

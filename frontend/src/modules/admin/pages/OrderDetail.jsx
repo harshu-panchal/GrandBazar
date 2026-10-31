@@ -137,6 +137,7 @@ const OrderDetail = () => {
     const [selectedRiderId, setSelectedRiderId] = useState("");
     const [isAssigningRider, setIsAssigningRider] = useState(false);
     const [showRiderSelector, setShowRiderSelector] = useState(false);
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     const invoiceRef = useRef(null);
 
     const sellerLocation = useMemo(() => {
@@ -227,13 +228,28 @@ const OrderDetail = () => {
     };
 
     const handleStatusUpdate = async (newStatus) => {
+        if (!order || newStatus === getLegacyStatusFromOrder(order) || isUpdatingStatus) return;
+        if (
+            newStatus === 'delivered' &&
+            !window.confirm(
+                `Mark order #${formatOrderId(order)} as delivered? This will finalize delivery and update settlement${String(order.paymentMode || '').toUpperCase() === 'COD' ? ' and COD collection' : ''}.`,
+            )
+        ) {
+            return;
+        }
+        setIsUpdatingStatus(true);
         try {
-            await adminApi.updateOrderStatus(orderId, { status: newStatus });
-            showToast(`Order status updated to ${newStatus}`, "success");
+            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus });
+            showToast(
+                response.data?.message || (newStatus === 'delivered' ? 'Order marked as delivered' : `Order status updated to ${newStatus}`),
+                "success",
+            );
             fetchDetail(); // Refresh data
         } catch (error) {
             console.error("Failed to update status:", error);
-            showToast("Failed to update status", "error");
+            showToast(error?.response?.data?.message || "Failed to update status", "error");
+        } finally {
+            setIsUpdatingStatus(false);
         }
     };
 
@@ -680,6 +696,7 @@ const OrderDetail = () => {
             case 'pending': return 'bg-amber-100 text-amber-600 border-amber-200';
             case 'confirmed': return 'bg-brand-100 text-brand-600 border-brand-200';
             case 'packed': return 'bg-brand-100 text-brand-600 border-brand-200';
+            case 'handed_over_to_logistics': return 'bg-purple-100 text-purple-700 border-purple-200';
             case 'out_for_delivery': return 'bg-purple-100 text-purple-600 border-purple-200';
             case 'delivered': return 'bg-brand-100 text-brand-600 border-brand-200';
             case 'cancelled': return 'bg-rose-100 text-rose-600 border-rose-200';
@@ -812,14 +829,17 @@ const OrderDetail = () => {
                                 <select
                                     value={legacyStatus}
                                     onChange={(e) => handleStatusUpdate(e.target.value)}
+                                    disabled={isUpdatingStatus}
                                     className={cn(
                                         "w-full text-[10px] pl-3 pr-8 py-1.5 rounded-xl font-black uppercase tracking-widest border appearance-none cursor-pointer focus:ring-2 focus:ring-offset-1 transition-all outline-none shadow-sm",
-                                        getStatusStyles(legacyStatus)
+                                        getStatusStyles(legacyStatus),
+                                        isUpdatingStatus && "cursor-wait opacity-60",
                                     )}
                                 >
                                     <option value="pending">Pending</option>
                                     <option value="confirmed">Confirmed</option>
                                     <option value="packed">Packed</option>
+                                    <option value="handed_over_to_logistics" disabled>Handed over to logistics</option>
                                     <option value="out_for_delivery">Out for Delivery</option>
                                     <option value="delivered">Delivered</option>
                                     <option value="cancelled">Cancelled</option>
@@ -1215,6 +1235,22 @@ const OrderDetail = () => {
                             </div>
                         </div>
 
+                        {Array.isArray(order.pickupProofImages) && order.pickupProofImages.length > 0 && (
+                            <div className="mt-5 pt-5 border-t border-slate-100">
+                                <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-700">
+                                    <Camera className="h-4 w-4" /> Product handover proof
+                                </p>
+                                <a href={order.pickupProofImages[0]} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border border-purple-200 bg-purple-50">
+                                    <img src={order.pickupProofImages[0]} alt="Product handover proof" className="h-52 w-full object-cover" />
+                                </a>
+                                {order.handedOverToLogisticsAt && (
+                                    <p className="mt-2 text-[10px] font-semibold text-slate-500">
+                                        Confirmed {new Date(order.handedOverToLogisticsAt).toLocaleString('en-IN')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {canReassignStore && (
                             <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
                                 <div className="flex items-start justify-between gap-3">
@@ -1549,7 +1585,11 @@ const OrderDetail = () => {
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         {hasInternalRider ? (
                                             <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">
-                                                {legacyStatus === "out_for_delivery" ? "OUT FOR DELIVERY" : legacyStatus === "delivered" ? "DELIVERED" : "ASSIGNED"}
+                                                {legacyStatus === "handed_over_to_logistics"
+                                                    ? "HANDED OVER TO LOGISTICS"
+                                                    : legacyStatus === "out_for_delivery"
+                                                        ? "OUT FOR DELIVERY"
+                                                        : legacyStatus === "delivered" ? "DELIVERED" : "ASSIGNED"}
                                             </Badge>
                                         ) : hasExternalLogistics ? (
                                             <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">

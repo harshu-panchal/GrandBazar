@@ -90,8 +90,16 @@ export function computeChecks(order, complaint, windowHours) {
   const delivered = isDelivered(order);
   const paid = paymentReceived(order);
 
+  // A seller-approved complaint is settlement-clear: the seller has accepted
+  // the resolution and its approved deduction is already frozen on the order.
+  // Customer refund/admin closure may complete afterwards without blocking the
+  // seller's remaining payout.
+  const complaintResolvedForSettlement = Boolean(
+    complaint && [COMPLAINT_STATUS.SELLER_APPROVED, COMPLAINT_STATUS.CLOSED].includes(complaint.status),
+  );
+
   let complaintDot;
-  if (complaint && complaint.status !== COMPLAINT_STATUS.CLOSED) complaintDot = "r";
+  if (complaint && !complaintResolvedForSettlement) complaintDot = "r";
   else if (!complaint && windowOpen) complaintDot = "a";
   else complaintDot = "g";
 
@@ -105,7 +113,10 @@ export function computeChecks(order, complaint, windowHours) {
     { key: "complaint", label: "No open complaint",
       dot: complaintDot, ok: complaintDot === "g",
       tooltip: complaintDot === "r" ? "Complaint open — settlement held"
-        : complaintDot === "a" ? "Complaint window still open" : "No open complaint" },
+        : complaintDot === "a" ? "Complaint window still open"
+          : complaint?.status === COMPLAINT_STATUS.SELLER_APPROVED
+            ? "Seller accepted the complaint resolution and deduction"
+            : "No open complaint" },
     { key: "penalty", label: "No penalty / seller issue", dot: penaltyClear ? "g" : "r", ok: penaltyClear,
       tooltip: penaltyClear ? "No penalty" : "On hold / penalty pending" },
   ];
@@ -266,6 +277,7 @@ export async function getSettlementDetail(orderId, { includeMoney = true } = {})
 
   const detail = {
     orderId: order.orderId,
+    shortOrderId: order.shortOrderId || null,
     customerName: order.customer?.name || "",
     maskedPhone: maskPhone(order.address?.phone || order.customer?.phone || ""),
     sellerName: order.seller?.shopName || "",

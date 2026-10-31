@@ -90,7 +90,7 @@ function normalizeSellerStatusFilter(statusParam) {
     return { status: "pending" };
   }
   if (statusParam === "processed") {
-    return { status: { $in: ["confirmed", "packed"] } };
+    return { status: { $in: ["confirmed", "packed", "handed_over_to_logistics"] } };
   }
   if (statusParam === "out-for-delivery") {
     return { status: "out_for_delivery" };
@@ -238,6 +238,9 @@ export async function fetchSellerOrdersPage({
           packed: {
             $sum: { $cond: [{ $eq: ["$status", "packed"] }, 1, 0] },
           },
+          handedOverToLogistics: {
+            $sum: { $cond: [{ $eq: ["$status", "handed_over_to_logistics"] }, 1, 0] },
+          },
           outForDelivery: {
             $sum: { $cond: [{ $eq: ["$status", "out_for_delivery"] }, 1, 0] },
           },
@@ -314,6 +317,7 @@ export async function fetchSellerOrdersPage({
     pending: Number(rawSummary.pending || 0),
     confirmed: Number(rawSummary.confirmed || 0),
     packed: Number(rawSummary.packed || 0),
+    handedOverToLogistics: Number(rawSummary.handedOverToLogistics || 0),
     outForDelivery: Number(rawSummary.outForDelivery || 0),
     delivered: Number(rawSummary.delivered || 0),
     cancelled: Number(rawSummary.cancelled || 0),
@@ -323,6 +327,7 @@ export async function fetchSellerOrdersPage({
     summary.pending +
     summary.confirmed +
     summary.packed +
+    summary.handedOverToLogistics +
     summary.outForDelivery;
 
   return {

@@ -57,6 +57,7 @@ import { placeOrderAtomic } from "../services/orderPlacementService.js";
 import { releaseCouponUsageForOrder } from "../services/couponUsageService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
+import { calculateReturnedProductAmount } from "../utils/returnRefund.js";
 import {
   emitDeliveryBroadcastForSeller,
   emitReturnBroadcastForCustomer,
@@ -1072,6 +1073,11 @@ export const requestReturn = async (req, res) => {
     await Promise.all([
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_REQUESTED, {
         orderId: order.orderId,
+        // A delivered order can have more than one return request over its
+        // lifetime (for example after a rejection).  Include this occurrence
+        // in the notification dedupe key so a new request is never mistaken
+        // for the previous one.
+        messageCreatedAt: order.returnRequestedAt?.toISOString?.() || String(order.returnRequestedAt),
         customerId: order.customer,
         sellerId: order.seller,
         adminIds,
@@ -1217,6 +1223,46 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const canonicalOrderId = order.orderId;
+    const isPlatformLogisticsOrder =
+      String(order.fulfillmentMethod || "").toLowerCase() === "platform_logistics" ||
+      (!order.fulfillmentMethod && String(order.logisticsMode || "zinto").toLowerCase() === "zinto");
+    const isCustomerPickupOrder =
+      String(order.fulfillmentMethod || "").toLowerCase() === "customer_pickup" ||
+      String(order.logisticsMode || "").toLowerCase() === "pickup";
+
+    if (
+      isCustomerPickupOrder &&
+      role !== "seller" &&
+      String(status || "").toLowerCase() === "delivered"
+    ) {
+      return handleResponse(
+        res,
+        403,
+        "Only the seller can complete customer pickup using OTP and a handover photo",
+      );
+    }
+
+    if (
+      order.workflowVersion >= 2 &&
+      isPlatformLogisticsOrder &&
+      role !== "seller" &&
+      String(status || "").toLowerCase() === "handed_over_to_logistics"
+    ) {
+      return handleResponse(res, 403, "Only the seller can confirm product handover with a photo");
+    }
+
+    if (
+      order.workflowVersion >= 2 &&
+      isPlatformLogisticsOrder &&
+      role !== "seller" &&
+      String(status || "").toLowerCase() === "out_for_delivery"
+    ) {
+      return handleResponse(
+        res,
+        409,
+        "The assigned rider must use Start delivery after the seller confirms handover",
+      );
+    }
 
     if (order.workflowVersion >= 2 && role === "seller" && status) {
       try {
@@ -1309,8 +1355,17 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     // Handle Confirmation/Delivery (Settle Transaction for Demo)
-    if (status === "delivered" && oldStatus !== "delivered") {
+    if (
+      status === "delivered" &&
+      (oldStatus !== "delivered" ||
+        ((order.workflowVersion >= 2 || order.workflowStatus) &&
+          order.workflowStatus !== WORKFLOW_STATUS.DELIVERED))
+    ) {
       order.deliveredAt = new Date();
+      if (order.workflowVersion >= 2 || order.workflowStatus) {
+        order.workflowStatus = WORKFLOW_STATUS.DELIVERED;
+      }
+      order.deliveryRiderStep = Math.max(Number(order.deliveryRiderStep || 0), 4);
 
       // Important: persist deliveryBoy/status first so settlement can correctly:
       // - queue rider payout
@@ -1327,7 +1382,25 @@ export const updateOrderStatus = async (req, res) => {
       });
 
       const refreshed = await Order.findById(order._id);
-      return handleResponse(res, 200, "Order status updated", refreshed || order);
+      const deliveredOrder = refreshed || order;
+      emitOrderStatusUpdate(
+        canonicalOrderId,
+        {
+          workflowStatus: deliveredOrder.workflowStatus || WORKFLOW_STATUS.DELIVERED,
+          status: "delivered",
+          orderStatus: "delivered",
+          deliveredAt: deliveredOrder.deliveredAt,
+        },
+        deliveredOrder.customer || order.customer,
+        deliveredOrder.seller || order.seller,
+        [deliveredOrder.deliveryBoy || order.deliveryBoy].filter(Boolean),
+      );
+      try {
+        await invalidate(buildKey("orders", "customer", `${order.customer.toString()}:*`));
+      } catch (cacheErr) {
+        console.warn("[updateOrderStatus] delivered cache invalidation failed:", cacheErr.message);
+      }
+      return handleResponse(res, 200, "Order marked as delivered and settlement updated", deliveredOrder);
     }
 
     await order.save();
@@ -1510,10 +1583,7 @@ export const approveReturnRequest = async (req, res) => {
       return handleResponse(res, 400, "No return items found for this order.");
     }
 
-    const refundAmount = order.returnItems.reduce(
-      (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
-      0,
-    );
+    const refundAmount = calculateReturnedProductAmount(order.returnItems);
 
     const settings = await Setting.findOne({});
     const returnCommission = Number(settings?.returnDeliveryCommission) || 30;
@@ -1865,7 +1935,7 @@ export const assignReturnDelivery = async (req, res) => {
     const assignDrop = assignSellerInfo?.shopName || "Seller Store";
 
     if (riderId) {
-      emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
+      await emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
         orderId: order.orderId,
         deliveryId: riderId,
         sellerId: order.seller,
@@ -1921,7 +1991,10 @@ export const assignReturnDelivery = async (req, res) => {
       // Broadcast to riders within the SELLER's service radius —
       // the return item goes back to the seller, so riders near the
       // seller's store are the right ones to notify.
-      emitReturnBroadcastForSeller(order.seller?.toString(), broadcastPayload);
+      // Wait until the eligible rider set has been resolved and the FCM event
+      // has been handed to the notification pipeline before responding.  A
+      // fire-and-forget call could be lost when the request/process ended.
+      await emitReturnBroadcastForSeller(order.seller?.toString(), broadcastPayload);
 
       emitNotificationEvent(NOTIFICATION_EVENTS.RETURN_PICKUP_ASSIGNED, {
         orderId: order.orderId,
@@ -2065,17 +2138,10 @@ export const completeReturnAndRefund = async (order) => {
 
   const grossRefundAmount =
     order.returnRefundAmount ||
-    (Array.isArray(order.returnItems)
-      ? order.returnItems.reduce(
-        (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
-        0,
-      )
-      : 0);
+    calculateReturnedProductAmount(order.returnItems);
 
-  // Per-item: category restocking fee (deducted from the customer's refund,
-  // kept by the seller), GST reversal (refunded to the customer on top of
-  // merchandise value — GST was never part of the seller's payout, so it's
-  // never clawed back from the seller either), and the seller's *actual*
+  // Per-item: category restocking fee (deducted from the customer's refund
+  // and kept by the seller), plus the seller's *actual*
   // original payout share for the returned units (from the frozen
   // paymentBreakdown snapshot, prorated by returned/original quantity) —
   // this is what gets reversed from the seller, not the customer-facing
@@ -2087,7 +2153,6 @@ export const completeReturnAndRefund = async (order) => {
   // code in the normal flow (restocking fee was configured but never
   // actually applied). Now it always runs off `returnItems` directly.
   let restockFeeDeducted = 0;
-  let gstRefundTotal = 0;
   let sellerShareOfReturnedItems = 0;
   // Admin's platform commission on the returned units, prorated the same way
   // as sellerShareOfReturnedItems below. Previously nothing ever reversed
@@ -2117,9 +2182,8 @@ export const completeReturnAndRefund = async (order) => {
         );
       }
 
-      // GST slab + the seller's original payout, exactly as frozen at
-      // checkout — not re-resolved live, so both match what was actually
-      // charged/paid regardless of any category/commission config changes since.
+      // Seller payout exactly as frozen at checkout, rather than resolving
+      // commission configuration again after the purchase.
       const lineItemByProductId = new Map(
         (order.paymentBreakdown?.lineItems || []).map((li) => [String(li.productId), li]),
       );
@@ -2137,11 +2201,6 @@ export const completeReturnAndRefund = async (order) => {
 
         const netMerchandise = Math.max(0, itemTotal - itemRestockFee);
         const lineItem = lineItemByProductId.get(pid);
-        const gstSlab = lineItem ? Number(lineItem.gstSlab) || 0 : 0;
-        if (gstSlab > 0) {
-          gstRefundTotal += Number(((netMerchandise * gstSlab) / 100).toFixed(2));
-        }
-
         if (lineItem && Number(lineItem.quantity) > 0) {
           const proration = Math.min(1, (item.quantity || 0) / Number(lineItem.quantity));
           sellerShareOfReturnedItems += Number(((Number(lineItem.sellerPayout) || 0) * proration).toFixed(2));
@@ -2157,7 +2216,9 @@ export const completeReturnAndRefund = async (order) => {
   }
 
   const merchandiseRefund = Math.max(0, Number((grossRefundAmount - restockFeeDeducted).toFixed(2)));
-  const refundAmount = Math.max(0, Number((merchandiseRefund + gstRefundTotal).toFixed(2)));
+  // The return credit is merchandise-only. Item prices already represent the
+  // product amount paid; never add tax or order-level charges a second time.
+  const refundAmount = merchandiseRefund;
   const commission = order.returnDeliveryCommission || 0;
   const walletRefundTotal = refundAmount;
   const sellerClawback = Math.max(0, Number((sellerShareOfReturnedItems + commission).toFixed(2)));
@@ -2208,7 +2269,7 @@ export const completeReturnAndRefund = async (order) => {
           type: "return_wallet",
           grossRefundAmount,
           restockFeeDeducted,
-          gstRefunded: gstRefundTotal,
+          gstRefunded: 0,
         },
       });
     }
@@ -2218,7 +2279,7 @@ export const completeReturnAndRefund = async (order) => {
   // balance) — uses `sellerClawback` (the seller's actual original payout share
   // for the returned units, plus the flat return-pickup fee), not the
   // customer-facing `refundAmount` — those differ by the original per-line
-  // commission, restocking fee, and GST, none of which the seller ever received.
+  // commission and restocking fee, neither of which the seller received.
   if (order.seller && sellerClawback > 0) {
     const isHeld =
       order.settlementStatus?.sellerPayout === "HOLD" ||

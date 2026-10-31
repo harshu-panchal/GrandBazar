@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminApi } from "../services/adminApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const fx = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const DOT_COLOR = { g: "#12a150", a: "#d99100", r: "#dc2626" };
@@ -99,7 +100,13 @@ export default function SellerSettlementConsole() {
               <tr key={r.orderId} className="border-b last:border-0 hover:bg-indigo-50/40">
                 <td className="px-2 py-2">{r.deliveredAt ? new Date(r.deliveredAt).toLocaleDateString() : "—"}</td>
                 <td className="px-2 py-2">
-                  <button className="font-semibold text-indigo-600" onClick={() => setOpenOrder(r.orderId)}>#{r.orderId}</button>
+                  <button
+                    className="font-semibold text-indigo-600"
+                    title={r.orderId}
+                    onClick={() => navigate(`/admin/orders/view/${r.orderId}`)}
+                  >
+                    #{formatOrderId(r)}
+                  </button>
                   {r.complaintId && (
                     <div className="text-[11px] text-slate-500">Complaint {r.complaintId}</div>
                   )}
@@ -215,7 +222,7 @@ function SettlementWindow({ orderId, onClose }) {
       <div className="w-full max-w-2xl rounded-2xl bg-white p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-black">Settlement · #{d.orderId}</h2>
+            <h2 className="text-lg font-black" title={d.orderId}>Settlement · #{formatOrderId(d)}</h2>
             <div className="text-xs text-slate-500">
               {d.customerName} · {d.sellerName} · {d.deliveredAt ? new Date(d.deliveredAt).toLocaleDateString() : ""}
             </div>

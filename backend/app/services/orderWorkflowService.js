@@ -49,9 +49,20 @@ import {
   scheduleOrderActivationJob,
 } from "./orderSchedulingService.js";
 import { markOrderReadyForCustomerPickup } from "./customerPickupService.js";
+import { buildKey, invalidate } from "./cacheService.js";
 
 const DELIVERY_SEARCH_MAX_ATTEMPTS = () =>
   parseInt(process.env.DELIVERY_SEARCH_MAX_ATTEMPTS || "3", 10);
+
+async function invalidateCustomerOrdersCache(customerRef) {
+  const customerId = customerRef?._id || customerRef;
+  if (!customerId) return;
+  try {
+    await invalidate(buildKey("orders", "customer", `${customerId}:*`));
+  } catch (error) {
+    console.warn("[orderWorkflow] customer order cache invalidation failed:", error.message);
+  }
+}
 
 /**
  * True when the absolute 24 h seller-accept cutoff has passed. Reads
@@ -981,6 +992,78 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     return { __pendingApproval: true, order: updatedRequest };
   }
 
+  if (legacy === "handed_over_to_logistics") {
+    if (method !== FULFILLMENT_METHOD.PLATFORM_LOGISTICS) {
+      const err = new Error("Handover confirmation is only available for platform logistics orders");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const proofImages = Array.isArray(additionalData.pickupProofImages)
+      ? additionalData.pickupProofImages
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+    if (proofImages.length !== 1) {
+      const err = new Error("Exactly one product handover photo is required");
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!/^https:\/\//i.test(proofImages[0])) {
+      const err = new Error("A valid uploaded product handover photo is required");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (ws === WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS) {
+      return order;
+    }
+    assertTransition(ws, WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS);
+
+    const now = new Date();
+    const updated = await Order.findOneAndUpdate(
+      {
+        orderId,
+        seller: effectiveSellerId,
+        workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+        deliveryBoy: { $ne: null },
+      },
+      {
+        $set: {
+          workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
+          status: legacyStatusFromWorkflow(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS),
+          orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS),
+          pickupProofImages: proofImages,
+          handedOverToLogisticsAt: now,
+          deliveryRiderStep: 2,
+        },
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      const err = new Error("The rider must arrive at the seller before handover can be confirmed");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    emitOrderStatusUpdate(
+      updated.orderId,
+      {
+        workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
+        status: legacyStatusFromWorkflow(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS),
+        handoverProofAvailable: true,
+        handedOverToLogisticsAt: updated.handedOverToLogisticsAt,
+      },
+      updated.customer,
+      updated.seller,
+      [updated.deliveryBoy],
+    );
+    await invalidateCustomerOrdersCache(updated.customer);
+
+    return updated;
+  }
+
   const platformManaged =
     method === FULFILLMENT_METHOD.PLATFORM_LOGISTICS ||
     order.logisticsMode === "zinto" ||
@@ -988,6 +1071,7 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
       WORKFLOW_STATUS.DELIVERY_SEARCH,
       WORKFLOW_STATUS.DELIVERY_ASSIGNED,
       WORKFLOW_STATUS.PICKUP_READY,
+      WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
       WORKFLOW_STATUS.OUT_FOR_DELIVERY,
     ].includes(ws);
 
@@ -1088,6 +1172,13 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
     }
   }
   if (nextWorkflow === WORKFLOW_STATUS.DELIVERED) {
+    if (method === FULFILLMENT_METHOD.CUSTOMER_PICKUP) {
+      const err = new Error(
+        "Complete customer pickup using the dedicated OTP and handover photo verification",
+      );
+      err.statusCode = 409;
+      throw err;
+    }
     if (method === FULFILLMENT_METHOD.SELLER_DELIVERY) {
       const enteredOtp = String(additionalData.otp || "").trim();
       if (!enteredOtp) {
@@ -2187,6 +2278,7 @@ export async function markArrivedAtStoreAtomic(deliveryId, orderId, lat, lng) {
       $set: {
         workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
         status: legacyStatusFromWorkflow(WORKFLOW_STATUS.PICKUP_READY),
+        orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.PICKUP_READY),
         pickupReadyAt: now,
         deliveryRiderStep: 2,
       },
@@ -2218,6 +2310,7 @@ export async function markArrivedAtStoreAtomic(deliveryId, orderId, lat, lng) {
     deliveryId: updated.deliveryBoy,
     sellerId: updated.seller,
   });
+  await invalidateCustomerOrdersCache(updated.customer);
   return updated;
 }
 
@@ -2240,10 +2333,7 @@ export async function confirmPickupAtomic(deliveryId, orderId, lat, lng) {
     workflowVersion: { $gte: 2 },
   });
 
-  const prePickup = new Set([
-    WORKFLOW_STATUS.DELIVERY_ASSIGNED,
-    WORKFLOW_STATUS.PICKUP_READY,
-  ]);
+  const prePickup = new Set([WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS]);
   if (!order || !prePickup.has(order.workflowStatus)) {
     const err = new Error("Invalid state for pickup confirmation");
     err.statusCode = 409;
@@ -2278,6 +2368,7 @@ export async function confirmPickupAtomic(deliveryId, orderId, lat, lng) {
       $set: {
         workflowStatus: WORKFLOW_STATUS.OUT_FOR_DELIVERY,
         status: legacyStatusFromWorkflow(WORKFLOW_STATUS.OUT_FOR_DELIVERY),
+        orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.OUT_FOR_DELIVERY),
         pickupConfirmedAt: now,
         outForDeliveryAt: now,
         deliveryRiderStep: 3,
@@ -2307,6 +2398,7 @@ export async function confirmPickupAtomic(deliveryId, orderId, lat, lng) {
     deliveryId: updated.deliveryBoy,
     sellerId: updated.seller,
   });
+  await invalidateCustomerOrdersCache(updated.customer);
   return updated;
 }
 

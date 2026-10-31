@@ -42,6 +42,7 @@ import Pagination from '@shared/components/ui/Pagination';
 import { DatePicker } from "@/components/ui/date-picker";
 import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocket";
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
+import { optimizeProofImage } from "@/core/utils/imageCompression";
 import { formatOrderId } from "@/shared/utils/orderId";
 
 const ORDER_EDITABLE_STATUSES = new Set([
@@ -109,14 +110,17 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDelive
 
     if (readOnly || requiresDisplayOnly) {
         const isScheduled = isScheduledHoldOrder(order) || order.status === 'scheduled';
-        const isPacked = normalizedStatus === 'packed' || Boolean(order.sellerPackedAt);
+        const isHandedOver = normalizedStatus === 'handed_over_to_logistics';
+        const isPacked = !isHandedOver && (normalizedStatus === 'packed' || Boolean(order.sellerPackedAt));
         const isAwaitingApproval =
             normalizedStatus === 'awaiting_extra_payment' ||
             order.priceAdjustment?.status === 'pending' ||
             String(order.statusLabel || '').toLowerCase().includes('awaiting customer') ||
             String(normalizedStatus).includes('awaiting');
 
-        const displayLabel = isAwaitingApproval
+        const displayLabel = isHandedOver
+            ? 'Handed over to logistics'
+            : isAwaitingApproval
             ? 'Awaiting Approval'
             : isPacked
                 ? 'Packed'
@@ -156,8 +160,23 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDelive
                 )}
                 {platformLocked && (
                     <p className="text-[10px] font-medium text-slate-500 mt-0.5 leading-tight whitespace-nowrap">
-                        Updated by delivery partner
+                        Platform logistics workflow
                     </p>
+                )}
+                {platformLocked && String(order.workflowStatus || '').toUpperCase() === 'PICKUP_READY' && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onStatusUpdate(
+                                order.id || order._id || order.orderId,
+                                'handed_over_to_logistics',
+                            );
+                        }}
+                        className="mt-1 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[9px] font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
+                    >
+                        Upload Handover Photo
+                    </button>
                 )}
                 {platformLocked && ['delivery_search', 'delivery_assigned'].includes(String(order.workflowStatus || '').toLowerCase()) && (
                     isPacked ? (
@@ -259,6 +278,7 @@ const Orders = () => {
         pending: 0,
         confirmed: 0,
         packed: 0,
+        handedOverToLogistics: 0,
         outForDelivery: 0,
         delivered: 0,
         cancelled: 0,
@@ -293,12 +313,16 @@ const Orders = () => {
     const [pickupOtpCooldown, setPickupOtpCooldown] = useState(0);
     const [pickupVerifyOtp, setPickupVerifyOtp] = useState('');
     const [pickupOtpVerifying, setPickupOtpVerifying] = useState(false);
+    const [customerPickupHandoverImage, setCustomerPickupHandoverImage] = useState('');
+    const [customerPickupPhotoUploading, setCustomerPickupPhotoUploading] = useState(false);
+    const [customerPickupPhotoProgress, setCustomerPickupPhotoProgress] = useState(0);
     const [deliveryOtp, setDeliveryOtp] = useState('');
     const [sellerDeliveryOtp, setSellerDeliveryOtp] = useState('');
     const [sellerDeliveryOtpCooldown, setSellerDeliveryOtpCooldown] = useState(0);
     const [sellerDeliveryOtpSending, setSellerDeliveryOtpSending] = useState(false);
     const [sellerDeliveryVerifying, setSellerDeliveryVerifying] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [replacementSaving, setReplacementSaving] = useState(false);
@@ -381,6 +405,7 @@ const Orders = () => {
         'Pending': 'pending',
         'Confirmed': 'processed',
         'Packed': 'processed',
+        'Handed over to logistics': 'processed',
         'Out for Delivery': 'out-for-delivery',
         'Delivered': 'delivered',
         'Cancelled': 'cancelled',
@@ -445,6 +470,9 @@ const Orders = () => {
                 priceAdjustment: order.priceAdjustment || null,
                 replacementRequests: order.replacementRequests || [],
                 splitDeliveries: order.splitDeliveries || [],
+                pickupProofImages: order.pickupProofImages || [],
+                hasCustomerComplaint: Boolean(order.complaintRef),
+                handedOverToLogisticsAt: order.handedOverToLogisticsAt || null,
                 revisedInvoices: order.revisedInvoices || [],
                 date: order.createdAt
                     ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -468,6 +496,7 @@ const Orders = () => {
                 pending: Number(payload.summary?.pending || 0),
                 confirmed: Number(payload.summary?.confirmed || 0),
                 packed: Number(payload.summary?.packed || 0),
+                handedOverToLogistics: Number(payload.summary?.handedOverToLogistics || 0),
                 outForDelivery: Number(payload.summary?.outForDelivery || 0),
                 delivered: Number(payload.summary?.delivered || 0),
                 cancelled: Number(payload.summary?.cancelled || 0),
@@ -539,6 +568,10 @@ const Orders = () => {
                                     priceAdjustment: full.priceAdjustment || null,
                                     reschedule: full.reschedule || null,
                                     workflowStatus: full.workflowStatus || prev.workflowStatus,
+                                    status: getLegacyStatusFromOrder(full),
+                                    statusLabel: getOrderStatusLabel(full),
+                                    pickupProofImages: full.pickupProofImages || [],
+                                    handedOverToLogisticsAt: full.handedOverToLogisticsAt || null,
                                 } : null));
                             }
                         }).catch(() => {});
@@ -571,7 +604,7 @@ const Orders = () => {
         };
     }, [isDetailsModalOpen, isQuickViewModalOpen, isPickupModalOpen, isRescheduleModalOpen, isCancelReasonModalOpen, isBulkRejectModalOpen, isReplacementModalOpen, isSplitModalOpen]);
 
-    const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'];
+    const tabs = ['All', 'Pending', 'Scheduled', 'Confirmed', 'Packed', 'Handed over to logistics', 'Out for Delivery', 'Delivered', 'Cancelled'];
     const todayStr = new Date().toISOString().split('T')[0];
 
     const safeOrders = useMemo(
@@ -585,6 +618,8 @@ const Orders = () => {
                 order.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
             const statusToMatch = activeTab === 'Out for Delivery'
                 ? 'out_for_delivery'
+                : activeTab === 'Handed over to logistics'
+                    ? 'handed_over_to_logistics'
                 : activeTab.toLowerCase();
             const matchesTab = activeTab === 'All' || order.status.toLowerCase() === statusToMatch;
             return matchesSearch && matchesTab;
@@ -725,6 +760,7 @@ const Orders = () => {
             case 'confirmed': return 'info';
             case 'scheduled': return 'info';
             case 'packed': return 'primary';
+            case 'handed_over_to_logistics': return 'info';
             case 'out_for_delivery': return 'secondary';
             case 'delivered': return 'success';
             case 'cancelled': return 'error';
@@ -759,6 +795,8 @@ const Orders = () => {
                     priceAdjustment: full.priceAdjustment || prev?.priceAdjustment || null,
                     replacementRequests: full.replacementRequests || prev?.replacementRequests || [],
                     splitDeliveries: full.splitDeliveries || prev?.splitDeliveries || [],
+                    pickupProofImages: full.pickupProofImages || prev?.pickupProofImages || [],
+                    handedOverToLogisticsAt: full.handedOverToLogisticsAt || prev?.handedOverToLogisticsAt || null,
                     storeReassignment:
                         getOrderStoreReassignment(full) || prev?.storeReassignment || null,
                     items: Array.isArray(prev?.items)
@@ -791,6 +829,13 @@ const Orders = () => {
         const isSelfDelivery = targetOrder ? resolveFulfillmentMethod(targetOrder) === 'seller_delivery' : false;
 
         if (normalizedStatus === 'out_for_delivery' && !additionalData.pickupProofImages) {
+            setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'pickupProofImages' });
+            setPickupImage(null);
+            setIsPickupModalOpen(true);
+            return;
+        }
+
+        if (normalizedStatus === 'handed_over_to_logistics' && !additionalData.pickupProofImages) {
             setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'pickupProofImages' });
             setPickupImage(null);
             setIsPickupModalOpen(true);
@@ -1296,6 +1341,8 @@ const Orders = () => {
 
     const handlePickupImageUpload = async (e) => {
         const file = e.target.files?.[0];
+        const input = e.currentTarget;
+        const isHandoverPhoto = pendingStatusUpdate?.status === 'handed_over_to_logistics';
         if (!file) return;
         if (!file.type.startsWith('image/')) {
             showToast('Please select an image file', 'error');
@@ -1303,21 +1350,39 @@ const Orders = () => {
         }
         
         setIsUploading(true);
+        setUploadProgress(0);
         try {
+            const optimizedFile = await optimizeProofImage(file);
             const formData = new FormData();
-            formData.append('file', file);
-            formData.append('folder', 'orders/pickup');
-            const res = await sellerApi.uploadMedia(formData);
+            formData.append('file', optimizedFile);
+            formData.append('folder', isHandoverPhoto ? 'orders/handover' : 'orders/pickup');
+            const res = await sellerApi.uploadMedia(formData, {
+                timeout: 45000,
+                onUploadProgress: (event) => {
+                    if (!event.total) return;
+                    setUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+                },
+            });
             const url = res.data?.result?.url || res.data?.url;
             if (url) {
                 setPickupImage(url);
-                showToast('Pickup proof uploaded', 'success');
+                showToast(isHandoverPhoto ? 'Product handover photo uploaded' : 'Pickup proof uploaded', 'success');
+            } else {
+                throw new Error('The upload completed without an image URL');
             }
         } catch (err) {
             console.error(err);
-            showToast('Failed to upload pickup proof', 'error');
+            const timedOut = err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''));
+            showToast(
+                timedOut
+                    ? 'Image upload timed out. Please check your connection and retry.'
+                    : err?.response?.data?.message || err?.message || (isHandoverPhoto ? 'Failed to upload product handover photo' : 'Failed to upload pickup proof'),
+                'error',
+            );
         } finally {
             setIsUploading(false);
+            setUploadProgress(0);
+            input.value = '';
         }
     };
 
@@ -1388,6 +1453,12 @@ const Orders = () => {
         return () => clearInterval(iv);
     }, [pickupOtpCooldown]);
 
+    useEffect(() => {
+        setPickupVerifyOtp('');
+        setCustomerPickupHandoverImage('');
+        setCustomerPickupPhotoProgress(0);
+    }, [selectedOrder?.id]);
+
     const handleSendPickupOtp = async (orderId) => {
         if (pickupOtpSending || pickupOtpCooldown > 0) return;
         setPickupOtpSending(true);
@@ -1403,17 +1474,75 @@ const Orders = () => {
     };
 
     const handleVerifyPickupOtp = async (orderId) => {
-        if (pickupOtpVerifying || pickupVerifyOtp.length < 4) return;
+        if (pickupOtpVerifying || pickupVerifyOtp.length < 4 || !customerPickupHandoverImage) return;
         setPickupOtpVerifying(true);
         try {
-            await sellerApi.verifyCustomerPickup(orderId, { otp: pickupVerifyOtp });
-            showToast('Pickup verified', 'success');
+            const handoverPhotoUrl = customerPickupHandoverImage;
+            await sellerApi.verifyCustomerPickup(orderId, {
+                otp: pickupVerifyOtp,
+                handoverPhotoUrl,
+            });
+            showToast('Pickup verified and order marked as delivered', 'success');
             setPickupVerifyOtp('');
+            setCustomerPickupHandoverImage('');
+            setSelectedOrder((previous) => previous ? {
+                ...previous,
+                status: 'delivered',
+                orderStatus: 'delivered',
+                workflowStatus: 'DELIVERED',
+                deliveredAt: new Date().toISOString(),
+                deliveryProofImages: [handoverPhotoUrl],
+            } : previous);
             await fetchOrders();
         } catch (err) {
             showToast(err?.response?.data?.message || 'Incorrect or expired code', 'error');
         } finally {
             setPickupOtpVerifying(false);
+        }
+    };
+
+    const handleCustomerPickupPhotoUpload = async (event) => {
+        const file = event.target.files?.[0];
+        const input = event.currentTarget;
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('Please select an image file', 'error');
+            input.value = '';
+            return;
+        }
+
+        setCustomerPickupPhotoUploading(true);
+        setCustomerPickupPhotoProgress(0);
+        try {
+            const optimizedFile = await optimizeProofImage(file);
+            const formData = new FormData();
+            formData.append('file', optimizedFile);
+            formData.append('folder', 'orders/customer-pickup-handover');
+            const response = await sellerApi.uploadMedia(formData, {
+                timeout: 45000,
+                onUploadProgress: (progressEvent) => {
+                    if (!progressEvent.total) return;
+                    setCustomerPickupPhotoProgress(
+                        Math.min(100, Math.round((progressEvent.loaded * 100) / progressEvent.total)),
+                    );
+                },
+            });
+            const url = response.data?.result?.url || response.data?.url;
+            if (!url) throw new Error('The upload completed without an image URL');
+            setCustomerPickupHandoverImage(url);
+            showToast('Customer pickup handover photo uploaded', 'success');
+        } catch (error) {
+            const timedOut = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
+            showToast(
+                timedOut
+                    ? 'Image upload timed out. Please check your connection and retry.'
+                    : error?.response?.data?.message || error?.message || 'Failed to upload handover photo',
+                'error',
+            );
+        } finally {
+            setCustomerPickupPhotoUploading(false);
+            setCustomerPickupPhotoProgress(0);
+            input.value = '';
         }
     };
 
@@ -1647,11 +1776,21 @@ const Orders = () => {
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, scale: 0.95 }}
-                                            className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm active:bg-slate-50/50"
+                                            className={cn(
+                                                "rounded-xl border p-4 shadow-sm transition-colors",
+                                                order.hasCustomerComplaint
+                                                    ? "border-rose-300 bg-rose-50/70 ring-1 ring-rose-100"
+                                                    : "border-slate-100 bg-white active:bg-slate-50/50",
+                                            )}
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1" onClick={() => handleViewDetails(order)}>
                                                     <p className="text-xs font-black text-slate-900 truncate" title={`#${order.id}`}>#{formatOrderId(order)}</p>
+                                                    {order.hasCustomerComplaint && (
+                                                        <Badge className="mt-1.5 w-fit border border-rose-300 bg-rose-100 px-2 py-0 text-[8px] font-black uppercase text-rose-700">
+                                                            Customer complaint
+                                                        </Badge>
+                                                    )}
                                                     <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
                                                         <HiOutlineCalendarDays className="h-3 w-3 shrink-0" />
                                                         {order.date} • {order.time}
@@ -1778,7 +1917,12 @@ const Orders = () => {
                                                     animate={{ opacity: 1, y: 0 }}
                                                     exit={{ opacity: 0, scale: 0.95 }}
                                                     key={order.id}
-                                                    className="hover:bg-slate-50/50 transition-colors group"
+                                                    className={cn(
+                                                        "group transition-colors",
+                                                        order.hasCustomerComplaint
+                                                            ? "bg-rose-50/70 hover:bg-rose-100/70 border-l-4 border-l-rose-500"
+                                                            : "hover:bg-slate-50/50",
+                                                    )}
                                                 >
                                                     <td className="px-4 lg:px-3 py-3 lg:py-4" onClick={(e) => e.stopPropagation()}>
                                                         {order.status === 'pending' && (
@@ -1795,6 +1939,11 @@ const Orders = () => {
                                                             <span className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors cursor-pointer" onClick={() => handleViewDetails(order)} title={`#${order.id}`}>
                                                                 #{formatOrderId(order)}
                                                             </span>
+                                                            {order.hasCustomerComplaint && (
+                                                                <Badge className="ml-2 inline-flex border border-rose-300 bg-rose-100 px-2 py-0 text-[8px] font-black uppercase text-rose-700">
+                                                                    Customer complaint
+                                                                </Badge>
+                                                            )}
                                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mt-1">
                                                                 <HiOutlineCalendarDays className="h-3 w-3" />
                                                                 {order.date} • {order.time}
@@ -2020,7 +2169,11 @@ const Orders = () => {
                                             ) : (
                                                 <HiOutlineCamera className="h-5 w-5 text-primary" />
                                             )}
-                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Confirm Delivery & Enter OTP' : 'Capture Pickup Proof'}
+                                            {pendingStatusUpdate?.proofField === 'deliveryProofImages'
+                                                ? 'Confirm Delivery & Enter OTP'
+                                                : pendingStatusUpdate?.status === 'handed_over_to_logistics'
+                                                    ? 'Product Handover Photo'
+                                                    : 'Capture Pickup Proof'}
                                         </h3>
                                         <button
                                             onClick={() => setIsPickupModalOpen(false)}
@@ -2060,7 +2213,16 @@ const Orders = () => {
                                             ) : (
                                                 <div className="flex flex-col items-center">
                                                     {isUploading ? (
-                                                        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-primary">
+                                                                {uploadProgress === 0
+                                                                    ? 'Optimizing photo…'
+                                                                    : uploadProgress < 100
+                                                                        ? `Uploading ${uploadProgress}%`
+                                                                        : 'Finishing upload…'}
+                                                            </span>
+                                                        </div>
                                                     ) : (
                                                         <>
                                                             <HiOutlineCamera className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors" />
@@ -2759,6 +2921,30 @@ const Orders = () => {
                                                 </div>
                                             );
                                         })()}
+                                        {Array.isArray(selectedOrder.pickupProofImages) && selectedOrder.pickupProofImages.length > 0 && (
+                                            <div className="mb-4 p-3 rounded-2xl bg-purple-50 ring-1 ring-purple-100">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-2">
+                                                    Product handover proof
+                                                </p>
+                                                <a
+                                                    href={selectedOrder.pickupProofImages[0]}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block overflow-hidden rounded-xl border border-purple-200 bg-white"
+                                                >
+                                                    <img
+                                                        src={selectedOrder.pickupProofImages[0]}
+                                                        alt="Product handed over to logistics"
+                                                        className="h-48 w-full object-cover"
+                                                    />
+                                                </a>
+                                                {selectedOrder.handedOverToLogisticsAt && (
+                                                    <p className="mt-2 text-[10px] font-semibold text-purple-700">
+                                                        Handed over {new Date(selectedOrder.handedOverToLogisticsAt).toLocaleString('en-IN')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                         {resolveFulfillmentMethod(selectedOrder) === 'customer_pickup'
                                             && String(selectedOrder.workflowStatus || '').toUpperCase() === 'CUSTOMER_PICKUP_READY' && (
                                             <div className="mb-4 p-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 space-y-2.5">
@@ -2766,9 +2952,53 @@ const Orders = () => {
                                                     Verify Pickup
                                                 </p>
                                                 <p className="text-xs font-semibold text-slate-700">
-                                                    Ask the customer for their pickup code and enter it below to confirm their identity.
+                                                    Enter the customer&apos;s pickup code and upload one final handover photo. Both are required to mark this order delivered.
                                                 </p>
-                                                <div className="flex gap-2">
+                                                <label className="relative block overflow-hidden rounded-2xl border-2 border-dashed border-emerald-200 bg-white cursor-pointer hover:border-emerald-400 transition-colors">
+                                                    {customerPickupHandoverImage ? (
+                                                        <div className="relative">
+                                                            <img
+                                                                src={customerPickupHandoverImage}
+                                                                alt="Customer pickup handover proof"
+                                                                className="h-44 w-full object-cover"
+                                                            />
+                                                            <span className="absolute bottom-2 right-2 rounded-lg bg-slate-900/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-white">
+                                                                Change photo
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex h-32 flex-col items-center justify-center gap-2 text-emerald-700">
+                                                            {customerPickupPhotoUploading ? (
+                                                                <>
+                                                                    <Loader2 className="h-7 w-7 animate-spin" />
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider">
+                                                                        {customerPickupPhotoProgress === 0
+                                                                            ? 'Optimizing photo…'
+                                                                            : customerPickupPhotoProgress < 100
+                                                                                ? `Uploading ${customerPickupPhotoProgress}%`
+                                                                                : 'Finishing upload…'}
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <HiOutlineCamera className="h-7 w-7" />
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider">
+                                                                        Upload final handover photo *
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        capture="environment"
+                                                        onChange={handleCustomerPickupPhotoUpload}
+                                                        disabled={customerPickupPhotoUploading || pickupOtpVerifying}
+                                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
+                                                    />
+                                                </label>
+                                                <div className="space-y-2">
                                                     <input
                                                         type="text"
                                                         inputMode="numeric"
@@ -2776,15 +3006,15 @@ const Orders = () => {
                                                         value={pickupVerifyOtp}
                                                         onChange={(e) => setPickupVerifyOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                                         placeholder="Enter code"
-                                                        className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-center text-lg font-black tracking-[0.2em] sm:tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-300"
+                                                        className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-center text-lg font-black tracking-[0.2em] sm:tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-300"
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => handleVerifyPickupOtp(selectedOrder.id)}
-                                                        disabled={pickupOtpVerifying || pickupVerifyOtp.length < 4}
-                                                        className="shrink-0 whitespace-nowrap rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        disabled={pickupOtpVerifying || customerPickupPhotoUploading || pickupVerifyOtp.length < 4 || !customerPickupHandoverImage}
+                                                        className="w-full whitespace-nowrap rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                                     >
-                                                        {pickupOtpVerifying ? 'Verifying...' : 'Verify'}
+                                                        {pickupOtpVerifying ? 'Completing pickup...' : 'Verify OTP & mark delivered'}
                                                     </button>
                                                 </div>
                                                 <button

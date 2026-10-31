@@ -749,7 +749,8 @@ export async function closeComplaint({ complaintId, adminId, summary, ctx = {} }
     throw httpError("Use acknowledge for feedback", 400);
   }
   if (!complaint.culprit) throw httpError("Name a culprit before closing", 400);
-  if (!summary || !String(summary).trim()) throw httpError("Write the final summary", 400);
+  const finalSummary = String(summary || "").trim().slice(0, 1000);
+  if (!finalSummary) throw httpError("Write the final summary", 400);
   if (complaint.status === COMPLAINT_STATUS.CLOSED) throw httpError("Already closed", 409);
   // Everyone except a false-complaint customer must be refunded before closing.
   if (complaint.culprit !== COMPLAINT_CULPRIT.CUSTOMER && complaint.status !== COMPLAINT_STATUS.REFUNDED) {
@@ -769,7 +770,7 @@ export async function closeComplaint({ complaintId, adminId, summary, ctx = {} }
         action: "closed",
         fromStatus: complaint.status,
         toStatus: COMPLAINT_STATUS.CLOSED,
-        note: `Closed · culprit ${complaint.culprit} · ${String(summary).trim()}`,
+        note: `Closed · culprit ${complaint.culprit} · ${finalSummary}`,
         meta: { culprit: complaint.culprit },
         ctx,
       });
@@ -778,7 +779,7 @@ export async function closeComplaint({ complaintId, adminId, summary, ctx = {} }
         {
           $set: {
             status: COMPLAINT_STATUS.CLOSED,
-            summary: String(summary).trim(),
+            summary: finalSummary,
             closedAt: new Date(),
             closedBy: adminId,
             settlementHeld: false,
@@ -802,6 +803,7 @@ export async function closeComplaint({ complaintId, adminId, summary, ctx = {} }
             complaintId,
             userId: complaint.customer,
             customerId: complaint.customer,
+            summary: finalSummary,
           }),
         );
       }

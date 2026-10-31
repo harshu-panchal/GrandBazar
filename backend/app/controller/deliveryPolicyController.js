@@ -268,36 +268,25 @@ export const sellerMarkReadyForPickup = async (req, res) => {
 };
 
 export const customerVerifyPickup = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { otp, qrToken, orderNumber } = req.body || {};
-    const order = await verifyCustomerPickup({
-      orderId,
-      customerId: req.user?.id,
-      otp,
-      qrToken,
-      orderNumber,
-      verifiedBy: "customer",
-    });
-    return handleResponse(res, 200, "Pickup verified", order);
-  } catch (error) {
-    return handleResponse(res, error.statusCode || 500, error.message);
-  }
+  return handleResponse(
+    res,
+    403,
+    "The seller must complete customer pickup using the OTP and a handover photo",
+  );
 };
 
 export const sellerVerifyPickup = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { otp, qrToken, orderNumber } = req.body || {};
+    const { otp, handoverPhotoUrl } = req.body || {};
     const order = await verifyCustomerPickup({
       orderId,
-      customerId: null,
+      sellerId: req.user?.id,
       otp,
-      qrToken,
-      orderNumber,
       verifiedBy: "seller",
+      handoverPhotoUrl,
     });
-    return handleResponse(res, 200, "Pickup verified", order);
+    return handleResponse(res, 200, "Pickup verified and order marked as delivered", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

@@ -119,7 +119,17 @@ jest.unstable_mockModule("../app/config/redis.js", () => ({
   getRedisClient: jest.fn(() => null),
 }));
 
-const { sellerAcceptAtomic, sellerMarkPackedSignalAtomic, sellerUpdateStatusAtomic } = await import("../app/services/orderWorkflowService.js");
+jest.unstable_mockModule("../app/services/cacheService.js", () => ({
+  buildKey: jest.fn((...parts) => parts.join(":")),
+  invalidate: jest.fn().mockResolvedValue(undefined),
+}));
+
+const {
+  confirmPickupAtomic,
+  sellerAcceptAtomic,
+  sellerMarkPackedSignalAtomic,
+  sellerUpdateStatusAtomic,
+} = await import("../app/services/orderWorkflowService.js");
 const { WORKFLOW_STATUS } = await import("../app/constants/orderWorkflow.js");
 const Store = (await import("../app/models/store.js")).default;
 
@@ -224,6 +234,96 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
       "cust3",
       "store3",
     );
+  });
+
+  it("requires one seller photo and records the platform-logistics handover", async () => {
+    const existingOrder = {
+      orderId: "ORD-HANDOVER-1",
+      seller: "store3",
+      customer: "cust3",
+      deliveryBoy: "rider3",
+      workflowVersion: 2,
+      workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+      fulfillmentMethod: "platform_logistics",
+      logisticsMode: "zinto",
+    };
+    mockOrderFindOne.mockResolvedValue(existingOrder);
+    mockOrderFindOneAndUpdate.mockResolvedValue({
+      ...existingOrder,
+      workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
+      status: "handed_over_to_logistics",
+      orderStatus: "handed_over_to_logistics",
+      pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"],
+      handedOverToLogisticsAt: new Date(),
+    });
+
+    const result = await sellerUpdateStatusAtomic(
+      "store3",
+      "ORD-HANDOVER-1",
+      "handed_over_to_logistics",
+      { pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"] },
+    );
+
+    expect(result.workflowStatus).toBe(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS);
+    expect(result.pickupProofImages).toEqual(["https://res.cloudinary.com/demo/handover.jpg"]);
+    expect(mockOrderFindOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: "ORD-HANDOVER-1",
+        seller: "store3",
+        workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+        deliveryBoy: { $ne: null },
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
+          status: "handed_over_to_logistics",
+          pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"],
+        }),
+      }),
+      { new: true },
+    );
+    expect(mockEmitOrderStatusUpdate).toHaveBeenCalledWith(
+      "ORD-HANDOVER-1",
+      expect.objectContaining({
+        workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
+        handoverProofAvailable: true,
+      }),
+      "cust3",
+      "store3",
+      ["rider3"],
+    );
+  });
+
+  it("rejects handover confirmation without an uploaded photo", async () => {
+    mockOrderFindOne.mockResolvedValue({
+      orderId: "ORD-HANDOVER-2",
+      seller: "store3",
+      deliveryBoy: "rider3",
+      workflowVersion: 2,
+      workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+      fulfillmentMethod: "platform_logistics",
+    });
+
+    await expect(
+      sellerUpdateStatusAtomic("store3", "ORD-HANDOVER-2", "handed_over_to_logistics", {}),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(mockOrderFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not let a rider start delivery before the seller confirms handover", async () => {
+    mockOrderFindOne.mockResolvedValue({
+      orderId: "ORD-HANDOVER-3",
+      seller: "store3",
+      deliveryBoy: "rider3",
+      workflowVersion: 2,
+      workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+      fulfillmentMethod: "platform_logistics",
+    });
+
+    await expect(
+      confirmPickupAtomic("rider3", "ORD-HANDOVER-3", 12.9716, 77.5946),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(mockOrderFindOneAndUpdate).not.toHaveBeenCalled();
   });
 
   // Regression test for the "Order not found" bug on accept/decline: a

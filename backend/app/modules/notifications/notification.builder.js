@@ -760,9 +760,11 @@ function eventDefinition(eventType) {
       return {
         role: NOTIFICATION_ROLES.CUSTOMER,
         recipientIds: (payload) => normalizeIdList(payload.userId || payload.customerId),
-        title: () => "Complaint closed",
+        title: () => "Complaint resolved",
         body: (payload) =>
-          `Complaint ${payload.complaintId || ""} is closed. Thank you for your patience.`,
+          payload.summary
+            ? `Complaint ${payload.complaintId || ""} resolved: ${truncateText(payload.summary, 240)}`
+            : `Complaint ${payload.complaintId || ""} is closed. Thank you for your patience.`,
       };
     case NOTIFICATION_EVENTS.COMPLAINT_FEEDBACK_RECEIVED:
       return {

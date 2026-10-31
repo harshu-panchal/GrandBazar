@@ -235,9 +235,22 @@ export const markOrderDeliveredAndSettle = async (req, res) => {
     if (!orderKey) {
       return handleResponse(res, 404, "Order not found");
     }
-    const order = await Order.findOne(orderKey).select("_id deliveryBoy seller").lean();
+    const order = await Order.findOne(orderKey)
+      .select("_id deliveryBoy seller fulfillmentMethod logisticsMode")
+      .lean();
     if (!order) {
       return handleResponse(res, 404, "Order not found");
+    }
+
+    if (
+      order.fulfillmentMethod === "customer_pickup" ||
+      order.logisticsMode === "pickup"
+    ) {
+      return handleResponse(
+        res,
+        409,
+        "Customer pickup must be completed by the seller using OTP and a handover photo",
+      );
     }
 
     if (

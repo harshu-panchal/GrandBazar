@@ -65,7 +65,7 @@ const DeliveryTracking = () => {
         requestedPage += 1;
       }
 
-      // Only show orders that are confirmed, packed, or out for delivery (Tracking flow)
+      // Show every active tracking stage, including the seller-confirmed handover.
       const formattedDeliveries = collectedOrders
         .filter(order => order.status !== 'pending' && order.status !== 'cancelled')
         .map(order => {

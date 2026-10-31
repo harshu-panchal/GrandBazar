@@ -11,6 +11,7 @@ const DEFAULT_PARTNER_IMAGE =
 const PLATFORM_ASSIGNED_WORKFLOWS = new Set([
   "DELIVERY_ASSIGNED",
   "PICKUP_READY",
+  "HANDED_OVER_TO_LOGISTICS",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
 ]);
@@ -143,6 +144,7 @@ export function getTrackingUiStatus(order = {}) {
 
   if (legacyStatus === "delivered") return "Delivered";
   if (legacyStatus === "out_for_delivery") return "On the Way";
+  if (legacyStatus === "handed_over_to_logistics") return "Handed over to logistics";
 
   if (method === "customer_pickup" || String(order.logisticsMode || "").toLowerCase() === "pickup") {
     return "Pickup";
@@ -181,6 +183,7 @@ export function getTrackingStatusVariant(status) {
     case "Seller Delivery":
     case "Assigned":
     case "Picked Up":
+    case "Handed over to logistics":
     case "Packed":
     case "Confirmed":
       return "warning";

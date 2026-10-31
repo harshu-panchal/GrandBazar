@@ -291,6 +291,8 @@ const FleetTrackingTable = () => {
                       variant={
                         item.status === "On the Way"
                           ? "info"
+                          : item.status === "Handed over to logistics"
+                            ? "warning"
                           : item.status === "At Pickup"
                             ? "warning"
                             : "primary"

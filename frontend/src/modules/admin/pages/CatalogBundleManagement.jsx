@@ -158,14 +158,14 @@ const CatalogBundleManagement = () => {
     }
   };
 
-  const handleDeactivate = async (bundle) => {
-    if (!window.confirm(`Deactivate bundle "${bundle.name}"?`)) return;
+  const handleDelete = async (bundle) => {
+    if (!window.confirm(`Permanently delete bundle "${bundle.name}"? This cannot be undone.`)) return;
     try {
       await adminApi.deleteCatalogBundle(bundle.id || bundle._id);
-      toast.success("Catalog bundle deactivated");
+      toast.success("Catalog bundle deleted");
       await loadBundles();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to deactivate bundle");
+      toast.error(error.response?.data?.message || "Failed to delete bundle");
     }
   };
 
@@ -258,7 +258,7 @@ const CatalogBundleManagement = () => {
                           <HiOutlinePencilSquare className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDeactivate(bundle)}
+                          onClick={() => handleDelete(bundle)}
                           className="h-9 w-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center"
                         >
                           <HiOutlineTrash className="h-4 w-4" />

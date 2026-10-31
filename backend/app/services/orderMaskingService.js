@@ -33,12 +33,27 @@ function maskOne(order) {
   return masked;
 }
 
+function applyOrderMediaVisibility(order, user) {
+  if (!order) return order;
+  const role = String(user?.role || "").toLowerCase();
+  if (role !== "customer" && role !== "user") return order;
+
+  const visible = { ...order };
+  // Product handover proof is operational evidence shared only with the
+  // seller, assigned rider, and admins. Customers still receive the status.
+  delete visible.pickupProofImages;
+  return visible;
+}
+
 export function maskOrderForViewer(order, user) {
-  if (!order || !shouldMask(user)) return order;
-  return maskOne(order);
+  const mediaSafeOrder = applyOrderMediaVisibility(order, user);
+  if (!mediaSafeOrder || !shouldMask(user)) return mediaSafeOrder;
+  return maskOne(mediaSafeOrder);
 }
 
 export function maskOrdersForViewer(orders, user) {
-  if (!Array.isArray(orders) || !shouldMask(user)) return orders;
-  return orders.map(maskOne);
+  if (!Array.isArray(orders)) return orders;
+  const mediaSafeOrders = orders.map((order) => applyOrderMediaVisibility(order, user));
+  if (!shouldMask(user)) return mediaSafeOrders;
+  return mediaSafeOrders.map(maskOne);
 }

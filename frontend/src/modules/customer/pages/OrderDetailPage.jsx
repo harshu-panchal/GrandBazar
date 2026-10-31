@@ -14,6 +14,7 @@ import OrderLifecycleActions from "../components/order/OrderLifecycleActions";
 import RateOrderItems from "../components/order/RateOrderItems";
 import ReturnProgressTracker from "../components/order/ReturnProgressTracker";
 import OrderProgressTracker from "../components/order/OrderProgressTracker";
+import ComplaintStatusTracker from "../components/order/ComplaintStatusTracker";
 import CancelOrderModal from "../components/order/CancelOrderModal";
 import { applyCloudinaryTransform } from "@/core/utils/imageUtils";
 import {
@@ -174,6 +175,9 @@ const OrderDetailPage = () => {
   const [showChatModal, setShowChatModal] = useState(false);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [complaintDetails, setComplaintDetails] = useState(null);
+  const [complaintLoading, setComplaintLoading] = useState(false);
+  const [complaintError, setComplaintError] = useState("");
   const [returnDetails, setReturnDetails] = useState(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [requestingReturn, setRequestingReturn] = useState(false);
@@ -221,6 +225,21 @@ const OrderDetailPage = () => {
   const [isReordering, setIsReordering] = useState(false);
   const resolveOrderLookupId = (ord) =>
     String(ord?.orderId || ord?.checkoutGroupId || orderId || "").trim();
+
+  const refreshComplaint = async (ord = order) => {
+    const lookupId = resolveOrderLookupId(ord);
+    if (!lookupId) return;
+    setComplaintLoading(true);
+    setComplaintError("");
+    try {
+      const response = await customerApi.getOrderComplaint(lookupId);
+      setComplaintDetails(response.data.result || null);
+    } catch (error) {
+      setComplaintError(error?.response?.data?.message || "Could not load the latest complaint status.");
+    } finally {
+      setComplaintLoading(false);
+    }
+  };
 
   const handleReorder = async () => {
     setIsReordering(true);
@@ -302,6 +321,8 @@ const OrderDetailPage = () => {
         const ord = response.data.result;
         setOrder(ord);
 
+        await refreshComplaint(ord);
+
         try {
           const retRes = await customerApi.getReturnDetails(resolveOrderLookupId(ord));
           const ret = retRes.data.result;
@@ -325,6 +346,16 @@ const OrderDetailPage = () => {
       fetchOrderDetails();
     }
   }, [orderId]);
+
+  // Keep an open complaint current while this order page is visible. Polling
+  // stops automatically once the ticket is resolved.
+  useEffect(() => {
+    if (!complaintDetails?.complaint || complaintDetails.complaint.status === "CLOSED") return undefined;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshComplaint();
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [complaintDetails?.complaint?.complaintId, complaintDetails?.complaint?.status, order?.orderId]);
 
   useEffect(() => {
     if (!orderId) return undefined;
@@ -1715,7 +1746,21 @@ const OrderDetailPage = () => {
           </motion.div>
         )}
 
-        <OrderLifecycleActions order={order} onRefresh={refreshOrder} returnWindowMinutes={returnWindowMinutes} />
+        <OrderLifecycleActions
+          order={order}
+          onRefresh={refreshOrder}
+          onComplaintSubmitted={(type) => {
+            if (type === "complaint") refreshComplaint();
+          }}
+          returnWindowMinutes={returnWindowMinutes}
+        />
+
+        <ComplaintStatusTracker
+          data={complaintDetails}
+          loading={complaintLoading}
+          error={complaintError}
+          onRetry={() => refreshComplaint()}
+        />
 
         <RateOrderItems order={order} />
       </div>

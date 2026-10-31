@@ -18,7 +18,12 @@ function checkDeliveryWindowChatActive(order) {
   // Active delivery window: assigned to rider or rider in workflow
   const hasDeliveryBoy = Boolean(order.deliveryBoy);
   const riderStep = Number(order.deliveryRiderStep) || 0;
-  const isDeliveryWorkflow = ["DELIVERY_ASSIGNED", "PICKUP_READY", "OUT_FOR_DELIVERY"].includes(
+  const isDeliveryWorkflow = [
+    "DELIVERY_ASSIGNED",
+    "PICKUP_READY",
+    "HANDED_OVER_TO_LOGISTICS",
+    "OUT_FOR_DELIVERY",
+  ].includes(
     String(order.workflowStatus || "").toUpperCase()
   );
 

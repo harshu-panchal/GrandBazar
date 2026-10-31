@@ -15,6 +15,7 @@ import {
 } from "react-icons/hi2";
 import { toast } from "sonner";
 import { adminApi } from "../services/adminApi";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const STATUS_OPTIONS = ["all", "PENDING", "COMPLETED", "CANCELLED"];
 const REASON_LABEL = {
@@ -171,8 +172,9 @@ const BulkSettlements = () => {
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/admin/orders/view/${row.orderId}`); }}
                         className="text-sm font-bold text-brand-700 hover:underline"
+                        title={row.orderId}
                       >
-                        {row.orderId}
+                        {formatOrderId(row)}
                       </button>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-700">{row.sellerId?.shopName || "—"}</td>
@@ -211,7 +213,9 @@ const BulkSettlements = () => {
         {detailItem && (
           <div className="space-y-5">
             <div className="text-center pb-4 border-b border-slate-100">
-              <p className="text-sm font-bold text-slate-900">{detailItem.orderId}</p>
+              <p className="text-sm font-bold text-slate-900" title={detailItem.orderId}>
+                {formatOrderId(detailItem)}
+              </p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
                 {detailItem.sellerId?.shopName || "Unknown seller"}
                 {detailItem.bulkOrderReason ? ` · ${REASON_LABEL[detailItem.bulkOrderReason] || detailItem.bulkOrderReason}` : ""}

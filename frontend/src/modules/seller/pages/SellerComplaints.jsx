@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { sellerApi } from "../services/sellerApi";
 import { COMPLAINT_STATUS_LABEL, COMPLAINT_REASONS } from "@shared/constants/complaint";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const reasonLabel = (v) => COMPLAINT_REASONS.find((r) => r.value === v)?.label || v;
 
@@ -71,7 +72,9 @@ export default function SellerComplaints() {
                 {COMPLAINT_STATUS_LABEL[item.status] || item.status}
               </span>
             </div>
-            <div className="text-xs text-slate-500 mt-1">Order {item.orderPublicId}</div>
+            <div className="text-xs text-slate-500 mt-1" title={item.orderPublicId}>
+              Order {formatOrderId(item.orderPublicId)}
+            </div>
           </button>
         ))}
       </div>
@@ -83,8 +86,8 @@ export default function SellerComplaints() {
             <div className="flex justify-between">
               <div>
                 <div className="text-lg font-black">{c.complaintId}</div>
-                <div className="text-xs text-slate-500">
-                  Order {c.orderPublicId} · Settlement {c.settlementHeld ? "on hold" : "released"}
+                <div className="text-xs text-slate-500" title={c.orderPublicId}>
+                  Order {formatOrderId(c.orderPublicId)} · Settlement {c.settlementHeld ? "on hold" : "released"}
                 </div>
               </div>
               <span className="rounded-full bg-indigo-100 text-indigo-700 px-3 py-1 text-xs font-bold">
@@ -99,6 +102,16 @@ export default function SellerComplaints() {
                     <b>{it.productName}</b>
                     <span className="text-slate-500">{reasonLabel(it.reason)}</span>
                   </div>
+                  {it.reasonText && (
+                    <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">
+                        Customer's complaint
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">
+                        {it.reasonText}
+                      </p>
+                    </div>
+                  )}
                   {it.photos?.length > 0 && (
                     <div className="flex gap-2 mt-2">
                       {it.photos.map((p, i) => (

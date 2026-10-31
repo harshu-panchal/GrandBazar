@@ -140,7 +140,7 @@ export const getActiveFleet = async (req, res) => {
     const query = {
       deliveryBoy: { $ne: null },
       status: {
-        $in: ["confirmed", "packed", "shipped", "out_for_delivery"],
+        $in: ["confirmed", "packed", "shipped", "handed_over_to_logistics", "out_for_delivery"],
       },
     };
 
@@ -170,6 +170,8 @@ export const getActiveFleet = async (req, res) => {
         status:
           order.status === "out_for_delivery"
             ? "On the Way"
+            : order.status === "handed_over_to_logistics"
+              ? "Handed over to logistics"
             : order.status === "packed"
               ? "At Pickup"
               : order.status === "shipped"

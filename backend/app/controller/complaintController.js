@@ -38,6 +38,49 @@ export const raiseComplaintHandler = async (req, res) => {
 
 // Strip the internal back-and-forth for the customer (BRD CMP-18): they see a
 // simple status + their own items, never the call logs / admin↔seller events.
+const CUSTOMER_MILESTONE = {
+  NEW: { key: "RECEIVED", label: "Complaint received" },
+  UNDER_REVIEW: { key: "UNDER_REVIEW", label: "Under review" },
+  CALL_DONE: { key: "CONTACTED", label: "Customer contacted" },
+  ASSIGNED: { key: "IN_PROGRESS", label: "Resolution in progress" },
+  SELLER_APPROVED: { key: "IN_PROGRESS", label: "Resolution in progress" },
+  SELLER_REJECTED: { key: "IN_PROGRESS", label: "Resolution in progress" },
+  REFUNDED: { key: "REFUNDED", label: "Refund processed" },
+  CLOSED: { key: "RESOLVED", label: "Resolved" },
+};
+
+// Convert the append-only audit trail into customer-safe milestones. Internal
+// actors, notes, call details and seller/admin decisions deliberately stay out
+// of this response; customers only receive the public state and its timestamp.
+export function buildCustomerComplaintTimeline(result) {
+  const complaint = result?.complaint || {};
+  const source = [
+    { toStatus: "NEW", createdAt: complaint.openedAt },
+    ...(Array.isArray(result?.events) ? result.events : []),
+  ];
+  const milestones = [];
+
+  source.forEach((event) => {
+    const milestone = CUSTOMER_MILESTONE[String(event?.toStatus || "").toUpperCase()];
+    if (!milestone) return;
+    const existing = milestones.find((entry) => entry.key === milestone.key);
+    if (existing) return;
+    milestones.push({ ...milestone, at: event.createdAt || null });
+  });
+
+  // Old migrated tickets may not have a complete event ledger. Always expose
+  // their current public state so the tracker cannot lag behind the ticket.
+  const currentMilestone = CUSTOMER_MILESTONE[String(complaint.status || "").toUpperCase()];
+  if (currentMilestone && !milestones.some((entry) => entry.key === currentMilestone.key)) {
+    milestones.push({
+      ...currentMilestone,
+      at: complaint.closedAt || complaint.refundedAt || complaint.updatedAt || null,
+    });
+  }
+
+  return milestones;
+}
+
 function customerView(result) {
   if (!result) return result;
   const c = result.complaint || {};
@@ -52,8 +95,12 @@ function customerView(result) {
       summary: c.status === "CLOSED" ? c.summary : "",
       openedAt: c.openedAt,
       dueAt: c.dueAt,
+      closedAt: c.closedAt,
+      refundedAt: c.refundedAt,
+      isOverdue: Boolean(c.isOverdue),
     },
     items: result.items,
+    timeline: buildCustomerComplaintTimeline(result),
   };
 }
 

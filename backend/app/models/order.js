@@ -357,6 +357,7 @@ const orderSchema = new mongoose.Schema(
         "pending",
         "confirmed",
         "packed",
+        "handed_over_to_logistics",
         "ready_for_pickup",
         "out_for_delivery",
         "delivered",
@@ -453,6 +454,7 @@ const orderSchema = new mongoose.Schema(
     },
     pickupConfirmedAt: Date,
     pickupReadyAt: Date,
+    handedOverToLogisticsAt: Date,
     // Seller-signaled "I've finished packing" for platform-logistics orders —
     // distinct from the rider-driven PICKUP_READY workflow status, which still
     // only flips once the rider physically arrives at the store. Lets the
@@ -794,6 +796,7 @@ const orderSchema = new mongoose.Schema(
       expiresAt: { type: Date, default: null },
       verifiedAt: { type: Date, default: null },
       verifiedBy: { type: String, enum: ["customer", "seller", ""], default: "" },
+      handoverPhotoUrl: { type: String, default: null },
       lastOtpSentAt: { type: Date, default: null },
     },
     fulfillmentMeta: {

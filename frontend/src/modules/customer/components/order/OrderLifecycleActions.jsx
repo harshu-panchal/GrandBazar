@@ -9,7 +9,7 @@ import { toast } from "sonner";
 // Complaints share the exact same post-delivery window as returns/refunds
 // (see backend/app/utils/returnWindow.js) — same admin setting, same
 // countdown semantics as the return-request flow on OrderDetailPage.
-export default function OrderLifecycleActions({ order, onRefresh, returnWindowMinutes = 1440 }) {
+export default function OrderLifecycleActions({ order, onRefresh, onComplaintSubmitted, returnWindowMinutes = 1440 }) {
   const [showReschedule, setShowReschedule] = useState(false);
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [paying, setPaying] = useState(false);
@@ -392,6 +392,7 @@ export default function OrderLifecycleActions({ order, onRefresh, returnWindowMi
             setDisputeSubmitted(true);
             toast.success(type === "feedback" ? "Feedback sent" : "Complaint raised");
             onRefresh?.();
+            onComplaintSubmitted?.(type);
           }}
         />
       )}

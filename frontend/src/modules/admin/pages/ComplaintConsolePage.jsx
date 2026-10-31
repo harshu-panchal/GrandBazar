@@ -6,6 +6,7 @@ import {
   CULPRITS,
   CALL_OUTCOMES,
 } from "@shared/constants/complaint";
+import { formatOrderId } from "@/shared/utils/orderId";
 
 const OPEN_STATUSES = ["NEW", "UNDER_REVIEW", "CALL_DONE", "ASSIGNED", "SELLER_APPROVED", "SELLER_REJECTED", "REFUNDED"];
 const reasonLabel = (v) => COMPLAINT_REASONS.find((r) => r.value === v)?.label || v;
@@ -118,8 +119,8 @@ export default function ComplaintConsolePage() {
                   {COMPLAINT_STATUS_LABEL[item.status] || item.status}
                 </span>
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Order {item.orderPublicId} · {item.submitType === "feedback" ? "Feedback" : "Complaint"}
+              <div className="text-xs text-slate-500 mt-1" title={item.orderPublicId}>
+                Order {formatOrderId(item.orderPublicId)} · {item.submitType === "feedback" ? "Feedback" : "Complaint"}
                 {item.isOverdue ? " · ⚠ Overdue" : ""}
               </div>
             </button>
@@ -135,8 +136,8 @@ export default function ComplaintConsolePage() {
             <div className="rounded-2xl border bg-white p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-lg font-black">
-                    {c.complaintId} · Order {c.orderPublicId}
+                  <div className="text-lg font-black" title={c.orderPublicId}>
+                    {c.complaintId} · Order {formatOrderId(c.orderPublicId)}
                   </div>
                   <div className="text-xs text-slate-500">
                     {isFeedback ? "Feedback" : "Complaint"} ·{" "}
@@ -308,18 +309,29 @@ export default function ComplaintConsolePage() {
                       Refund customer
                     </button>
                   </div>
-                  <textarea
-                    value={summary}
-                    onChange={(e) => setSummary(e.target.value)}
-                    placeholder="Final summary (required to close)"
-                    className="w-full rounded-lg border px-2 py-1.5 text-sm"
-                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      Resolution message to customer
+                    </label>
+                    <textarea
+                      value={summary}
+                      onChange={(e) => setSummary(e.target.value)}
+                      placeholder="Explain how the complaint was resolved. This message will be sent to the customer."
+                      maxLength={1000}
+                      rows={4}
+                      className="w-full rounded-lg border px-3 py-2 text-sm"
+                    />
+                    <div className="mt-1 flex justify-between text-[11px] text-slate-400">
+                      <span>Required to close the complaint and release its settlement hold.</span>
+                      <span>{summary.length}/1000</span>
+                    </div>
+                  </div>
                   <button
-                    disabled={busy}
+                    disabled={busy || !summary.trim()}
                     onClick={() => run(() => adminApi.closeComplaint(c.complaintId, { summary }), () => setSummary(""))}
                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                   >
-                    Close complaint
+                    Close complaint & notify customer
                   </button>
                 </div>
               </>

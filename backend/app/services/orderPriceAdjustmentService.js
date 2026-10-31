@@ -30,6 +30,7 @@ import { scheduleOrderActivationJob } from "./orderSchedulingService.js";
 // started (or the order is otherwise past the point of editing).
 const ADD_ITEMS_BLOCKED_WORKFLOW_STATUSES = [
   WORKFLOW_STATUS.PICKUP_READY,
+  WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
   WORKFLOW_STATUS.CUSTOMER_PICKUP_READY,
   WORKFLOW_STATUS.OUT_FOR_DELIVERY,
   WORKFLOW_STATUS.DELIVERED,
@@ -289,7 +290,7 @@ export async function applyOrderPriceAdjustment({
   }
 
   const ws = resolveWorkflowStatus(order);
-  if ([WORKFLOW_STATUS.CANCELLED, WORKFLOW_STATUS.DELIVERED, WORKFLOW_STATUS.OUT_FOR_DELIVERY].includes(ws)) {
+  if ([WORKFLOW_STATUS.CANCELLED, WORKFLOW_STATUS.DELIVERED, WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS, WORKFLOW_STATUS.OUT_FOR_DELIVERY].includes(ws)) {
     const err = new Error("Order cannot be adjusted in current state");
     err.statusCode = 409;
     throw err;

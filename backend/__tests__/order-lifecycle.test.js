@@ -26,6 +26,18 @@ describe("order state machine extensions", () => {
   it("blocks instant delivery search to scheduled hold", () => {
     expect(canTransition(WORKFLOW_STATUS.DELIVERY_SEARCH, WORKFLOW_STATUS.SCHEDULED_HOLD)).toBe(false);
   });
+
+  it("requires seller handover between rider arrival and start delivery", () => {
+    expect(
+      canTransition(WORKFLOW_STATUS.PICKUP_READY, WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS),
+    ).toBe(true);
+    expect(
+      canTransition(WORKFLOW_STATUS.PICKUP_READY, WORKFLOW_STATUS.OUT_FOR_DELIVERY),
+    ).toBe(false);
+    expect(
+      canTransition(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS, WORKFLOW_STATUS.OUT_FOR_DELIVERY),
+    ).toBe(true);
+  });
 });
 
 describe("schedule date utils", () => {

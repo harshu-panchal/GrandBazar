@@ -15,6 +15,7 @@ const STATUS_OPTIONS = [
   { value: "", label: "All status" },
   { value: "delivered", label: "Delivered" },
   { value: "out_for_delivery", label: "Out for delivery" },
+  { value: "handed_over_to_logistics", label: "Handed over to logistics" },
   { value: "cancelled", label: "Cancelled" },
   { value: "returned", label: "Returned" },
 ];
@@ -22,6 +23,7 @@ const STATUS_OPTIONS = [
 const STATUS_BADGE_VARIANT = {
   delivered: "success",
   out_for_delivery: "info",
+  handed_over_to_logistics: "info",
   cancelled: "error",
   returned: "warning",
 };

@@ -104,7 +104,7 @@ export async function getSellerLocationsData({
   });
 
   const sellerIds = filteredByCity.map((seller) => seller._id);
-  const activeStatuses = ["pending", "confirmed", "packed", "out_for_delivery"];
+  const activeStatuses = ["pending", "confirmed", "packed", "handed_over_to_logistics", "out_for_delivery"];
   const recentWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const ordersBySeller = sellerIds.length
@@ -369,7 +369,7 @@ export async function getActiveSellersData({
                     {
                       $in: [
                         "$status",
-                        ["pending", "confirmed", "packed", "out_for_delivery"],
+                        ["pending", "confirmed", "packed", "handed_over_to_logistics", "out_for_delivery"],
                       ],
                     },
                     1,
@@ -625,7 +625,7 @@ export async function getActiveSellerByIdData(id) {
                 {
                   $in: [
                     "$status",
-                    ["pending", "confirmed", "packed", "out_for_delivery"],
+                    ["pending", "confirmed", "packed", "handed_over_to_logistics", "out_for_delivery"],
                   ],
                 },
                 1,

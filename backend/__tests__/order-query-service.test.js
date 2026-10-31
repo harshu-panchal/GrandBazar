@@ -3,7 +3,7 @@ import { jest } from "@jest/globals";
 const mockOrderFind = jest.fn();
 const mockOrderCountDocuments = jest.fn();
 const mockDeliveryFindById = jest.fn();
-const mockSellerFind = jest.fn();
+const mockStoreFind = jest.fn();
 const mockDistanceMeters = jest.fn();
 
 jest.unstable_mockModule("../app/models/order.js", () => ({
@@ -19,9 +19,9 @@ jest.unstable_mockModule("../app/models/delivery.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../app/models/seller.js", () => ({
+jest.unstable_mockModule("../app/models/store.js", () => ({
   default: {
-    find: mockSellerFind,
+    find: mockStoreFind,
   },
 }));
 
@@ -65,7 +65,9 @@ describe("orderQueryService", () => {
     });
 
     expect(query.seller).toBe("seller-1");
-    expect(query.status).toEqual({ $in: ["confirmed", "packed"] });
+    expect(query.status).toEqual({
+      $in: ["confirmed", "packed", "handed_over_to_logistics"],
+    });
     expect(query.createdAt.$gte).toEqual(new Date("2026-03-01"));
     expect(query.createdAt.$lte.getFullYear()).toBe(2026);
     expect(query.createdAt.$lte.getMonth()).toBe(2);
@@ -101,7 +103,7 @@ describe("orderQueryService", () => {
       },
     });
 
-    mockSellerFind.mockReturnValueOnce(
+    mockStoreFind.mockReturnValueOnce(
       makeSelectChain([{ _id: "seller-1" }, { _id: "seller-2" }]),
     );
 

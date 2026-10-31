@@ -95,6 +95,36 @@ describe("Seller Settlement engine", () => {
     expect(resolveSettlementState(order, checks)).toBe("HELD");
   });
 
+  test("seller-approved complaint clears all checks while preserving its deduction", () => {
+    const order = {
+      deliveredAt: new Date(Date.now() - 30 * 3600 * 1000),
+      complaintWindowClosesAt: new Date(Date.now() - 6 * 3600 * 1000),
+      paymentStatus: "PAID",
+      paymentBreakdown: { sellerPayoutTotal: 81 },
+      sellerSettlement: { deductions: { complaint: 40 } },
+      financeFlags: {},
+    };
+    const checks = computeChecks(order, { status: "SELLER_APPROVED" }, HOURS);
+
+    expect(checks.dots.every((dot) => dot.dot === "g")).toBe(true);
+    expect(checks.ready).toBe(true);
+    expect(computeSettled(order)).toBe(41);
+    expect(checks.dots.find((dot) => dot.key === "complaint").tooltip).toMatch(/accepted/i);
+  });
+
+  test("seller-rejected complaint remains blocked for admin review", () => {
+    const order = {
+      deliveredAt: new Date(Date.now() - 30 * 3600 * 1000),
+      complaintWindowClosesAt: new Date(Date.now() - 6 * 3600 * 1000),
+      paymentStatus: "PAID",
+      financeFlags: {},
+    };
+    const checks = computeChecks(order, { status: "SELLER_REJECTED" }, HOURS);
+
+    expect(checks.dots.find((dot) => dot.key === "complaint").dot).toBe("r");
+    expect(checks.ready).toBe(false);
+  });
+
   test("unpaid order → payment dot red, not ready", () => {
     const order = {
       deliveredAt: new Date(Date.now() - 25 * 3600 * 1000),

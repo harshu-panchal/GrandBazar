@@ -118,7 +118,7 @@ export async function getDeliveryCashBalancesData({ page, limit, skip }) {
                   {
                     $in: [
                       "$$order.status",
-                      ["confirmed", "packed", "picked_up", "out_for_delivery"],
+                      ["confirmed", "packed", "picked_up", "handed_over_to_logistics", "out_for_delivery"],
                     ],
                   },
                   { $in: ["$$order.payment.method", ["cash", "cod"]] },

@@ -6,6 +6,9 @@ const mockOrderFindById = jest.fn();
 const mockApplyDeliveredSettlement = jest.fn();
 const mockOrderMatchQueryFromRouteParam = jest.fn();
 const mockHandleResponse = jest.fn();
+const mockEmitNotificationEvent = jest.fn();
+const mockEmitOrderStatusUpdate = jest.fn();
+const mockInvalidate = jest.fn().mockResolvedValue(undefined);
 
 jest.unstable_mockModule("../app/models/order.js", () => ({
   default: {
@@ -31,28 +34,58 @@ jest.unstable_mockModule("../app/services/orderSettlement.js", () => ({
 jest.unstable_mockModule("../app/utils/orderLookup.js", () => ({
   orderMatchQueryFromRouteParam: mockOrderMatchQueryFromRouteParam,
   orderMatchQueryFlexible: jest.fn(),
+  requireCanonicalOrderId: jest.fn(async (value) => value),
 }));
 
 jest.unstable_mockModule("../app/utils/helper.js", () => ({
   default: mockHandleResponse,
+  handleResponse: mockHandleResponse,
+  calculateDistance: jest.fn(),
+  isAdminScopedUser: jest.fn((user) => user?.role === "admin"),
 }));
 
 jest.unstable_mockModule("../app/utils/pagination.js", () => ({
   default: jest.fn(),
 }));
 
-jest.unstable_mockModule("../app/constants/orderWorkflow.js", () => ({
-  WORKFLOW_STATUS: {},
-  DEFAULT_SELLER_TIMEOUT_MS: () => 0,
-}));
-
 jest.unstable_mockModule("../app/services/orderWorkflowService.js", () => ({
   afterPlaceOrderV2: jest.fn(),
-  sellerAcceptAtomic: jest.fn(),
-  sellerRejectAtomic: jest.fn(),
+  sellerUpdateStatusAtomic: jest.fn(),
   deliveryAcceptAtomic: jest.fn(),
   customerCancelV2: jest.fn(),
+  requestCustomerCancellationApproval: jest.fn(),
+  approveCustomerCancellationRequest: jest.fn(),
+  rejectCustomerCancellationRequest: jest.fn(),
   resolveWorkflowStatus: jest.fn(),
+  sellerMarkPackedSignalAtomic: jest.fn(),
+  sellerResendDeliverySearchAtomic: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/modules/notifications/notification.emitter.js", () => ({
+  emitNotificationEvent: mockEmitNotificationEvent,
+}));
+
+jest.unstable_mockModule("../app/services/orderSocketEmitter.js", () => ({
+  registerOrderSocketGetter: jest.fn(),
+  getIo: jest.fn(),
+  emitDeliveryBroadcastForSeller: jest.fn(),
+  emitDeliveryBroadcast: jest.fn(),
+  emitReturnBroadcastForCustomer: jest.fn(),
+  emitReturnBroadcastForSeller: jest.fn(),
+  retractDeliveryBroadcastForOrder: jest.fn(),
+  emitToSeller: jest.fn(),
+  emitToDelivery: jest.fn(),
+  emitToCustomer: jest.fn(),
+  emitOrderChatMessage: jest.fn(),
+  emitOrderStatusUpdate: mockEmitOrderStatusUpdate,
+  emitReturnStatusUpdate: jest.fn(),
+}));
+
+jest.unstable_mockModule("../app/services/cacheService.js", () => ({
+  buildKey: jest.fn((...parts) => parts.join(":")),
+  getOrSet: jest.fn(),
+  getTTL: jest.fn(),
+  invalidate: mockInvalidate,
 }));
 
 jest.unstable_mockModule("../app/services/finance/orderFinanceService.js", () => ({
@@ -87,6 +120,7 @@ describe("updateOrderStatus delivered finance ordering", () => {
       workflowVersion: 1,
       deliveryBoy: "rider-old",
       seller: "seller-1",
+      customer: "customer-1",
       save: jest.fn().mockImplementation(async () => {
         callOrder.push("save");
       }),
@@ -116,5 +150,57 @@ describe("updateOrderStatus delivered finance ordering", () => {
 
     expect(mockApplyDeliveredSettlement).toHaveBeenCalledWith(orderDoc, "ORD1");
     expect(callOrder).toEqual(["save", "settlement"]);
+  });
+
+  it("keeps a V2 admin delivery override visible across every module", async () => {
+    const orderDoc = {
+      _id: "mongo-2",
+      orderId: "ORD2",
+      status: "out_for_delivery",
+      orderStatus: "out_for_delivery",
+      workflowVersion: 2,
+      workflowStatus: "OUT_FOR_DELIVERY",
+      deliveryRiderStep: 3,
+      deliveryBoy: "rider-2",
+      seller: "seller-2",
+      customer: "customer-2",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const refreshed = {
+      ...orderDoc,
+      status: "delivered",
+      orderStatus: "delivered",
+      workflowStatus: "DELIVERED",
+      deliveryRiderStep: 4,
+    };
+
+    mockOrderFindOne.mockResolvedValue(orderDoc);
+    mockOrderFindById.mockResolvedValue(refreshed);
+
+    const result = await updateOrderStatus(
+      {
+        params: { orderId: "ORD2" },
+        body: { status: "delivered" },
+        user: { id: "admin-1", role: "admin" },
+      },
+      {},
+    );
+
+    expect(result.status).toBe(200);
+    expect(orderDoc.workflowStatus).toBe("DELIVERED");
+    expect(orderDoc.deliveryRiderStep).toBe(4);
+    expect(mockApplyDeliveredSettlement).toHaveBeenCalledWith(orderDoc, "ORD2");
+    expect(mockEmitOrderStatusUpdate).toHaveBeenCalledWith(
+      "ORD2",
+      expect.objectContaining({
+        workflowStatus: "DELIVERED",
+        status: "delivered",
+        orderStatus: "delivered",
+      }),
+      "customer-2",
+      "seller-2",
+      ["rider-2"],
+    );
+    expect(mockInvalidate).toHaveBeenCalledWith("orders:customer:customer-2:*");
   });
 });

@@ -37,6 +37,7 @@ const DISPLAY_LABELS = {
   pending: "Pending",
   confirmed: "Confirmed",
   packed: "Packed",
+  handed_over_to_logistics: "Handed over to logistics",
   ready_for_pickup: "Ready for pickup",
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
@@ -76,7 +77,7 @@ const RETURN_STATUS_LABELS = {
 
 // Mirrors frontend OrderProgressTracker.jsx's WORKFLOW_STAGE_INDEX — moved
 // here so delivery (which has no tracker concept today) and every other
-// module can share one 0-6 step position instead of each guessing.
+// module can share one 0-7 step position instead of each guessing.
 const WORKFLOW_STAGE_INDEX = {
   [WORKFLOW_STATUS.CREATED]: 0,
   [WORKFLOW_STATUS.PREORDER_HOLD]: 0,
@@ -88,15 +89,17 @@ const WORKFLOW_STAGE_INDEX = {
   [WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING]: 2,
   [WORKFLOW_STATUS.DELIVERY_ASSIGNED]: 3,
   [WORKFLOW_STATUS.PICKUP_READY]: 4,
+  [WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS]: 5,
   [WORKFLOW_STATUS.CUSTOMER_PICKUP_READY]: 4,
-  [WORKFLOW_STATUS.OUT_FOR_DELIVERY]: 5,
-  [WORKFLOW_STATUS.DELIVERED]: 6,
-  [WORKFLOW_STATUS.DISPUTED]: 6,
+  [WORKFLOW_STATUS.OUT_FOR_DELIVERY]: 6,
+  [WORKFLOW_STATUS.DELIVERED]: 7,
+  [WORKFLOW_STATUS.DISPUTED]: 7,
 };
 
 function legacyStageIndex(legacyStatus, order) {
-  if (legacyStatus === "delivered" || legacyStatus === "disputed") return 6;
-  if (legacyStatus === "out_for_delivery") return 5;
+  if (legacyStatus === "delivered" || legacyStatus === "disputed") return 7;
+  if (legacyStatus === "out_for_delivery") return 6;
+  if (legacyStatus === "handed_over_to_logistics") return 5;
   if (legacyStatus === "packed" || legacyStatus === "ready_for_pickup") return 4;
   if (order?.deliveryBoy || order?.assignedAt) return 3;
   if (legacyStatus === "confirmed") return 2;

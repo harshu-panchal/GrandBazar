@@ -306,6 +306,7 @@ export function emitOrderChatMessage(orderId, messageObj, customerId, deliveryId
  */
 export async function emitReturnBroadcastForSeller(sellerId, payload) {
   const s = getIo();
+  const broadcastCreatedAt = new Date().toISOString();
 
   let ids = [];
   try {
@@ -327,7 +328,7 @@ export async function emitReturnBroadcastForSeller(sellerId, payload) {
     }
   }
 
-  const body = { ...payload, at: new Date().toISOString() };
+  const body = { ...payload, at: broadcastCreatedAt };
 
   if (s) {
     // Emit to specific rider rooms
@@ -340,9 +341,12 @@ export async function emitReturnBroadcastForSeller(sellerId, payload) {
 
   // Push notification
   if (ids.length > 0) {
-    emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
+    await emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
       orderId: payload.orderId,
       deliveryIds: ids,
+      // "Notify Riders" can legitimately be used again for the same order.
+      // Distinguish each broadcast while still deduplicating its recipients.
+      messageCreatedAt: broadcastCreatedAt,
     });
   }
 
@@ -379,6 +383,7 @@ export async function emitReturnBroadcastForSeller(sellerId, payload) {
  */
 export async function emitReturnBroadcastForCustomer(customerLocation, payload) {
   const s = getIo();
+  const broadcastCreatedAt = new Date().toISOString();
 
   let ids = [];
   try {
@@ -400,7 +405,7 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
     }
   }
 
-  const body = { ...payload, at: new Date().toISOString() };
+  const body = { ...payload, at: broadcastCreatedAt };
 
   if (s) {
     // 1. Emit to specific rider rooms
@@ -413,9 +418,10 @@ export async function emitReturnBroadcastForCustomer(customerLocation, payload) 
 
   // 3. Send Push Notification via FCM
   if (ids.length > 0) {
-    emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
+    await emitNotificationEvent(NOTIFICATION_EVENTS.NEW_RETURN_BROADCAST, {
       orderId: payload.orderId,
       deliveryIds: ids,
+      messageCreatedAt: broadcastCreatedAt,
     });
   }
 

@@ -13,6 +13,7 @@ export const WORKFLOW_STATUS = {
   EXTERNAL_LOGISTICS_PENDING: "EXTERNAL_LOGISTICS_PENDING",
   DELIVERY_ASSIGNED: "DELIVERY_ASSIGNED",
   PICKUP_READY: "PICKUP_READY",
+  HANDED_OVER_TO_LOGISTICS: "HANDED_OVER_TO_LOGISTICS",
   CUSTOMER_PICKUP_READY: "CUSTOMER_PICKUP_READY",
   OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
   DELIVERED: "DELIVERED",
@@ -80,6 +81,8 @@ export function legacyStatusFromWorkflow(workflowStatus) {
       return "confirmed";
     case WORKFLOW_STATUS.PICKUP_READY:
       return "packed";
+    case WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS:
+      return "handed_over_to_logistics";
     case WORKFLOW_STATUS.CUSTOMER_PICKUP_READY:
       return "ready_for_pickup";
     case WORKFLOW_STATUS.OUT_FOR_DELIVERY:
@@ -104,6 +107,7 @@ export function workflowFromLegacyStatus(legacy) {
   if (s === "preorder_confirmed") return WORKFLOW_STATUS.PREORDER_HOLD;
   if (s === "confirmed") return WORKFLOW_STATUS.DELIVERY_SEARCH;
   if (s === "packed") return WORKFLOW_STATUS.PICKUP_READY;
+  if (s === "handed_over_to_logistics") return WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS;
   if (s === "out_for_delivery") return WORKFLOW_STATUS.OUT_FOR_DELIVERY;
   if (s === "delivered") return WORKFLOW_STATUS.DELIVERED;
   if (s === "disputed") return WORKFLOW_STATUS.DISPUTED;

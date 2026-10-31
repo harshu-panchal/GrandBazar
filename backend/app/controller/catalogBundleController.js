@@ -4,7 +4,7 @@ import {
   getCatalogBundleById,
   createCatalogBundle,
   updateCatalogBundle,
-  deactivateCatalogBundle,
+  deleteCatalogBundle,
   getAvailableBundlesForStore,
   getBundleImportStatus,
   importBundlesForStore,
@@ -64,8 +64,8 @@ export const updateCatalogBundleHandler = async (req, res) => {
 
 export const deleteCatalogBundleHandler = async (req, res) => {
   try {
-    const bundle = await deactivateCatalogBundle(req.params.id);
-    return handleResponse(res, 200, "Catalog bundle deactivated successfully", bundle);
+    const bundle = await deleteCatalogBundle(req.params.id);
+    return handleResponse(res, 200, "Catalog bundle deleted successfully", bundle);
   } catch (error) {
     const status = error.message === "Catalog bundle not found" ? 404 : 400;
     return handleResponse(res, status, error.message);

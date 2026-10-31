@@ -82,10 +82,18 @@ const OrdersPage = () => {
         const getToken = () => localStorage.getItem('auth_customer');
         let refreshTimer = null;
         const unsubscribe = onOrderStatusUpdate(getToken, (payload) => {
-            if (!payload?.orderId || !payload?.returnStatus) return;
+            if (!payload?.orderId) return;
             setOrders((previous) => previous.map((order) =>
                 order.orderId === payload.orderId
-                    ? { ...order, returnStatus: payload.returnStatus }
+                    ? {
+                        ...order,
+                        ...(payload.returnStatus && { returnStatus: payload.returnStatus }),
+                        ...(payload.workflowStatus && {
+                            workflowStatus: payload.workflowStatus,
+                            status: payload.status || order.status,
+                            displayStatus: undefined,
+                        }),
+                    }
                     : order
             ));
             clearTimeout(refreshTimer);

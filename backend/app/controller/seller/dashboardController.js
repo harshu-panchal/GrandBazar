@@ -84,6 +84,8 @@ const bucketForWorkflow = (ws) => {
     case WORKFLOW_STATUS.PICKUP_READY:
     case WORKFLOW_STATUS.CUSTOMER_PICKUP_READY:
       return "preparing";
+    case WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS:
+      return "outForDelivery";
     case WORKFLOW_STATUS.OUT_FOR_DELIVERY:
       return "outForDelivery";
     case WORKFLOW_STATUS.DELIVERED:
