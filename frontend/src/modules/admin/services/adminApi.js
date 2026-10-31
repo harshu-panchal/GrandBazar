@@ -217,6 +217,7 @@ export const adminApi = {
     getBroadcastAudienceStats: () => axiosInstance.get('/notifications/broadcast/audience-stats'),
 
     // Reviews
+    getReviews: (params) => axiosInstance.get('/reviews/admin', { params }),
     getPendingReviews: (params) => axiosInstance.get('/reviews/admin/pending', { params }),
     updateReviewStatus: (id, status) => axiosInstance.patch(`/reviews/admin/status/${id}`, { status }),
 

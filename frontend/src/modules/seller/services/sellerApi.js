@@ -54,6 +54,7 @@ export const sellerApi = {
     // Others
     getDashboard: (params) => axiosInstance.get('/seller/dashboard', { params }),
     getStats: (range) => axiosInstance.get('/seller/stats', { params: { range } }),
+    getReviews: (params) => axiosInstance.get('/reviews/seller/mine', { params }),
     // ttl: 0 — no stale-read risk (sellers need fresh data after actions), but still
     // collapses genuinely concurrent identical calls (e.g. DashboardLayout's alert
     // poll and Orders.jsx firing on the same socket event with the same params).

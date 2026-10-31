@@ -26,6 +26,7 @@ import {
   HiOutlineSquare3Stack3D,
   HiOutlineChatBubbleLeftRight,
   HiOutlinePhone,
+  HiOutlineStar,
 } from "react-icons/hi2";
 
 const Dashboard = React.lazy(() => import("../pages/Dashboard"));
@@ -62,12 +63,14 @@ const DeliveryPolicyPage = React.lazy(() => import("../pages/DeliveryPolicyPage"
 const PreOrderCampaigns = React.lazy(() => import("../pages/PreOrderCampaigns"));
 const SellerRewardCampaigns = React.lazy(() => import("../pages/SellerRewardCampaigns"));
 const SellerRewards = React.lazy(() => import("../pages/SellerRewards"));
+const Reviews = React.lazy(() => import("../pages/Reviews"));
 
 const navItems = [
   { label: "Dashboard", path: "/seller", icon: HiOutlineSquares2X2, end: true },
   { label: "Messages from Admin", path: "/seller/admin-messages", icon: HiOutlineChatBubbleLeftRight },
   { label: "Store Design", path: "/seller/storefront", icon: HiOutlinePhoto, permission: "storefront" },
   { label: "Products", path: "/seller/products", icon: HiOutlineCube, permission: "products", end: true },
+  { label: "Customer Reviews", path: "/seller/reviews", icon: HiOutlineStar, permission: "products" },
   { label: "Browse Catalog", path: "/seller/products/catalog", icon: HiOutlineInboxStack, permission: "products" },
   { label: "Stock", path: "/seller/inventory", icon: HiOutlineArchiveBox, permission: "inventory" },
   { label: "Orders", path: "/seller/orders", icon: HiOutlineTruck, permission: "orders" },
@@ -246,6 +249,7 @@ const SellerRoutes = () => {
             <Route path="products/catalog" element={<BrowseCatalog />} />
             <Route path="products/pricing" element={<CatalogPricingWizard />} />
             <Route path="products/add" element={<AddProduct />} />
+            <Route path="reviews" element={<Reviews />} />
           </>
         )}
         {hasPermission("inventory") && <Route path="inventory" element={<StockManagement />} />}

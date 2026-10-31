@@ -15,7 +15,7 @@ import {
   processPayout,
   cancelPendingPayoutForOrder,
 } from "./payoutService.js";
-import { createSellerPayout, isTerminalSuccess, isTerminalFailure } from "./razorpayPayoutService.js";
+import { createSellerPayout, fetchSellerPayout, isRazorpayConfigured, isTerminalSuccess, isTerminalFailure } from "./razorpayPayoutService.js";
 import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
 
@@ -546,10 +546,20 @@ async function syncBulkOrder(orderDbId, patch) {
 }
 
 async function finalizeSettlement(orderDbId, { payoutId, txnNo = "", utr = "", mode }) {
+  const existing = await Order.findById(orderDbId)
+    .select("settlementStatus.settlementState sellerSettlement.lockedAt sellerSettlement.invoiceNo")
+    .lean();
+  if (existing?.sellerSettlement?.lockedAt || existing?.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED) {
+    return existing.sellerSettlement?.invoiceNo || "";
+  }
   const invoiceNo = await nextSettlementInvoiceNo();
   const now = new Date();
-  await Order.updateOne(
-    { _id: orderDbId },
+  const finalized = await Order.updateOne(
+    {
+      _id: orderDbId,
+      "sellerSettlement.lockedAt": null,
+      "settlementStatus.settlementState": { $ne: SETTLEMENT_STATE.SETTLED },
+    },
     {
       $set: {
         "settlementStatus.settlementState": SETTLEMENT_STATE.SETTLED,
@@ -563,6 +573,10 @@ async function finalizeSettlement(orderDbId, { payoutId, txnNo = "", utr = "", m
       },
     },
   );
+  if (!finalized.modifiedCount) {
+    const winner = await Order.findById(orderDbId).select("sellerSettlement.invoiceNo").lean();
+    return winner?.sellerSettlement?.invoiceNo || "";
+  }
   const order = await Order.findById(orderDbId)
     .select("orderId seller customer sellerSettlement")
     .populate("customer", "name")
@@ -621,6 +635,36 @@ export async function handlePayoutWebhook(payload) {
     return { ok: true, outcome: "FAILED" };
   }
   return { ok: true, outcome: "PENDING" };
+}
+
+// Webhooks remain the primary completion path. This sweep closes the reliability
+// gap when Razorpay has reached a terminal state but a webhook delivery is
+// delayed or missed. Simulated payouts are deliberately excluded.
+export async function reconcileProcessingPayouts({ limit = 50 } = {}) {
+  if (!isRazorpayConfigured()) return { checked: 0, settled: 0, failed: 0, skipped: "not configured" };
+
+  const payouts = await Payout.find({
+    status: "PROCESSING",
+    razorpayPayoutId: { $type: "string", $regex: /^pout_(?!SIM_)/ },
+  })
+    .sort({ updatedAt: 1 })
+    .limit(Math.max(1, Math.min(100, Number(limit) || 50)))
+    .lean();
+
+  const result = { checked: 0, settled: 0, failed: 0, processing: 0, errors: 0 };
+  for (const payout of payouts) {
+    try {
+      const remote = await fetchSellerPayout(payout.razorpayPayoutId);
+      result.checked += 1;
+      const outcome = await handlePayoutWebhook({ payload: { payout: { entity: remote } } });
+      if (outcome?.outcome === "SETTLED") result.settled += 1;
+      else if (outcome?.outcome === "FAILED") result.failed += 1;
+      else result.processing += 1;
+    } catch {
+      result.errors += 1;
+    }
+  }
+  return result;
 }
 
 // ---- retry a failed payout ------------------------------------------------

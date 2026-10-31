@@ -1,4 +1,4 @@
-import { markReadySweep } from "../services/finance/sellerSettlementService.js";
+import { markReadySweep, reconcileProcessingPayouts } from "../services/finance/sellerSettlementService.js";
 import logger from "../services/logger.js";
 
 // Per-minute sweep (BRD / flow-chart "Every minute: close expired 24h windows,
@@ -13,11 +13,15 @@ export function getSettlementReadyJobHandler() {
   return async () => {
     const startTime = Date.now();
     try {
-      const result = await markReadySweep();
+      const [readyResult, payoutResult] = await Promise.all([
+        markReadySweep(),
+        reconcileProcessingPayouts(),
+      ]);
       logger.info("Settlement READY sweep completed", {
         jobName: "settlementReadyJob",
         duration: Date.now() - startTime,
-        ...result,
+        ...readyResult,
+        payoutReconciliation: payoutResult,
       });
     } catch (error) {
       logger.error("Settlement READY sweep failed", {

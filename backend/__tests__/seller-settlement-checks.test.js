@@ -25,6 +25,8 @@ jest.unstable_mockModule("../app/services/finance/payoutService.js", () => ({
 }));
 jest.unstable_mockModule("../app/services/finance/razorpayPayoutService.js", () => ({
   createSellerPayout: jest.fn(),
+  fetchSellerPayout: jest.fn(),
+  isRazorpayConfigured: () => false,
   isTerminalSuccess: (s) => s === "processed",
   isTerminalFailure: (s) => ["reversed", "failed"].includes(s),
 }));

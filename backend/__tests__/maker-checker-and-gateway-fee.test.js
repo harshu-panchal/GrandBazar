@@ -46,7 +46,8 @@ jest.unstable_mockModule("../app/services/finance/payoutService.js", () => ({
   createPendingPayoutForOrder: jest.fn(), processPayout: jest.fn(), cancelPendingPayoutForOrder: jest.fn(),
 }));
 jest.unstable_mockModule("../app/services/finance/razorpayPayoutService.js", () => ({
-  createSellerPayout: jest.fn(), isTerminalSuccess: () => false, isTerminalFailure: () => false,
+  createSellerPayout: jest.fn(), fetchSellerPayout: jest.fn(), isRazorpayConfigured: () => false,
+  isTerminalSuccess: () => false, isTerminalFailure: () => false,
 }));
 jest.unstable_mockModule("../app/modules/notifications/notification.emitter.js", () => ({ emitNotificationEvent: jest.fn() }));
 

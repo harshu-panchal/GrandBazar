@@ -33,6 +33,23 @@ export function isRazorpayConfigured() {
   return Boolean(c.keyId && c.keySecret && c.accountNumber);
 }
 
+export async function fetchSellerPayout(payoutId) {
+  if (!isRazorpayConfigured()) throw new Error("RazorpayX payouts are not configured");
+  if (!payoutId || String(payoutId).startsWith("pout_SIM_")) {
+    throw new Error("Simulated payouts do not exist in RazorpayX");
+  }
+  try {
+    const res = await axios.get(`${RZP_BASE}/payouts/${encodeURIComponent(payoutId)}`, {
+      headers: authHeader(),
+      timeout: 15000,
+    });
+    return res.data;
+  } catch (error) {
+    const razorpayError = error.response?.data?.error || {};
+    throw new Error(razorpayError.description || razorpayError.reason || error.message);
+  }
+}
+
 function authHeader() {
   const c = razorpayConfig();
   const token = Buffer.from(`${c.keyId}:${c.keySecret}`).toString("base64");
@@ -154,4 +171,5 @@ export default {
   isTerminalSuccess,
   isTerminalFailure,
   razorpayConfig,
+  fetchSellerPayout,
 };

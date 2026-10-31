@@ -1,4 +1,5 @@
 import Review from "../models/review.js";
+import mongoose from "mongoose";
 import Product from "../models/product.js";
 import Store from "../models/store.js";
 import Order from "../models/order.js";
@@ -226,38 +227,123 @@ export const getStoreReviews = async (req, res) => {
   }
 };
 
-// Admin: Get all pending reviews (product + store)
+function buildReviewFilters(query = {}, { defaultStatus = null } = {}) {
+  const filters = {};
+  const status = String(query.status || defaultStatus || "").toLowerCase();
+  const targetType = String(query.targetType || "").toLowerCase();
+  const rating = Number(query.rating);
+
+  if (["pending", "approved", "rejected"].includes(status)) {
+    filters.status = status;
+  }
+  if (targetType === "product" || targetType === "store") {
+    filters.targetType = targetType;
+  }
+  if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+    filters.rating = rating;
+  }
+  return filters;
+}
+
+async function findReviewsPage(req, query, { includeCustomerContact = false } = {}) {
+  const { page, limit, skip } = getPagination(req, {
+    defaultLimit: 25,
+    maxLimit: 200,
+  });
+  const [reviews, total, summary] = await Promise.all([
+    Review.find(query)
+      .populate("userId", includeCustomerContact ? "name email phone image" : "name image")
+      .populate("productId", "name images mainImage sellerId")
+      .populate("storeId", "shopName banners")
+      .populate("orderId", "orderId")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Review.countDocuments(query),
+    Review.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: "$rating" },
+          verifiedCount: { $sum: { $cond: ["$verifiedPurchase", 1, 0] } },
+        },
+      },
+    ]),
+  ]);
+
+  return {
+    items: reviews,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit) || 1,
+    summary: {
+      avgRating: Number(Number(summary[0]?.avgRating || 0).toFixed(1)),
+      verifiedCount: Number(summary[0]?.verifiedCount || 0),
+    },
+  };
+}
+
+// Admin: Get reviews of every status (product + store)
+export const getAdminReviews = async (req, res) => {
+  try {
+    const query = buildReviewFilters(req.query);
+    const result = await findReviewsPage(req, query, { includeCustomerContact: true });
+    return handleResponse(res, 200, "Reviews fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// Backwards-compatible endpoint retained for older admin clients.
 export const getPendingReviews = async (req, res) => {
   try {
-    const { page, limit, skip } = getPagination(req, {
-      defaultLimit: 25,
-      maxLimit: 200,
-    });
-    const targetType = String(req.query.targetType || "").toLowerCase();
-    const query = { status: "pending" };
-    if (targetType === "product" || targetType === "store") {
-      query.targetType = targetType;
+    const query = buildReviewFilters({ ...req.query, status: "pending" });
+    const result = await findReviewsPage(req, query, { includeCustomerContact: true });
+    return handleResponse(res, 200, "Pending reviews fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// Seller: approved product/store reviews belonging to the active store only.
+export const getSellerReviews = async (req, res) => {
+  try {
+    const storeId = req.user?.activeStoreId || req.user?.id;
+    if (!storeId || !mongoose.Types.ObjectId.isValid(String(storeId))) {
+      return handleResponse(res, 400, "Active store is required");
     }
 
-    const [reviews, total] = await Promise.all([
-      Review.find(query)
-        .populate("userId", "name email phone")
-        .populate("productId", "name images mainImage")
-        .populate("storeId", "shopName banners")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Review.countDocuments(query),
-    ]);
+    const storeObjectId = new mongoose.Types.ObjectId(String(storeId));
+    const productIds = await Product.find({ sellerId: storeObjectId }).distinct("_id");
+    const targetType = String(req.query.targetType || "").toLowerCase();
+    const productOwnership = {
+      productId: { $in: productIds },
+      $or: [
+        { targetType: "product" },
+        { targetType: { $exists: false } },
+        { targetType: null },
+      ],
+    };
+    const ownership =
+      targetType === "store"
+        ? { targetType: "store", storeId: storeObjectId }
+        : targetType === "product"
+          ? productOwnership
+          : {
+              $or: [
+                { targetType: "store", storeId: storeObjectId },
+                productOwnership,
+              ],
+            };
 
-    return handleResponse(res, 200, "Pending reviews fetched successfully", {
-      items: reviews,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit) || 1,
-    });
+    const filters = buildReviewFilters(req.query);
+    filters.status = "approved";
+    delete filters.targetType;
+    const result = await findReviewsPage(req, { ...filters, ...ownership });
+    return handleResponse(res, 200, "Seller reviews fetched successfully", result);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }
