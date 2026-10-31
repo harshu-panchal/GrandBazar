@@ -90,10 +90,20 @@ export async function createSellerPayout({ store, amount, idempotencyKey, refere
         }),
   };
 
-  const res = await axios.post(`${RZP_BASE}/payouts`, body, {
-    headers: { ...authHeader(), "X-Payout-Idempotency": idempotencyKey, "Content-Type": "application/json" },
-    timeout: 20000,
-  });
+  let res;
+  try {
+    res = await axios.post(`${RZP_BASE}/payouts`, body, {
+      headers: { ...authHeader(), "X-Payout-Idempotency": idempotencyKey, "Content-Type": "application/json" },
+      timeout: 20000,
+    });
+  } catch (error) {
+    const razorpayError = error.response?.data?.error || {};
+    const description = razorpayError.description || razorpayError.reason || error.message;
+    const field = razorpayError.field ? ` (${razorpayError.field})` : "";
+    // Surface Razorpay's safe validation description, never request headers,
+    // credentials, or the submitted beneficiary account details.
+    throw new Error(`Razorpay rejected the payout${field}: ${description}`);
+  }
   return {
     payoutId: res.data?.id || "",
     status: res.data?.status || "processing",

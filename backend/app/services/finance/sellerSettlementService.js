@@ -469,7 +469,9 @@ export async function paySettlement(orderId, { mode = PAYOUT_MODE.AUTOMATIC, txn
       store: order.seller,
       amount: settledAmount,
       idempotencyKey: key,
-      referenceId: `${order.orderId}:${key}`,
+      // Razorpay caps reference_id at 40 characters. The previous full order
+      // ID + idempotency key exceeded that limit and caused HTTP 400.
+      referenceId: `SETTLE-${order.shortOrderId || String(order._id)}-${Date.now()}`.slice(0, 40),
     });
     await Payout.updateOne(
       { _id: payout._id },
