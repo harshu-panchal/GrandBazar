@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { sellerApi } from "../services/sellerApi";
 import { formatOrderId } from "@/shared/utils/orderId";
 
@@ -56,7 +57,15 @@ export default function SellerSettlementsView() {
             )}
             {rows.map((r) => (
               <tr key={r.orderId} className="border-b last:border-0">
-                <td className="px-2 py-2 font-semibold" title={r.orderId}>#{formatOrderId(r)}</td>
+                <td className="px-2 py-2 font-semibold" title={r.orderId}>
+                  <Link
+                    to={`/seller/orders?orderId=${encodeURIComponent(r.orderId)}`}
+                    className="text-brand-700 underline decoration-brand-200 underline-offset-4 transition-colors hover:text-brand-900 hover:decoration-brand-500"
+                    aria-label={`View order ${formatOrderId(r)} details`}
+                  >
+                    #{formatOrderId(r)}
+                  </Link>
+                </td>
                 <td className="px-2 py-2">{r.customerName}</td>
                 <td className="px-2 py-2">{r.date ? new Date(r.date).toLocaleDateString() : "—"}</td>
                 <td className="px-2 py-2">{fx(r.quotedAmount)}</td>

@@ -44,6 +44,7 @@ import { onSellerOrderNew, onOrderStatusUpdate } from "@core/services/orderSocke
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 import { optimizeProofImage } from "@/core/utils/imageCompression";
 import { formatOrderId } from "@/shared/utils/orderId";
+import { useSearchParams } from "react-router-dom";
 
 const ORDER_EDITABLE_STATUSES = new Set([
     'pending',
@@ -59,6 +60,68 @@ const ORDER_EDITABLE_STATUSES = new Set([
 function orderStatusControlShowsOwnBadge(order) {
     const normalizedStatus = String(order?.status || '').toLowerCase();
     return !ORDER_EDITABLE_STATUSES.has(normalizedStatus);
+}
+
+function formatSellerOrder(order) {
+    return {
+        id: order.orderId,
+        shortOrderId: order.shortOrderId,
+        _id: order._id,
+        customer: {
+            name: order.customer?.name || 'Unknown',
+            phone: order.customer?.phone || '',
+            avatar: (order.customer?.name || 'U').charAt(0)
+        },
+        items: (order.items || []).map(item => ({
+            name: item.name,
+            price: item.price,
+            qty: item.quantity,
+            image: item.image,
+            packagingType: item.product?.categoryId?.packagingType || 'standard',
+        })),
+        rawItems: (order.items || []).map(item => ({
+            product: item.product?._id || item.product,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            variantSlot: item.variantSlot,
+            image: item.image
+        })),
+        total: getSellerOrderPayout(order),
+        customerTotal: getCustomerOrderTotal(order),
+        sellerPayout: getSellerOrderPayout(order),
+        status: getLegacyStatusFromOrder(order),
+        statusLabel: getOrderStatusLabel(order),
+        workflowStatus: order.workflowStatus,
+        workflowVersion: order.workflowVersion,
+        storeReassignment: getOrderStoreReassignment(order),
+        fulfillmentType: order.fulfillmentType || 'instant',
+        logisticsMode: order.logisticsMode || null,
+        fulfillmentMethod: resolveFulfillmentMethod(order),
+        schedule: order.schedule || null,
+        reschedule: order.reschedule || null,
+        itemAdditionRequest: order.itemAdditionRequest || null,
+        priceAdjustment: order.priceAdjustment || null,
+        replacementRequests: order.replacementRequests || [],
+        splitDeliveries: order.splitDeliveries || [],
+        pickupProofImages: order.pickupProofImages || [],
+        hasCustomerComplaint: Boolean(order.complaintRef),
+        handedOverToLogisticsAt: order.handedOverToLogisticsAt || null,
+        revisedInvoices: order.revisedInvoices || [],
+        date: order.createdAt
+            ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '',
+        time: order.createdAt
+            ? new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+            : '',
+        address: order.address
+            ? `${order.address.address || ''}, ${order.address.city || ''}`.trim()
+            : '',
+        location: order.address?.location || null,
+        payment: order.payment?.method === 'cash' || order.payment?.method === 'cod'
+            ? 'Cash on Delivery'
+            : 'Online Paid'
+    };
 }
 
 function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDeliveredForSelfDelivery = false }) {
@@ -271,6 +334,9 @@ function OrderStatusControl({ order, onStatusUpdate, compact = false, hideDelive
 }
 
 const Orders = () => {
+    const [searchParams] = useSearchParams();
+    const linkedOrderId = searchParams.get('orderId') || '';
+    const openedLinkedOrderRef = useRef('');
     const [orders, setOrders] = useState([]);
     const [summary, setSummary] = useState({
         totalOrders: 0,
@@ -430,64 +496,7 @@ const Orders = () => {
                 ? payload.items
                 : (response.data.results || []);
 
-            const formattedOrders = (rawOrders || []).map(order => ({
-                id: order.orderId,
-                shortOrderId: order.shortOrderId,
-                _id: order._id,
-                customer: {
-                    name: order.customer?.name || 'Unknown',
-                    phone: order.customer?.phone || '',
-                    avatar: (order.customer?.name || 'U').charAt(0)
-                },
-                items: (order.items || []).map(item => ({
-                    name: item.name,
-                    price: item.price,
-                    qty: item.quantity,
-                    image: item.image
-                })),
-                rawItems: (order.items || []).map(item => ({
-                    product: item.product?._id || item.product,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    variantSlot: item.variantSlot,
-                    image: item.image
-                })),
-                total: getSellerOrderPayout(order),
-                customerTotal: getCustomerOrderTotal(order),
-                sellerPayout: getSellerOrderPayout(order),
-                status: getLegacyStatusFromOrder(order),
-                statusLabel: getOrderStatusLabel(order),
-                workflowStatus: order.workflowStatus,
-                workflowVersion: order.workflowVersion,
-                storeReassignment: getOrderStoreReassignment(order),
-                fulfillmentType: order.fulfillmentType || 'instant',
-                logisticsMode: order.logisticsMode || null,
-                fulfillmentMethod: resolveFulfillmentMethod(order),
-                schedule: order.schedule || null,
-                reschedule: order.reschedule || null,
-                itemAdditionRequest: order.itemAdditionRequest || null,
-                priceAdjustment: order.priceAdjustment || null,
-                replacementRequests: order.replacementRequests || [],
-                splitDeliveries: order.splitDeliveries || [],
-                pickupProofImages: order.pickupProofImages || [],
-                hasCustomerComplaint: Boolean(order.complaintRef),
-                handedOverToLogisticsAt: order.handedOverToLogisticsAt || null,
-                revisedInvoices: order.revisedInvoices || [],
-                date: order.createdAt
-                    ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '',
-                time: order.createdAt
-                    ? new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                    : '',
-                address: order.address
-                    ? `${order.address.address || ''}, ${order.address.city || ''}`.trim()
-                    : '',
-                location: order.address?.location || null,
-                payment: order.payment?.method === 'cash' || order.payment?.method === 'cod'
-                    ? 'Cash on Delivery'
-                    : 'Online Paid'
-            }));
+            const formattedOrders = (rawOrders || []).map(formatSellerOrder);
 
             setOrders(formattedOrders);
             setSummary({
@@ -811,6 +820,31 @@ const Orders = () => {
             console.error('Failed to load order fulfillment details:', error);
         }
     };
+
+    // Settlement and other seller pages can deep-link to any order, including
+    // orders that are not present on the currently loaded paginated list.
+    useEffect(() => {
+        if (!linkedOrderId || openedLinkedOrderRef.current === linkedOrderId) return undefined;
+
+        let cancelled = false;
+        openedLinkedOrderRef.current = linkedOrderId;
+        sellerApi.getOrderDetails(linkedOrderId)
+            .then((response) => {
+                if (cancelled || !response.data?.success || !response.data?.result) return;
+                setSelectedOrder(formatSellerOrder(response.data.result));
+                setAdjustMode(false);
+                setAdjustItems([]);
+                setAdjustReason('');
+                setIsDetailsModalOpen(true);
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                openedLinkedOrderRef.current = '';
+                showToast(error?.response?.data?.message || 'Failed to load order details', 'error');
+            });
+
+        return () => { cancelled = true; };
+    }, [linkedOrderId, showToast]);
 
     const handleStatusUpdate = async (orderId, newStatus, additionalData = {}) => {
         const normalizedStatus = String(newStatus).toLowerCase();
