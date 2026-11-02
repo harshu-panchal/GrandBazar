@@ -406,8 +406,19 @@ const OrderDetailPage = () => {
     };
 
     const offStatus = onOrderStatusUpdate(getToken, (payload) => {
+      // The customer room receives updates for every order belonging to the
+      // customer. Never apply another order's event to the currently open one.
+      if (!matchesOrderIdentifier(payload?.orderId, identifiersRef.current)) return;
       if (payload?.returnStatus) {
         setOrder((prev) => prev ? { ...prev, returnStatus: payload.returnStatus } : prev);
+        setReturnDetails((prev) => ({
+          ...(prev || {}),
+          ...Object.fromEntries(
+            Object.entries(payload).filter(([key, value]) =>
+              key.startsWith("return") && value !== undefined
+            )
+          ),
+        }));
       }
       // Immediately update order state from socket payload — no waiting for API re-fetch
       const ws = String(payload?.workflowStatus || "").toUpperCase();

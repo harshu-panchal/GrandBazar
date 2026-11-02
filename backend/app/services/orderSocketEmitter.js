@@ -93,9 +93,24 @@ export function emitOrderStatusUpdate(orderId, payload, customerId, sellerId, de
 /** Broadcast a return transition to customer, seller, admin and rider apps. */
 export function emitReturnStatusUpdate(order, payload = {}) {
   if (!order?.orderId) return;
+  // Send the fields used by the return cards/detail views so clients can
+  // reconcile the transition immediately. A background refetch remains a
+  // safety net, but the UI no longer depends on that request completing.
+  const returnUpdate = {
+    returnStatus: order.returnStatus,
+    returnDeliveryBoy: order.returnDeliveryBoy,
+    returnQcNote: order.returnQcNote,
+    returnRejectedReason: order.returnRejectedReason,
+    returnRefundAmount: order.returnRefundAmount,
+    returnRequestedAt: order.returnRequestedAt,
+    returnPickedAt: order.returnPickedAt,
+    returnDeliveredBackAt: order.returnDeliveredBackAt,
+    returnQcAt: order.returnQcAt,
+    refundIssuedAt: order.refundIssuedAt,
+  };
   emitOrderStatusUpdate(
     order.orderId,
-    { returnStatus: payload.returnStatus || order.returnStatus, ...payload },
+    { ...returnUpdate, ...payload, returnStatus: payload.returnStatus || order.returnStatus },
     order.customer,
     order.seller,
     [order.deliveryBoy, order.returnDeliveryBoy].filter(Boolean),

@@ -150,14 +150,19 @@ const Returns = () => {
         let refreshTimer = null;
         const unsubscribeStatus = onOrderStatusUpdate(getToken, (payload) => {
             if (!payload?.orderId || !payload?.returnStatus) return;
+            const returnPatch = Object.fromEntries(
+                Object.entries(payload).filter(([key, value]) =>
+                    key.startsWith("return") && value !== undefined
+                )
+            );
             setReturns((previous) => previous.map((order) =>
                 order.orderId === payload.orderId
-                    ? { ...order, returnStatus: payload.returnStatus }
+                    ? { ...order, ...returnPatch }
                     : order
             ));
             setSelectedReturn((previous) =>
                 previous?.orderId === payload.orderId
-                    ? { ...previous, returnStatus: payload.returnStatus }
+                    ? { ...previous, ...returnPatch }
                     : previous
             );
             clearTimeout(refreshTimer);
