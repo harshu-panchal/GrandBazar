@@ -54,6 +54,21 @@ function mapItemsForPricing(items = []) {
   }));
 }
 
+/** Reprice an existing order without changing its fulfillment contract. */
+function buildAdjustmentPricingSnapshot(order, items) {
+  return buildCheckoutPricingSnapshot({
+    orderItems: mapItemsForPricing(items),
+    address: order.address,
+    tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
+    discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
+    freeDelivery: Boolean(order.freeDeliveryApplied),
+    fulfillmentMethod: order.fulfillmentMethod,
+    orderPlacedAt: order.createdAt,
+    paymentMethod: order.paymentMode,
+    enforceServerPricing: false,
+  });
+}
+
 // Same deadline queue/job name serves both "waiting on payment" and "waiting
 // on approval" — both are just "customer hasn't responded to a pending
 // adjustment yet," and reusing the queue avoids a second job type to wire up.
@@ -238,13 +253,7 @@ export async function previewOrderPriceAdjustment({ orderId, items, sellerId = n
   }
 
   const previousGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
-  const pricingSnapshot = await buildCheckoutPricingSnapshot({
-    orderItems: mapItemsForPricing(items),
-    address: order.address,
-    tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
-    discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
-    enforceServerPricing: false,
-  });
+  const pricingSnapshot = await buildAdjustmentPricingSnapshot(order, items);
 
   const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(
     (e) => String(e.sellerId) === String(order.seller),
@@ -307,16 +316,7 @@ export async function applyOrderPriceAdjustment({
   }
 
   const previousGrandTotal = Number(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
-  const pricingSnapshot = await buildCheckoutPricingSnapshot({
-    orderItems: mapItemsForPricing(items),
-    address: order.address,
-    tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
-    discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
-    // This is the seller/admin adjusting their own order, not a customer
-    // checkout — lets mapItemsForPricing's per-line price override through
-    // instead of silently re-pricing off the live product record.
-    enforceServerPricing: false,
-  });
+  const pricingSnapshot = await buildAdjustmentPricingSnapshot(order, items);
 
   const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(
     (e) => String(e.sellerId) === String(order.seller),
@@ -891,6 +891,10 @@ export async function addItemsToOrder({ customerId, orderId, items = [], reason 
     address: order.address,
     tipAmount: Number(order.pricing?.tip || order.paymentBreakdown?.tipTotal || 0),
     discountTotal: Number(order.pricing?.discount || order.paymentBreakdown?.discountTotal || 0),
+    freeDelivery: Boolean(order.freeDeliveryApplied),
+    fulfillmentMethod: order.fulfillmentMethod,
+    orderPlacedAt: order.createdAt,
+    paymentMethod: order.paymentMode,
   });
 
   const sellerEntry = pricingSnapshot.sellerBreakdownEntries.find(

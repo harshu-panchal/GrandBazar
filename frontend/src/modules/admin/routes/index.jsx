@@ -614,11 +614,29 @@ const AdminRoutes = () => {
     });
   }, [totalUnread, pendingDeliveryCount, pendingSellerAdminCount, pendingSellerShopCount, pendingReturnCount, openComplaintCount, user, isSuperAdminOrAdmin]);
 
+  // Scoped staff may not have dashboard access. In that case /admin (the
+  // post-login destination) must land on their first visible section instead
+  // of briefly rendering a dashboard they cannot use.
+  const defaultAdminPath = React.useMemo(() => {
+    if (hasPermission("dashboard")) return "/admin";
+    for (const item of navItemsWithBadges) {
+      if (item.path && item.path !== "/admin") return item.path;
+      const firstChild = item.children?.find((child) => child.path);
+      if (firstChild?.path) return firstChild.path;
+    }
+    return "/admin/profile";
+  }, [hasPermission, navItemsWithBadges]);
+
   return (
     <DashboardLayout navItems={navItemsWithBadges} title="Admin Center">
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route
+          path="/"
+          element={hasPermission("dashboard")
+            ? <Dashboard />
+            : <Navigate to={defaultAdminPath} replace />}
+        />
         {hasPermission("staff") && <Route path="/users" element={<UserManagement />} />}
         {hasPermission("staff") && <Route path="/sessions" element={<SessionMonitor />} />}
         <Route path="/profile" element={<AdminProfile />} />
@@ -737,7 +755,7 @@ const AdminRoutes = () => {
         {hasPermission("settings") && <Route path="/settings" element={<AdminSettings />} />}
         {hasPermission("system") && <Route path="/env" element={<EnvSettings />} />}
         
-        <Route path="*" element={<Navigate to="/admin" replace />} />
+        <Route path="*" element={<Navigate to={defaultAdminPath} replace />} />
       </Routes>
     </DashboardLayout>
   );

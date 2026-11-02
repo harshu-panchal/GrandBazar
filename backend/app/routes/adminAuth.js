@@ -521,7 +521,7 @@ router.get(
     "/dashboard",
     verifyToken,
     allowRoles("admin"),
-    checkAdminPermission("wallet"),
+    checkAdminPermission("dashboard"),
     getAdminDashboard
 );
 
