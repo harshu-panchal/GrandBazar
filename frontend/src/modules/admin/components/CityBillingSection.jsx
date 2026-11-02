@@ -60,6 +60,17 @@ function normalizeIncoming(raw) {
     };
 }
 
+const inputClass =
+    'w-full rounded-xl border-none bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none ring-1 ring-slate-100 transition focus:bg-white focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60';
+const compactInputClass =
+    'w-full rounded-xl border-none bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-900 outline-none ring-1 ring-slate-100 transition focus:bg-white focus:ring-2 focus:ring-brand-200';
+const sectionClass =
+    'rounded-2xl border-none bg-white p-5 shadow-sm ring-1 ring-slate-100 space-y-4';
+const sectionTitleClass =
+    'px-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500';
+const actionButtonClass =
+    'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40';
+
 const CityBillingSection = () => {
     const { showToast } = useToast();
     const [cities, setCities] = useState([]);
@@ -275,13 +286,19 @@ const CityBillingSection = () => {
     const isDistanceMode = form.deliveryCharges.pricingMode === 'distance_based';
 
     return (
-        <Card className="p-6 space-y-6">
-            <div className="flex items-start justify-between gap-4">
+        <Card
+            className="overflow-hidden rounded-[32px] border-none bg-white shadow-xl ring-1 ring-slate-100"
+            contentClassName="p-0"
+        >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-50 bg-slate-50/30 p-6">
                 <div>
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                        <MapPin className="w-5 h-5" /> City-Wise Billing Configuration
+                    <h2 className="flex items-center gap-3 text-sm font-black uppercase tracking-widest text-slate-900">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                            <MapPin className="h-4 w-4" />
+                        </span>
+                        City-Wise Billing Configuration
                     </h2>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="mt-2 max-w-3xl text-xs font-medium leading-relaxed text-slate-500">
                         Overrides global delivery, weather and extra charges for a specific city. Cities without a
                         configuration fall back to the global defaults below.
                     </p>
@@ -289,18 +306,19 @@ const CityBillingSection = () => {
                 <button
                     type="button"
                     onClick={refreshList}
-                    className="p-2 rounded hover:bg-gray-100"
+                    className="rounded-xl bg-white p-2.5 text-slate-500 shadow-sm ring-1 ring-slate-100 transition hover:bg-slate-50 hover:text-slate-900"
                     title="Refresh"
                 >
-                    <RefreshCw className="w-4 h-4" />
+                    <RefreshCw className="h-4 w-4" />
                 </button>
             </div>
 
-            <div className="flex flex-wrap items-end gap-3">
-                <label className="flex flex-col text-sm">
-                    <span className="font-semibold text-gray-700 mb-1">Select city</span>
+            <div className="space-y-6 p-6">
+            <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-slate-50/70 p-4 ring-1 ring-slate-100">
+                <label className="flex min-w-[260px] flex-1 flex-col text-sm">
+                    <span className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Select city</span>
                     <select
-                        className="border rounded px-3 py-2 min-w-[280px]"
+                        className={inputClass}
                         value={selectedKey || form.cityKey}
                         onChange={(e) => loadCity(e.target.value)}
                     >
@@ -331,49 +349,50 @@ const CityBillingSection = () => {
                 <button
                     type="button"
                     onClick={startNewCity}
-                    className="px-3 py-2 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium"
+                    className={`${actionButtonClass} bg-brand-50 text-brand-700 hover:bg-brand-100`}
                 >
-                    <Plus className="w-4 h-4 inline mr-1" /> Add city
+                    <Plus className="h-4 w-4" /> Add city
                 </button>
                 {selectedKey && (
                     <button
                         type="button"
                         onClick={deleteConfig}
-                        className="px-3 py-2 rounded bg-red-50 text-red-700 hover:bg-red-100 text-sm font-medium"
+                        className={`${actionButtonClass} bg-rose-50 text-rose-600 ring-1 ring-rose-100 hover:bg-rose-100`}
                     >
-                        <Trash2 className="w-4 h-4 inline mr-1" /> Delete
+                        <Trash2 className="h-4 w-4" /> Delete
                     </button>
                 )}
             </div>
 
             {isLoading ? (
-                <div className="text-sm text-gray-500">Loading…</div>
+                <div className="rounded-2xl bg-slate-50 py-12 text-center text-sm font-semibold text-slate-500 ring-1 ring-slate-100">Loading…</div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <input
-                            className="border rounded px-3 py-2"
+                            className={inputClass}
                             placeholder="City key (e.g. indore)"
                             value={form.cityKey}
                             onChange={(e) => setForm((f) => ({ ...f, cityKey: e.target.value }))}
                             disabled={Boolean(selectedKey)}
                         />
                         <input
-                            className="border rounded px-3 py-2"
+                            className={inputClass}
                             placeholder="City name"
                             value={form.cityName}
                             onChange={(e) => setForm((f) => ({ ...f, cityName: e.target.value }))}
                         />
                         <input
-                            className="border rounded px-3 py-2"
+                            className={inputClass}
                             placeholder="State"
                             value={form.state}
                             onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
                         />
                     </div>
-                    <label className="inline-flex items-center gap-2 text-sm">
+                    <label className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 ring-1 ring-emerald-100">
                         <input
                             type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 accent-brand-600"
                             checked={form.isActive}
                             onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
                         />
@@ -381,27 +400,29 @@ const CityBillingSection = () => {
                     </label>
 
                     {/* Delivery charges */}
-                    <fieldset className="border rounded p-4 space-y-3">
-                        <legend className="px-2 font-semibold">Delivery charges</legend>
-                        <div className="flex gap-4">
-                            <label className="inline-flex items-center gap-2 text-sm">
+                    <fieldset className={sectionClass}>
+                        <legend className={sectionTitleClass}>Delivery charges</legend>
+                        <div className="inline-flex rounded-xl bg-slate-100 p-1">
+                            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${!isDistanceMode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                                 <input
                                     type="radio"
+                                    className="accent-brand-600"
                                     checked={!isDistanceMode}
                                     onChange={() => updateDelivery({ pricingMode: 'fixed_price' })}
                                 />
                                 Fixed
                             </label>
-                            <label className="inline-flex items-center gap-2 text-sm">
+                            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${isDistanceMode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                                 <input
                                     type="radio"
+                                    className="accent-brand-600"
                                     checked={isDistanceMode}
                                     onChange={() => updateDelivery({ pricingMode: 'distance_based' })}
                                 />
                                 Distance-based
                             </label>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                             {isDistanceMode ? (
                                 <>
                                     <NumberField label="Base charge (₹)" value={form.deliveryCharges.baseCharge}
@@ -429,33 +450,34 @@ const CityBillingSection = () => {
                     </fieldset>
 
                     {/* Weather */}
-                    <fieldset className="border rounded p-4 space-y-3">
-                        <legend className="px-2 font-semibold flex items-center gap-2">
-                            <CloudRain className="w-4 h-4" /> Weather charge
+                    <fieldset className={sectionClass}>
+                        <legend className={`${sectionTitleClass} inline-flex items-center gap-2`}>
+                            <CloudRain className="h-4 w-4" /> Weather charge
                         </legend>
-                        <label className="inline-flex items-center gap-2 text-sm">
+                        <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
                             <input
                                 type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 accent-brand-600"
                                 checked={form.weatherCharges.enabled}
                                 onChange={(e) => updateWeather({ enabled: e.target.checked })}
                             />
                             Enable weather charge for this city
                         </label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                             <NumberField label="Amount (₹)" value={form.weatherCharges.amount}
                                 onChange={(v) => updateWeather({ amount: v })} />
-                            <input className="border rounded px-3 py-2 col-span-2"
+                            <input className={`${inputClass} sm:col-span-2`}
                                 placeholder="Reason (e.g. Heavy rain)"
                                 value={form.weatherCharges.reason}
                                 onChange={(e) => updateWeather({ reason: e.target.value })} />
-                            <div className="text-sm text-gray-600 self-center">
+                            <div className="self-center rounded-xl bg-slate-50 px-3 py-3 text-xs font-bold text-slate-600 ring-1 ring-slate-100">
                                 Status:{' '}
-                                <span className={form.weatherCharges.active ? 'text-green-600 font-semibold' : 'text-gray-500'}>
+                                <span className={form.weatherCharges.active ? 'text-emerald-600 font-black' : 'text-slate-400'}>
                                     {form.weatherCharges.active ? 'ACTIVE' : 'INACTIVE'}
                                 </span>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <NumberField
                                 label="Platform share (%)"
                                 value={form.weatherCharges.revenueSplit.platform}
@@ -486,7 +508,7 @@ const CityBillingSection = () => {
                                 Number(form.weatherCharges.revenueSplit.seller || 0);
                             if (sum === 100) return null;
                             return (
-                                <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                                <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
                                     Platform + Seller must equal 100% (currently {sum}%). Adjust one field —
                                     the other will auto-balance.
                                 </p>
@@ -502,7 +524,7 @@ const CityBillingSection = () => {
                                             ? "Save the city configuration first, then activate"
                                             : "Apply this weather charge to new orders immediately"
                                     }
-                                    className="px-3 py-2 rounded bg-orange-600 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className={`${actionButtonClass} bg-amber-500 text-white shadow-sm shadow-amber-200 hover:bg-amber-600`}
                                     disabled={!selectedKey}
                                 >
                                     Activate now
@@ -510,14 +532,14 @@ const CityBillingSection = () => {
                                 <button
                                     type="button"
                                     onClick={deactivateWeather}
-                                    className="px-3 py-2 rounded bg-gray-200 text-gray-800 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className={`${actionButtonClass} bg-slate-100 text-slate-700 hover:bg-slate-200`}
                                     disabled={!selectedKey || !form.weatherCharges.active}
                                 >
                                     Deactivate
                                 </button>
                             </div>
                             {!selectedKey && (
-                                <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 ring-1 ring-amber-100">
                                     Save the city configuration first (green button below) — the Activate button
                                     writes to a saved city row.
                                 </p>
@@ -526,33 +548,33 @@ const CityBillingSection = () => {
                     </fieldset>
 
                     {/* Extra charges */}
-                    <fieldset className="border rounded p-4 space-y-3">
+                    <fieldset className={sectionClass}>
                         <div className="flex justify-between items-center">
-                            <legend className="px-2 font-semibold">Extra charges</legend>
+                            <legend className={sectionTitleClass}>Extra charges</legend>
                             <button
                                 type="button"
                                 onClick={addExtraCharge}
-                                className="text-sm px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                className={`${actionButtonClass} bg-brand-50 text-brand-700 hover:bg-brand-100`}
                             >
-                                <Plus className="w-4 h-4 inline mr-1" /> Add
+                                <Plus className="h-4 w-4" /> Add
                             </button>
                         </div>
                         {form.extraCharges.length === 0 ? (
-                            <p className="text-sm text-gray-500">No extra charges configured.</p>
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center text-xs font-semibold text-slate-400">No extra charges configured.</div>
                         ) : (
                             <div className="space-y-2">
                                 {form.extraCharges.map((c, idx) => (
-                                    <div key={idx} className="grid grid-cols-1 md:grid-cols-6 gap-2 items-center border p-2 rounded">
-                                        <input className="border rounded px-2 py-1 text-sm" placeholder="Name"
+                                    <div key={idx} className="grid grid-cols-1 items-center gap-3 rounded-2xl bg-slate-50/70 p-3 ring-1 ring-slate-100 md:grid-cols-6">
+                                        <input className={compactInputClass} placeholder="Name"
                                             value={c.name} onChange={(e) => updateExtraCharge(idx, { name: e.target.value })} />
-                                        <select className="border rounded px-2 py-1 text-sm" value={c.type}
+                                        <select className={compactInputClass} value={c.type}
                                             onChange={(e) => updateExtraCharge(idx, { type: e.target.value })}>
                                             <option value="flat">Flat ₹</option>
                                             <option value="percentage">Percentage %</option>
                                         </select>
-                                        <input type="number" className="border rounded px-2 py-1 text-sm" placeholder="Amount"
+                                        <input type="number" className={compactInputClass} placeholder="Amount"
                                             value={c.amount} onChange={(e) => updateExtraCharge(idx, { amount: toNumber(e.target.value) })} />
-                                        <select className="border rounded px-2 py-1 text-sm" value={c.appliesTo}
+                                        <select className={compactInputClass} value={c.appliesTo}
                                             onChange={(e) => updateExtraCharge(idx, { appliesTo: e.target.value })}>
                                             <option value="all_orders">All orders</option>
                                             <option value="cod">COD only</option>
@@ -560,7 +582,7 @@ const CityBillingSection = () => {
                                             <option value="delivery">Delivery only</option>
                                             <option value="minimum_order_value">Min-order</option>
                                         </select>
-                                        <select className="border rounded px-2 py-1 text-sm" value={c.revenueType}
+                                        <select className={compactInputClass} value={c.revenueType}
                                             onChange={(e) => updateExtraCharge(idx, { revenueType: e.target.value })}>
                                             <option value="platform">Platform</option>
                                             <option value="seller">Seller</option>
@@ -568,13 +590,13 @@ const CityBillingSection = () => {
                                             <option value="split">Split</option>
                                         </select>
                                         <div className="flex items-center gap-2">
-                                            <label className="text-xs inline-flex items-center gap-1">
-                                                <input type="checkbox" checked={c.enabled}
+                                            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                                                <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-brand-600" checked={c.enabled}
                                                     onChange={(e) => updateExtraCharge(idx, { enabled: e.target.checked })} />
                                                 Enabled
                                             </label>
                                             <button type="button" onClick={() => removeExtraCharge(idx)}
-                                                className="text-red-600 hover:text-red-800" title="Remove">
+                                                className="rounded-lg p-2 text-rose-500 transition hover:bg-rose-50 hover:text-rose-700" title="Remove">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -584,60 +606,72 @@ const CityBillingSection = () => {
                         )}
                     </fieldset>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end border-t border-slate-100 pt-5">
                         <button
                             type="button"
                             onClick={saveConfig}
                             disabled={isSaving}
-                            className="px-4 py-2 rounded bg-green-600 text-white font-semibold disabled:opacity-50"
+                            className={`${actionButtonClass} bg-slate-900 px-6 text-white shadow-lg shadow-slate-200 hover:bg-slate-800`}
                         >
                             {isSaving ? 'Saving…' : 'Save city configuration'}
                         </button>
                     </div>
 
                     {/* Preview calculator */}
-                    <fieldset className="border rounded p-4 space-y-3 bg-gray-50">
-                        <legend className="px-2 font-semibold flex items-center gap-2">
-                            <Calculator className="w-4 h-4" /> Preview calculator
-                        </legend>
-                        <p className="text-xs text-gray-500">
+                    <div className="space-y-5 rounded-2xl bg-slate-900 p-5 text-white shadow-xl sm:p-6 [&_label]:text-slate-300 [&_input]:bg-white/10 [&_input]:text-white [&_input]:ring-white/10">
+                        <div className="flex items-start gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-brand-300 ring-1 ring-white/10">
+                                <Calculator className="h-4 w-4" />
+                            </span>
+                            <div>
+                                <h3 className="text-[11px] font-black uppercase tracking-[0.16em] text-white">Preview calculator</h3>
+                                <p className="mt-1 text-xs font-medium leading-relaxed text-slate-400">
                             Preview uses the live backend pricing engine, so what you see here is what real checkout would charge.
-                        </p>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <input className="border rounded px-3 py-2 text-sm"
-                                placeholder="City key"
-                                value={previewInput.cityKey}
-                                onChange={(e) => setPreviewInput((p) => ({ ...p, cityKey: e.target.value }))} />
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                            <label className="flex flex-col text-[10px] font-black uppercase tracking-wider text-slate-300">
+                                <span className="mb-1.5">City key</span>
+                                <input className="w-full rounded-xl border-none bg-white/10 px-4 py-3 text-sm font-semibold text-white outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-brand-400"
+                                    placeholder={selectedKey || "e.g. indore"}
+                                    value={previewInput.cityKey}
+                                    onChange={(e) => setPreviewInput((p) => ({ ...p, cityKey: e.target.value }))} />
+                            </label>
                             <NumberField label="Subtotal" value={previewInput.subtotal}
                                 onChange={(v) => setPreviewInput((p) => ({ ...p, subtotal: v }))} />
                             <NumberField label="Distance (km)" value={previewInput.distanceKm} step="0.1"
                                 onChange={(v) => setPreviewInput((p) => ({ ...p, distanceKm: v }))} />
-                            <select className="border rounded px-3 py-2 text-sm"
-                                value={previewInput.paymentMethod}
-                                onChange={(e) => setPreviewInput((p) => ({ ...p, paymentMethod: e.target.value }))}>
-                                <option value="ONLINE">Online</option>
-                                <option value="COD">COD</option>
-                            </select>
+                            <label className="flex flex-col text-[10px] font-black uppercase tracking-wider text-slate-300">
+                                <span className="mb-1.5">Payment method</span>
+                                <select className="w-full rounded-xl border-none bg-white/10 px-4 py-3 text-sm font-semibold text-white outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-brand-400"
+                                    value={previewInput.paymentMethod}
+                                    onChange={(e) => setPreviewInput((p) => ({ ...p, paymentMethod: e.target.value }))}>
+                                    <option className="text-slate-900" value="ONLINE">Online</option>
+                                    <option className="text-slate-900" value="COD">COD</option>
+                                </select>
+                            </label>
                             <button type="button" onClick={runPreview}
-                                className="px-3 py-2 rounded bg-indigo-600 text-white text-sm font-semibold">
+                                className={`${actionButtonClass} min-h-11 bg-brand-500 text-white shadow-lg shadow-brand-950/20 hover:bg-brand-400`}>
                                 Calculate
                             </button>
                         </div>
                         {preview && <PreviewBreakdown preview={preview} />}
-                    </fieldset>
+                    </div>
                 </>
             )}
+            </div>
         </Card>
     );
 };
 
 const NumberField = ({ label, value, onChange, step = '1' }) => (
-    <label className="flex flex-col text-xs text-gray-600">
-        <span className="mb-1">{label}</span>
+    <label className="flex flex-col text-[10px] font-black uppercase tracking-wider text-slate-500">
+        <span className="mb-1.5">{label}</span>
         <input
             type="number"
             step={step}
-            className="border rounded px-3 py-2 text-sm text-gray-900"
+            className={inputClass}
             value={value ?? 0}
             onChange={(e) => onChange(toNumber(e.target.value))}
         />
@@ -647,14 +681,14 @@ const NumberField = ({ label, value, onChange, step = '1' }) => (
 const PreviewBreakdown = ({ preview }) => {
     const b = preview.breakdown || {};
     const row = (label, value) => (
-        <div className="flex justify-between text-sm py-1 border-b last:border-0">
-            <span className="text-gray-600">{label}</span>
-            <span className="font-medium">₹{Number(value || 0).toFixed(2)}</span>
+        <div className="flex justify-between border-b border-slate-100 py-2 text-sm last:border-0">
+            <span className="font-medium text-slate-500">{label}</span>
+            <span className="font-black text-slate-900">₹{Number(value || 0).toFixed(2)}</span>
         </div>
     );
     return (
-        <div className="bg-white border rounded p-3">
-            <div className="text-xs text-gray-500 mb-2">
+        <div className="rounded-2xl bg-white p-4 text-slate-900 shadow-lg ring-1 ring-slate-100">
+            <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Billing source: <span className="font-semibold">{preview.billing?.source}</span>
                 {preview.billing?.cityName ? ` — ${preview.billing.cityName}` : ''}
             </div>
@@ -663,12 +697,12 @@ const PreviewBreakdown = ({ preview }) => {
             {b.oddHourSurcharge > 0 && row('Odd-hour surcharge', b.oddHourSurcharge)}
             {b.weatherSurcharge > 0 && row('Weather surcharge', b.weatherSurcharge)}
             {(b.extraCharges || []).map((c, i) => (
-                <div key={i} className="flex justify-between text-sm py-1 border-b">
-                    <span className="text-gray-600">{c.name} ({c.type})</span>
-                    <span className="font-medium">₹{Number(c.amount).toFixed(2)}</span>
+                <div key={i} className="flex justify-between border-b border-slate-100 py-2 text-sm">
+                    <span className="font-medium text-slate-500">{c.name} ({c.type})</span>
+                    <span className="font-black text-slate-900">₹{Number(c.amount).toFixed(2)}</span>
                 </div>
             ))}
-            <div className="flex justify-between text-base font-bold pt-2 mt-2 border-t">
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-3 text-base font-black">
                 <span>Grand total</span>
                 <span>₹{Number(b.grandTotal || 0).toFixed(2)}</span>
             </div>

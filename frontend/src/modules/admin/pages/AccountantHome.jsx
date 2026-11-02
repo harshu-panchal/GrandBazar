@@ -154,28 +154,47 @@ const AccountantHome = () => {
         </div>
       </Card>
 
-      <div>
-        <p className="text-xs font-bold uppercase text-slate-400 mb-2">Seller money (GMV) — not platform revenue</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="rounded-3xl bg-slate-50/70 p-4 ring-1 ring-slate-100 sm:p-5">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-700">Seller money</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">Order value and seller settlement flow — not platform revenue.</p>
+          </div>
+          <span className="w-fit rounded-full bg-white px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500 ring-1 ring-slate-100">GMV overview</span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <StatCard label="Total GMV" value={formatMoney(gmv.gmv)} icon={HiOutlineShoppingCart} color="text-brand-600" bg="bg-brand-50" />
+          <StatCard label="Gateway Collected" value={formatMoney(gmv.gatewayCollected)} icon={HiOutlineBanknotes} color="text-sky-600" bg="bg-sky-50" />
           <StatCard label="Total Orders" value={gmv.orderCount} icon={HiOutlineShoppingCart} color="text-slate-600" bg="bg-slate-50" />
           <StatCard label="Seller Payable" value={formatMoney(gmv.sellerPayable)} icon={HiOutlineBanknotes} color="text-emerald-600" bg="bg-emerald-50" />
           <StatCard label="Seller Paid" value={formatMoney(gmv.sellerPaid)} icon={HiOutlineBanknotes} color="text-emerald-600" bg="bg-emerald-50" />
           <StatCard label="Seller Pending" value={formatMoney(gmv.sellerPending)} icon={HiOutlineBanknotes} color="text-amber-600" bg="bg-amber-50" />
-          <StatCard label="Gateway Collected" value={formatMoney(gmv.gatewayCollected)} icon={HiOutlineBanknotes} color="text-sky-600" bg="bg-sky-50" />
         </div>
-      </div>
+      </section>
 
-      <div>
-        <p className="text-xs font-bold uppercase text-slate-400 mb-2">Platform's own revenue</p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="rounded-3xl bg-violet-50/40 p-4 ring-1 ring-violet-100/70 sm:p-5">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-700">Platform revenue</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">Income retained by the platform, taxes collected, and refunds.</p>
+          </div>
+          <span className="w-fit rounded-full bg-white px-3 py-1 text-[9px] font-black uppercase tracking-widest text-violet-600 ring-1 ring-violet-100">Revenue overview</span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+          <StatCard
+            label="Net Revenue"
+            value={formatMoney(revenue.netRevenue)}
+            icon={HiOutlineArrowTrendingUp}
+            color="text-emerald-300"
+            bg="bg-white/10"
+            className="sm:col-span-2 xl:col-span-2 bg-slate-900 ring-0 [&_.ds-caption]:text-slate-300 [&_.ds-stat-large]:text-white"
+          />
           <StatCard label="Commission" value={formatMoney(revenue.commission)} icon={HiOutlineReceiptPercent} color="text-violet-600" bg="bg-violet-50" />
           <StatCard label="Subscription Income" value={formatMoney(revenue.subscriptionIncome)} icon={HiOutlineArrowTrendingUp} color="text-violet-600" bg="bg-violet-50" />
-          <StatCard label="Refunds" value={formatMoney(revenue.refunds)} icon={HiOutlineReceiptPercent} color="text-red-600" bg="bg-red-50" />
-          <StatCard label="Net Revenue" value={formatMoney(revenue.netRevenue)} icon={HiOutlineArrowTrendingUp} color="text-emerald-600" bg="bg-emerald-50" />
+          <StatCard label="Refunds" value={formatMoney(revenue.refunds)} icon={HiOutlineReceiptPercent} color="text-rose-600" bg="bg-rose-50" />
           <StatCard label="GST Collected" value={formatMoney(revenue.gstCollected)} icon={HiOutlineReceiptPercent} color="text-sky-600" bg="bg-sky-50" />
         </div>
-      </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {reconciliation.mismatches.length > 0 && (
