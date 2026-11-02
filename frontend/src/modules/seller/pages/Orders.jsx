@@ -571,16 +571,10 @@ const Orders = () => {
                         sellerApi.getOrderDetails(targetId).then((res) => {
                             if (res.data?.success && res.data.result) {
                                 const full = res.data.result;
+                                const formattedFull = formatSellerOrder(full);
                                 setSelectedOrder((prev) => (prev ? {
                                     ...prev,
-                                    itemAdditionRequest: full.itemAdditionRequest || null,
-                                    priceAdjustment: full.priceAdjustment || null,
-                                    reschedule: full.reschedule || null,
-                                    workflowStatus: full.workflowStatus || prev.workflowStatus,
-                                    status: getLegacyStatusFromOrder(full),
-                                    statusLabel: getOrderStatusLabel(full),
-                                    pickupProofImages: full.pickupProofImages || [],
-                                    handedOverToLogisticsAt: full.handedOverToLogisticsAt || null,
+                                    ...formattedFull,
                                 } : null));
                             }
                         }).catch(() => {});
@@ -792,28 +786,10 @@ const Orders = () => {
             const response = await sellerApi.getOrderDetails(order.id);
             if (response.data?.success) {
                 const full = response.data.result || {};
+                const formattedFull = formatSellerOrder(full);
                 setSelectedOrder((prev) => ({
                     ...prev,
-                    fulfillmentType: full.fulfillmentType || prev?.fulfillmentType,
-                    logisticsMode: full.logisticsMode || prev?.logisticsMode,
-                    workflowStatus: full.workflowStatus || prev?.workflowStatus,
-                    fulfillmentMethod: resolveFulfillmentMethod(full),
-                    schedule: full.schedule || prev?.schedule,
-                    reschedule: full.reschedule || prev?.reschedule,
-                    itemAdditionRequest: full.itemAdditionRequest || prev?.itemAdditionRequest || null,
-                    priceAdjustment: full.priceAdjustment || prev?.priceAdjustment || null,
-                    replacementRequests: full.replacementRequests || prev?.replacementRequests || [],
-                    splitDeliveries: full.splitDeliveries || prev?.splitDeliveries || [],
-                    pickupProofImages: full.pickupProofImages || prev?.pickupProofImages || [],
-                    handedOverToLogisticsAt: full.handedOverToLogisticsAt || prev?.handedOverToLogisticsAt || null,
-                    storeReassignment:
-                        getOrderStoreReassignment(full) || prev?.storeReassignment || null,
-                    items: Array.isArray(prev?.items)
-                        ? prev.items.map((item, idx) => ({
-                              ...item,
-                              packagingType: full.items?.[idx]?.product?.categoryId?.packagingType || 'standard',
-                          }))
-                        : prev?.items,
+                    ...formattedFull,
                 }));
             }
         } catch (error) {
@@ -1295,7 +1271,23 @@ const Orders = () => {
     };
 
     const openSplitModal = async (order) => {
-        if (!order || !Array.isArray(order.rawItems) || order.rawItems.length < 2) {
+        if (!order) return;
+
+        // Item additions/replacements can change the order while this modal is
+        // already open. Validate against the server, not the list-card snapshot.
+        let currentOrder = order;
+        try {
+            const details = await sellerApi.getOrderDetails(order.id || order._id);
+            if (details.data?.success && details.data.result) {
+                currentOrder = formatSellerOrder(details.data.result);
+                setSelectedOrder((prev) => ({ ...prev, ...currentOrder }));
+            }
+        } catch (error) {
+            showToast(error?.response?.data?.message || 'Failed to refresh order items', 'error');
+            return;
+        }
+
+        if (!Array.isArray(currentOrder.rawItems) || currentOrder.rawItems.length < 2) {
             showToast('At least 2 items required for split delivery', 'error');
             return;
         }
