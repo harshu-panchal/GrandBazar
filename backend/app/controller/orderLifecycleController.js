@@ -17,6 +17,7 @@ import {
 import {
   applyOrderPriceAdjustment,
   previewOrderPriceAdjustment,
+  initiatePriceDifferencePayment,
   payPriceDifference,
   approveOrderAdjustment,
   rejectOrderAdjustment,
@@ -373,8 +374,17 @@ export const rejectItemAdditionController = async (req, res) => {
 
 export const payOrderDifference = async (req, res) => {
   try {
+    const checkout = await initiatePriceDifferencePayment(req.user.id, req.params.orderId);
+    return handleResponse(res, 201, "Extra payment initiated", checkout);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
+
+export const verifyOrderDifferencePayment = async (req, res) => {
+  try {
     const order = await payPriceDifference(req.user.id, req.params.orderId, req.body);
-    return handleResponse(res, 200, "Extra payment recorded", order);
+    return handleResponse(res, 200, "Extra payment verified", order);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

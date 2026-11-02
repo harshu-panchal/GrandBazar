@@ -25,6 +25,12 @@ import { emitNotificationEvent } from "../modules/notifications/notification.emi
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 import { computeActivationAt } from "../utils/scheduleDateUtils.js";
 import { scheduleOrderActivationJob } from "./orderSchedulingService.js";
+import {
+  createRazorpayOrder,
+  fetchRazorpayPayment,
+  razorpayCheckoutConfig,
+  verifyRazorpaySignature,
+} from "./razorpay/razorpayCheckoutClient.js";
 
 // Order states from which a customer can no longer add items — packing has
 // started (or the order is otherwise past the point of editing).
@@ -128,7 +134,9 @@ export async function issueCreditNoteAndRefund(order, deltaAmount, reason, actor
     amount: deltaAmount,
     reason,
     status: "issued",
-    refundMode: order.paymentMode === "ONLINE" ? "original_payment" : "wallet",
+    // Price-adjustment decreases are intentionally credited to the customer's
+    // wallet, including when the original order was paid online.
+    refundMode: "wallet",
     issuedByModel: actorLabel === "seller" ? "Seller" : "Admin",
   });
 
@@ -686,7 +694,7 @@ export async function rejectOrderAdjustment(customerId, orderId, { reason = "" }
   return updated;
 }
 
-export async function payPriceDifference(customerId, orderId, { walletAmount = 0 } = {}) {
+async function findPayablePriceAdjustment(customerId, orderId) {
   orderId = await requireCanonicalOrderId(orderId);
   const order = await Order.findOne({
     orderId,
@@ -701,37 +709,118 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
     throw err;
   }
 
-  const delta = Number(order.priceAdjustment?.deltaAmount || 0);
-  const walletUse = Math.min(Number(walletAmount || 0), delta);
-  if (walletUse > 0) {
-    const user = await User.findById(customerId);
-    if (!user || user.walletBalance < walletUse) {
-      const err = new Error("Insufficient wallet balance");
-      err.statusCode = 400;
-      throw err;
-    }
-    user.walletBalance -= walletUse;
-    await user.save();
-    await Transaction.create({
-      user: customerId,
-      userModel: "User",
-      order: order._id,
-      type: "Order Payment",
-      amount: -walletUse,
-      status: "Settled",
-      reference: `EXTRA-${orderId}`,
-      paymentMethod: "WALLET",
-    });
+  if (order.paymentMode !== "ONLINE") {
+    const err = new Error("Razorpay extra payment is available only for online orders");
+    err.statusCode = 400;
+    throw err;
   }
+  return order;
+}
+
+export async function initiatePriceDifferencePayment(customerId, orderId) {
+  const order = await findPayablePriceAdjustment(customerId, orderId);
+  const delta = Number(order.priceAdjustment?.deltaAmount || 0);
+  const amountPaise = Math.round(delta * 100);
+  if (amountPaise <= 0) {
+    const err = new Error("No positive price difference to pay");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  let razorpayOrderId = order.priceAdjustment?.extraPaymentGatewayOrderId || "";
+  if (!razorpayOrderId || Number(order.priceAdjustment?.extraPaymentAmountPaise || 0) !== amountPaise) {
+    const gatewayOrder = await createRazorpayOrder({
+      amountPaise,
+      currency: "INR",
+      receipt: `ADJ-${order.orderId}`.slice(0, 40),
+      notes: {
+        merchantOrderId: `ADJ-${order.orderId}`,
+        orderId: order.orderId,
+        type: "price_adjustment",
+      },
+    });
+    razorpayOrderId = gatewayOrder.razorpayOrderId;
+    await Order.updateOne(
+      { _id: order._id, "priceAdjustment.status": "pending" },
+      { $set: {
+        "priceAdjustment.extraPaymentGatewayOrderId": razorpayOrderId,
+        "priceAdjustment.extraPaymentAmountPaise": amountPaise,
+      } },
+    );
+  }
+
+  return {
+    razorpayOrderId,
+    amount: amountPaise,
+    currency: "INR",
+    keyId: razorpayCheckoutConfig().keyId,
+  };
+}
+
+export async function payPriceDifference(customerId, orderId, {
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+} = {}) {
+  const order = await findPayablePriceAdjustment(customerId, orderId);
+  const expectedGatewayOrderId = order.priceAdjustment?.extraPaymentGatewayOrderId;
+  const expectedAmountPaise = Math.round(Number(order.priceAdjustment?.deltaAmount || 0) * 100);
+
+  if (!razorpayOrderId || razorpayOrderId !== expectedGatewayOrderId) {
+    const err = new Error("Payment does not match this price adjustment");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!verifyRazorpaySignature({
+    orderId: razorpayOrderId,
+    paymentId: razorpayPaymentId,
+    signature: razorpaySignature,
+  })) {
+    const err = new Error("Razorpay payment signature is invalid");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const gatewayPayment = await fetchRazorpayPayment(razorpayPaymentId);
+  if (
+    String(gatewayPayment?.status || "").toLowerCase() !== "captured" ||
+    gatewayPayment?.order_id !== razorpayOrderId ||
+    Number(gatewayPayment?.amount || 0) !== expectedAmountPaise
+  ) {
+    const err = new Error("Razorpay payment is not captured for the required amount");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const delta = Number(order.priceAdjustment?.deltaAmount || 0);
 
   // Paying the difference IS the customer's approval for an online increase
   // — applies the proposed items/pricing exactly like approveOrderAdjustment
   // does for the no-payment-needed cases.
   const updated = await finalizePendingAdjustment(order, {
     actorRole: "customer",
-    extraSet: { "priceAdjustment.extraPaymentRef": `EXTRA-${orderId}` },
+    extraSet: {
+      "priceAdjustment.extraPaymentRef": razorpayPaymentId,
+      "priceAdjustment.extraPaymentGatewayPaymentId": razorpayPaymentId,
+    },
     skipNotification: true,
   });
+
+  await Transaction.findOneAndUpdate(
+    { reference: razorpayPaymentId },
+    { $setOnInsert: {
+      user: customerId,
+      userModel: "User",
+      order: order._id,
+      type: "Order Payment",
+      amount: -delta,
+      status: "Settled",
+      reference: razorpayPaymentId,
+      paymentMethod: "ONLINE",
+      meta: { orderId, purpose: "price_adjustment", razorpayOrderId },
+    } },
+    { upsert: true, new: true },
+  );
 
   await Order.updateOne(
     { _id: updated._id },
@@ -743,7 +832,7 @@ export async function payPriceDifference(customerId, orderId, { walletAmount = 0
           actorRole: "customer",
           actorId: String(customerId || ""),
           note: "Extra payment received",
-          meta: { deltaAmount: delta, walletUsed: walletUse },
+          meta: { deltaAmount: delta, razorpayOrderId, razorpayPaymentId },
           createdAt: new Date(),
         },
       },

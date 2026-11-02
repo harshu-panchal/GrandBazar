@@ -147,6 +147,8 @@ export const customerApi = {
     }),
   payOrderDifference: (orderId, data) =>
     axiosInstance.post(`/orders/${orderId}/pay-difference`, data),
+  verifyOrderDifferencePayment: (orderId, data) =>
+    axiosInstance.post(`/orders/${orderId}/pay-difference/verify`, data),
   approveOrderAdjustment: (orderId) =>
     axiosInstance.post(`/orders/${orderId}/adjustment/approve`),
   rejectOrderAdjustment: (orderId, data) =>

@@ -5,6 +5,7 @@ import AddOrderItemsModal from "./AddOrderItemsModal";
 import ComplaintWindowModal from "./ComplaintWindowModal";
 import { canCustomerAddItems, getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
 import { toast } from "sonner";
+import { openRazorpayCheckout } from "@shared/hooks/useRazorpayCheckout";
 
 // Complaints share the exact same post-delivery window as returns/refunds
 // (see backend/app/utils/returnWindow.js) — same admin setting, same
@@ -99,12 +100,43 @@ export default function OrderLifecycleActions({ order, onRefresh, onComplaintSub
   const payDifference = async () => {
     try {
       setPaying(true);
-      await customerApi.payOrderDifference(order.orderId, {});
-      toast.success("Extra payment recorded");
-      onRefresh?.();
+      const response = await customerApi.payOrderDifference(order.orderId, {});
+      const checkout = response?.data?.result;
+      if (!checkout?.razorpayOrderId) {
+        throw new Error("Unable to start Razorpay checkout");
+      }
+      await openRazorpayCheckout({
+        razorpayOrderId: checkout.razorpayOrderId,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        keyId: checkout.keyId,
+        description: `Price adjustment for order #${order.orderId}`,
+        onSuccess: async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) => {
+          try {
+            await customerApi.verifyOrderDifferencePayment(order.orderId, {
+              razorpayOrderId,
+              razorpayPaymentId,
+              razorpaySignature,
+            });
+            toast.success("Extra payment received");
+            onRefresh?.();
+          } catch (error) {
+            toast.error(error?.response?.data?.message || "Payment verification failed");
+          } finally {
+            setPaying(false);
+          }
+        },
+        onFailure: (error) => {
+          toast.error(error?.description || "Payment failed");
+          setPaying(false);
+        },
+        onDismiss: () => {
+          toast.info("Payment cancelled");
+          setPaying(false);
+        },
+      });
     } catch (e) {
       toast.error(e.response?.data?.message || "Payment failed");
-    } finally {
       setPaying(false);
     }
   };

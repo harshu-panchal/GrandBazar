@@ -87,6 +87,7 @@ import {
   previewAdjustOrder,
   partialCancelOrder,
   payOrderDifference,
+  verifyOrderDifferencePayment,
   approveOrderAdjustmentController,
   rejectOrderAdjustmentController,
   addOrderItems,
@@ -525,6 +526,12 @@ router.post(
   verifyToken,
   allowRoles("customer", "user"),
   payOrderDifference,
+);
+router.post(
+  "/:orderId/pay-difference/verify",
+  verifyToken,
+  allowRoles("customer", "user"),
+  verifyOrderDifferencePayment,
 );
 router.post(
   "/:orderId/adjustment/approve",
