@@ -54,7 +54,13 @@ export default function ComplaintConsolePage() {
     adminApi
       .getComplaint(complaintId)
       .then((res) => {
-        setDetail(res.data?.result || null);
+        const nextDetail = res.data?.result || null;
+        const nextComplaint = nextDetail?.complaint;
+        setDetail(nextDetail);
+        if (nextComplaint) {
+          setCulprit(nextComplaint.culprit || CULPRITS[0].value);
+          setAmount(Number(nextComplaint.amount) > 0 ? String(nextComplaint.amount) : "");
+        }
         setErr("");
       })
       .catch((e) => setErr(e.response?.data?.message || "Failed to load complaint"));
@@ -187,7 +193,7 @@ export default function ComplaintConsolePage() {
             {isFeedback && c.status !== "CLOSED" && (
               <div className="rounded-2xl border bg-white p-4">
                 <button
-                  disabled={busy}
+                  disabled={busy || (culprit !== "CUSTOMER" && !(Number(amount) > 0))}
                   onClick={() => run(() => adminApi.acknowledgeFeedback(c.complaintId))}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                 >
@@ -246,19 +252,25 @@ export default function ComplaintConsolePage() {
                   <div className="flex flex-wrap gap-2 items-center">
                     <select
                       value={culprit}
-                      onChange={(e) => setCulprit(e.target.value)}
+                      onChange={(e) => {
+                        setCulprit(e.target.value);
+                        setAmount(Number(c.amount) > 0 ? String(c.amount) : "");
+                      }}
                       className="rounded-lg border px-2 py-1.5 text-sm"
                     >
                       {CULPRITS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
-                    {culprit !== "SELLER" && culprit !== "CUSTOMER" && (
+                    {culprit !== "CUSTOMER" && (
                       <input
                         type="number"
+                        min="0.01"
+                        step="0.01"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
-                        placeholder="Refund ₹"
+                        placeholder={culprit === "SELLER" ? "Requested refund ₹" : "Refund ₹"}
+                        aria-label={culprit === "SELLER" ? "Admin-requested seller refund amount" : "Refund amount"}
                         className="w-28 rounded-lg border px-2 py-1.5 text-sm"
                       />
                     )}
@@ -287,10 +299,12 @@ export default function ComplaintConsolePage() {
                     </button>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Seller approves their own amount. For other parties, enter the refund here. Reassign any number of times.
+                    {culprit === "SELLER"
+                      ? "Enter the refund amount requested from the seller. The seller will see it and confirm or reject it."
+                      : "Enter the refund amount for the responsible party. Reassign any number of times."}
                   </p>
                   <div className="text-sm">
-                    Culprit: <b>{c.culprit || "Not decided"}</b> · Amount: <b>₹{c.amount || 0}</b>
+                    Culprit: <b>{c.culprit || "Not decided"}</b> · {c.culprit === "SELLER" && c.sellerDecision?.decision !== "approved" ? "Requested refund" : "Amount"}: <b>₹{c.amount || 0}</b>
                     {c.culprit === "SELLER" && (
                       <> · Seller decision: <b>{c.sellerDecision?.decision || "pending"}</b></>
                     )}

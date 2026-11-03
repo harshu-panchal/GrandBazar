@@ -19,6 +19,8 @@ export function TaxesAndChargesDropdown({
   oddHourSurchargeAmount,
   weatherSurchargeAmount,
   taxAmount,
+  taxableAmount,
+  gstRates = [],
   cgstAmount,
   sgstAmount,
   igstAmount,
@@ -38,6 +40,18 @@ export function TaxesAndChargesDropdown({
   const extra = Number(customerSurchargeAmount || 0);
   const oddHour = Number(oddHourSurchargeAmount || 0);
   const weather = Number(weatherSurchargeAmount || 0);
+  const appliedGstRates = [...new Set(
+    gstRates.map(Number).filter((rate) => Number.isFinite(rate) && rate > 0),
+  )].sort((a, b) => a - b);
+  if (appliedGstRates.length === 0 && totalTaxes > 0 && Number(taxableAmount) > 0) {
+    appliedGstRates.push((totalTaxes / Number(taxableAmount)) * 100);
+  }
+  const gstRateLabel = appliedGstRates.length
+    ? appliedGstRates.map((rate) => `${Number(rate.toFixed(2))}%`).join(", ")
+    : "";
+  const splitGstRateLabel = appliedGstRates.length
+    ? appliedGstRates.map((rate) => `${Number((rate / 2).toFixed(2))}%`).join(", ")
+    : "";
 
   const grandTotal =
     handling + packing + packaging + extra + oddHour + weather + totalTaxes;
@@ -115,23 +129,23 @@ export function TaxesAndChargesDropdown({
               )}
               {isInterState ? (
                 <div className="flex justify-between items-center text-slate-600 pt-1 border-t border-slate-200/60">
-                  <span className="font-semibold">IGST</span>
+                  <span className="font-semibold">IGST{gstRateLabel ? ` (${gstRateLabel})` : ""}</span>
                   <span className="font-bold text-slate-800">₹{fmt(igstAmount)}</span>
                 </div>
               ) : cgstAmount > 0 || sgstAmount > 0 ? (
                 <div className="space-y-1 pt-1.5 border-t border-slate-200/60">
                   <div className="flex justify-between items-center text-slate-600">
-                    <span className="font-semibold">GST</span>
+                    <span className="font-semibold">GST{gstRateLabel ? ` (${gstRateLabel})` : ""}</span>
                     <span className="font-bold text-slate-800">
                       ₹{fmt(Number(cgstAmount) + Number(sgstAmount))}
                     </span>
                   </div>
                   <div className="flex justify-between items-center pl-2 text-[11px] text-slate-400">
-                    <span>CGST</span>
+                    <span>CGST{splitGstRateLabel ? ` (${splitGstRateLabel})` : ""}</span>
                     <span>₹{fmt(cgstAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center pl-2 text-[11px] text-slate-400">
-                    <span>SGST</span>
+                    <span>SGST{splitGstRateLabel ? ` (${splitGstRateLabel})` : ""}</span>
                     <span>₹{fmt(sgstAmount)}</span>
                   </div>
                 </div>
@@ -181,6 +195,7 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
   const packingFee = pricingPreview?.packingFeeCharged || 0;
   const tipAmount = pricingPreview?.tipTotal || selectedTip || 0;
   const taxAmount = pricingPreview?.taxTotal || 0;
+  const gstRates = (pricingPreview?.lineItems || []).map((item) => item.gstSlab);
   const cgstAmount = pricingPreview?.cgstTotal || 0;
   const sgstAmount = pricingPreview?.sgstTotal || 0;
   const igstAmount = pricingPreview?.igstTotal || 0;
@@ -268,6 +283,8 @@ const CheckoutPricingBreakdown = React.memo(function CheckoutPricingBreakdown({
             oddHourSurchargeAmount={oddHourSurchargeAmount}
             weatherSurchargeAmount={weatherSurchargeAmount}
             taxAmount={taxAmount}
+            taxableAmount={pricingPreview?.productSubtotal ?? cartTotal}
+            gstRates={gstRates}
             cgstAmount={cgstAmount}
             sgstAmount={sgstAmount}
             igstAmount={igstAmount}

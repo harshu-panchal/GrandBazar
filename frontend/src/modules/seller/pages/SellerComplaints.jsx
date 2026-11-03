@@ -23,7 +23,17 @@ export default function SellerComplaints() {
   const loadDetail = (id) => {
     sellerApi
       .getComplaint(id)
-      .then((res) => { setDetail(res.data?.result || null); setErr(""); })
+      .then((res) => {
+        const nextDetail = res.data?.result || null;
+        const nextComplaint = nextDetail?.complaint;
+        setDetail(nextDetail);
+        setAmount(
+          nextComplaint?.culprit === "SELLER" && nextComplaint.status === "ASSIGNED" && Number(nextComplaint.amount) > 0
+            ? String(nextComplaint.amount)
+            : "",
+        );
+        setErr("");
+      })
       .catch((e) => setErr(e.response?.data?.message || "Failed to load"));
   };
 
@@ -75,6 +85,11 @@ export default function SellerComplaints() {
             <div className="text-xs text-slate-500 mt-1" title={item.orderPublicId}>
               Order {formatOrderId(item.orderPublicId)}
             </div>
+            {item.culprit === "SELLER" && item.status === "ASSIGNED" && Number(item.amount) > 0 && (
+              <div className="mt-1 text-xs font-bold text-indigo-700">
+                Admin requested refund: ₹{Number(item.amount).toFixed(2)}
+              </div>
+            )}
           </button>
         ))}
       </div>
@@ -130,11 +145,18 @@ export default function SellerComplaints() {
             {pending ? (
               <div className="rounded-xl border p-3 space-y-2">
                 <b>Your decision</b>
+                <div className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+                  Admin requested a refund of <b>₹{Number(c.amount || 0).toFixed(2)}</b> for this complaint.
+                  You can approve this amount or enter a different amount below.
+                </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <input
                     type="number"
+                    min="0.01"
+                    step="0.01"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
+                    aria-label="Refund amount to approve"
                     placeholder="Amount ₹"
                     className="w-28 rounded-lg border px-2 py-1.5 text-sm"
                   />

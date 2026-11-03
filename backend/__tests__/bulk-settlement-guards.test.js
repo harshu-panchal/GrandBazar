@@ -5,6 +5,7 @@ import { jest } from "@jest/globals";
 
 const mockOrderFind = jest.fn();
 const mockComputeChecks = jest.fn();
+const mockStoreFind = jest.fn();
 
 function chain(result) {
   const obj = {};
@@ -19,7 +20,10 @@ jest.unstable_mockModule("../app/models/order.js", () => ({
   default: { find: (...a) => mockOrderFind(...a) },
 }));
 jest.unstable_mockModule("../app/models/store.js", () => ({
-  default: { findById: () => chain({ shopName: "Fresh Basket" }) },
+  default: {
+    find: (...args) => mockStoreFind(...args),
+    findById: () => chain({ shopName: "Fresh Basket" }),
+  },
 }));
 jest.unstable_mockModule("../app/models/complaint.js", () => ({
   default: { find: () => chain([]) },
@@ -47,7 +51,12 @@ jest.unstable_mockModule("../app/services/finance/sellerSettlementService.js", (
   paySettlement: jest.fn(),
 }));
 
-const { previewBulk, payBulk } = await import("../app/services/finance/bulkSettlementService.js");
+const {
+  previewBulk,
+  payBulk,
+  listSellerUnsettledOrders,
+  listBulkSettlementSellers,
+} = await import("../app/services/finance/bulkSettlementService.js");
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -55,6 +64,77 @@ beforeEach(() => {
 });
 
 describe("Bulk Settlement guards", () => {
+  test("bulk settlement seller options include only active verified stores", async () => {
+    mockStoreFind.mockReturnValue(chain([
+      { _id: "S1", shopName: "Fresh Basket" },
+    ]));
+
+    await expect(listBulkSettlementSellers()).resolves.toEqual([
+      { id: "S1", shopName: "Fresh Basket" },
+    ]);
+    expect(mockStoreFind).toHaveBeenCalledWith({
+      isVerified: true,
+      isActive: true,
+      applicationStatus: "approved",
+    });
+  });
+
+  test("bulk order list only returns orders with all four checks green", async () => {
+    mockOrderFind.mockReturnValue(chain([
+      {
+        orderId: "READY",
+        seller: "S1",
+        deliveredAt: new Date(),
+        customer: { name: "Customer 1" },
+        sellerSettlement: { deductions: { complaint: 40 } },
+        paymentBreakdown: {
+          grandTotal: 323.64,
+          taxTotal: 35.64,
+          adminProductCommissionTotal: 18,
+          deliveryFeeCharged: 30,
+          riderPayoutTotal: 30,
+          sellerPayoutTotal: 181,
+        },
+        items: [{ name: "Product", quantity: 1, price: 181 }],
+        _ready: true,
+        _q: 181,
+        _amt: 141,
+      },
+      { orderId: "WAITING", seller: "S1", deliveredAt: new Date(), customer: { name: "Customer 2" }, _ready: false },
+    ]));
+    mockComputeChecks.mockImplementation((o) => ({
+      ready: o._ready,
+      dots: [
+        { key: "delivered", dot: "g" },
+        { key: "payment", dot: "g" },
+        { key: "complaint", dot: o._ready ? "g" : "a" },
+        { key: "penalty", dot: "g" },
+      ],
+    }));
+
+    const orders = await listSellerUnsettledOrders("S1");
+
+    expect(orders.map((order) => order.orderId)).toEqual(["READY"]);
+    expect(orders[0].dots).toHaveLength(4);
+    expect(orders[0].dots.every((dot) => dot.dot === "g")).toBe(true);
+    expect(orders[0]).toMatchObject({
+      quotedAmount: 181,
+      settledAmount: 141,
+      deductions: { complaint: 40 },
+      orderMoney: {
+        customerPaid: 323.64,
+        itemPrice: 181,
+        gst: 35.64,
+        commission: 18,
+        deliveryCharge: 30,
+        riderCost: 30,
+        gatewayFee: 7.61,
+        gatewayFeePercent: 2.35,
+      },
+      items: [{ name: "Product", quantity: 1, lineTotal: 181 }],
+    });
+  });
+
   test("scenario 12: orders from two sellers are blocked", async () => {
     mockOrderFind.mockReturnValue(
       chain([

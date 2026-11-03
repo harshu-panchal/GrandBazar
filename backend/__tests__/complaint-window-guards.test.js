@@ -18,6 +18,7 @@ jest.unstable_mockModule("../app/models/order.js", () => ({
 jest.unstable_mockModule("../app/models/complaint.js", () => ({
   default: { findOne: mockComplaintFindOne, create: jest.fn(), updateOne: jest.fn(), findById: jest.fn() },
 }));
+jest.unstable_mockModule("../app/models/refund.js", () => ({ default: { create: jest.fn() } }));
 jest.unstable_mockModule("../app/models/complaintItem.js", () => ({ default: { create: jest.fn(), find: jest.fn() } }));
 jest.unstable_mockModule("../app/models/complaintEvent.js", () => ({ default: { create: jest.fn(), find: jest.fn() } }));
 jest.unstable_mockModule("../app/models/callLog.js", () => ({ default: { create: jest.fn(), find: jest.fn() } }));

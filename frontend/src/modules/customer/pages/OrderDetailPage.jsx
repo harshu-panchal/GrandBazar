@@ -1405,6 +1405,10 @@ const OrderDetailPage = () => {
               oddHourSurchargeAmount={order.paymentBreakdown?.oddHourSurchargeAmount}
               weatherSurchargeAmount={order.paymentBreakdown?.weatherSurchargeAmount}
               taxAmount={order.paymentBreakdown?.taxTotal}
+              taxableAmount={order.paymentBreakdown?.productSubtotal ?? order.pricing?.subtotal}
+              gstRates={(order.paymentBreakdown?.lineItems || order.items || []).map(
+                (item) => item.gstSlab ?? item.gstRate ?? item.gst,
+              )}
               cgstAmount={order.paymentBreakdown?.cgstTotal}
               sgstAmount={order.paymentBreakdown?.sgstTotal}
               igstAmount={order.paymentBreakdown?.igstTotal}

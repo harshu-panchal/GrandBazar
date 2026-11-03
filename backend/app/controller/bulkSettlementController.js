@@ -4,6 +4,7 @@ import {
   payBulk,
   getBulkSettlement,
   listBulkSettlements,
+  listBulkSettlementSellers,
   listSellerUnsettledOrders,
 } from "../services/finance/bulkSettlementService.js";
 
@@ -11,6 +12,15 @@ import {
 // the routes; one-seller + ready-only + idempotency are enforced in the service.
 
 const actorOf = (req) => ({ id: req.user?.id, role: req.user?.role });
+
+export const listBulkSettlementSellersHandler = async (_req, res) => {
+  try {
+    const items = await listBulkSettlementSellers();
+    return handleResponse(res, 200, "Settlement sellers", { items });
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+};
 
 export const listSellerUnsettledHandler = async (req, res) => {
   try {

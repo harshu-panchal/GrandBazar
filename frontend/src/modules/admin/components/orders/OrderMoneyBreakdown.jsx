@@ -16,7 +16,7 @@ import {
     Info,
 } from 'lucide-react';
 
-const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const SETTLEMENT_BADGE_STYLES = {
     NOT_APPLICABLE: 'bg-slate-100 text-slate-500 border-slate-200',
@@ -64,12 +64,27 @@ const RecipientTile = ({ icon: Icon, label, amount, description, accent }) => (
     </div>
 );
 
-const OrderMoneyBreakdown = ({ order }) => {
+const OrderMoneyBreakdown = ({ order, refundBreakdown }) => {
     const [showLineItems, setShowLineItems] = useState(false);
     const pb = order?.paymentBreakdown || {};
     const settlement = order?.settlementStatus || {};
     const financeFlags = order?.financeFlags || {};
     const lineItems = Array.isArray(pb.lineItems) ? pb.lineItems : [];
+    const appliedGstRates = [...new Set(
+        lineItems.map((item) => Number(item.gstSlab)).filter((rate) => Number.isFinite(rate) && rate > 0),
+    )].sort((a, b) => a - b);
+    if (appliedGstRates.length === 0 && Number(pb.taxTotal || 0) > 0 && Number(pb.productSubtotal || 0) > 0) {
+        appliedGstRates.push((Number(pb.taxTotal) / Number(pb.productSubtotal)) * 100);
+    }
+    const gstRateLabel = appliedGstRates.length
+        ? appliedGstRates.map((rate) => `${Number(rate.toFixed(2))}%`).join(", ")
+        : "";
+    const splitGstRateLabel = appliedGstRates.length
+        ? appliedGstRates.map((rate) => `${Number((rate / 2).toFixed(2))}%`).join(", ")
+        : "";
+    const sellerRefundImpact = Number(refundBreakdown?.recipientImpacts?.seller || 0);
+    const sellerGross = Number(refundBreakdown?.sellerGross ?? pb.sellerPayoutTotal ?? 0);
+    const sellerNet = Number(refundBreakdown?.sellerNet ?? sellerGross);
 
     // Nothing meaningful to show for very old / legacy orders that never got
     // a frozen paymentBreakdown snapshot (pre-dates this app's finance
@@ -126,13 +141,15 @@ const OrderMoneyBreakdown = ({ order }) => {
                 <div className="p-6 space-y-8">
                     {/* Recipient summary tiles */}
                     <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Customer Paid {inr(pb.grandTotal)} — Where It Went</p>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Customer Paid {inr(pb.grandTotal)} — Seller Net Reflects Completed Refunds and Clawbacks</p>
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                             <RecipientTile
                                 icon={Store}
-                                label="Seller Got"
-                                amount={pb.sellerPayoutTotal}
-                                description="Full price seller listed — commission is added on top, not taken from this"
+                                label="Seller Got (Net)"
+                                amount={sellerNet}
+                                description={sellerRefundImpact > 0
+                                    ? `Gross ${inr(sellerGross)} − seller refunds / clawbacks ${inr(sellerRefundImpact)}`
+                                    : "Before any seller refunds or clawbacks"}
                                 accent="bg-orange-50 border-orange-100 text-orange-800"
                             />
                             <RecipientTile
@@ -153,9 +170,87 @@ const OrderMoneyBreakdown = ({ order }) => {
                                 icon={Receipt}
                                 label="Tax (Government)"
                                 amount={pb.taxTotal}
-                                description={isIntraState ? 'CGST + SGST' : 'IGST'}
+                                description={`${isIntraState ? 'CGST + SGST' : 'IGST'}${gstRateLabel ? ` · ${gstRateLabel}` : ''}`}
                                 accent="bg-slate-50 border-slate-200 text-slate-700"
                             />
+                            <RecipientTile
+                                icon={Undo2}
+                                label="Refunded to Customer"
+                                amount={refundBreakdown?.totalRefunded}
+                                description="Completed refunds across complaint, return, cancellation, and other flows"
+                                accent="bg-rose-50 border-rose-100 text-rose-800"
+                            />
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/40 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-800">Refund impact before final settlement</p>
+                                    <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                                        Seller Got reflects completed seller refunds and clawbacks. Each refund remains itemized below.
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+                                    {Number(refundBreakdown?.totalPending || 0) > 0 && (
+                                        <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">Pending {inr(refundBreakdown.totalPending)}</span>
+                                    )}
+                                    {Number(refundBreakdown?.totalFailed || 0) > 0 && (
+                                        <span className="rounded-lg bg-white px-2.5 py-1.5 text-rose-700">Failed {inr(refundBreakdown.totalFailed)}</span>
+                                    )}
+                                    {Number(refundBreakdown?.totalCodAdjustments || 0) > 0 && (
+                                        <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-700">COD adjusted {inr(refundBreakdown.totalCodAdjustments)}</span>
+                                    )}
+                                </div>
+                            </div>
+                            {refundBreakdown?.items?.length ? (
+                                <div className="mt-3 overflow-x-auto rounded-xl border border-rose-100 bg-white">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50/70">
+                                                <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Refund source</th>
+                                                <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Who bears it / impact</th>
+                                                <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Mode · status</th>
+                                                <th className="px-3 py-2 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {refundBreakdown.items.map((item) => (
+                                                <tr key={item.id}>
+                                                    <td className="px-3 py-2 text-xs font-bold text-slate-700">
+                                                        {item.source}
+                                                        {item.sourceReference && <span className="block text-[10px] font-medium text-slate-400">{item.sourceReference}</span>}
+                                                        {item.createdAt && <span className="block text-[10px] font-medium text-slate-400">{new Date(item.createdAt).toLocaleString('en-IN')}</span>}
+                                                        {item.reference && <span className="block text-[10px] font-medium text-slate-400">Ref: {item.reference}</span>}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-[10px] text-slate-600">
+                                                        <span className="font-black text-slate-800">{item.payerLabel}</span>
+                                                        {item.payerNote && <span className="block">{item.payerNote}</span>}
+                                                        {item.payer === 'shared' && (
+                                                            <span className="mt-1 block">
+                                                                {item.recipientImpacts.seller > 0 && <>Seller clawback {inr(item.recipientImpacts.seller)} · </>}
+                                                                {item.recipientImpacts.platform > 0 && <>Platform clawback {inr(item.recipientImpacts.platform)} · </>}
+                                                                {item.recipientImpacts.rider > 0 && <>Rider impact {inr(item.recipientImpacts.rider)} · </>}
+                                                                {item.recipientImpacts.tax > 0 && <>Tax impact {inr(item.recipientImpacts.tax)} · </>}
+                                                                {!Object.values(item.recipientImpacts || {}).some((amount) => amount > 0) && 'Recipient deductions not separately recorded'}
+                                                            </span>
+                                                        )}
+                                                        {item.failureReason && <span className="block text-rose-600">{item.failureReason}</span>}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-[10px] font-bold uppercase text-slate-600">
+                                                        {String(item.mode || '—').replaceAll('_', ' ')} · {item.status || '—'}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-xs font-black text-rose-600">
+                                                        {item.mode === 'cod_adjustment' ? 'COD − ' : '− '}{inr(item.amount)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-xs font-semibold text-slate-400">
+                                    No refunds or customer adjustments have been recorded for this order.
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -186,7 +281,15 @@ const OrderMoneyBreakdown = ({ order }) => {
                                     />
                                 )}
                                 {Number(pb.tipTotal || 0) > 0 && <Row label="Rider Tip" value={pb.tipTotal} sub="100% to rider" />}
-                                <Row label={isIntraState ? 'Tax (CGST + SGST)' : 'Tax (IGST)'} value={pb.taxTotal} sub={isIntraState ? `CGST ${inr(pb.cgstTotal)} + SGST ${inr(pb.sgstTotal)}` : `IGST ${inr(pb.igstTotal)}`} />
+                                <Row
+                                    label={isIntraState
+                                        ? `Tax${gstRateLabel ? ` (${gstRateLabel})` : ''} (CGST + SGST)`
+                                        : `Tax${gstRateLabel ? ` (${gstRateLabel})` : ''} (IGST)`}
+                                    value={pb.taxTotal}
+                                    sub={isIntraState
+                                        ? `CGST${splitGstRateLabel ? ` ${splitGstRateLabel}` : ''} ${inr(pb.cgstTotal)} + SGST${splitGstRateLabel ? ` ${splitGstRateLabel}` : ''} ${inr(pb.sgstTotal)}`
+                                        : `IGST${gstRateLabel ? ` ${gstRateLabel}` : ''} ${inr(pb.igstTotal)}`}
+                                />
                                 {Number(pb.discountTotal || 0) > 0 && (
                                     <Row label="Discount / Coupon" value={pb.discountTotal} tone="negative" />
                                 )}
@@ -198,7 +301,9 @@ const OrderMoneyBreakdown = ({ order }) => {
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Where It Went, Per Recipient</p>
                             <div className="divide-y divide-slate-50">
-                                <Row label="Seller Payout" value={pb.sellerPayoutTotal} bold sub="Full price the seller listed — paid in full" />
+                                <Row label="Seller Payout (Gross)" value={sellerGross} bold sub="Before seller-funded complaint refunds and clawbacks" />
+                                {sellerRefundImpact > 0 && <Row label="— Seller refunds / clawbacks" value={sellerRefundImpact} tone="negative" />}
+                                <Row label="Seller Net After Refunds" value={sellerNet} bold />
                                 <Row label="Admin / Platform Earning" value={pb.platformTotalEarning} bold />
                                 <Row label="— Product Commission" value={pb.adminProductCommissionTotal} />
                                 <Row label="— Logistics Margin" value={pb.platformLogisticsMargin} sub="Delivery + handling fees minus rider base pay" />

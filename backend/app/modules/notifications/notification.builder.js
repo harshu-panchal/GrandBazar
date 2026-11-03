@@ -780,7 +780,7 @@ function eventDefinition(eventType) {
         recipientIds: (payload) => normalizeIdList(payload.sellerId),
         title: () => "Complaint needs your decision",
         body: (payload) =>
-          `Complaint ${payload.complaintId || ""} on order #${payload.orderId || ""} was assigned to you. Approve an amount or reject.`,
+          `Complaint ${payload.complaintId || ""} on order #${payload.orderId || ""} was assigned to you. Admin requested a refund of ₹${Number(payload.amount) || 0}. Approve an amount or reject.`,
       };
     case NOTIFICATION_EVENTS.COMPLAINT_ADMIN_NEW:
       return {

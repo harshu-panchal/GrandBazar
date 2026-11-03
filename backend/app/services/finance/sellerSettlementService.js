@@ -752,6 +752,38 @@ export async function getSellerSettlementInvoice(orderId, sellerStoreId) {
     throw httpError("This order is not yours", 403);
   }
   if (!order.sellerSettlement?.invoiceNo) throw httpError("Settlement invoice not generated yet", 404);
+  const paymentBreakdown = order.paymentBreakdown || {};
+  const lineItems = Array.isArray(paymentBreakdown.lineItems) && paymentBreakdown.lineItems.length
+    ? paymentBreakdown.lineItems.map((item) => ({
+        name: item.productName || item.name || "Item",
+        quantity: Number(item.quantity || 0),
+        unitPrice: roundCurrency(item.unitPrice ?? item.price ?? 0),
+        subtotal: roundCurrency(item.itemSubtotal ?? Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity || 0)),
+        gstRate: Number(item.gstSlab ?? item.gstRate ?? item.gst ?? 0),
+        cgst: roundCurrency(item.cgst || 0),
+        sgst: roundCurrency(item.sgst || 0),
+        igst: roundCurrency(item.igst || 0),
+      }))
+    : (order.items || []).map((item) => {
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = roundCurrency(item.price || 0);
+        const subtotal = roundCurrency(unitPrice * quantity);
+        const gstRate = Number(item.gstSlab ?? item.gstRate ?? item.gst ?? 0);
+        const tax = roundCurrency(subtotal * gstRate / 100);
+        const isInterState = paymentBreakdown.taxJurisdiction === "inter_state";
+        const cgst = isInterState ? 0 : roundCurrency(tax / 2);
+        const sgst = isInterState ? 0 : roundCurrency(tax - cgst);
+        return {
+          name: item.name || "Item",
+          quantity,
+          unitPrice,
+          subtotal,
+          gstRate,
+          cgst,
+          sgst,
+          igst: isInterState ? tax : 0,
+        };
+      });
   return {
     invoiceNo: order.sellerSettlement.invoiceNo,
     orderId: order.orderId,
@@ -763,7 +795,33 @@ export async function getSellerSettlementInvoice(orderId, sellerStoreId) {
     txnNo: order.sellerSettlement.txnNo || "",
     bulkRef: order.sellerSettlement.bulkRef || "",
     paidAt: order.sellerSettlement.paidAt,
-    items: (order.items || []).map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+    items: lineItems,
+    moneyBreakdown: {
+      productSubtotal: roundCurrency(paymentBreakdown.productSubtotal || 0),
+      deliveryFee: roundCurrency(paymentBreakdown.deliveryFeeCharged || 0),
+      handlingFee: roundCurrency(paymentBreakdown.handlingFeeCharged || 0),
+      packingFee: roundCurrency(paymentBreakdown.packingFeeCharged || 0),
+      productPackagingCharge: roundCurrency(paymentBreakdown.productPackagingChargeAmount || 0),
+      packagingCharge: roundCurrency(paymentBreakdown.packagingChargeAmount || 0),
+      customerSurcharge: roundCurrency(paymentBreakdown.customerSurchargeAmount || 0),
+      customerSurchargeReason: paymentBreakdown.customerSurchargeReason || "",
+      oddHourSurcharge: roundCurrency(paymentBreakdown.oddHourSurchargeAmount || 0),
+      weatherSurcharge: roundCurrency(paymentBreakdown.weatherSurchargeAmount || 0),
+      extraCharges: (paymentBreakdown.extraCharges || []).map((charge) => ({
+        name: charge.name || "Extra charge",
+        amount: roundCurrency(charge.amount || 0),
+      })),
+      tip: roundCurrency(paymentBreakdown.tipTotal || 0),
+      discount: roundCurrency(paymentBreakdown.discountTotal || 0),
+      taxTotal: roundCurrency(paymentBreakdown.taxTotal || 0),
+      cgstTotal: roundCurrency(paymentBreakdown.cgstTotal || 0),
+      sgstTotal: roundCurrency(paymentBreakdown.sgstTotal || 0),
+      igstTotal: roundCurrency(paymentBreakdown.igstTotal || 0),
+      taxJurisdiction: paymentBreakdown.taxJurisdiction || "",
+      grandTotal: roundCurrency(paymentBreakdown.grandTotal || 0),
+      walletAmount: roundCurrency(paymentBreakdown.walletAmount || 0),
+      paymentMode: order.paymentMode || "",
+    },
   };
 }
 

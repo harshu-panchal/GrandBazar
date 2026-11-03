@@ -86,6 +86,7 @@ const OrderDetail = () => {
         return Boolean(parent && allowed.includes(parent));
     };
     const [order, setOrder] = useState(null);
+    const [refundBreakdown, setRefundBreakdown] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [externalProvider, setExternalProvider] = useState("");
     const [externalTracking, setExternalTracking] = useState("");
@@ -216,12 +217,16 @@ const OrderDetail = () => {
     const fetchDetail = async () => {
         setIsLoading(true);
         try {
-            const response = await adminApi.getOrderDetails(orderId);
+            const [response, refundResponse] = await Promise.all([
+                adminApi.getOrderDetails(orderId),
+                adminApi.getOrderRefundBreakdown(orderId),
+            ]);
             if (response.data.success) {
                 setOrder(response.data.result);
+                setRefundBreakdown(refundResponse.data?.result || null);
             }
         } catch (error) {
-            showToast("Failed to load order details", "error");
+            showToast("Failed to load order details and refund history", "error");
         } finally {
             setIsLoading(false);
         }
@@ -1240,9 +1245,13 @@ const OrderDetail = () => {
                                 <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-purple-700">
                                     <Camera className="h-4 w-4" /> Product handover proof
                                 </p>
-                                <a href={order.pickupProofImages[0]} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border border-purple-200 bg-purple-50">
-                                    <img src={order.pickupProofImages[0]} alt="Product handover proof" className="h-52 w-full object-cover" />
-                                </a>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {order.pickupProofImages.map((url, index) => (
+                                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-purple-200 bg-purple-50">
+                                            <img src={url} alt={`Product handover proof ${index + 1}`} className="h-32 w-full object-cover" />
+                                        </a>
+                                    ))}
+                                </div>
                                 {order.handedOverToLogisticsAt && (
                                     <p className="mt-2 text-[10px] font-semibold text-slate-500">
                                         Confirmed {new Date(order.handedOverToLogisticsAt).toLocaleString('en-IN')}
@@ -1979,7 +1988,7 @@ const OrderDetail = () => {
             </div>
 
             {/* Money Breakdown — every rupee, split by exactly who received it */}
-            <OrderMoneyBreakdown order={order} />
+            <OrderMoneyBreakdown order={order} refundBreakdown={refundBreakdown} />
 
             {/* Hidden Printable Invoice Template */}
             <div className="fixed -left-[9999px] top-0">

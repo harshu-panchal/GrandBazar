@@ -1004,13 +1004,13 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
           .map((value) => String(value || "").trim())
           .filter(Boolean)
       : [];
-    if (proofImages.length !== 1) {
-      const err = new Error("Exactly one product handover photo is required");
+    if (proofImages.length < 1 || proofImages.length > 4) {
+      const err = new Error("Between one and four product handover photos are required");
       err.statusCode = 400;
       throw err;
     }
-    if (!/^https:\/\//i.test(proofImages[0])) {
-      const err = new Error("A valid uploaded product handover photo is required");
+    if (proofImages.some((url) => !/^https:\/\//i.test(url))) {
+      const err = new Error("Valid uploaded product handover photos are required");
       err.statusCode = 400;
       throw err;
     }

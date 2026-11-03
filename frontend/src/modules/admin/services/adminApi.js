@@ -99,6 +99,7 @@ export const adminApi = {
     getDeliveryEarningsSummary: (params) => axiosInstance.get('/admin/finance/delivery-earnings-summary', { params }),
     getSellerEarningsSummary: (params) => axiosInstance.get('/admin/finance/seller-earnings-summary', { params }),
     getRefunds: (params) => axiosInstance.get('/admin/finance/refunds', { params }),
+    getOrderRefundBreakdown: (orderId) => axiosInstance.get(`/admin/finance/orders/${orderId}/refunds`),
     getAuditLogs: (params) => axiosInstance.get('/admin/audit-logs', { params }),
     getRoleAccessAuditLogs: (params) => axiosInstance.get('/admin/roles/access-logs', { params }),
     processFinancePayouts: (data) => axiosInstance.post('/admin/finance/payouts/process', data),
@@ -336,6 +337,7 @@ export const adminApi = {
     getSettlementInvoice: (orderId) => axiosInstance.get(`/settlements/${orderId}/invoice`),
 
     // Bulk Settlement (BRD section 6)
+    listBulkSettlementSellers: () => axiosInstance.get('/settlements/bulk/sellers'),
     listSellerUnsettledOrders: (sellerId) => axiosInstance.get(`/settlements/bulk/seller/${sellerId}/orders`),
     previewBulkSettlement: (data) => axiosInstance.post('/settlements/bulk/preview', data),
     payBulkSettlement: (data) => axiosInstance.post('/settlements/bulk/pay', data),

@@ -8,6 +8,7 @@ import User from "../models/customer.js";
 import Admin from "../models/admin.js";
 import Setting from "../models/setting.js";
 import Transaction from "../models/transaction.js";
+import Refund from "../models/refund.js";
 import { requireCanonicalOrderId } from "../utils/orderLookup.js";
 import { roundCurrency } from "../utils/money.js";
 import { nextComplaintId } from "../utils/sequenceIds.js";
@@ -477,10 +478,10 @@ export async function assignCulprit({ complaintId, adminId, culprit, amount = 0,
   const order = await Order.findById(complaint.order);
   if (!order) throw httpError("Order not found", 404);
 
-  // For non-seller culprits the admin sets the refund amount here. For a seller
-  // culprit the SELLER approves the final amount (BRD), so amount stays pending.
-  const amt = culprit === COMPLAINT_CULPRIT.SELLER ? 0 : roundCurrency(Math.max(0, Number(amount) || 0));
-  if (culprit !== COMPLAINT_CULPRIT.SELLER && culprit !== COMPLAINT_CULPRIT.CUSTOMER && !(amt > 0)) {
+  // For seller cases this is the admin-requested amount; the seller still
+  // confirms the final amount through sellerDecision.
+  const amt = roundCurrency(Math.max(0, Number(amount) || 0));
+  if (culprit !== COMPLAINT_CULPRIT.CUSTOMER && !(amt > 0)) {
     throw httpError("Enter the refund amount", 400);
   }
 
@@ -519,6 +520,7 @@ export async function assignCulprit({ complaintId, adminId, culprit, amount = 0,
             orderId: order.orderId,
             complaintId,
             sellerId: order.seller,
+            amount: amt,
           }),
         );
       }
@@ -659,6 +661,31 @@ export async function refundCustomer({ complaintId, adminId, ctx = {} }) {
         { $inc: { walletBalance: amount } },
         { session },
       );
+      const [refund] = await Refund.create(
+        [
+          {
+            order: order._id,
+            orderId: order.orderId,
+            type: "complaint",
+            sourceReference: complaintId,
+            payer: complaint.culprit === COMPLAINT_CULPRIT.SELLER ? "seller" : "platform",
+            payerNote: complaint.culprit === COMPLAINT_CULPRIT.RIDER_LOGISTICS
+              ? "Paid by platform; logistics recovery may be pending"
+              : complaint.culprit === COMPLAINT_CULPRIT.PLATFORM
+                ? "Platform-funded complaint refund"
+                : "Seller-funded complaint refund",
+            recipientImpacts: complaint.culprit === COMPLAINT_CULPRIT.SELLER
+              ? { seller: amount, platform: 0, rider: 0, tax: 0 }
+              : { seller: 0, platform: amount, rider: 0, tax: 0 },
+            amount,
+            mode: "wallet",
+            status: "completed",
+            completedAt: new Date(),
+            initiatedBy: adminId || null,
+          },
+        ],
+        { session },
+      );
       await Transaction.create(
         [
           {
@@ -669,7 +696,7 @@ export async function refundCustomer({ complaintId, adminId, ctx = {} }) {
             amount,
             status: "Settled",
             reference: txnNo,
-            meta: { complaintId, culprit: complaint.culprit },
+            meta: { complaintId, culprit: complaint.culprit, refundId: String(refund._id) },
           },
         ],
         { session },

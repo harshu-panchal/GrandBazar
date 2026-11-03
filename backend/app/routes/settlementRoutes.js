@@ -18,6 +18,7 @@ import {
 } from "../controller/sellerSettlementController.js";
 import {
   listSellerUnsettledHandler,
+  listBulkSettlementSellersHandler,
   bulkPreviewHandler,
   bulkPayHandler,
   getBulkHandler,
@@ -42,6 +43,7 @@ router.get("/", ...finance, listSettlementsHandler);
 // Bulk Settlement (BRD section 6) — registered before the /:orderId routes so
 // "bulk" is never captured as an order id.
 router.get("/bulk", ...finance, listBulkHandler);
+router.get("/bulk/sellers", ...finance, listBulkSettlementSellersHandler);
 router.get("/bulk/seller/:sellerId/orders", ...finance, listSellerUnsettledHandler);
 router.post("/bulk/preview", ...finance, bulkPreviewHandler);
 router.post("/bulk/pay", ...finance, bulkPayHandler);

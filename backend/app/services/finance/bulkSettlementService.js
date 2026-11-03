@@ -26,9 +26,12 @@ function httpError(message, statusCode = 400) {
   return err;
 }
 
-async function windowHoursFor() {
-  const s = await Setting.findOne({}).select("complaint refundWindowHours").lean();
-  return s?.complaint?.windowHours ?? s?.refundWindowHours ?? 24;
+async function settlementConfig() {
+  const s = await Setting.findOne({}).select("complaint refundWindowHours razorpay").lean();
+  return {
+    windowHours: s?.complaint?.windowHours ?? s?.refundWindowHours ?? 24,
+    payoutFeePercent: s?.razorpay?.payoutFeePercent ?? 2.35,
+  };
 }
 
 async function requireDifferentReviewerAndPayerFor() {
@@ -56,7 +59,7 @@ async function resolveSelection(sellerId, orderIds) {
   const mixed = orders.find((o) => String(o.seller?._id || o.seller) !== String(sellerId));
   if (mixed) throw httpError("All orders in a bulk settlement must belong to the same seller", 400);
 
-  const windowHours = await windowHoursFor();
+  const { windowHours } = await settlementConfig();
   const complaintIds = orders.map((o) => o.complaintRef).filter(Boolean);
   const complaints = complaintIds.length
     ? await Complaint.find({ _id: { $in: complaintIds } }).select("status").lean()
@@ -243,9 +246,24 @@ export async function listBulkSettlements({ sellerId, page = 1, limit = 20 } = {
   return { items, total, page: Number(page), limit: Number(limit) };
 }
 
+export async function listBulkSettlementSellers() {
+  const sellers = await Store.find({
+    isVerified: true,
+    isActive: true,
+    applicationStatus: "approved",
+  })
+    .select("_id shopName")
+    .sort({ shopName: 1 })
+    .lean();
+  return sellers.map((seller) => ({
+    id: String(seller._id),
+    shopName: seller.shopName || "Unnamed Store",
+  }));
+}
+
 // List a seller's unsettled orders for the bulk page (BLK-02).
 export async function listSellerUnsettledOrders(sellerId) {
-  const windowHours = await windowHoursFor();
+  const { windowHours, payoutFeePercent } = await settlementConfig();
   const orders = await Order.find({
     seller: sellerId,
     deliveredAt: { $ne: null },
@@ -262,19 +280,63 @@ export async function listSellerUnsettledOrders(sellerId) {
     : [];
   const cmap = new Map(complaints.map((c) => [String(c._id), c]));
 
-  return orders.map((o) => {
+  return orders.flatMap((o) => {
     const complaint = o.complaintRef ? cmap.get(String(o.complaintRef)) : null;
     const checks = computeChecks(o, complaint, windowHours);
-    return {
+    if (!checks.ready || !checks.dots.every((dot) => dot.dot === "g")) return [];
+    return [{
       orderId: o.orderId,
       shortOrderId: o.shortOrderId || null,
       date: o.deliveredAt,
       customerName: o.customer?.name || "",
       settlementAmount: computeSettled(o),
+      quotedAmount: getQuoted(o),
+      deductions: o.sellerSettlement?.deductions || {},
+      settledAmount: computeSettled(o),
       reviewed: Boolean(o.sellerSettlement?.reviewed),
       ready: checks.ready,
       dots: checks.dots,
       complaintId: complaint?.complaintId || "",
-    };
+      complaint: complaint
+        ? { complaintId: complaint.complaintId, status: complaint.status, deduction: complaint.amount || 0 }
+        : null,
+      deliveredAt: o.deliveredAt,
+      state: o.settlementStatus?.settlementState || null,
+      failureReason: o.sellerSettlement?.failureReason || "",
+      invoiceNo: o.sellerSettlement?.invoiceNo || "",
+      mode: o.sellerSettlement?.mode || null,
+      payoutProgress: {
+        razorpay: o.sellerSettlement?.mode === PAYOUT_MODE.AUTOMATIC
+          ? o.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED
+            ? "PROCESSED"
+            : o.settlementStatus?.settlementState === SETTLEMENT_STATE.FAILED
+              ? "FAILED"
+              : o.settlementStatus?.settlementState === SETTLEMENT_STATE.PAYING
+                ? "PROCESSING"
+                : "PENDING"
+          : "NOT_APPLICABLE",
+        settlement: o.sellerSettlement?.lockedAt || o.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED
+          ? "SETTLED"
+          : "PENDING",
+      },
+      orderMoney: {
+        customerPaid: roundCurrency(o.paymentBreakdown?.grandTotal || 0),
+        itemPrice: getQuoted(o),
+        gst: roundCurrency(o.paymentBreakdown?.taxTotal || 0),
+        commission: roundCurrency(o.paymentBreakdown?.adminProductCommissionTotal || 0),
+        deliveryCharge: roundCurrency(o.paymentBreakdown?.deliveryFeeCharged || 0),
+        riderCost: roundCurrency(o.paymentBreakdown?.riderPayoutTotal || 0),
+        gatewayFee: roundCurrency(
+          (roundCurrency(o.paymentBreakdown?.grandTotal || 0) * payoutFeePercent) / 100,
+        ),
+        gatewayFeePercent: payoutFeePercent,
+      },
+      seller: { upiId: "" },
+      items: (o.items || []).map((item) => ({
+        name: item.name || "Item",
+        quantity: Number(item.quantity || 0),
+        lineTotal: roundCurrency(Number(item.price || 0) * Number(item.quantity || 0)),
+      })),
+    }];
   });
 }

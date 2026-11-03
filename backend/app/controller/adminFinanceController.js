@@ -29,6 +29,7 @@ import { createLedgerEntry } from "../services/finance/ledgerService.js";
 import { getOrCreateWallet } from "../services/finance/walletService.js";
 import { LEDGER_DIRECTION, LEDGER_TRANSACTION_TYPE, PAYOUT_STATUS } from "../constants/finance.js";
 import { roundCurrency } from "../utils/money.js";
+import { getOrderRefundBreakdown } from "../services/finance/orderRefundBreakdownService.js";
 import {
   financeLedgerQuerySchema,
   payoutProcessSchema,
@@ -355,6 +356,15 @@ export const getAdminRefundsController = async (req, res) => {
     });
   } catch (error) {
     return handleResponse(res, 500, error.message);
+  }
+};
+
+export const getAdminOrderRefundBreakdownController = async (req, res) => {
+  try {
+    const result = await getOrderRefundBreakdown(req.params.orderId);
+    return handleResponse(res, 200, "Order refund breakdown fetched", result);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
   }
 };
 

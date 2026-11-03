@@ -187,6 +187,7 @@ export const REFUND_TYPE = {
   RETURN: "return",
   PRICE_ADJUSTMENT: "price_adjustment",
   CANCELLATION: "cancellation",
+  COMPLAINT: "complaint",
 };
 
 export const REFUND_MODE = {

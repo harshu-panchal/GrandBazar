@@ -15,6 +15,27 @@ const refundSchema = new mongoose.Schema(
       enum: ALL_REFUND_TYPES,
       required: true,
     },
+    sourceReference: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    payer: {
+      type: String,
+      enum: ["seller", "platform", "shared", "order_reversal", "unallocated", null],
+      default: null,
+    },
+    payerNote: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    recipientImpacts: {
+      seller: { type: Number, default: 0 },
+      platform: { type: Number, default: 0 },
+      rider: { type: Number, default: 0 },
+      tax: { type: Number, default: 0 },
+    },
     amount: {
       type: Number,
       required: true,

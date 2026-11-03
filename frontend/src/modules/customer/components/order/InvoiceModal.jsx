@@ -48,6 +48,11 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
                   lineTotal: sub + totalTax,
               };
           });
+    const gstRates = [...new Set(
+        lineItems.map((item) => Number(item.gstSlab)).filter((rate) => Number.isFinite(rate) && rate > 0),
+    )].sort((a, b) => a - b);
+    const gstRateLabel = gstRates.map((rate) => `${Number(rate.toFixed(2))}%`).join(", ");
+    const splitGstRateLabel = gstRates.map((rate) => `${Number((rate / 2).toFixed(2))}%`).join(", ");
 
     // Breakdown charges fallbacks
     const deliveryFee = Number(breakdown.deliveryFeeCharged ?? pricing.deliveryFee ?? 0);
@@ -280,17 +285,17 @@ const InvoiceModal = ({ isOpen, onClose, order }) => {
                                         <div className="text-xs text-slate-600 space-y-1.5 font-mono">
                                             {isInterState ? (
                                                 <div className="flex justify-between">
-                                                    <span>IGST Total Tax:</span>
+                                                    <span>IGST{gstRateLabel ? ` (${gstRateLabel})` : ""} Total Tax:</span>
                                                     <span className="font-semibold text-slate-900">₹{igstTotal.toFixed(2)}</span>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <div className="flex justify-between">
-                                                        <span>CGST Tax Total:</span>
+                                                        <span>CGST{splitGstRateLabel ? ` (${splitGstRateLabel})` : ""} Tax Total:</span>
                                                         <span className="font-semibold text-slate-900">₹{cgstTotal.toFixed(2)}</span>
                                                     </div>
                                                     <div className="flex justify-between">
-                                                        <span>SGST Tax Total:</span>
+                                                        <span>SGST{splitGstRateLabel ? ` (${splitGstRateLabel})` : ""} Tax Total:</span>
                                                         <span className="font-semibold text-slate-900">₹{sgstTotal.toFixed(2)}</span>
                                                     </div>
                                                 </>

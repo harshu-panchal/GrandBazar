@@ -375,6 +375,7 @@ const Orders = () => {
     const [isQuickViewModalOpen, setIsQuickViewModalOpen] = useState(false);
     const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
     const [pickupImage, setPickupImage] = useState(null);
+    const [handoverImages, setHandoverImages] = useState([]);
     const [pickupOtpSending, setPickupOtpSending] = useState(false);
     const [pickupOtpCooldown, setPickupOtpCooldown] = useState(0);
     const [pickupVerifyOtp, setPickupVerifyOtp] = useState('');
@@ -848,6 +849,7 @@ const Orders = () => {
         if (normalizedStatus === 'handed_over_to_logistics' && !additionalData.pickupProofImages) {
             setPendingStatusUpdate({ orderId, status: newStatus, proofField: 'pickupProofImages' });
             setPickupImage(null);
+            setHandoverImages([]);
             setIsPickupModalOpen(true);
             return;
         }
@@ -1366,10 +1368,63 @@ const Orders = () => {
     };
 
     const handlePickupImageUpload = async (e) => {
-        const file = e.target.files?.[0];
         const input = e.currentTarget;
         const isHandoverPhoto = pendingStatusUpdate?.status === 'handed_over_to_logistics';
-        if (!file) return;
+        const files = Array.from(input.files || []);
+        if (!files.length) return;
+        if (isHandoverPhoto) {
+            const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+            if (imageFiles.length !== files.length) {
+                showToast('Please select image files only', 'error');
+            }
+            const availableSlots = Math.max(0, 4 - handoverImages.length);
+            const filesToUpload = imageFiles.slice(0, availableSlots);
+            if (imageFiles.length > availableSlots) {
+                showToast('You can upload up to 4 handover photos', 'error');
+            }
+            if (!filesToUpload.length) {
+                input.value = '';
+                return;
+            }
+
+            setIsUploading(true);
+            setUploadProgress(0);
+            try {
+                for (const file of filesToUpload) {
+                    const optimizedFile = await optimizeProofImage(file);
+                    const formData = new FormData();
+                    formData.append('file', optimizedFile);
+                    formData.append('folder', 'orders/handover');
+                    const res = await sellerApi.uploadMedia(formData, {
+                        timeout: 45000,
+                        onUploadProgress: (event) => {
+                            if (!event.total) return;
+                            setUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+                        },
+                    });
+                    const url = res.data?.result?.url || res.data?.url;
+                    if (!url) throw new Error('The upload completed without an image URL');
+                    setHandoverImages((previous) => [...previous, url]);
+                }
+                showToast('Product handover photo(s) uploaded', 'success');
+            } catch (err) {
+                console.error(err);
+                const timedOut = err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''));
+                showToast(
+                    timedOut
+                        ? 'Image upload timed out. Please check your connection and retry.'
+                        : err?.response?.data?.message || err?.message || 'Failed to upload product handover photo',
+                    'error',
+                );
+            } finally {
+                setIsUploading(false);
+                setUploadProgress(0);
+                input.value = '';
+            }
+            return;
+        }
+
+        const file = files[0];
         if (!file.type.startsWith('image/')) {
             showToast('Please select an image file', 'error');
             return;
@@ -1416,19 +1471,24 @@ const Orders = () => {
         const isDelivery = pendingStatusUpdate?.status === 'delivered';
         const targetOrder = orders.find((o) => o.id === pendingStatusUpdate?.orderId) || (selectedOrder?.id === pendingStatusUpdate?.orderId ? selectedOrder : null);
         const isSelfDelivery = targetOrder ? resolveFulfillmentMethod(targetOrder) === 'seller_delivery' : false;
+        const isHandover = pendingStatusUpdate?.status === 'handed_over_to_logistics';
 
         if (isDelivery && isSelfDelivery && (!deliveryOtp || deliveryOtp.trim().length !== 4)) {
             showToast('Please enter the 4-digit customer delivery OTP', 'error');
             return;
         }
-        if (!isDelivery && !pickupImage) {
+        if (isHandover && handoverImages.length === 0) {
+            showToast('Please upload at least one handover photo', 'error');
+            return;
+        }
+        if (!isDelivery && !isHandover && !pickupImage) {
             showToast('Please upload a proof image first', 'error');
             return;
         }
         if (pendingStatusUpdate) {
             const field = pendingStatusUpdate.proofField || 'pickupProofImages';
             handleStatusUpdate(pendingStatusUpdate.orderId, pendingStatusUpdate.status, {
-                [field]: pickupImage ? [pickupImage] : [],
+                [field]: isHandover ? handoverImages : pickupImage ? [pickupImage] : [],
                 otp: deliveryOtp ? deliveryOtp.trim() : undefined,
             });
         }
@@ -2198,7 +2258,7 @@ const Orders = () => {
                                             {pendingStatusUpdate?.proofField === 'deliveryProofImages'
                                                 ? 'Confirm Delivery & Enter OTP'
                                                 : pendingStatusUpdate?.status === 'handed_over_to_logistics'
-                                                    ? 'Product Handover Photo'
+                                                    ? 'Product Handover Photos'
                                                     : 'Capture Pickup Proof'}
                                         </h3>
                                         <button
@@ -2213,7 +2273,9 @@ const Orders = () => {
                                         <p className="text-xs font-bold text-slate-600">
                                             {pendingStatusUpdate?.proofField === 'deliveryProofImages'
                                                 ? 'Enter the customer delivery OTP to complete handover (photo proof is optional).'
-                                                : 'Please upload a photo of the order being handed over to the delivery partner.'}
+                                                : pendingStatusUpdate?.status === 'handed_over_to_logistics'
+                                                    ? 'Upload 1 to 4 photos of the order being handed over to the delivery partner.'
+                                                    : 'Please upload a photo of the order being handed over to the delivery partner.'}
                                         </p>
                                         {pendingStatusUpdate?.status === 'delivered' && (
                                             <div className="space-y-1.5 text-left bg-purple-50 p-3.5 rounded-2xl border border-purple-200">
@@ -2233,41 +2295,85 @@ const Orders = () => {
                                                 </p>
                                             </div>
                                         )}
-                                        <div className="relative h-48 w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors">
-                                            {pickupImage ? (
-                                                <img src={pickupImage} alt="Delivery Proof" className="h-full w-full object-cover" />
-                                            ) : (
-                                                <div className="flex flex-col items-center">
-                                                    {isUploading ? (
-                                                        <div className="flex flex-col items-center gap-2">
-                                                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-primary">
-                                                                {uploadProgress === 0
-                                                                    ? 'Optimizing photo…'
-                                                                    : uploadProgress < 100
-                                                                        ? `Uploading ${uploadProgress}%`
-                                                                        : 'Finishing upload…'}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <HiOutlineCamera className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors" />
-                                                            <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest group-hover:text-primary">
-                                                                {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Optional: Tap to Upload Photo' : 'Tap to Upload'}
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            )}
-                                            <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                capture="environment"
-                                                onChange={handlePickupImageUpload}
-                                                disabled={isUploading}
-                                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                            />
-                                        </div>
+                                        {pendingStatusUpdate?.status === 'handed_over_to_logistics' ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {handoverImages.map((url, index) => (
+                                                    <div key={url} className="relative h-24 overflow-hidden rounded-xl border border-slate-200">
+                                                        <img src={url} alt={`Handover proof ${index + 1}`} className="h-full w-full object-cover" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setHandoverImages((previous) => previous.filter((image) => image !== url))}
+                                                            disabled={isUploading}
+                                                            aria-label={`Remove handover photo ${index + 1}`}
+                                                            className="absolute right-1 top-1 rounded-full bg-slate-900/70 p-1 text-white"
+                                                        >
+                                                            <HiOutlineXMark className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {handoverImages.length < 4 && (
+                                                    <label className="relative flex h-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:border-primary/50">
+                                                        {isUploading ? (
+                                                            <>
+                                                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                                                <span className="mt-1 text-[10px] font-bold text-primary">Uploading {uploadProgress}%</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <HiOutlineCamera className="h-7 w-7" />
+                                                                <span className="mt-1 text-[10px] font-black uppercase tracking-wider">
+                                                                    Add photo ({handoverImages.length}/4)
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            multiple
+                                                            onChange={handlePickupImageUpload}
+                                                            disabled={isUploading}
+                                                            className="absolute inset-0 cursor-pointer opacity-0"
+                                                        />
+                                                    </label>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="relative h-48 w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden flex flex-col items-center justify-center group hover:border-primary/50 transition-colors">
+                                                {pickupImage ? (
+                                                    <img src={pickupImage} alt="Delivery Proof" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <div className="flex flex-col items-center">
+                                                        {isUploading ? (
+                                                            <div className="flex flex-col items-center gap-2">
+                                                                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-primary">
+                                                                    {uploadProgress === 0
+                                                                        ? 'Optimizing photo…'
+                                                                        : uploadProgress < 100
+                                                                            ? `Uploading ${uploadProgress}%`
+                                                                            : 'Finishing upload…'}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <HiOutlineCamera className="h-8 w-8 text-slate-300 group-hover:text-primary transition-colors" />
+                                                                <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest group-hover:text-primary">
+                                                                    {pendingStatusUpdate?.proofField === 'deliveryProofImages' ? 'Optional: Tap to Upload Photo' : 'Tap to Upload'}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    capture="environment"
+                                                    onChange={handlePickupImageUpload}
+                                                    disabled={isUploading}
+                                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
                                         <Button 
@@ -2284,7 +2390,9 @@ const Orders = () => {
                                                 isUploading ||
                                                 (pendingStatusUpdate?.status === 'delivered'
                                                     ? !deliveryOtp || deliveryOtp.trim().length !== 4
-                                                    : !pickupImage)
+                                                    : pendingStatusUpdate?.status === 'handed_over_to_logistics'
+                                                        ? handoverImages.length === 0
+                                                        : !pickupImage)
                                             }
                                             className="flex-1 text-xs bg-purple-600 hover:bg-purple-700 text-white"
                                         >
@@ -2952,18 +3060,23 @@ const Orders = () => {
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-2">
                                                     Product handover proof
                                                 </p>
-                                                <a
-                                                    href={selectedOrder.pickupProofImages[0]}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="block overflow-hidden rounded-xl border border-purple-200 bg-white"
-                                                >
-                                                    <img
-                                                        src={selectedOrder.pickupProofImages[0]}
-                                                        alt="Product handed over to logistics"
-                                                        className="h-48 w-full object-cover"
-                                                    />
-                                                </a>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {selectedOrder.pickupProofImages.map((url, index) => (
+                                                        <a
+                                                            key={url}
+                                                            href={url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="block overflow-hidden rounded-xl border border-purple-200 bg-white"
+                                                        >
+                                                            <img
+                                                                src={url}
+                                                                alt={`Product handover proof ${index + 1}`}
+                                                                className="h-24 w-full object-cover"
+                                                            />
+                                                        </a>
+                                                    ))}
+                                                </div>
                                                 {selectedOrder.handedOverToLogisticsAt && (
                                                     <p className="mt-2 text-[10px] font-semibold text-purple-700">
                                                         Handed over {new Date(selectedOrder.handedOverToLogisticsAt).toLocaleString('en-IN')}

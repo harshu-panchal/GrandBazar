@@ -11,6 +11,7 @@ const mockEmitNotificationEvent = jest.fn();
 const mockComplaintFindOne = jest.fn();
 const mockComplaintUpdateOne = jest.fn(async () => ({}));
 const mockOrderFindById = jest.fn();
+const mockRefundCreate = jest.fn().mockResolvedValue([{ _id: "refund-1" }]);
 
 function fakeSession() {
   return {
@@ -56,6 +57,7 @@ jest.unstable_mockModule("../app/models/admin.js", () => ({
   default: { find: () => ({ select: () => ({ lean: async () => [] }) }) },
 }));
 jest.unstable_mockModule("../app/models/transaction.js", () => ({ default: { create: jest.fn() } }));
+jest.unstable_mockModule("../app/models/refund.js", () => ({ default: { create: mockRefundCreate } }));
 jest.unstable_mockModule("../app/models/setting.js", () => ({
   default: { findOne: () => ({ select: () => ({ lean: async () => ({ complaint: {} }) }) }) },
 }));
@@ -68,7 +70,7 @@ jest.unstable_mockModule("../app/modules/notifications/notification.emitter.js",
   emitNotificationEvent: (...a) => mockEmitNotificationEvent(...a),
 }));
 
-const { refundCustomer, logCall } = await import("../app/services/complaintService.js");
+const { assignCulprit, refundCustomer, logCall } = await import("../app/services/complaintService.js");
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -79,6 +81,32 @@ beforeEach(() => {
 });
 
 describe("CMP-15 / section 9: complaint cost ledger posting", () => {
+  test("seller assignment records and notifies the admin-requested refund amount", async () => {
+    mockComplaintFindOne.mockResolvedValue({
+      _id: "c-seller-1",
+      complaintId: "C-SELLER-1",
+      status: "CALL_DONE",
+      seller: "seller-1",
+      order: "order-db-id",
+    });
+
+    await assignCulprit({
+      complaintId: "C-SELLER-1",
+      adminId: "admin-1",
+      culprit: "SELLER",
+      amount: 125.5,
+    });
+
+    const assignmentUpdate = mockComplaintUpdateOne.mock.calls.find(
+      ([, update]) => update?.$set?.culprit === "SELLER",
+    );
+    expect(assignmentUpdate?.[1].$set.amount).toBe(125.5);
+    expect(mockEmitNotificationEvent).toHaveBeenCalledWith(
+      "COMPLAINT_ASSIGNED_SELLER",
+      expect.objectContaining({ complaintId: "C-SELLER-1", amount: 125.5 }),
+    );
+  });
+
   test("platform at fault: posts a ledger entry AND reduces order platform earning", async () => {
     mockComplaintFindOne.mockResolvedValue({
       _id: "c1",
@@ -105,6 +133,35 @@ describe("CMP-15 / section 9: complaint cost ledger posting", () => {
     );
     expect(decUpdate).toBeTruthy();
     expect(decUpdate[1].$inc["paymentBreakdown.platformTotalEarning"]).toBe(-50);
+  });
+
+  test("complaint refunds are recorded in the order refund ledger", async () => {
+    mockComplaintFindOne.mockResolvedValue({
+      _id: "c-complaint-1",
+      complaintId: "C-REFUND-1",
+      culprit: "PLATFORM",
+      status: "ASSIGNED",
+      amount: 12.34,
+      customer: "cust-1",
+      order: "order-db-id",
+    });
+
+    await refundCustomer({ complaintId: "C-REFUND-1", adminId: "admin-1" });
+
+    expect(mockRefundCreate).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          order: "order-db-id",
+          orderId: "ORD1",
+          type: "complaint",
+          sourceReference: "C-REFUND-1",
+          amount: 12.34,
+          mode: "wallet",
+          status: "completed",
+        }),
+      ],
+      { session: expect.any(Object) },
+    );
   });
 
   test("logistics at fault: posts a ledger entry but does NOT touch platform earning", async () => {

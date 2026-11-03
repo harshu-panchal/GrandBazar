@@ -2234,6 +2234,9 @@ export const completeReturnAndRefund = async (order) => {
     order: order._id,
     orderId: order.orderId,
     type: "return",
+    sourceReference: `return:${order.orderId}`,
+    payer: "shared",
+    payerNote: "See seller and platform clawbacks for actual recipient impact",
     amount: refundAmount,
     mode: order.paymentMode === "COD" ? "wallet" : "wallet",
     status: "initiated",
@@ -2451,6 +2454,13 @@ export const completeReturnAndRefund = async (order) => {
   }
 
   order.returnStatus = "refund_completed";
+  refundRecord.recipientImpacts = {
+    seller: Number(order.returnSellerClawback || 0),
+    platform: Number(order.returnAdminCommissionClawback || 0),
+    rider: 0,
+    tax: 0,
+  };
+  refundRecord.payerNote = "Actual seller and platform clawbacks recorded for this return";
   if (order.payment) {
     order.payment.status = "refunded";
   }

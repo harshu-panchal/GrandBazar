@@ -236,7 +236,13 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
     );
   });
 
-  it("requires one seller photo and records the platform-logistics handover", async () => {
+  it("records up to four seller photos for the platform-logistics handover", async () => {
+    const proofImages = [
+      "https://res.cloudinary.com/demo/handover-1.jpg",
+      "https://res.cloudinary.com/demo/handover-2.jpg",
+      "https://res.cloudinary.com/demo/handover-3.jpg",
+      "https://res.cloudinary.com/demo/handover-4.jpg",
+    ];
     const existingOrder = {
       orderId: "ORD-HANDOVER-1",
       seller: "store3",
@@ -253,7 +259,7 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
       workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
       status: "handed_over_to_logistics",
       orderStatus: "handed_over_to_logistics",
-      pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"],
+      pickupProofImages: proofImages,
       handedOverToLogisticsAt: new Date(),
     });
 
@@ -261,11 +267,11 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
       "store3",
       "ORD-HANDOVER-1",
       "handed_over_to_logistics",
-      { pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"] },
+      { pickupProofImages: proofImages },
     );
 
     expect(result.workflowStatus).toBe(WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS);
-    expect(result.pickupProofImages).toEqual(["https://res.cloudinary.com/demo/handover.jpg"]);
+    expect(result.pickupProofImages).toEqual(proofImages);
     expect(mockOrderFindOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: "ORD-HANDOVER-1",
@@ -277,7 +283,7 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
         $set: expect.objectContaining({
           workflowStatus: WORKFLOW_STATUS.HANDED_OVER_TO_LOGISTICS,
           status: "handed_over_to_logistics",
-          pickupProofImages: ["https://res.cloudinary.com/demo/handover.jpg"],
+          pickupProofImages: proofImages,
         }),
       }),
       { new: true },
@@ -306,6 +312,27 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
 
     await expect(
       sellerUpdateStatusAtomic("store3", "ORD-HANDOVER-2", "handed_over_to_logistics", {}),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(mockOrderFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than four handover photos", async () => {
+    mockOrderFindOne.mockResolvedValue({
+      orderId: "ORD-HANDOVER-4",
+      seller: "store3",
+      deliveryBoy: "rider3",
+      workflowVersion: 2,
+      workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
+      fulfillmentMethod: "platform_logistics",
+    });
+
+    await expect(
+      sellerUpdateStatusAtomic("store3", "ORD-HANDOVER-4", "handed_over_to_logistics", {
+        pickupProofImages: Array.from(
+          { length: 5 },
+          (_, index) => `https://res.cloudinary.com/demo/handover-${index + 1}.jpg`,
+        ),
+      }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(mockOrderFindOneAndUpdate).not.toHaveBeenCalled();
   });

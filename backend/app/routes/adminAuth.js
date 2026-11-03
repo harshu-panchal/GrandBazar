@@ -94,6 +94,7 @@ import {
     exportAdminFinanceStatementController,
     getAdminBulkSettlementsController,
     getAdminRefundsController,
+    getAdminOrderRefundBreakdownController,
     getAdminFinanceLedgerController,
     getAdminFinancePayoutsController,
     getAdminFinanceSummaryController,
@@ -291,6 +292,13 @@ router.get(
     allowRoles("admin"),
     checkAdminPermission("wallet"),
     getAdminRefundsController,
+);
+router.get(
+    "/finance/orders/:orderId/refunds",
+    verifyToken,
+    allowRoles("admin"),
+    checkAdminPermission("orders"),
+    getAdminOrderRefundBreakdownController,
 );
 router.get(
     "/audit-logs",

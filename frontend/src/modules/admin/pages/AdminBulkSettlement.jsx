@@ -1,9 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "../services/adminApi";
 import { formatOrderId } from "@/shared/utils/orderId";
 
 const fx = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const DOT_COLOR = { g: "#12a150", a: "#d99100", r: "#dc2626" };
+const ISSUE_FIELDS = [
+  ["packing", "Packing"],
+  ["extra", "Extra charge"],
+  ["quality", "Quality issue"],
+  ["priceMismatch", "Price mismatch"],
+  ["misc", "Miscellaneous"],
+];
 
 function Dots({ dots = [] }) {
   return (
@@ -25,11 +32,21 @@ export default function AdminBulkSettlement() {
   const [payOpen, setPayOpen] = useState(false);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState("");
+  const [sellerLoadError, setSellerLoadError] = useState("");
+  const [sellersLoading, setSellersLoading] = useState(true);
+  const [detail, setDetail] = useState(null);
 
   useEffect(() => {
-    adminApi.getActiveSellers({ limit: 200 })
-      .then((res) => setSellers(res.data?.result?.items || []))
-      .catch(() => setSellers([]));
+    adminApi.listBulkSettlementSellers()
+      .then((res) => {
+        setSellers(res.data?.result?.items || []);
+        setSellerLoadError("");
+      })
+      .catch((error) => {
+        setSellers([]);
+        setSellerLoadError(error.response?.data?.message || "Failed to load sellers for bulk settlement.");
+      })
+      .finally(() => setSellersLoading(false));
   }, []);
 
   const loadOrders = (sid) => {
@@ -75,15 +92,24 @@ export default function AdminBulkSettlement() {
     <div className="p-4 space-y-3">
       <div>
         <h1 className="text-xl font-black">Bulk Settlement</h1>
-        <p className="text-xs text-slate-500">Choose a seller. All their unsettled orders appear. Only green (ready) orders can be selected.</p>
+        <p className="text-xs text-slate-500">Choose a seller. Only unsettled orders with all four checks green are listed. Open an order to review its details.</p>
       </div>
 
-      <select value={sellerId} onChange={(e) => pickSeller(e.target.value)} className="rounded-lg border px-3 py-1.5 text-sm">
-        <option value="">Select seller</option>
+      <select
+        value={sellerId}
+        onChange={(e) => pickSeller(e.target.value)}
+        disabled={sellersLoading || sellers.length === 0}
+        className="rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <option value="">{sellersLoading ? "Loading sellers…" : "Select seller"}</option>
         {sellers.map((s) => (
-          <option key={s._id || s.id} value={s._id || s.id}>{s.shopName}</option>
+          <option key={s.id || s._id} value={s.id || s._id}>{s.shopName}</option>
         ))}
       </select>
+      {sellerLoadError && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{sellerLoadError}</div>}
+      {!sellersLoading && !sellerLoadError && sellers.length === 0 && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">No active sellers are available for settlement.</div>
+      )}
 
       {sellerId && (
         <>
@@ -97,14 +123,15 @@ export default function AdminBulkSettlement() {
                   <th className="px-2 py-2 text-left">Customer</th>
                   <th className="px-2 py-2 text-left">Amount</th>
                   <th className="px-2 py-2 text-left">Checks</th>
+                  <th className="px-2 py-2 text-left">Detail</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-slate-400">No unsettled orders.</td></tr>}
+                {orders.length === 0 && <tr><td colSpan={7} className="px-2 py-6 text-center text-slate-400">No unsettled orders with all four checks green.</td></tr>}
                 {orders.map((o) => (
                   <tr key={o.orderId} className="border-b last:border-0">
                     <td className="px-2 py-2">
-                      <input type="checkbox" checked={sel.has(o.orderId)} disabled={!o.ready} onChange={() => toggle(o.orderId, o.ready)} />
+                      <input type="checkbox" checked={sel.has(o.orderId)} onChange={() => toggle(o.orderId, o.ready)} />
                     </td>
                     <td className="px-2 py-2">{o.date ? new Date(o.date).toLocaleDateString() : "—"}</td>
                     <td className="px-2 py-2">
@@ -114,6 +141,16 @@ export default function AdminBulkSettlement() {
                     <td className="px-2 py-2">{o.customerName}</td>
                     <td className="px-2 py-2 font-bold">{fx(o.settlementAmount)}</td>
                     <td className="px-2 py-2"><Dots dots={o.dots} /></td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setDetail(o)}
+                        className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-50"
+                        aria-label={`Open details for order ${formatOrderId(o)}`}
+                      >
+                        Open
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -163,6 +200,7 @@ export default function AdminBulkSettlement() {
               to mark them reviewed first, or settle them individually after review.
             </p>
           )}
+
           <table className="mt-2 w-full text-sm">
             <thead><tr className="border-b text-[11px] uppercase text-slate-500"><th className="px-2 py-1 text-left">Order</th><th className="px-2 py-1 text-left">Customer</th><th className="px-2 py-1">Del</th><th className="px-2 py-1">Pay</th><th className="px-2 py-1">No cmp</th><th className="px-2 py-1">No pen</th><th className="px-2 py-1 text-left">Amount</th></tr></thead>
             <tbody>
@@ -181,6 +219,81 @@ export default function AdminBulkSettlement() {
         </Modal>
       )}
 
+      {detail && (
+        <Modal
+          onClose={() => setDetail(null)}
+          title={`Settlement · #${formatOrderId(detail)}`}
+          className="max-w-2xl space-y-3"
+        >
+          <div className="text-xs text-slate-500">
+            {detail.customerName || "Customer"} · {sellerName || "Seller"} · {detail.deliveredAt ? new Date(detail.deliveredAt).toLocaleDateString() : "—"}
+          </div>
+          {detail.orderMoney && (
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <b>Order money</b> <span className="text-xs text-slate-400">(Admin / Finance only)</span>
+              <div className="mt-1 grid grid-cols-2 gap-x-4">
+                <Kv label="Customer paid" value={fx(detail.orderMoney.customerPaid)} />
+                <Kv label="Item price (quote)" value={fx(detail.orderMoney.itemPrice)} />
+                <Kv label="GST" value={fx(detail.orderMoney.gst)} />
+                <Kv label="Commission" value={fx(detail.orderMoney.commission)} />
+                <Kv label="Delivery charge" value={fx(detail.orderMoney.deliveryCharge)} />
+                <Kv label="Rider cost" value={fx(detail.orderMoney.riderCost)} />
+                <Kv label={`Razorpay fee ${detail.orderMoney.gatewayFeePercent ?? ""}%`} value={fx(detail.orderMoney.gatewayFee)} />
+              </div>
+            </div>
+          )}
+          <div className="space-y-2">
+            {(detail.dots || []).map((check) => <CheckRow key={check.key} check={check} />)}
+            <PayoutStatusRow
+              label="Processing from RazorpayX side"
+              status={detail.payoutProgress?.razorpay || "PENDING"}
+              detail={
+                detail.payoutProgress?.razorpay === "PROCESSED" ? "RazorpayX payout processed"
+                  : detail.payoutProgress?.razorpay === "PROCESSING" ? "Waiting for RazorpayX terminal webhook"
+                    : detail.payoutProgress?.razorpay === "FAILED" ? (detail.failureReason || "RazorpayX payout failed")
+                      : detail.payoutProgress?.razorpay === "NOT_APPLICABLE" ? "Manual payment selected"
+                        : "Payout not started"
+              }
+            />
+            <PayoutStatusRow
+              label="Settled"
+              status={detail.payoutProgress?.settlement || "PENDING"}
+              detail={detail.payoutProgress?.settlement === "SETTLED"
+                ? `Settlement completed${detail.invoiceNo ? ` · ${detail.invoiceNo}` : ""}`
+                : "Waiting for successful payout completion"}
+            />
+          </div>
+          {detail.complaint && (
+            <div className="text-xs text-slate-500">
+              Complaint {detail.complaint.complaintId} · {detail.complaint.status} · deduct {fx(detail.complaint.deduction)}
+            </div>
+          )}
+          <div className="rounded-xl border p-3">
+            <b className="text-sm">Seller issues (deductions)</b>
+            <div className="mt-2 space-y-1">
+              {ISSUE_FIELDS.map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between text-sm">
+                  <span>{label}</span>
+                  <span className="w-28 rounded border px-2 py-1 text-right">{fx(detail.deductions?.[key])}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl bg-indigo-50 p-3 text-sm">
+            <div className="flex justify-between"><span>Seller deserves</span><b>{fx(detail.quotedAmount)}</b></div>
+            {Number(detail.deductions?.complaint || 0) > 0 && (
+              <div className="flex justify-between text-red-600"><span>− Complaint</span><span>−{fx(detail.deductions.complaint)}</span></div>
+            )}
+            {ISSUE_FIELDS.map(([key, label]) => Number(detail.deductions?.[key]) > 0 && (
+              <div key={key} className="flex justify-between text-red-600"><span>− {label}</span><span>−{fx(detail.deductions[key])}</span></div>
+            ))}
+            <div className="mt-1 flex justify-between border-t pt-1">
+              <b>Settlement amount</b><b className="text-indigo-700">{fx(detail.settledAmount)}</b>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {payOpen && (
         <BulkPayModal
           sellerId={sellerId}
@@ -195,16 +308,55 @@ export default function AdminBulkSettlement() {
   );
 }
 
-function Modal({ title, children, onClose }) {
+function Modal({ title, children, onClose, className = "" }) {
   return (
     <div className="fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-20 md:pt-24" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-3xl rounded-2xl bg-white p-5">
+      <div className={`w-full max-w-3xl rounded-2xl bg-white p-5 ${className}`}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-black">{title}</h2>
           <button onClick={onClose} className="text-slate-500">✕</button>
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+function Kv({ label, value }) {
+  return (
+    <div className="flex justify-between gap-3 py-0.5">
+      <span className="text-slate-500">{label}</span><span>{value}</span>
+    </div>
+  );
+}
+
+function CheckRow({ check }) {
+  const borderColor = check.dot === "g" ? "border-emerald-500" : check.dot === "a" ? "border-amber-500" : "border-red-500";
+  const icon = check.dot === "g" ? "✓" : check.dot === "a" ? "⏳" : "✕";
+  return (
+    <div className={`rounded-lg border border-l-4 ${borderColor} p-2`}>
+      <b>{icon} {check.label}</b>
+      <div className="text-xs text-slate-500">{check.tooltip}</div>
+    </div>
+  );
+}
+
+function PayoutStatusRow({ label, status, detail }) {
+  const complete = status === "PROCESSED" || status === "SETTLED";
+  const failed = status === "FAILED";
+  const active = status === "PROCESSING";
+  const color = complete
+    ? "border-emerald-500 bg-emerald-50"
+    : failed
+      ? "border-red-500 bg-red-50"
+      : active
+        ? "border-amber-500 bg-amber-50"
+        : "border-slate-300 bg-slate-50";
+  const icon = complete ? "✓" : failed ? "✕" : active ? "⏳" : "○";
+  return (
+    <div className={`rounded-lg border border-l-4 ${color} p-2`}>
+      <b>{icon} {label}</b>
+      <div className="text-xs text-slate-500">{detail}</div>
     </div>
   );
 }

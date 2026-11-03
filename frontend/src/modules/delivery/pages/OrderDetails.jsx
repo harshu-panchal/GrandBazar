@@ -973,10 +973,14 @@ const OrderDetails = () => {
                     ? "Review the seller's product handover photo, then start delivery."
                     : "The seller must upload the product handover photo before you can start delivery."}
                 </p>
-                {isHandoverConfirmed && order.pickupProofImages?.[0] && (
-                  <a href={order.pickupProofImages[0]} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-2xl border border-purple-200 bg-white">
-                    <img src={order.pickupProofImages[0]} alt="Product handover proof" className="h-52 w-full object-cover" />
-                  </a>
+                {isHandoverConfirmed && order.pickupProofImages?.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {order.pickupProofImages.map((url, index) => (
+                      <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-purple-200 bg-white">
+                        <img src={url} alt={`Product handover proof ${index + 1}`} className="h-32 w-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
