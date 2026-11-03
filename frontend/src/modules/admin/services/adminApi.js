@@ -185,6 +185,7 @@ export const adminApi = {
 
     getOrders: (params) => axiosInstance.get('/orders/seller-orders', { params }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
+    getOrderReviews: (orderId, params) => axiosInstance.get(`/reviews/order/${orderId}`, { params }),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
     getOrderReassignCandidates: (orderId) =>
         axiosInstance.get(`/orders/${orderId}/reassign-candidates`),
@@ -230,6 +231,10 @@ export const adminApi = {
     getActiveFleet: (params) => axiosInstance.get('/admin/active-fleet', { params }),
     getUnassignedOrders: (params) => axiosInstance.get('/admin/unassigned-orders', { params }),
     assignOrderToRider: (orderId, riderId, reason = '') => axiosInstance.post(`/admin/orders/${orderId}/assign-rider`, { riderId, reason }),
+    assignGuestCourier: (orderId, data) => axiosInstance.post(`/admin/orders/${orderId}/assign-guest-courier`, data),
+    resendGuestCourierLink: (assignmentId, reason) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/resend`, { reason }),
+    revokeGuestCourier: (assignmentId, reason) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/revoke`, { reason }),
+    replaceGuestCourier: (assignmentId, data) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/replace`, data),
 
     // Delivery Payouts / Funds
     getDeliveryTransactions: (params) => axiosInstance.get('/admin/delivery-transactions', { params }),
@@ -246,6 +251,8 @@ export const adminApi = {
     getRiderCashDetails: (id) => axiosInstance.get(`/admin/rider-cash-details/${id}`),
     settleRiderCash: (data) => axiosInstance.post('/admin/settle-cash', data),
     getCashSettlementHistory: (params) => axiosInstance.get('/admin/cash-history', { params }),
+    getGuestCodSettlements: (params) => axiosInstance.get('/admin/guest-cod-settlements', { params }),
+    recordGuestPhysicalCash: (assignmentId, data) => axiosInstance.post(`/admin/guest-cod-settlements/${assignmentId}/physical-receipt`, data),
 
     // FAQ Management
     getFAQs: (params) => axiosInstance.get('/admin/faqs', { params }),

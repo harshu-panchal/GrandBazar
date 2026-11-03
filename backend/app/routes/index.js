@@ -28,6 +28,7 @@ import rewardRoute from "../modules/rewards/reward.routes.js";
 import seoRoute from "./seoRoutes.js";
 import complaintRoute from "./complaintRoutes.js";
 import settlementRoute from "./settlementRoutes.js";
+import guestCourierRoute from "./guestCourierRoutes.js";
 
 import express from "express";
 
@@ -51,6 +52,7 @@ const setupRoutes = (app) => {
     router.use("/wishlist", wishlistRoute);
     router.use("/favorite-stores", favoriteStoreRoute);
     router.use("/orders", orderRoute);
+    router.use("/guest-deliveries", guestCourierRoute);
     router.use("/complaints", complaintRoute);
     router.use("/settlements", settlementRoute);
     router.use("/payments", paymentRoute);

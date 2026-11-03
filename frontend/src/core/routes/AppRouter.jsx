@@ -39,6 +39,7 @@ const StoreDetailPage = lazy(() => import('../../modules/customer/pages/StoreDet
 const ProfilePage = lazy(() => import('../../modules/customer/pages/ProfilePage'));
 const OrdersPage = lazy(() => import('../../modules/customer/pages/OrdersPage'));
 const OrderTransactionsPage = lazy(() => import('../../modules/customer/pages/OrderTransactionsPage'));
+const MyReviewsPage = lazy(() => import('../../modules/customer/pages/MyReviewsPage'));
 const AddressesPage = lazy(() => import('../../modules/customer/pages/AddressesPage'));
 const SettingsPage = lazy(() => import('../../modules/customer/pages/SettingsPage'));
 const NotificationsPage = lazy(() => import('../../modules/customer/pages/NotificationsPage'));
@@ -64,6 +65,7 @@ const PreOrderDetailPage = lazy(() => import('../../modules/customer/pages/PreOr
 const DiscoverCityPage = lazy(() => import('../../modules/customer/pages/DiscoverCityPage'));
 const DiscoverPincodePage = lazy(() => import('../../modules/customer/pages/DiscoverPincodePage'));
 const BecomeSellerForm = lazy(() => import('../../modules/customer/pages/BecomeSellerForm'));
+const GuestDeliveryPage = lazy(() => import('../../modules/guestDelivery/pages/GuestDeliveryPage'));
 
 // Lazy load heavy modules
 const SellerModule = lazy(() => import('../../modules/seller/routes/index'));
@@ -154,6 +156,10 @@ const router = createBrowserRouter([
                     element: <DeliveryAuth />,
                 },
                 {
+                    path: 'delivery/guest',
+                    element: <GuestDeliveryPage />,
+                },
+                {
                     path: 'seller/*',
                     element: (
                         <ProtectedRoute>
@@ -214,6 +220,7 @@ const router = createBrowserRouter([
                         { path: 'orders', element: <ProtectedRoute><OrdersPage /></ProtectedRoute> },
                         { path: 'orders/:orderId', element: <ProtectedRoute><OrderDetailPage /></ProtectedRoute> },
                         { path: 'transactions', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },
+                        { path: 'reviews', element: <ProtectedRoute><MyReviewsPage /></ProtectedRoute> },
                         { path: 'refunds', element: <ProtectedRoute><OrderTransactionsPage /></ProtectedRoute> },
                         { path: 'addresses', element: <ProtectedRoute><AddressesPage /></ProtectedRoute> },
                         { path: 'settings', element: <ProtectedRoute><SettingsPage /></ProtectedRoute> },

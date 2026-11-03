@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     User, MapPin, Package, CreditCard, Wallet, ChevronRight,
-    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store, Settings, RotateCcw, Sparkles
+    LogOut, ShieldCheck, Heart, HelpCircle, Info, Edit2, ChevronLeft, Bell, Store, Settings, RotateCcw, Sparkles, Star
 } from 'lucide-react';
 import { useAuth } from '@core/context/AuthContext';
 import { useSettings } from '@core/context/SettingsContext';
@@ -108,6 +108,14 @@ const ProfilePage = () => {
                                 path="/orders"
                                 color="var(--primary)"
                                 bg="rgba(16,185,129,0.10)"
+                            />
+                            <MenuItem
+                                icon={Star}
+                                label="My Reviews"
+                                sub="See all ratings and reviews you added"
+                                path="/reviews"
+                                color="#d97706"
+                                bg="rgba(245,158,11,0.10)"
                             />
                             <MenuItem
                                 icon={RotateCcw}

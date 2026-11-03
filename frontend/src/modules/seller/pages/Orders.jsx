@@ -45,6 +45,7 @@ import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageU
 import { optimizeProofImage } from "@/core/utils/imageCompression";
 import { formatOrderId } from "@/shared/utils/orderId";
 import { useSearchParams } from "react-router-dom";
+import OrderReviewsPanel from '@shared/components/reviews/OrderReviewsPanel';
 
 const ORDER_EDITABLE_STATUSES = new Set([
     'pending',
@@ -392,6 +393,8 @@ const Orders = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [orderReviews, setOrderReviews] = useState([]);
+    const [orderReviewsLoading, setOrderReviewsLoading] = useState(false);
     const [replacementSaving, setReplacementSaving] = useState(false);
     const [splitSaving, setSplitSaving] = useState(false);
     const [isReplacementModalOpen, setIsReplacementModalOpen] = useState(false);
@@ -590,6 +593,25 @@ const Orders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, selectedOrder?.id, selectedOrder?._id]);
 
+    useEffect(() => {
+        if (!isDetailsModalOpen || !selectedOrder?.id) return undefined;
+
+        let cancelled = false;
+        setOrderReviewsLoading(true);
+        sellerApi.getOrderReviews(selectedOrder.id, { limit: 200 })
+            .then((response) => {
+                if (!cancelled) setOrderReviews(response.data?.result?.items || []);
+            })
+            .catch(() => {
+                if (!cancelled) setOrderReviews([]);
+            })
+            .finally(() => {
+                if (!cancelled) setOrderReviewsLoading(false);
+            });
+
+        return () => { cancelled = true; };
+    }, [isDetailsModalOpen, selectedOrder?.id]);
+
     // Lock page scroll while any order modal is open; keep scrolling inside the modal.
     useEffect(() => {
         const modalOpen =
@@ -774,6 +796,8 @@ const Orders = () => {
 
     const handleViewDetails = async (order) => {
         setSelectedOrder(order);
+        setOrderReviews([]);
+        setOrderReviewsLoading(true);
         setAdjustMode(false);
         setAdjustItems([]);
         setAdjustReason('');
@@ -3646,6 +3670,13 @@ const Orders = () => {
                                                 ))}
                                             </div>
                                         )}
+                                    </div>
+
+                                    <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+                                        <OrderReviewsPanel
+                                            reviews={orderReviews}
+                                            loading={orderReviewsLoading}
+                                        />
                                     </div>
 
                                     {/* Modal Footer */}

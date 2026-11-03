@@ -15,7 +15,14 @@ import {
   processPayout,
   cancelPendingPayoutForOrder,
 } from "./payoutService.js";
-import { createSellerPayout, fetchSellerPayout, isRazorpayConfigured, isTerminalSuccess, isTerminalFailure } from "./razorpayPayoutService.js";
+import {
+  createSellerPayout,
+  fetchSellerPayout,
+  isRazorpayConfigured,
+  isTerminalSuccess,
+  isTerminalFailure,
+} from "./razorpayPayoutService.js";
+import { normalizePayoutIdempotencyKey } from "./payoutIdempotency.js";
 import { emitNotificationEvent } from "../../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../../modules/notifications/notification.constants.js";
 
@@ -411,13 +418,11 @@ export async function paySettlement(orderId, { mode = PAYOUT_MODE.AUTOMATIC, txn
   const settledAmount = computeSettled(order);
   if (!(settledAmount > 0)) throw httpError("Settled amount must be positive", 400);
 
-  // Razorpay's X-Payout-Idempotency header only accepts letters, digits,
-  // hyphens, underscores and spaces. Keep it compact and deterministic enough
-  // for a single payment attempt; the database claim still prevents doubles.
+  // Keep the database claim and Razorpay header on the same deterministic,
+  // valid key. Long bulk keys are hashed so the order-specific portion remains
+  // unique instead of being truncated away.
   const rawKey = idempotencyKey || `settle-${order.shortOrderId || String(order._id)}-${Date.now()}`;
-  const key = String(rawKey)
-    .replace(/[^A-Za-z0-9_ -]/g, "-")
-    .slice(0, 40);
+  const key = normalizePayoutIdempotencyKey(rawKey);
 
   // Atomically claim the settlement so a double-click / retry can't start two
   // payouts. Only transitions a not-yet-paying order into PAYING + stamps key.

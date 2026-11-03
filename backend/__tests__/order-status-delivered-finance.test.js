@@ -9,6 +9,7 @@ const mockHandleResponse = jest.fn();
 const mockEmitNotificationEvent = jest.fn();
 const mockEmitOrderStatusUpdate = jest.fn();
 const mockInvalidate = jest.fn().mockResolvedValue(undefined);
+const mockCompensateOrderCancellation = jest.fn();
 
 jest.unstable_mockModule("../app/models/order.js", () => ({
   default: {
@@ -29,6 +30,10 @@ jest.unstable_mockModule("../app/models/customer.js", () => ({ default: {} }));
 
 jest.unstable_mockModule("../app/services/orderSettlement.js", () => ({
   applyDeliveredSettlement: mockApplyDeliveredSettlement,
+}));
+
+jest.unstable_mockModule("../app/services/orderCompensation.js", () => ({
+  compensateOrderCancellation: mockCompensateOrderCancellation,
 }));
 
 jest.unstable_mockModule("../app/utils/orderLookup.js", () => ({
@@ -102,6 +107,8 @@ const { updateOrderStatus } = await import("../app/controller/orderController.js
 describe("updateOrderStatus delivered finance ordering", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockApplyDeliveredSettlement.mockResolvedValue(undefined);
+    mockCompensateOrderCancellation.mockResolvedValue(undefined);
     mockOrderMatchQueryFromRouteParam.mockImplementation((id) => ({ orderId: id }));
     mockHandleResponse.mockImplementation((_res, status, message, data) => ({
       status,
@@ -202,5 +209,115 @@ describe("updateOrderStatus delivered finance ordering", () => {
       ["rider-2"],
     );
     expect(mockInvalidate).toHaveBeenCalledWith("orders:customer:customer-2:*");
+  });
+
+  it("allows an admin to deliver an unconfirmed customer-pickup order", async () => {
+    const orderDoc = {
+      _id: "mongo-3",
+      orderId: "ORD3",
+      status: "pending",
+      orderStatus: "pending",
+      workflowVersion: 2,
+      workflowStatus: "SELLER_PENDING",
+      fulfillmentMethod: "customer_pickup",
+      seller: "seller-3",
+      customer: "customer-3",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockOrderFindOne.mockResolvedValue(orderDoc);
+    mockOrderFindById.mockResolvedValue({ ...orderDoc, status: "delivered", workflowStatus: "DELIVERED" });
+
+    const result = await updateOrderStatus(
+      {
+        params: { orderId: "ORD3" },
+        body: { status: "delivered" },
+        user: { id: "admin-1", role: "admin" },
+      },
+      {},
+    );
+
+    expect(result.status).toBe(200);
+    expect(orderDoc.status).toBe("delivered");
+    expect(orderDoc.workflowStatus).toBe("DELIVERED");
+    expect(mockApplyDeliveredSettlement).toHaveBeenCalledWith(orderDoc, "ORD3");
+  });
+
+  it("admin cancellation updates V2 state and runs shared compensation before confirmation", async () => {
+    const orderDoc = {
+      _id: "mongo-4",
+      orderId: "ORD4",
+      status: "pending",
+      orderStatus: "pending",
+      workflowVersion: 2,
+      workflowStatus: "SELLER_PENDING",
+      seller: "seller-4",
+      customer: "customer-4",
+      deliveryBoy: null,
+      cancellationRequest: { status: "none" },
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockOrderFindOne.mockResolvedValue(orderDoc);
+    mockOrderFindById.mockResolvedValue({ ...orderDoc, status: "cancelled", workflowStatus: "CANCELLED" });
+
+    const result = await updateOrderStatus(
+      {
+        params: { orderId: "ORD4" },
+        body: { status: "cancelled", cancelReason: "Customer contacted support" },
+        user: { id: "admin-1", role: "admin" },
+      },
+      {},
+    );
+
+    expect(result.status).toBe(200);
+    expect(orderDoc).toMatchObject({
+      status: "cancelled",
+      orderStatus: "cancelled",
+      workflowStatus: "CANCELLED",
+      cancelledBy: "admin",
+      cancelReason: "Customer contacted support",
+    });
+    expect(mockCompensateOrderCancellation).toHaveBeenCalledWith(orderDoc, "ORD4");
+    expect(mockEmitOrderStatusUpdate).toHaveBeenCalledWith(
+      "ORD4",
+      expect.objectContaining({ status: "cancelled", workflowStatus: "CANCELLED" }),
+      "customer-4",
+      "seller-4",
+      [],
+    );
+  });
+
+  it("keeps an admin delivery override when online settlement is waiting for payment capture", async () => {
+    const orderDoc = {
+      _id: "mongo-5",
+      orderId: "ORD5",
+      status: "pending",
+      orderStatus: "pending",
+      workflowVersion: 2,
+      workflowStatus: "SELLER_PENDING",
+      paymentMode: "ONLINE",
+      financeFlags: {},
+      seller: "seller-5",
+      customer: "customer-5",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockOrderFindOne.mockResolvedValue(orderDoc);
+    mockOrderFindById.mockResolvedValue({ ...orderDoc, status: "delivered", workflowStatus: "DELIVERED" });
+    mockApplyDeliveredSettlement.mockRejectedValueOnce(
+      new Error("Cannot settle delivered online order before payment capture"),
+    );
+
+    const result = await updateOrderStatus(
+      {
+        params: { orderId: "ORD5" },
+        body: { status: "delivered" },
+        user: { id: "admin-1", role: "admin" },
+      },
+      {},
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.message).toContain("settlement will start after online payment is captured");
+    expect(orderDoc.status).toBe("delivered");
+    expect(orderDoc.workflowStatus).toBe("DELIVERED");
   });
 });

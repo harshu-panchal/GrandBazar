@@ -28,6 +28,7 @@ import {
   Download,
   HelpCircle,
   Phone,
+  Mail,
   MessageSquare,
   ArrowRight,
   User,
@@ -642,6 +643,16 @@ const OrderDetailPage = () => {
     order.paymentMode === "ONLINE" &&
     order.paymentStatus !== "PAID" &&
     status !== "cancelled";
+  const returnCourier = order?.returnDeliveryAssignee ||
+    (order?.returnDeliveryBoy && typeof order.returnDeliveryBoy === "object"
+      ? order.returnDeliveryBoy
+      : null);
+  const activeReturnStatus = String(returnDetails?.returnStatus || order?.returnStatus || "");
+  const isActiveReturnTracking = [
+    "return_pickup_assigned",
+    "return_in_transit",
+    "return_drop_pending",
+  ].includes(activeReturnStatus) && Boolean(returnCourier);
   const sellerLocation = coordsToLatLng(order?.seller?.location?.coordinates);
   const customerOwnLocation = hasValidLocation
     ? { lat: Number(currentLocation.latitude), lng: Number(currentLocation.longitude) }
@@ -1136,9 +1147,10 @@ const OrderDetailPage = () => {
               status={getLegacyStatusFromOrder(order)}
               workflowStatus={order.workflowStatus}
               eta={estimatedArrival.arrivingInText}
-              riderName={order.deliveryBoy?.name || "Delivery Partner"}
-              riderPhoto={order.deliveryBoy?.profileImage}
-              riderPhone={order.deliveryBoy?.phone}
+              riderName={order.deliveryAssignee?.name || order.deliveryBoy?.name || "Delivery Partner"}
+              riderPhoto={order.deliveryAssignee?.profileImage || order.deliveryBoy?.profileImage}
+              riderPhone={order.deliveryAssignee?.phone || order.deliveryBoy?.phone}
+              riderEmail={order.deliveryAssignee?.email || order.deliveryBoy?.email}
               riderLocation={liveLocation}
               sellerLocation={sellerLocation}
               destinationLocation={
@@ -1701,6 +1713,48 @@ const OrderDetailPage = () => {
               <div className="space-y-4 text-sm">
                 <ReturnProgressTracker returnStatus={returnDetails.returnStatus} />
 
+                {isActiveReturnTracking && (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {returnCourier.type === "guest" ? "Temporary return courier" : "Return courier"}
+                        </p>
+                        <p className="mt-1 font-bold text-slate-900">{returnCourier.name || "Delivery Partner"}</p>
+                        {returnCourier.email && <p className="mt-0.5 text-xs text-slate-500">{returnCourier.email}</p>}
+                      </div>
+                      <div className="flex gap-2">
+                        {returnCourier.phone && (
+                          <a href={`tel:${returnCourier.phone}`} aria-label="Call return courier" className="rounded-xl bg-white p-2.5 text-brand-600 shadow-sm ring-1 ring-slate-200">
+                            <Phone size={16} />
+                          </a>
+                        )}
+                        {returnCourier.email && (
+                          <a href={`mailto:${returnCourier.email}`} aria-label="Email return courier" className="rounded-xl bg-white p-2.5 text-brand-600 shadow-sm ring-1 ring-slate-200">
+                            <Mail size={16} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-72 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      <LiveTrackingMap
+                        status="out_for_delivery"
+                        workflowStatus="DELIVERY_ASSIGNED"
+                        eta="Live return tracking"
+                        riderName={returnCourier.name || "Return Courier"}
+                        riderPhoto={returnCourier.profileImage}
+                        riderPhone={returnCourier.phone}
+                        riderEmail={returnCourier.email}
+                        riderLocation={liveLocation}
+                        sellerLocation={sellerLocation}
+                        destinationLocation={order.address?.location || null}
+                        routePhase={activeReturnStatus === "return_pickup_assigned" ? "delivery" : "pickup"}
+                        routePolyline={null}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Return OTP Display for Customer if pickup is assigned */}
                 {returnDetails.returnStatus === "return_pickup_assigned" && (
                   <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100">
@@ -1957,9 +2011,10 @@ const OrderDetailPage = () => {
         currentUserId={order?.customer?._id || order?.customer}
         orderStatus={status}
         partnerInfo={{
-          name: order?.deliveryBoy?.name || "Delivery Partner",
-          phone: order?.deliveryBoy?.phone || "",
-          avatar: order?.deliveryBoy?.profileImage || order?.deliveryBoy?.avatar || "",
+          name: order?.deliveryAssignee?.name || order?.deliveryBoy?.name || "Delivery Partner",
+          phone: order?.deliveryAssignee?.phone || order?.deliveryBoy?.phone || "",
+          email: order?.deliveryAssignee?.email || order?.deliveryBoy?.email || "",
+          avatar: order?.deliveryAssignee?.profileImage || order?.deliveryBoy?.profileImage || order?.deliveryBoy?.avatar || "",
         }}
       />
     </div>

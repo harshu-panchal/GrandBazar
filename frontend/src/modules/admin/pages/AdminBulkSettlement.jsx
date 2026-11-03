@@ -49,9 +49,9 @@ export default function AdminBulkSettlement() {
       .finally(() => setSellersLoading(false));
   }, []);
 
-  const loadOrders = (sid) => {
-    setSel(new Set());
-    setResult(null);
+  const loadOrders = (sid, { resetSelection = true, resetResult = true } = {}) => {
+    if (resetSelection) setSel(new Set());
+    if (resetResult) setResult(null);
     adminApi.listSellerUnsettledOrders(sid)
       .then((res) => setOrders(res.data?.result?.items || []))
       .catch(() => setOrders([]));
@@ -123,15 +123,16 @@ export default function AdminBulkSettlement() {
                   <th className="px-2 py-2 text-left">Customer</th>
                   <th className="px-2 py-2 text-left">Amount</th>
                   <th className="px-2 py-2 text-left">Checks</th>
+                  <th className="px-2 py-2 text-left">Status</th>
                   <th className="px-2 py-2 text-left">Detail</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.length === 0 && <tr><td colSpan={7} className="px-2 py-6 text-center text-slate-400">No unsettled orders with all four checks green.</td></tr>}
+                {orders.length === 0 && <tr><td colSpan={8} className="px-2 py-6 text-center text-slate-400">No unsettled orders with all four checks green.</td></tr>}
                 {orders.map((o) => (
                   <tr key={o.orderId} className="border-b last:border-0">
                     <td className="px-2 py-2">
-                      <input type="checkbox" checked={sel.has(o.orderId)} onChange={() => toggle(o.orderId, o.ready)} />
+                      <input type="checkbox" checked={sel.has(o.orderId)} disabled={!o.ready} onChange={() => toggle(o.orderId, o.ready)} />
                     </td>
                     <td className="px-2 py-2">{o.date ? new Date(o.date).toLocaleDateString() : "—"}</td>
                     <td className="px-2 py-2">
@@ -141,6 +142,7 @@ export default function AdminBulkSettlement() {
                     <td className="px-2 py-2">{o.customerName}</td>
                     <td className="px-2 py-2 font-bold">{fx(o.settlementAmount)}</td>
                     <td className="px-2 py-2"><Dots dots={o.dots} /></td>
+                    <td className="px-2 py-2"><SettlementStatus status={o.state} /></td>
                     <td className="px-2 py-2">
                       <button
                         type="button"
@@ -175,13 +177,16 @@ export default function AdminBulkSettlement() {
           <div className="font-black">Bulk settlement {result.refNo} · {result.status}</div>
           <div className="text-sm text-slate-500">{result.settledCount} settled · {result.failedCount} failed · total {fx(result.total)}</div>
           <table className="mt-2 w-full text-sm">
-            <thead><tr className="border-b text-[11px] uppercase text-slate-500"><th className="px-2 py-1 text-left">Order</th><th className="px-2 py-1 text-left">Amount</th><th className="px-2 py-1 text-left">Status</th><th className="px-2 py-1 text-left">Invoice</th></tr></thead>
+            <thead><tr className="border-b text-[11px] uppercase text-slate-500"><th className="px-2 py-1 text-left">Order</th><th className="px-2 py-1 text-left">Amount</th><th className="px-2 py-1 text-left">Status</th><th className="px-2 py-1 text-left">Failure reason</th><th className="px-2 py-1 text-left">Invoice</th></tr></thead>
             <tbody>
               {(result.orders || []).map((o) => (
                 <tr key={o.orderPublicId} className="border-b last:border-0">
                   <td className="px-2 py-1">#{o.orderPublicId}</td>
                   <td className="px-2 py-1">{fx(o.settledAmount)}</td>
                   <td className={`px-2 py-1 font-semibold ${o.status === "SETTLED" ? "text-emerald-600" : o.status === "FAILED" ? "text-red-600" : "text-amber-600"}`}>{o.status}</td>
+                  <td className={`max-w-md px-2 py-1 text-sm ${o.status === "FAILED" ? "text-red-600" : "text-slate-400"}`}>
+                    {o.status === "FAILED" ? (o.failureReason || "No failure reason was recorded.") : "—"}
+                  </td>
                   <td className="px-2 py-1">{o.invoiceNo || "—"}</td>
                 </tr>
               ))}
@@ -301,7 +306,11 @@ export default function AdminBulkSettlement() {
           orderIds={[...sel]}
           total={total}
           onClose={() => setPayOpen(false)}
-          onDone={(res) => { setResult(res); setPayOpen(false); loadOrders(sellerId); }}
+          onDone={(res) => {
+            setResult(res);
+            setPayOpen(false);
+            loadOrders(sellerId, { resetResult: false });
+          }}
         />
       )}
     </div>
@@ -327,6 +336,25 @@ function Kv({ label, value }) {
     <div className="flex justify-between gap-3 py-0.5">
       <span className="text-slate-500">{label}</span><span>{value}</span>
     </div>
+  );
+}
+
+function SettlementStatus({ status }) {
+  const normalized = String(status || "READY").toUpperCase();
+  const presentation = {
+    READY: { label: "Ready", className: "bg-emerald-50 text-emerald-700" },
+    REVIEWED: { label: "Reviewed", className: "bg-blue-50 text-blue-700" },
+    PAYING: { label: "Processing", className: "bg-amber-50 text-amber-700" },
+    FAILED: { label: "Failed", className: "bg-red-50 text-red-700" },
+    SETTLED: { label: "Settled", className: "bg-emerald-100 text-emerald-800" },
+    WINDOW_OPEN: { label: "Window open", className: "bg-slate-100 text-slate-600" },
+    HELD: { label: "On hold", className: "bg-orange-50 text-orange-700" },
+  }[normalized] || { label: normalized, className: "bg-slate-100 text-slate-600" };
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${presentation.className}`}>
+      {presentation.label}
+    </span>
   );
 }
 
@@ -367,35 +395,69 @@ function BulkPayModal({ sellerId, sellerName, orderIds, total, onClose, onDone }
   const [txnNo, setTxnNo] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [idempotencyKey] = useState(() => {
+    const randomPart = globalThis.crypto?.randomUUID?.()
+      || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `bulk-${sellerId}-${randomPart}`;
+  });
 
   const pay = async () => {
     if (!reviewed) { setErr("Tick the review box first."); return; }
     if (mode === "MANUAL" && !txnNo.trim()) { setErr("Add the transaction number."); return; }
     setBusy(true); setErr("");
     try {
-      const res = await adminApi.payBulkSettlement({ sellerId, orderIds, mode, txnNo });
-      onDone(res.data?.result);
-    } catch (e) { setErr(e.response?.data?.message || "Bulk settlement failed"); }
+      const res = await adminApi.payBulkSettlement({
+        sellerId,
+        orderIds,
+        mode,
+        txnNo,
+        idempotencyKey,
+      });
+      const result = res.data?.result;
+      if (!result) throw new Error("The server returned an empty settlement response.");
+      onDone(result);
+    } catch (e) {
+      setErr(
+        e.response?.data?.message
+        || e.message
+        || "Bulk settlement failed. Check your connection and try again.",
+      );
+    }
     finally { setBusy(false); }
   };
 
   return (
-    <Modal title={`Bulk settle · ${sellerName}`} onClose={onClose}>
+    <Modal title={`Bulk settle · ${sellerName}`} onClose={() => { if (!busy) onClose(); }}>
       <p className="text-sm text-slate-500">{orderIds.length} orders · Total {fx(total)}</p>
       <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />
+        <input type="checkbox" checked={reviewed} disabled={busy} onChange={(e) => setReviewed(e.target.checked)} />
         I have reviewed all orders
       </label>
       <div className="mt-2 flex gap-4 text-sm">
-        <label className="flex items-center gap-1"><input type="radio" checked={mode === "AUTOMATIC"} onChange={() => setMode("AUTOMATIC")} /> Automatic (Razorpay)</label>
-        <label className="flex items-center gap-1"><input type="radio" checked={mode === "MANUAL"} onChange={() => setMode("MANUAL")} /> Manual</label>
+        <label className="flex items-center gap-1"><input type="radio" checked={mode === "AUTOMATIC"} disabled={busy} onChange={() => setMode("AUTOMATIC")} /> Automatic (Razorpay)</label>
+        <label className="flex items-center gap-1"><input type="radio" checked={mode === "MANUAL"} disabled={busy} onChange={() => setMode("MANUAL")} /> Manual</label>
       </div>
       {mode === "MANUAL" && (
-        <input value={txnNo} onChange={(e) => setTxnNo(e.target.value)} placeholder="Transaction number" className="mt-2 w-full rounded border px-2 py-1 text-sm" />
+        <input value={txnNo} disabled={busy} onChange={(e) => setTxnNo(e.target.value)} placeholder="Transaction number" className="mt-2 w-full rounded border px-2 py-1 text-sm disabled:bg-slate-100" />
+      )}
+      {busy && (
+        <div role="status" aria-live="polite" className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+          <span className="mt-0.5 inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+          <span>
+            Sending {orderIds.length} payout{orderIds.length === 1 ? "" : "s"} to Razorpay. Keep this window open; each payout may take up to 20 seconds to start.
+          </span>
+        </div>
       )}
       {err && <div className="mt-2 rounded-lg bg-red-50 text-red-600 text-sm px-3 py-2">{err}</div>}
       <div className="mt-3 flex justify-end">
-        <button disabled={busy} onClick={pay} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Confirm &amp; Pay</button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={pay}
+          className="min-w-32 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
+        >
+          {busy ? "Starting payouts…" : "Confirm & Pay"}
+        </button>
       </div>
     </Modal>
   );

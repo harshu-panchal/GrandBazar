@@ -121,7 +121,7 @@ export async function applyDeliveredSettlement(order, orderIdString) {
     });
   } else if (
     isCod &&
-    (settled.fulfillmentMethod === "seller_delivery" || !settled.deliveryBoy) &&
+    (settled.fulfillmentMethod === "seller_delivery" || (!settled.deliveryBoy && settled.deliveryAssigneeType !== "guest")) &&
     !settled.financeFlags?.codMarkedCollected
   ) {
     // Seller delivered COD order: seller holds 100% cash collected from customer at the door.
@@ -262,4 +262,5 @@ export async function applyDeliveredSettlement(order, orderIdString) {
   }
 
   await syncLegacyDeliveryTransactions(settled, orderIdString);
+  return settled;
 }

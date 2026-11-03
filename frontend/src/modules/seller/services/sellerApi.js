@@ -60,6 +60,7 @@ export const sellerApi = {
     // poll and Orders.jsx firing on the same socket event with the same params).
     getOrders: (params) => getWithDedupe('/orders/seller-orders', params, { ttl: 0 }),
     getOrderDetails: (orderId) => axiosInstance.get(`/orders/details/${orderId}`),
+    getOrderReviews: (orderId, params) => axiosInstance.get(`/reviews/seller/order/${orderId}`, { params }),
     getOrderInvoice: (orderId) => axiosInstance.get(`/orders/${orderId}/invoice/seller`),
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
     markOrderPacked: (orderId) => axiosInstance.put(`/orders/${orderId}/seller-packed`),

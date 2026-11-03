@@ -134,6 +134,58 @@ export function useRealEmailOTP() {
   );
 }
 
+function escapeEmailHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/** Send an account-free, order-scoped delivery link to a temporary courier. */
+export async function sendGuestCourierAssignmentEmail({
+  email,
+  name,
+  orderId,
+  taskType,
+  accessToken,
+}) {
+  const appName = await getAppName();
+  const fromEmail = process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@zinto.in";
+  const baseUrl = String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  // A fragment keeps the bearer token out of HTTP access logs and referrer headers.
+  const taskUrl = `${baseUrl}/delivery/guest#token=${encodeURIComponent(accessToken)}`;
+  const isReturn = taskType === "return_pickup";
+  const subject = `${appName}: ${isReturn ? "return pickup" : "delivery"} task ${orderId}`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
+      <h2 style="margin-top:0;color:#0f172a">${isReturn ? "Return pickup assigned" : "Delivery assigned"}</h2>
+      <p>Hello <strong>${escapeEmailHtml(name)}</strong>,</p>
+      <p>You have been assigned ${isReturn ? "a return pickup" : "an order delivery"} for <strong>${escapeEmailHtml(orderId)}</strong>.</p>
+      <p><a href="${taskUrl}" style="display:inline-block;background:#ea580c;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700">Open delivery task</a></p>
+      <p style="font-size:13px;color:#64748b">This private link remains valid while the task is active. It is revoked when the task is completed, cancelled, replaced, or when an administrator sends a replacement link. Do not forward it.</p>
+    </div>`;
+
+  if (!useRealEmailOTP()) {
+    console.log(`[emailService] Mocking guest courier assignment email for ${email}: ${taskUrl}`);
+    return { success: true, mocked: true };
+  }
+
+  try {
+    const info = await getTransporter().sendMail({
+      from: `${appName} Platform <${fromEmail}>`,
+      to: email,
+      subject,
+      html,
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("[emailService] Failed to send guest courier assignment email:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * Sends OTP email for password reset.
  */

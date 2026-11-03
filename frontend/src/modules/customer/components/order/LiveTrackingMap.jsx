@@ -5,6 +5,7 @@ import {
   MapPin,
   Navigation,
   Phone,
+  Mail,
   MessageSquare,
   Shield,
   Clock,
@@ -51,6 +52,7 @@ const LiveTrackingMap = memo(({
   riderName,
   riderPhoto,
   riderPhone,
+  riderEmail,
   riderLocation,
   sellerLocation,
   destinationLocation,
@@ -469,6 +471,7 @@ const LiveTrackingMap = memo(({
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-900 text-xs truncate">{riderName}</h3>
                 <p className="text-[10px] text-gray-500">Your delivery partner</p>
+                {riderEmail && <a href={`mailto:${riderEmail}`} className="block max-w-[180px] truncate text-[9px] font-semibold text-slate-500">{riderEmail}</a>}
               </div>
               <div className="flex items-center gap-1.5">
                 {riderPhone && (
@@ -494,6 +497,7 @@ const LiveTrackingMap = memo(({
                     </button>
                   </>
                 )}
+                {riderEmail && <a href={`mailto:${riderEmail}`} className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-50 text-sky-600" title="Email courier"><Mail size={14} /></a>}
               </div>
             </div>
           </motion.div>
@@ -524,6 +528,7 @@ const LiveTrackingMap = memo(({
     prevProps.riderName === nextProps.riderName &&
     prevProps.riderPhoto === nextProps.riderPhoto &&
     prevProps.riderPhone === nextProps.riderPhone &&
+    prevProps.riderEmail === nextProps.riderEmail &&
     prevProps.riderLocation?.lat === nextProps.riderLocation?.lat &&
     prevProps.riderLocation?.lng === nextProps.riderLocation?.lng &&
     prevProps.sellerLocation?.lat === nextProps.sellerLocation?.lat &&

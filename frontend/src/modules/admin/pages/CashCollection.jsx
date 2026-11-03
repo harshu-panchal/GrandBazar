@@ -35,6 +35,7 @@ const CashCollection = () => {
 
     const [ridersCashData, setRidersCashData] = useState([]);
     const [historyData, setHistoryData] = useState([]);
+    const [guestCashData, setGuestCashData] = useState([]);
     const [riderDetails, setRiderDetails] = useState([]);
     const [ridersPage, setRidersPage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
@@ -50,9 +51,10 @@ const CashCollection = () => {
             const commonParams = { page: 1, limit: pageSize };
             if (searchTerm.trim()) commonParams.search = searchTerm.trim();
 
-            const [cashRes, historyRes] = await Promise.all([
+            const [cashRes, historyRes, guestRes] = await Promise.all([
                 adminApi.getDeliveryCashBalances({ ...commonParams, page: cashPage }),
-                adminApi.getCashSettlementHistory({ ...commonParams, page: histPage })
+                adminApi.getCashSettlementHistory({ ...commonParams, page: histPage }),
+                adminApi.getGuestCodSettlements({ page: 1, limit: 100 })
             ]);
 
             if (cashRes.data.success) {
@@ -69,6 +71,7 @@ const CashCollection = () => {
                 setHistoryTotal(typeof payload.total === 'number' ? payload.total : history.length);
                 setHistoryPage(typeof payload.page === 'number' ? payload.page : histPage);
             }
+            if (guestRes.data.success) setGuestCashData(guestRes.data.result?.items || []);
         } catch (error) {
             console.error("Failed to fetch cash collection data:", error);
             toast.error("Failed to sync with backend");
@@ -162,6 +165,21 @@ const CashCollection = () => {
         }
     };
 
+    const settleGuestCash = async (entry) => {
+        const amount = window.prompt(`Physical cash received from ${entry.courier?.name || 'guest courier'}:`, String(entry.pendingAmount || 0));
+        if (!amount) return;
+        const receiptNumber = window.prompt('Receipt/reference number:', `GUEST-${entry.orderId}-${Date.now()}`);
+        if (!receiptNumber) return;
+        const note = window.prompt('Settlement note:', 'Physical cash received by admin') || 'Physical cash received by admin';
+        try {
+            await adminApi.recordGuestPhysicalCash(entry.assignment?._id || entry.assignment, { amount: Number(amount), receiptNumber, note });
+            toast.success('Guest courier cash receipt recorded');
+            fetchData(ridersPage, historyPage);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Guest cash settlement failed');
+        }
+    };
+
     return (
         <div className="ds-section-spacing animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12 pt-6 relative z-10">
             {/* Header Section */}
@@ -230,6 +248,16 @@ const CashCollection = () => {
                     >
                         <History className="h-4 w-4" />
                         SETTLEMENT LOGS
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('guest_balances')}
+                        className={cn(
+                            "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black transition-all",
+                            activeTab === 'guest_balances' ? "bg-white text-slate-900 shadow-xl" : "text-slate-500 hover:text-slate-700"
+                        )}
+                    >
+                        <CircleDollarSign className="h-4 w-4" />
+                        TEMPORARY COURIERS
                     </button>
                 </div>
 
@@ -344,7 +372,7 @@ const CashCollection = () => {
                                 ))}
                             </tbody>
                         </table>
-                    ) : (
+                    ) : activeTab === 'history' ? (
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50/50 border-b border-slate-100">
@@ -380,13 +408,21 @@ const CashCollection = () => {
                                 ))}
                             </tbody>
                         </table>
+                    ) : (
+                        <table className="w-full text-left border-collapse">
+                            <thead><tr className="bg-slate-50/50 border-b border-slate-100"><th className="ds-table-header-cell pl-8 py-5">Courier / Order</th><th className="ds-table-header-cell">Collected</th><th className="ds-table-header-cell">Remitted</th><th className="ds-table-header-cell">Pending</th><th className="ds-table-header-cell text-right pr-8">Physical receipt</th></tr></thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {guestCashData.map((entry) => <tr key={entry._id} className="hover:bg-orange-50/30"><td className="px-6 py-5 pl-8"><p className="text-sm font-black text-slate-900">{entry.courier?.name || entry.assignment?.courier?.name}</p><p className="text-[10px] font-bold text-slate-400">{entry.orderId} · {entry.courier?.phone || entry.assignment?.courier?.phone}</p></td><td className="px-6 py-5 text-sm font-black">₹{Number(entry.grossCollected || 0).toLocaleString()}</td><td className="px-6 py-5 text-sm font-black text-emerald-600">₹{Number(entry.amountRemitted || 0).toLocaleString()}</td><td className="px-6 py-5"><Badge variant={Number(entry.pendingAmount) > 0 ? 'warning' : 'success'}>₹{Number(entry.pendingAmount || 0).toLocaleString()}</Badge></td><td className="px-6 py-5 text-right pr-8"><button disabled={Number(entry.pendingAmount) <= 0} onClick={() => settleGuestCash(entry)} className="rounded-xl bg-orange-600 px-4 py-2 text-[10px] font-black uppercase text-white disabled:opacity-40">Record cash</button></td></tr>)}
+                                {!guestCashData.length && <tr><td colSpan={5} className="px-6 py-12 text-center text-xs font-bold text-slate-400">No temporary-courier COD balances.</td></tr>}
+                            </tbody>
+                        </table>
                     )}
                 </div>
                 <div className="px-6 py-3 border-t border-slate-100">
                     <Pagination
                         page={activeTab === 'live_balances' ? ridersPage : historyPage}
-                        totalPages={Math.ceil((activeTab === 'live_balances' ? ridersTotal : historyTotal) / pageSize) || 1}
-                        total={activeTab === 'live_balances' ? ridersTotal : historyTotal}
+                        totalPages={Math.ceil((activeTab === 'live_balances' ? ridersTotal : activeTab === 'history' ? historyTotal : guestCashData.length) / pageSize) || 1}
+                        total={activeTab === 'live_balances' ? ridersTotal : activeTab === 'history' ? historyTotal : guestCashData.length}
                         pageSize={pageSize}
                         onPageChange={activeTab === 'live_balances' ? fetchRidersPage : fetchHistoryPage}
                         onPageSizeChange={(newSize) => {

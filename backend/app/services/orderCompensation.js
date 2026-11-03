@@ -1,6 +1,7 @@
 import Transaction from "../models/transaction.js";
 import Order from "../models/order.js";
 import CheckoutGroup from "../models/checkoutGroup.js";
+import GuestCourierAssignment from "../models/guestCourierAssignment.js";
 import { releaseReservedStockForOrder } from "./stockService.js";
 import { releaseCouponUsageForOrder } from "./couponUsageService.js";
 import { reverseOrderFinanceOnCancellation } from "./finance/orderFinanceService.js";
@@ -17,6 +18,22 @@ import logger from "./logger.js";
 export async function compensateOrderCancellation(order, orderIdString) {
   const existing = await Order.findById(order._id);
   if (existing) {
+    // Permanent guest links have no time-based expiry, so cancellation must
+    // explicitly terminate every active token immediately.
+    await GuestCourierAssignment.updateMany(
+      {
+        order: existing._id,
+        status: { $in: ["email_pending", "active", "email_failed"] },
+      },
+      {
+        $set: {
+          status: "cancelled",
+          revokedAt: new Date(),
+          revocationReason: existing.cancelReason || "Order cancelled",
+        },
+        $inc: { tokenVersion: 1 },
+      },
+    );
     await releaseReservedStockForOrder(existing, {
       reason: "Cancelled",
     });

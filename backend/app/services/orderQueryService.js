@@ -1,5 +1,6 @@
 import Order from "../models/order.js";
 import Delivery from "../models/delivery.js";
+import GuestCourierAssignment from "../models/guestCourierAssignment.js";
 import Store from "../models/store.js";
 import { WORKFLOW_STATUS, SELLER_ACCEPT_DEADLINE_MS } from "../constants/orderWorkflow.js";
 
@@ -57,12 +58,22 @@ export async function attachDeliveryPartners(orders = []) {
     }
   }
 
-  if (missingIds.size === 0) return orders;
+  const guestIds = new Set();
+  for (const order of orders) {
+    if (order.guestCourierAssignment) guestIds.add(String(order.guestCourierAssignment?._id || order.guestCourierAssignment));
+    if (order.returnGuestCourierAssignment) guestIds.add(String(order.returnGuestCourierAssignment?._id || order.returnGuestCourierAssignment));
+  }
 
-  const partners = await Delivery.find({ _id: { $in: [...missingIds] } })
-    .select("name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
-    .lean();
+  const [partners, guestAssignments] = await Promise.all([
+    missingIds.size
+      ? Delivery.find({ _id: { $in: [...missingIds] } }).select("name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified").lean()
+      : [],
+    guestIds.size
+      ? GuestCourierAssignment.find({ _id: { $in: [...guestIds] } }).select("courier taskType status assignedAt emailStatus lastAccessedAt tokenVersion").lean()
+      : [],
+  ]);
   const map = new Map(partners.map((p) => [String(p._id), p]));
+  const guestMap = new Map(guestAssignments.map((a) => [String(a._id), a]));
 
   for (const order of orders) {
     for (const field of ["deliveryBoy", "deliveryPartner"]) {
@@ -75,6 +86,20 @@ export async function attachDeliveryPartners(orders = []) {
       order.deliveryBoy = order.deliveryPartner;
     } else if (isPartnerDocument(order.deliveryBoy) && !isPartnerDocument(order.deliveryPartner)) {
       order.deliveryPartner = order.deliveryBoy;
+    }
+    const forwardGuest = guestMap.get(String(order.guestCourierAssignment?._id || order.guestCourierAssignment || ""));
+    const returnGuest = guestMap.get(String(order.returnGuestCourierAssignment?._id || order.returnGuestCourierAssignment || ""));
+    if (forwardGuest) {
+      order.guestCourierAssignment = forwardGuest;
+      order.deliveryAssignee = { type: "guest", ...forwardGuest.courier, assignmentId: forwardGuest._id, status: forwardGuest.status, emailStatus: forwardGuest.emailStatus, assignedAt: forwardGuest.assignedAt, lastAccessedAt: forwardGuest.lastAccessedAt };
+    } else if (isPartnerDocument(order.deliveryBoy)) {
+      order.deliveryAssignee = { type: "registered", ...order.deliveryBoy };
+    }
+    if (returnGuest) {
+      order.returnGuestCourierAssignment = returnGuest;
+      order.returnDeliveryAssignee = { type: "guest", ...returnGuest.courier, assignmentId: returnGuest._id, status: returnGuest.status, emailStatus: returnGuest.emailStatus, assignedAt: returnGuest.assignedAt, lastAccessedAt: returnGuest.lastAccessedAt };
+    } else if (isPartnerDocument(order.returnDeliveryBoy)) {
+      order.returnDeliveryAssignee = { type: "registered", ...order.returnDeliveryBoy };
     }
   }
 

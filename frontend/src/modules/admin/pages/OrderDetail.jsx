@@ -55,14 +55,7 @@ import {
 import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/services/orderSocket';
 import OrderMoneyBreakdown from '../components/orders/OrderMoneyBreakdown';
 import { formatOrderId } from '@/shared/utils/orderId';
-
-const REASSIGNABLE_WORKFLOW = new Set([
-    'SELLER_PENDING',
-    'SELLER_ACCEPTED',
-    'SCHEDULED_HOLD',
-    'DELIVERY_SEARCH',
-    'EXTERNAL_LOGISTICS_PENDING',
-]);
+import OrderReviewsPanel from '@shared/components/reviews/OrderReviewsPanel';
 
 const OrderDetail = () => {
     const { orderId } = useParams();
@@ -87,6 +80,8 @@ const OrderDetail = () => {
     };
     const [order, setOrder] = useState(null);
     const [refundBreakdown, setRefundBreakdown] = useState(null);
+    const [orderReviews, setOrderReviews] = useState([]);
+    const [reviewsLoading, setReviewsLoading] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [externalProvider, setExternalProvider] = useState("");
     const [externalTracking, setExternalTracking] = useState("");
@@ -138,6 +133,9 @@ const OrderDetail = () => {
     const [selectedRiderId, setSelectedRiderId] = useState("");
     const [isAssigningRider, setIsAssigningRider] = useState(false);
     const [showRiderSelector, setShowRiderSelector] = useState(false);
+    const [showGuestCourierForm, setShowGuestCourierForm] = useState(false);
+    const [guestCourierForm, setGuestCourierForm] = useState({ taskType: 'forward_delivery', name: '', phone: '', email: '', reason: '' });
+    const [guestCourierSaving, setGuestCourierSaving] = useState(false);
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     const invoiceRef = useRef(null);
 
@@ -214,26 +212,78 @@ const OrderDetail = () => {
         }
     };
 
+    const handleGuestCourierAction = async (mode = 'assign', assignmentId = null) => {
+        const { name, phone, email, reason, taskType } = guestCourierForm;
+        if (!name.trim() || !phone.trim() || !email.trim() || !reason.trim()) {
+            showToast('Name, phone, email and reason are required', 'error');
+            return;
+        }
+        setGuestCourierSaving(true);
+        try {
+            const payload = { name: name.trim(), phone: phone.trim(), email: email.trim(), reason: reason.trim(), taskType };
+            const response = mode === 'replace'
+                ? await adminApi.replaceGuestCourier(assignmentId, payload)
+                : await adminApi.assignGuestCourier(order.orderId || order._id, payload);
+            showToast(response.data?.message || 'Guest courier assigned', response.data?.result?.email?.success === false ? 'warning' : 'success');
+            setShowGuestCourierForm(false);
+            setGuestCourierForm((prev) => ({ ...prev, name: '', phone: '', email: '', reason: '' }));
+            fetchDetail();
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to assign guest courier', 'error');
+        } finally {
+            setGuestCourierSaving(false);
+        }
+    };
+
+    const handleResendGuestLink = async (assignmentId) => {
+        const reason = window.prompt('Reason for resending this link:', 'Courier did not receive the previous email');
+        if (!reason) return;
+        try {
+            const response = await adminApi.resendGuestCourierLink(assignmentId, reason);
+            showToast(response.data?.message || 'New link sent', response.data?.result?.email?.success === false ? 'warning' : 'success');
+            fetchDetail();
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to resend link', 'error');
+        }
+    };
+
+    const handleRevokeGuest = async (assignmentId) => {
+        const reason = window.prompt('Reason for revoking guest courier access:');
+        if (!reason) return;
+        try {
+            await adminApi.revokeGuestCourier(assignmentId, reason);
+            showToast('Guest courier access revoked', 'success');
+            fetchDetail();
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to revoke access', 'error');
+        }
+    };
+
     const fetchDetail = async () => {
         setIsLoading(true);
+        setReviewsLoading(true);
         try {
-            const [response, refundResponse] = await Promise.all([
+            const [response, refundResponse, reviewsResponse] = await Promise.all([
                 adminApi.getOrderDetails(orderId),
                 adminApi.getOrderRefundBreakdown(orderId),
+                adminApi.getOrderReviews(orderId, { limit: 200 }).catch(() => null),
             ]);
             if (response.data.success) {
                 setOrder(response.data.result);
                 setRefundBreakdown(refundResponse.data?.result || null);
+                setOrderReviews(reviewsResponse?.data?.result?.items || []);
             }
         } catch (error) {
             showToast("Failed to load order details and refund history", "error");
         } finally {
             setIsLoading(false);
+            setReviewsLoading(false);
         }
     };
 
     const handleStatusUpdate = async (newStatus) => {
         if (!order || newStatus === getLegacyStatusFromOrder(order) || isUpdatingStatus) return;
+        let cancelReason = "";
         if (
             newStatus === 'delivered' &&
             !window.confirm(
@@ -242,9 +292,17 @@ const OrderDetail = () => {
         ) {
             return;
         }
+        if (newStatus === 'cancelled') {
+            const enteredReason = window.prompt(
+                `Cancel order #${formatOrderId(order)}? Enter the cancellation reason:`,
+                'Cancelled by admin',
+            );
+            if (enteredReason === null) return;
+            cancelReason = enteredReason.trim() || 'Cancelled by admin';
+        }
         setIsUpdatingStatus(true);
         try {
-            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus });
+            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus, cancelReason });
             showToast(
                 response.data?.message || (newStatus === 'delivered' ? 'Order marked as delivered' : `Order status updated to ${newStatus}`),
                 "success",
@@ -602,8 +660,8 @@ const OrderDetail = () => {
         }
     };
 
-    const canReassignStore = REASSIGNABLE_WORKFLOW.has(
-        String(order?.workflowStatus || '').toUpperCase(),
+    const canReassignStore = !['delivered', 'cancelled'].includes(
+        getLegacyStatusFromOrder(order),
     );
 
     const loadReassignCandidates = async () => {
@@ -1223,6 +1281,13 @@ const OrderDetail = () => {
                         </div>
                     </Card>
 
+                    <OrderReviewsPanel
+                        reviews={orderReviews}
+                        loading={reviewsLoading}
+                        showStatus
+                        className="shadow-xl ring-1 ring-slate-100"
+                    />
+
                     {/* Shop Details */}
                     <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-2xl p-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
@@ -1268,7 +1333,7 @@ const OrderDetail = () => {
                                             Shift to another store
                                         </p>
                                         <p className="text-[11px] text-slate-500 mt-1">
-                                            Use when the current seller/store is off or cannot fulfill. Target store must have matching products + stock and fall within the customer's delivery range.
+                                            Available at every ongoing stage before delivery. Admin may override delivery range; the target store must still have matching products and enough stock.
                                         </p>
                                     </div>
                                     <button
@@ -1301,17 +1366,6 @@ const OrderDetail = () => {
                                         >
                                             <option value="">Select store…</option>
                                             {reassignCandidates.map((c) => {
-                                                const blockers = [];
-                                                if (!c.productsAvailable && !c.stockOk) {
-                                                    blockers.push('low stock / missing products');
-                                                } else if (!c.productsAvailable) {
-                                                    blockers.push('incomplete catalog match');
-                                                }
-                                                if (c.inCustomerRange === false) {
-                                                    blockers.push(
-                                                        c.rangeReason || 'out of customer range',
-                                                    );
-                                                }
                                                 const distanceLabel =
                                                     c.distanceKm != null
                                                         ? ` · ${c.distanceKm} km`
@@ -1333,12 +1387,8 @@ const OrderDetail = () => {
                                                     {distanceLabel}
                                                     {` · ${c.coveragePct}% match`}
                                                     {priceLabel}
-                                                    {c.canReassign
-                                                        ? ''
-                                                        : blockers.length
-                                                          ? ` (${blockers.join('; ')})`
-                                                          : ' (not eligible)'}
                                                     {c.isOpenNow ? '' : ' · closed now'}
+                                                    {c.canReassign && c.inCustomerRange === false ? ' · range override' : ''}
                                                 </option>
                                                 );
                                             })}
@@ -1583,6 +1633,14 @@ const OrderDetail = () => {
                         const deliveryBoy = order.deliveryBoy || order.deliveryPartner;
                         const hasInternalRider = Boolean(deliveryBoy && (deliveryBoy.name || deliveryBoy._id));
                         const hasExternalLogistics = Boolean(order.externalLogisticsProvider);
+                        const guestAssignee = order.deliveryAssignee?.type === 'guest'
+                            ? order.deliveryAssignee
+                            : order.returnDeliveryAssignee?.type === 'guest'
+                                ? order.returnDeliveryAssignee
+                                : null;
+                        const guestAssignmentId = guestAssignee?.assignmentId;
+                        const canAssignForwardGuest = String(order.workflowStatus || '').toUpperCase() === 'DELIVERY_SEARCH' && !hasInternalRider && !order.guestCourierAssignment;
+                        const canAssignReturnGuest = ['return_approved', 'return_pickup_assigned'].includes(order.returnStatus) && !order.returnDeliveryBoy && !order.returnGuestCourierAssignment;
 
                         return (
                             <Card className="border-none shadow-xl ring-1 ring-slate-100 bg-white rounded-2xl p-6 text-left space-y-4">
@@ -1592,7 +1650,11 @@ const OrderDetail = () => {
                                         Delivery Partner Information
                                     </h4>
                                     <div className="flex items-center gap-1.5 shrink-0">
-                                        {hasInternalRider ? (
+                                        {guestAssignee ? (
+                                            <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">
+                                                Temporary Courier
+                                            </Badge>
+                                        ) : hasInternalRider ? (
                                             <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest px-2.5 py-0.5">
                                                 {legacyStatus === "handed_over_to_logistics"
                                                     ? "HANDED OVER TO LOGISTICS"
@@ -1611,6 +1673,25 @@ const OrderDetail = () => {
                                         )}
                                     </div>
                                 </div>
+
+                                {guestAssignee && (
+                                    <div className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4 space-y-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div><p className="text-[10px] font-black uppercase tracking-widest text-orange-600">Temporary courier</p><h5 className="mt-1 text-base font-black text-slate-900">{guestAssignee.name}</h5></div>
+                                            <Badge className={cn('text-[8px] uppercase', guestAssignee.emailStatus === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700')}>{guestAssignee.emailStatus || guestAssignee.status}</Badge>
+                                        </div>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            <a href={`tel:${guestAssignee.phone}`} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700"><Phone className="mr-2 inline h-3.5 w-3.5 text-orange-600" />{guestAssignee.phone}</a>
+                                            <a href={`mailto:${guestAssignee.email}`} className="truncate rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700"><Mail className="mr-2 inline h-3.5 w-3.5 text-orange-600" />{guestAssignee.email}</a>
+                                        </div>
+                                        <p className="text-[10px] font-semibold text-slate-500">Assigned {guestAssignee.assignedAt ? new Date(guestAssignee.assignedAt).toLocaleString('en-IN') : ''}{guestAssignee.lastAccessedAt ? ` · Last opened ${new Date(guestAssignee.lastAccessedAt).toLocaleString('en-IN')}` : ' · Link not opened yet'}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button type="button" onClick={() => handleResendGuestLink(guestAssignmentId)} className="rounded-xl bg-orange-600 px-3 py-2 text-[10px] font-black uppercase text-white">Resend link</button>
+                                            <button type="button" onClick={() => { setGuestCourierForm((prev) => ({ ...prev, taskType: order.deliveryAssignee?.type === 'guest' ? 'forward_delivery' : 'return_pickup' })); setShowGuestCourierForm(true); }} className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-orange-700">Replace</button>
+                                            <button type="button" onClick={() => handleRevokeGuest(guestAssignmentId)} className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-rose-600">Revoke</button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Internal Delivery Partner / Rider details */}
                                 {hasInternalRider && (
@@ -1761,10 +1842,11 @@ const OrderDetail = () => {
                                         <button
                                             type="button"
                                             onClick={() => setShowRiderSelector(!showRiderSelector)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all shadow-sm active:scale-95"
+                                            disabled={Boolean(guestAssignee)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             <RefreshCw className={cn("h-3 w-3", showRiderSelector && "animate-spin")} />
-                                            {showRiderSelector ? "Close Selector" : hasInternalRider ? "Reassign Rider" : "Assign Fleet Rider"}
+                                            {guestAssignee ? "Guest assigned" : showRiderSelector ? "Close Selector" : hasInternalRider ? "Reassign Rider" : "Assign Fleet Rider"}
                                         </button>
                                     </div>
 
@@ -1803,6 +1885,35 @@ const OrderDetail = () => {
                                                     {isAssigningRider ? "Assigning..." : "Confirm Assignment"}
                                                 </button>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {(canAssignForwardGuest || canAssignReturnGuest || guestAssignee) && !showRiderSelector && (
+                                        <div className="space-y-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!showGuestCourierForm) {
+                                                        setGuestCourierForm((prev) => ({ ...prev, taskType: guestAssignee ? (order.deliveryAssignee?.type === 'guest' ? 'forward_delivery' : 'return_pickup') : canAssignForwardGuest ? 'forward_delivery' : 'return_pickup' }));
+                                                    }
+                                                    setShowGuestCourierForm(!showGuestCourierForm);
+                                                }}
+                                                className="w-full rounded-xl border border-orange-200 bg-orange-50 py-2.5 text-[10px] font-black uppercase tracking-wider text-orange-700 hover:bg-orange-100"
+                                            >
+                                                {showGuestCourierForm ? 'Close temporary courier form' : guestAssignee ? 'Replace temporary courier' : 'Assign temporary courier'}
+                                            </button>
+                                            {showGuestCourierForm && (
+                                                <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
+                                                    {canAssignForwardGuest && canAssignReturnGuest && !guestAssignee && <select value={guestCourierForm.taskType} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, taskType: e.target.value }))} className="w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold"><option value="forward_delivery">Forward delivery</option><option value="return_pickup">Return pickup</option></select>}
+                                                    <div className="grid gap-3 sm:grid-cols-2">
+                                                        <input value={guestCourierForm.name} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Full name" className="rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
+                                                        <input value={guestCourierForm.phone} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone number" className="rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
+                                                    </div>
+                                                    <input type="email" value={guestCourierForm.email} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email address" className="w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
+                                                    <textarea value={guestCourierForm.reason} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, reason: e.target.value }))} placeholder="Assignment reason" rows={2} className="w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
+                                                    <button type="button" disabled={guestCourierSaving} onClick={() => handleGuestCourierAction(guestAssignee ? 'replace' : 'assign', guestAssignmentId)} className="w-full rounded-xl bg-orange-600 py-3 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-50">{guestCourierSaving ? 'Assigning…' : guestAssignee ? 'Replace and email new link' : 'Assign and email link'}</button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

@@ -277,7 +277,10 @@ describe("orderWorkflowService sellerAcceptAtomic", () => {
         orderId: "ORD-HANDOVER-1",
         seller: "store3",
         workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
-        deliveryBoy: { $ne: null },
+        $or: [
+          { deliveryBoy: { $ne: null } },
+          { deliveryAssigneeType: "guest", guestCourierAssignment: { $ne: null } },
+        ],
       }),
       expect.objectContaining({
         $set: expect.objectContaining({

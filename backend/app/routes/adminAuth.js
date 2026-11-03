@@ -108,6 +108,14 @@ import {
     holdSellerPayoutController,
     releaseSellerPayoutController,
 } from "../controller/adminFinanceController.js";
+import {
+    assignGuestCourierController,
+    resendGuestCourierLinkController,
+    revokeGuestCourierController,
+    replaceGuestCourierController,
+    listGuestCashSettlementsController,
+    recordGuestPhysicalCashController,
+} from "../controller/admin/guestCourierController.js";
 import { adminReconcileSellerCommissionController } from "../controller/sellerCodCommissionController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
 import {
@@ -505,6 +513,10 @@ router.put(
 router.get("/active-fleet", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery", "operations.monitor"), getActiveFleet);
 router.get("/unassigned-orders", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery", "operations.monitor"), getUnassignedOrders);
 router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignOrderToRider);
+router.post("/orders/:orderId/assign-guest-courier", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignGuestCourierController);
+router.post("/guest-couriers/:assignmentId/resend", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, resendGuestCourierLinkController);
+router.post("/guest-couriers/:assignmentId/revoke", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, revokeGuestCourierController);
+router.post("/guest-couriers/:assignmentId/replace", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, replaceGuestCourierController);
 router.get("/wallet-data", verifyToken, allowRoles("admin"), checkAdminPermission("wallet"), getAdminWalletData);
 
 // Delivery Payouts / Funds
@@ -517,6 +529,8 @@ router.get("/delivery-cash", verifyToken, allowRoles("admin"), checkAdminPermiss
 router.get("/rider-cash-details/:id", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), getRiderCashDetails);
 router.post("/settle-cash", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection.write"), settleRiderCash);
 router.get("/cash-history", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), getCashSettlementHistory);
+router.get("/guest-cod-settlements", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection"), listGuestCashSettlementsController);
+router.post("/guest-cod-settlements/:assignmentId/physical-receipt", verifyToken, allowRoles("admin"), checkAdminPermission("cash_collection.write"), recordGuestPhysicalCashController);
 
 // Seller Withdrawal Management
 router.get("/seller-withdrawals", verifyToken, allowRoles("admin"), checkAdminPermission("withdrawals"), getSellerWithdrawals);

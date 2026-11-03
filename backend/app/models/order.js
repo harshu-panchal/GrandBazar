@@ -327,6 +327,8 @@ const orderSchema = new mongoose.Schema(
       sellerPayoutQueued: { type: Boolean, default: false },
       riderPayoutQueued: { type: Boolean, default: false },
       adminEarningCredited: { type: Boolean, default: false },
+      guestCourierAdminEarningCredited: { type: Boolean, default: false },
+      guestReturnAdminEarningCredited: { type: Boolean, default: false },
       rewardsApplied: { type: Boolean, default: false },
       sellerPayoutHeld: { type: Boolean, default: false },
       // Distinct from the automatic return-window hold: set only when an
@@ -780,6 +782,17 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Delivery",
     },
+    deliveryAssigneeType: {
+      type: String,
+      enum: ["none", "registered", "guest", "external"],
+      default: "none",
+      index: true,
+    },
+    guestCourierAssignment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GuestCourierAssignment",
+      default: null,
+    },
     externalLogisticsProvider: String,
     externalTrackingLink: String,
     fulfillmentMethod: {
@@ -948,6 +961,17 @@ const orderSchema = new mongoose.Schema(
     returnDeliveryBoy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Delivery",
+    },
+    returnDeliveryAssigneeType: {
+      type: String,
+      enum: ["none", "registered", "guest"],
+      default: "none",
+      index: true,
+    },
+    returnGuestCourierAssignment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GuestCourierAssignment",
+      default: null,
     },
     returnDeliveryCommission: {
       type: Number,

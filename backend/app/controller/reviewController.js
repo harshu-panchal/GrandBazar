@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Product from "../models/product.js";
 import Store from "../models/store.js";
 import Order from "../models/order.js";
-import handleResponse from "../utils/helper.js";
+import handleResponse, { isAdminScopedUser } from "../utils/helper.js";
 import getPagination from "../utils/pagination.js";
 import { refreshReviewStatsForReview } from "../services/reviewStatsService.js";
 import { orderMatchQueryFlexible } from "../utils/orderLookup.js";
@@ -255,7 +255,7 @@ async function findReviewsPage(req, query, { includeCustomerContact = false } = 
       .populate("userId", includeCustomerContact ? "name email phone image" : "name image")
       .populate("productId", "name images mainImage sellerId")
       .populate("storeId", "shopName banners")
-      .populate("orderId", "orderId")
+      .populate("orderId", "orderId shortOrderId")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -344,6 +344,72 @@ export const getSellerReviews = async (req, res) => {
     delete filters.targetType;
     const result = await findReviewsPage(req, { ...filters, ...ownership });
     return handleResponse(res, 200, "Seller reviews fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// Customer: every review submitted by the signed-in customer, including
+// moderation state and the linked product/store/order for account history.
+export const getMyReviews = async (req, res) => {
+  try {
+    const filters = buildReviewFilters(req.query);
+    const result = await findReviewsPage(req, {
+      ...filters,
+      userId: new mongoose.Types.ObjectId(String(req.user.id)),
+    });
+    return handleResponse(res, 200, "Your reviews fetched successfully", result);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+// Order detail: reviews are scoped to the owning customer/store, while an
+// admin-scoped caller can inspect every review and moderation state.
+export const getOrderReviews = async (req, res) => {
+  try {
+    const matchQuery = orderMatchQueryFlexible(req.params.orderId);
+    if (!matchQuery) return handleResponse(res, 400, "Invalid order ID");
+
+    const order = await Order.findOne(matchQuery)
+      .select("_id customer seller items.product")
+      .lean();
+    if (!order) return handleResponse(res, 404, "Order not found");
+
+    const role = String(req.user?.role || "").toLowerCase();
+    const userId = String(req.user?.id || "");
+    const activeStoreId = String(req.user?.activeStoreId || userId);
+    const isAdmin = isAdminScopedUser(req.user);
+    const isCustomer = ["customer", "user"].includes(role)
+      && String(order.customer) === userId;
+    const isSeller = role === "seller" && String(order.seller) === activeStoreId;
+
+    if (!isAdmin && !isCustomer && !isSeller) {
+      return handleResponse(res, 403, "You are not allowed to view reviews for this order");
+    }
+
+    const query = { orderId: order._id };
+    if (isCustomer) {
+      const productIds = (order.items || [])
+        .map((item) => item.product)
+        .filter(Boolean);
+      // A customer can review a product only once. Include an older or generic
+      // review for the same product so a later order never prompts them again.
+      query.userId = order.customer;
+      if (productIds.length) {
+        delete query.orderId;
+        query.$or = [
+          { orderId: order._id },
+          { productId: { $in: productIds } },
+        ];
+      }
+    }
+    if (isSeller) query.status = "approved";
+
+    const result = await findReviewsPage(req, query, {
+      includeCustomerContact: isAdmin,
+    });
+    return handleResponse(res, 200, "Order reviews fetched successfully", result);
   } catch (error) {
     return handleResponse(res, 500, error.message);
   }

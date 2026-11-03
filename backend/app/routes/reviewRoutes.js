@@ -6,6 +6,8 @@ import {
   getPendingReviews,
   getAdminReviews,
   getSellerReviews,
+  getMyReviews,
+  getOrderReviews,
   updateReviewStatus,
 } from "../controller/reviewController.js";
 import {
@@ -24,6 +26,17 @@ router.get("/store/:storeId", getStoreReviews);
 
 // Authenticated customer routes
 router.post("/submit", verifyToken, submitReview);
+router.get("/mine", verifyToken, allowRoles("customer", "user"), getMyReviews);
+router.get(
+  "/seller/order/:orderId",
+  verifyToken,
+  allowRoles("seller"),
+  resolveActiveStore,
+  requireApprovedSeller,
+  checkSubSellerPermission("orders", "read"),
+  getOrderReviews,
+);
+router.get("/order/:orderId", verifyToken, getOrderReviews);
 
 // Admin only routes
 router.get("/admin", verifyToken, allowRoles("admin"), getAdminReviews);

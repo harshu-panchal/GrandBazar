@@ -4,6 +4,7 @@ import Product from "../models/product.js";
 import Store from "../models/store.js";
 import User from "../models/customer.js";
 import DeliveryAssignment from "../models/deliveryAssignment.js";
+import GuestCourierAssignment from "../models/guestCourierAssignment.js";
 import {
   WORKFLOW_STATUS,
   legacyStatusFromWorkflow,
@@ -35,14 +36,21 @@ import { createLedgerEntry } from "./finance/ledgerService.js";
 import { issueCreditNoteAndRefund } from "./orderPriceAdjustmentService.js";
 import { OWNER_TYPE, LEDGER_TRANSACTION_TYPE, LEDGER_DIRECTION } from "../constants/finance.js";
 import { roundCurrency } from "../utils/money.js";
+import {
+  canReassignOrderBeforeDelivery,
+  workflowStatusForReassignment,
+} from "./orderReassignmentEligibility.js";
 
-const REASSIGNABLE_STATUSES = new Set([
-  WORKFLOW_STATUS.SELLER_PENDING,
-  WORKFLOW_STATUS.SELLER_ACCEPTED,
-  WORKFLOW_STATUS.SCHEDULED_HOLD,
-  WORKFLOW_STATUS.DELIVERY_SEARCH,
-  WORKFLOW_STATUS.EXTERNAL_LOGISTICS_PENDING,
-]);
+function assertOrderCanBeReassigned(order) {
+  const workflowStatus = workflowStatusForReassignment(order);
+  if (!canReassignOrderBeforeDelivery(order)) {
+    throw httpError(
+      `Order cannot be reassigned after it is ${workflowStatus.toLowerCase()}`,
+      400,
+    );
+  }
+  return workflowStatus;
+}
 
 function toId(value) {
   if (!value) return "";
@@ -131,30 +139,6 @@ async function loadOrderForReassign(orderId) {
   const order = await Order.findOne({ orderId: canonical });
   if (!order) throw httpError("Order not found", 404);
   return order;
-}
-
-async function assertTargetStoreInCustomerRange(order, targetStore) {
-  const customer = resolveOrderCustomerCoords(order);
-  if (!customer.valid) {
-    throw httpError(
-      "Order has no customer delivery location, so store range cannot be verified",
-      400,
-    );
-  }
-
-  const range = evaluateStoreInCustomerRange(
-    targetStore,
-    customer.lat,
-    customer.lng,
-  );
-  if (!range.inCustomerRange) {
-    throw httpError(
-      range.rangeReason ||
-        "Target store is outside the customer's delivery range",
-      400,
-    );
-  }
-  return range;
 }
 
 /**
@@ -347,6 +331,13 @@ async function clearDeliveryState(order, { session = null } = {}) {
     },
     session ? { session } : {},
   );
+  if (order.guestCourierAssignment) {
+    await GuestCourierAssignment.updateOne(
+      { _id: order.guestCourierAssignment, status: { $in: ["email_pending", "active", "email_failed"] } },
+      { $set: { status: "revoked", revokedAt: new Date(), revocationReason: "Order store was reassigned" }, $inc: { tokenVersion: 1 } },
+      session ? { session } : {},
+    );
+  }
 }
 
 function sellerTimeoutMsForOrder(order) {
@@ -360,30 +351,14 @@ function sellerTimeoutMsForOrder(order) {
 }
 
 /**
- * List stores that can fulfill every catalog line on this order
- * and are within the customer's delivery range (store serviceRadius).
+ * List all active approved stores. Product/stock compatibility determines
+ * whether a store is selectable; delivery range is advisory for Admin.
  */
 export async function getOrderReassignCandidates(orderId) {
   const order = await loadOrderForReassign(orderId);
-  const workflowStatus = order.workflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
-  if (!REASSIGNABLE_STATUSES.has(workflowStatus)) {
-    throw httpError(
-      `Order cannot be reassigned in status ${workflowStatus}`,
-      400,
-    );
-  }
+  const workflowStatus = assertOrderCanBeReassigned(order);
 
   const customer = resolveOrderCustomerCoords(order);
-  if (!customer.valid) {
-    return {
-      orderId: order.orderId,
-      currentStoreId: toId(order.seller),
-      requiredCatalogCount: 0,
-      candidates: [],
-      message:
-        "Order has no customer delivery location, so in-range stores cannot be determined.",
-    };
-  }
 
   const sourceProductIds = order.items.map((item) => item.product).filter(Boolean);
   const sourceProducts = await Product.find({ _id: { $in: sourceProductIds } })
@@ -487,10 +462,19 @@ export async function getOrderReassignCandidates(orderId) {
     const coveragePct = Math.round(
       (matchedCount / Math.max(requiredLineCount, 1)) * 100,
     );
-    if (coveragePct <= 0) continue;
-
-    const range = evaluateStoreInCustomerRange(store, customer.lat, customer.lng);
+    const range = customer.valid
+      ? evaluateStoreInCustomerRange(store, customer.lat, customer.lng)
+      : {
+          inCustomerRange: null,
+          distanceKm: null,
+          serviceRadiusKm: Number(store?.serviceRadius) || 5,
+          rangeReason: "Customer delivery location unavailable",
+        };
     const productsAvailable = coveragePct === 100 && stockOk;
+    // Do not send irrelevant stores to the Admin UI. A candidate must carry
+    // every ordered catalog product/variant and have enough live stock for
+    // the full requested quantity.
+    if (!productsAvailable) continue;
     const openState = isStoreOperationallyOpen(store);
 
     candidates.push({
@@ -508,7 +492,7 @@ export async function getOrderReassignCandidates(orderId) {
       distanceKm: range.distanceKm,
       serviceRadiusKm: range.serviceRadiusKm,
       rangeReason: range.rangeReason,
-      canReassign: productsAvailable && range.inCustomerRange,
+      canReassign: true,
     });
   }
 
@@ -556,6 +540,9 @@ export async function getOrderReassignCandidates(orderId) {
     requiredCatalogCount: lineRequirements.length || catalogIds.length,
     customerLocation: { lat: customer.lat, lng: customer.lng },
     candidates,
+    message: candidates.length
+      ? null
+      : "No other active store has every ordered product/variant in the required quantity.",
   };
 }
 
@@ -578,13 +565,7 @@ export async function adminReassignOrderToStore({
   }
 
   const order = await loadOrderForReassign(orderId);
-  const workflowStatus = order.workflowStatus || WORKFLOW_STATUS.SELLER_PENDING;
-  if (!REASSIGNABLE_STATUSES.has(workflowStatus)) {
-    throw httpError(
-      `Order cannot be reassigned in status ${workflowStatus}`,
-      400,
-    );
-  }
+  const workflowStatus = assertOrderCanBeReassigned(order);
 
   const fromStoreId = toId(order.seller);
   const toStoreId = String(targetStoreId);
@@ -605,8 +586,6 @@ export async function adminReassignOrderToStore({
     throw httpError("Target store is not approved", 400);
   }
 
-  await assertTargetStoreInCustomerRange(order, targetStore);
-
   const fromStore = fromStoreId
     ? await Store.findById(fromStoreId).select("_id shopName name").lean()
     : null;
@@ -620,12 +599,7 @@ export async function adminReassignOrderToStore({
 
     const locked = await Order.findOne({ orderId: order.orderId }).session(session);
     if (!locked) throw httpError("Order not found", 404);
-    if (!REASSIGNABLE_STATUSES.has(locked.workflowStatus || WORKFLOW_STATUS.SELLER_PENDING)) {
-      throw httpError(
-        `Order cannot be reassigned in status ${locked.workflowStatus}`,
-        400,
-      );
-    }
+    assertOrderCanBeReassigned(locked);
     if (toId(locked.seller) !== fromStoreId) {
       throw httpError("Order seller changed concurrently. Refresh and retry.", 409);
     }
@@ -780,6 +754,12 @@ export async function adminReassignOrderToStore({
 
     locked.seller = toStoreId;
     locked.items = remappedItems;
+    if (["pending", "awaiting_payment"].includes(locked.priceAdjustment?.status)) {
+      locked.priceAdjustment.status = "cancelled";
+      locked.priceAdjustment.proposedItems = [];
+      locked.priceAdjustment.proposedBreakdown = null;
+      locked.priceAdjustment.proposedPartialCancelIndexes = [];
+    }
     locked.workflowStatus = WORKFLOW_STATUS.SELLER_PENDING;
     locked.status = legacyStatusFromWorkflow(WORKFLOW_STATUS.SELLER_PENDING);
     locked.orderStatus = locked.status;
@@ -787,7 +767,29 @@ export async function adminReassignOrderToStore({
     locked.sellerAcceptedAt = undefined;
     locked.deliveryBoy = undefined;
     locked.deliveryPartner = undefined;
+    locked.deliveryAssigneeType = "none";
+    locked.guestCourierAssignment = null;
     locked.assignedAt = undefined;
+    locked.pickupConfirmedAt = undefined;
+    locked.pickupReadyAt = undefined;
+    locked.handedOverToLogisticsAt = undefined;
+    locked.sellerPackedAt = undefined;
+    locked.outForDeliveryAt = undefined;
+    locked.deliveryRiderStep = 1;
+    locked.pickupProofImages = [];
+    locked.deliveryProofImages = [];
+    locked.externalLogisticsProvider = undefined;
+    locked.externalTrackingLink = undefined;
+    locked.customerPickup = {
+      readyAt: null,
+      otpHash: null,
+      qrTokenHash: null,
+      expiresAt: null,
+      verifiedAt: null,
+      verifiedBy: "",
+      handoverPhotoUrl: null,
+      lastOtpSentAt: null,
+    };
     locked.assignmentVersion = Number(locked.assignmentVersion || 0) + 1;
     locked.skippedBy = [];
     locked.deliverySearchMeta = {

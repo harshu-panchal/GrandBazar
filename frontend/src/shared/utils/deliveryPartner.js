@@ -48,14 +48,15 @@ export function isPopulatedDeliveryPartner(partner) {
 
 /** Resolve delivery partner display for seller/admin tracking UIs */
 export function resolveDeliveryPartnerDisplay(order = {}) {
-  const partner = isPopulatedDeliveryPartner(order.deliveryBoy)
+  const guestPartner = order.deliveryAssignee?.type === "guest" ? order.deliveryAssignee : null;
+  const partner = guestPartner || (isPopulatedDeliveryPartner(order.deliveryBoy)
     ? order.deliveryBoy
     : isPopulatedDeliveryPartner(order.deliveryPartner)
       ? order.deliveryPartner
-      : null;
+      : null);
 
   if (partner) {
-    return buildPartnerDisplay(partner);
+    return buildPartnerDisplay(partner, guestPartner ? "Temporary Courier" : "Delivery Partner");
   }
 
   const providerName = String(order.externalLogisticsProvider || "").trim();

@@ -405,7 +405,7 @@ export async function handleOnlineOrderFinance(
 
     if (order.financeFlags?.onlinePaymentCaptured) {
       await session.commitTransaction();
-      return order;
+      return settleDeferredDeliveredOrder(order, actorId);
     }
 
     const grandTotal = roundCurrency(order.paymentBreakdown?.grandTotal || order.pricing?.total || 0);
@@ -467,13 +467,27 @@ export async function handleOnlineOrderFinance(
 
     await order.save({ session });
     await session.commitTransaction();
-    return order;
+    return settleDeferredDeliveredOrder(order, actorId);
   } catch (error) {
     await session.abortTransaction();
     throw error;
   } finally {
     session.endSession();
   }
+}
+
+async function settleDeferredDeliveredOrder(order, actorId) {
+  const delivered =
+    order?.status === "delivered" ||
+    order?.orderStatus === "delivered" ||
+    order?.workflowStatus === WORKFLOW_STATUS.DELIVERED;
+  if (!delivered || order?.financeFlags?.deliveredSettlementApplied) return order;
+
+  // Dynamic import avoids a static cycle: orderSettlement delegates its
+  // ledger work back to this module. This runs only after payment capture has
+  // committed, so settlement observes the confirmed funds.
+  const { applyDeliveredSettlement } = await import("../orderSettlement.js");
+  return (await applyDeliveredSettlement(order, order.orderId)) || order;
 }
 
 export async function handleCodOrderFinance(

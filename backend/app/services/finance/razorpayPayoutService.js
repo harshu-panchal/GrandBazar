@@ -2,6 +2,7 @@ import crypto from "crypto";
 import axios from "axios";
 import Setting from "../../models/setting.js";
 import logger from "../logger.js";
+import { normalizePayoutIdempotencyKey } from "./payoutIdempotency.js";
 
 // RazorpayX Payouts client for automatic seller settlement (BRD SET-20) plus
 // the payout webhook signature check (SET-20 / "final status from the webhook").
@@ -64,6 +65,7 @@ function authHeader() {
 export async function createSellerPayout({ store, amount, idempotencyKey, referenceId, narration = "Zinto seller settlement" }) {
   const cfg = razorpayConfig();
   const amountPaise = Math.round(Number(amount) * 100);
+  const normalizedIdempotencyKey = normalizePayoutIdempotencyKey(idempotencyKey);
   if (!(amountPaise > 0)) throw new Error("Payout amount must be positive");
 
   if (!isRazorpayConfigured()) {
@@ -110,7 +112,7 @@ export async function createSellerPayout({ store, amount, idempotencyKey, refere
   let res;
   try {
     res = await axios.post(`${RZP_BASE}/payouts`, body, {
-      headers: { ...authHeader(), "X-Payout-Idempotency": idempotencyKey, "Content-Type": "application/json" },
+      headers: { ...authHeader(), "X-Payout-Idempotency": normalizedIdempotencyKey, "Content-Type": "application/json" },
       timeout: 20000,
     });
   } catch (error) {

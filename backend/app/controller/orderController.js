@@ -2,7 +2,6 @@ import Order from "../models/order.js";
 import Cart from "../models/cart.js";
 import Product from "../models/product.js";
 import Transaction from "../models/transaction.js";
-import StockHistory from "../models/stockHistory.js";
 import Store from "../models/store.js";
 import Delivery from "../models/delivery.js";
 import Setting from "../models/setting.js";
@@ -74,6 +73,7 @@ import { processPayout } from "../services/finance/payoutService.js";
 import { createLedgerEntry } from "../services/finance/ledgerService.js";
 import { buildKey, getOrSet, getTTL, invalidate } from "../services/cacheService.js";
 import { resolveSiblingStoreIds } from "../services/storeService.js";
+import { compensateOrderCancellation } from "../services/orderCompensation.js";
 
 function validateWithJoi(schema, payload) {
   const { error, value } = schema.validate(payload, {
@@ -537,6 +537,8 @@ export const getOrderDetails = async (req, res) => {
       .populate("deliveryBoy", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
       .populate("deliveryPartner", "name phone email profileImage vehicleType vehicleNumber currentArea isOnline isVerified")
       .populate("returnDeliveryBoy", "name phone email profileImage vehicleType vehicleNumber")
+      .populate("guestCourierAssignment", "courier taskType status assignedAt emailStatus lastAccessedAt tokenVersion")
+      .populate("returnGuestCourierAssignment", "courier taskType status assignedAt emailStatus lastAccessedAt tokenVersion")
       .populate({
         path: "seller",
         select: "shopName name address city state pincode gstNumber location phone ownerId",
@@ -1210,6 +1212,7 @@ export const updateOrderStatus = async (req, res) => {
     const { orderId } = req.params;
     const { status, deliveryBoyId, cancelReason } = req.body;
     const { id: userId, role } = req.user;
+    const isAdmin = isAdminScopedUser(req.user);
 
     const orderKey = orderMatchQueryFromRouteParam(orderId);
     if (!orderKey) {
@@ -1233,6 +1236,7 @@ export const updateOrderStatus = async (req, res) => {
     if (
       isCustomerPickupOrder &&
       role !== "seller" &&
+      !isAdmin &&
       String(status || "").toLowerCase() === "delivered"
     ) {
       return handleResponse(
@@ -1289,8 +1293,6 @@ export const updateOrderStatus = async (req, res) => {
       role === "seller" && order.seller?.toString() === userId;
     const isAssignedDeliveryBoy =
       role === "delivery" && order.deliveryBoy?.toString() === userId;
-    const isAdmin = role === "admin";
-
     if (!isOwnerSeller && !isAssignedDeliveryBoy && !isAdmin) {
       return handleResponse(
         res,
@@ -1324,34 +1326,66 @@ export const updateOrderStatus = async (req, res) => {
 
     // Handle Cancellation (Stock Reversal & Transaction Update)
     if (status === "cancelled" && oldStatus !== "cancelled") {
-      // 1. Reverse Stock
-      for (const item of order.items) {
-        await Product.findByIdAndUpdate(item.product, {
-          $inc: { stock: item.quantity },
-        });
+      const cancellationReason = String(
+        cancelReason || (isAdmin ? "Cancelled by admin" : `Cancelled by ${role}`),
+      ).trim().slice(0, 500);
 
-        await StockHistory.create({
-          product: item.product,
-          seller: order.seller,
-          type: "Correction",
-          quantity: item.quantity,
-          note: `Order #${canonicalOrderId} Cancelled`,
-          order: order._id,
-        });
+      order.cancelledBy = isAdmin ? "admin" : (role === "seller" ? "seller" : "system");
+      order.cancelReason = cancellationReason;
+      if (order.workflowVersion >= 2 || order.workflowStatus) {
+        order.workflowStatus = WORKFLOW_STATUS.CANCELLED;
+      }
+      if (isAdmin && order.cancellationRequest?.status === "pending") {
+        order.cancellationRequest = {
+          ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
+          status: "approved",
+          reviewedAt: new Date(),
+          reviewedBy: userId,
+          adminNote: cancellationReason,
+        };
       }
 
-      // 2. Update Transaction
-      await Transaction.findOneAndUpdate(
-        { reference: canonicalOrderId },
-        { status: "Failed" },
-      );
+      // Persist the canonical cancelled state first, then use the shared
+      // compensation path used by every other cancellation flow. This keeps
+      // stock, coupons, refunds, wallets and transaction mirrors consistent.
+      await order.save();
+      await compensateOrderCancellation(order, canonicalOrderId);
 
       emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_CANCELLED, {
         orderId: canonicalOrderId,
         customerId: order.customer,
         userId: order.customer,
         sellerId: order.seller,
+        customerMessage: `Your order was cancelled by an administrator. Reason: ${cancellationReason}`,
+        sellerMessage: `Order #${canonicalOrderId} was cancelled by an administrator.`,
       });
+
+      emitOrderStatusUpdate(
+        canonicalOrderId,
+        {
+          workflowStatus: WORKFLOW_STATUS.CANCELLED,
+          status: "cancelled",
+          orderStatus: "cancelled",
+          cancelReason: cancellationReason,
+        },
+        order.customer,
+        order.seller,
+        [order.deliveryBoy].filter(Boolean),
+      );
+
+      try {
+        await invalidate(buildKey("orders", "customer", `${order.customer.toString()}:*`));
+      } catch (cacheErr) {
+        console.warn("[updateOrderStatus] cancelled cache invalidation failed:", cacheErr.message);
+      }
+
+      const cancelledOrder = await Order.findById(order._id);
+      return handleResponse(
+        res,
+        200,
+        isAdmin ? "Order cancelled by admin" : "Order cancelled",
+        cancelledOrder || order,
+      );
     }
 
     // Handle Confirmation/Delivery (Settle Transaction for Demo)
@@ -1371,7 +1405,22 @@ export const updateOrderStatus = async (req, res) => {
       // - queue rider payout
       // - mark COD cash collected (system float)
       await order.save();
-      await applyDeliveredSettlement(order, canonicalOrderId);
+      let settlementDeferred = false;
+      try {
+        await applyDeliveredSettlement(order, canonicalOrderId);
+      } catch (settlementError) {
+        // Admin may force the operational state to DELIVERED before an ONLINE
+        // payment capture arrives. Keep that override, and let the capture
+        // flow apply settlement immediately after the money is confirmed.
+        if (
+          isAdmin &&
+          settlementError?.message === "Cannot settle delivered online order before payment capture"
+        ) {
+          settlementDeferred = true;
+        } else {
+          throw settlementError;
+        }
+      }
 
       emitNotificationEvent(NOTIFICATION_EVENTS.ORDER_DELIVERED, {
         orderId: canonicalOrderId,
@@ -1400,7 +1449,14 @@ export const updateOrderStatus = async (req, res) => {
       } catch (cacheErr) {
         console.warn("[updateOrderStatus] delivered cache invalidation failed:", cacheErr.message);
       }
-      return handleResponse(res, 200, "Order marked as delivered and settlement updated", deliveredOrder);
+      return handleResponse(
+        res,
+        200,
+        settlementDeferred
+          ? "Order marked as delivered; settlement will start after online payment is captured"
+          : "Order marked as delivered and settlement updated",
+        deliveredOrder,
+      );
     }
 
     await order.save();

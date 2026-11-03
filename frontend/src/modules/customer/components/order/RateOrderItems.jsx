@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Star, CheckCircle2 } from "lucide-react";
 import { customerApi } from "../../services/customerApi";
 import { toast } from "sonner";
@@ -8,12 +8,11 @@ import { getLegacyStatusFromOrder } from "@/shared/utils/orderStatus";
  * "Rate your order" — shown once an order is delivered. Submits one review
  * per item via the existing product-review endpoint, but with orderId
  * attached so the backend marks it verifiedPurchase (see
- * reviewController.js resolveVerifiedPurchase). A customer who already
- * rated a product (via the product page, or a previous order) sees the
- * backend's "already reviewed" error surface gracefully — this component
- * doesn't try to pre-detect that, it just reacts to it.
+ * reviewController.js resolveVerifiedPurchase). Existing product reviews are
+ * loaded first so products reviewed from this or an earlier order are never
+ * offered for rating again.
  */
-function ItemRatingRow({ item, orderId }) {
+function ItemRatingRow({ item, orderId, onReviewed }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -40,10 +39,13 @@ function ItemRatingRow({ item, orderId }) {
         comment: comment.trim() || "Great product!",
       });
       setDone(true);
+      onReviewed(productId);
+      toast.success("Thanks for your review!");
     } catch (error) {
       const message = error?.response?.data?.message || "";
       if (message.toLowerCase().includes("already reviewed")) {
         setAlreadyRated(true);
+        onReviewed(productId);
       } else {
         toast.error(message || "Failed to submit rating");
       }
@@ -109,8 +111,65 @@ export default function RateOrderItems({ order }) {
   const legacy = getLegacyStatusFromOrder(order);
   const isDelivered = legacy === "delivered" || legacy === "disputed" || Boolean(order?.deliveredAt);
   const items = Array.isArray(order?.items) ? order.items : [];
+  const orderId = order?.orderId || order?._id;
+  const [reviewedProductIds, setReviewedProductIds] = useState(() => new Set());
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsLoadFailed, setReviewsLoadFailed] = useState(false);
+
+  useEffect(() => {
+    if (!orderId || !isDelivered) {
+      setReviewsLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setReviewsLoading(true);
+    setReviewsLoadFailed(false);
+    customerApi.getOrderReviews(orderId, { limit: 200 })
+      .then((response) => {
+        if (cancelled) return;
+        const ids = (response.data?.result?.items || [])
+          .map((review) => review.productId?._id || review.productId)
+          .filter(Boolean)
+          .map(String);
+        setReviewedProductIds(new Set(ids));
+      })
+      .catch(() => {
+        if (!cancelled) setReviewsLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isDelivered, orderId]);
+
+  const unreviewedItems = useMemo(
+    () => items.filter((item) => {
+      const productId = item.product?._id || item.product;
+      return productId && !reviewedProductIds.has(String(productId));
+    }),
+    [items, reviewedProductIds],
+  );
+
+  const markReviewed = (productId) => {
+    setReviewedProductIds((current) => new Set([...current, String(productId)]));
+  };
 
   if (!isDelivered || !items.length) return null;
+
+  // Never show a fresh rating prompt when existing-review state could not be
+  // verified; that could invite a duplicate submission.
+  if (reviewsLoading || reviewsLoadFailed) return null;
+
+  if (!unreviewedItems.length) {
+    return (
+      <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm font-semibold text-emerald-700">
+        <CheckCircle2 size={18} />
+        You have reviewed all products in this order.
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4">
@@ -118,11 +177,12 @@ export default function RateOrderItems({ order }) {
       <p className="text-xs text-slate-500 mb-2">
         Your ratings are marked as a verified purchase and help other customers.
       </p>
-      {items.map((item, idx) => (
+      {unreviewedItems.map((item, idx) => (
         <ItemRatingRow
           key={item.product?._id || item.product || idx}
           item={item}
-          orderId={order.orderId || order._id}
+          orderId={orderId}
+          onReviewed={markReviewed}
         />
       ))}
     </div>

@@ -1026,7 +1026,10 @@ export async function sellerUpdateStatusAtomic(sellerId, orderId, nextLegacyStat
         orderId,
         seller: effectiveSellerId,
         workflowStatus: WORKFLOW_STATUS.PICKUP_READY,
-        deliveryBoy: { $ne: null },
+        $or: [
+          { deliveryBoy: { $ne: null } },
+          { deliveryAssigneeType: "guest", guestCourierAssignment: { $ne: null } },
+        ],
       },
       {
         $set: {

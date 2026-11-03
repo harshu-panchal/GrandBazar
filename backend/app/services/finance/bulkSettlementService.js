@@ -70,7 +70,8 @@ async function resolveSelection(sellerId, orderIds) {
     const complaint = o.complaintRef ? complaintMap.get(String(o.complaintRef)) : null;
     const checks = computeChecks(o, complaint, windowHours);
     const settled = Boolean(o.sellerSettlement?.lockedAt) || o.settlementStatus?.settlementState === SETTLEMENT_STATE.SETTLED;
-    return { order: o, checks, settled };
+    const paying = o.settlementStatus?.settlementState === SETTLEMENT_STATE.PAYING;
+    return { order: o, checks, settled, paying };
   });
 
   return enriched;
@@ -125,7 +126,7 @@ export async function payBulk({ sellerId, orderIds, mode = PAYOUT_MODE.AUTOMATIC
 
   // Reject the whole request if any selected order is not ready / already
   // settled — do NOT silently settle a tampered selection (BRD BLK-03).
-  const bad = enriched.filter((e) => !e.checks.ready || e.settled);
+  const bad = enriched.filter((e) => !e.checks.ready || e.settled || e.paying);
   if (bad.length) {
     throw httpError(
       `These orders are not ready to settle: ${bad.map((e) => e.order.orderId).join(", ")}`,
@@ -284,6 +285,7 @@ export async function listSellerUnsettledOrders(sellerId) {
     const complaint = o.complaintRef ? cmap.get(String(o.complaintRef)) : null;
     const checks = computeChecks(o, complaint, windowHours);
     if (!checks.ready || !checks.dots.every((dot) => dot.dot === "g")) return [];
+    const state = o.settlementStatus?.settlementState || SETTLEMENT_STATE.READY;
     return [{
       orderId: o.orderId,
       shortOrderId: o.shortOrderId || null,
@@ -294,14 +296,16 @@ export async function listSellerUnsettledOrders(sellerId) {
       deductions: o.sellerSettlement?.deductions || {},
       settledAmount: computeSettled(o),
       reviewed: Boolean(o.sellerSettlement?.reviewed),
-      ready: checks.ready,
+      // Keep an in-flight order visible so Finance can see its status, but do
+      // not let it be selected into another bulk settlement.
+      ready: checks.ready && state !== SETTLEMENT_STATE.PAYING,
       dots: checks.dots,
       complaintId: complaint?.complaintId || "",
       complaint: complaint
         ? { complaintId: complaint.complaintId, status: complaint.status, deduction: complaint.amount || 0 }
         : null,
       deliveredAt: o.deliveredAt,
-      state: o.settlementStatus?.settlementState || null,
+      state,
       failureReason: o.sellerSettlement?.failureReason || "",
       invoiceNo: o.sellerSettlement?.invoiceNo || "",
       mode: o.sellerSettlement?.mode || null,

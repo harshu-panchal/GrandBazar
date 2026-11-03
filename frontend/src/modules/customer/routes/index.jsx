@@ -9,6 +9,7 @@ import OffersPage from '../pages/OffersPage';
 import ProfilePage from '../pages/ProfilePage';
 import OrdersPage from '../pages/OrdersPage';
 import OrderTransactionsPage from '../pages/OrderTransactionsPage';
+import MyReviewsPage from '../pages/MyReviewsPage';
 import AddressesPage from '../pages/AddressesPage';
 import SettingsPage from '../pages/SettingsPage';
 import SupportPage from '../pages/SupportPage';
@@ -63,6 +64,7 @@ const CustomerRoutes = () => {
                             <Route path="orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
                             <Route path="orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
                             <Route path="transactions" element={<ProtectedRoute><OrderTransactionsPage /></ProtectedRoute>} />
+                            <Route path="reviews" element={<ProtectedRoute><MyReviewsPage /></ProtectedRoute>} />
                             <Route path="addresses" element={<ProtectedRoute><AddressesPage /></ProtectedRoute>} />
                             <Route path="settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                             <Route path="support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />

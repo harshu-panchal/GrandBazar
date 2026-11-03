@@ -169,6 +169,7 @@ const OrdersList = () => {
     const handleStatusUpdate = async (orderId, newStatus) => {
         const targetOrder = orders.find((item) => item._id === orderId || item.id === orderId);
         if (!targetOrder || targetOrder.status === newStatus || updatingOrderId) return;
+        let cancelReason = "";
         if (
             newStatus === 'delivered' &&
             !window.confirm(
@@ -177,9 +178,17 @@ const OrdersList = () => {
         ) {
             return;
         }
+        if (newStatus === 'cancelled') {
+            const enteredReason = window.prompt(
+                `Cancel order #${targetOrder.shortId || targetOrder.id}? Enter the cancellation reason:`,
+                'Cancelled by admin',
+            );
+            if (enteredReason === null) return;
+            cancelReason = enteredReason.trim() || 'Cancelled by admin';
+        }
         setUpdatingOrderId(orderId);
         try {
-            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus });
+            const response = await adminApi.updateOrderStatus(orderId, { status: newStatus, cancelReason });
             showToast(
                 response.data?.message || (newStatus === 'delivered' ? 'Order marked as delivered' : `Order status updated to ${newStatus}`),
                 "success",
