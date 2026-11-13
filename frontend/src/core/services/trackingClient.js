@@ -97,6 +97,8 @@ export const subscribeToOrderLocation = (orderId, handler) => {
     }
 
     console.log(`[tracking] No valid location coordinates found in deliveryLocations`);
+  }, (error) => {
+    console.warn(`[tracking] Unable to read /deliveryLocations/${orderId}:`, error?.message || error);
   });
 
   const r2 = ref(db, `/orders/${orderId}/rider`);
@@ -110,6 +112,8 @@ export const subscribeToOrderLocation = (orderId, handler) => {
     } else {
       console.log(`[tracking] No data at /orders/${orderId}/rider`);
     }
+  }, (error) => {
+    console.warn(`[tracking] Unable to read /orders/${orderId}/rider:`, error?.message || error);
   });
 
   return () => {

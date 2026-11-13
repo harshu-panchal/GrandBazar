@@ -410,6 +410,18 @@ const OrderDetailPage = () => {
       // The customer room receives updates for every order belonging to the
       // customer. Never apply another order's event to the currently open one.
       if (!matchesOrderIdentifier(payload?.orderId, identifiersRef.current)) return;
+      if (
+        payload?.liveLocation &&
+        Number.isFinite(Number(payload.liveLocation.lat)) &&
+        Number.isFinite(Number(payload.liveLocation.lng))
+      ) {
+        setLiveLocation({
+          ...payload.liveLocation,
+          lat: Number(payload.liveLocation.lat),
+          lng: Number(payload.liveLocation.lng),
+          source: payload.liveLocation.source || "order_socket",
+        });
+      }
       if (payload?.returnStatus) {
         setOrder((prev) => prev ? { ...prev, returnStatus: payload.returnStatus } : prev);
         setReturnDetails((prev) => ({
@@ -512,31 +524,54 @@ const OrderDetailPage = () => {
     };
   }, [orderId, order?.orderId]);
 
-  // Subscribe to live tracking from Firebase (if available)
+  // Subscribe with the canonical business order ID. The route parameter can
+  // also be a Mongo ID (for example after checkout), while tracking writers
+  // always use order.orderId.
   useEffect(() => {
-    if (!orderId) return;
+    const trackingOrderId = order?.orderId || orderId;
+    if (!trackingOrderId) return undefined;
 
-    console.log(`[OrderDetailPage] Setting up Firebase subscriptions for order ${orderId}`);
-    const offLocation = subscribeToOrderLocation(orderId, (loc) => {
+    console.log(`[OrderDetailPage] Setting up Firebase subscriptions for order ${trackingOrderId}`);
+    const offLocation = subscribeToOrderLocation(trackingOrderId, (loc) => {
       console.log(`[OrderDetailPage] Location update:`, loc);
       setLiveLocation(loc);
     });
-    const offTrail = subscribeToOrderTrail(orderId, (t) => {
+    const offTrail = subscribeToOrderTrail(trackingOrderId, (t) => {
       console.log(`[OrderDetailPage] Trail update: ${t.length} points`);
       setTrail(t);
     });
-    const offRoute = subscribeToOrderRoute(orderId, (route) => {
+    const offRoute = subscribeToOrderRoute(trackingOrderId, (route) => {
       console.log(`[OrderDetailPage] Route update:`, route);
       setRoutePolyline(route);
     });
 
     return () => {
-      console.log(`[OrderDetailPage] Cleaning up Firebase subscriptions for order ${orderId}`);
+      console.log(`[OrderDetailPage] Cleaning up Firebase subscriptions for order ${trackingOrderId}`);
       offLocation && offLocation();
       offTrail && offTrail();
       offRoute && offRoute();
     };
-  }, [orderId]);
+  }, [orderId, order?.orderId]);
+
+  // Initial/refresh fallback from MongoDB. Socket events replace this as soon
+  // as the guest courier sends another GPS point.
+  useEffect(() => {
+    const fallback = order?.guestCourierLiveLocation;
+    const updatedAt = new Date(fallback?.lastUpdatedAt || 0).getTime();
+    const isRecent = Number.isFinite(updatedAt) && Date.now() - updatedAt <= 10 * 60 * 1000;
+    if (
+      isRecent &&
+      Number.isFinite(Number(fallback?.lat)) &&
+      Number.isFinite(Number(fallback?.lng))
+    ) {
+      setLiveLocation({
+        ...fallback,
+        lat: Number(fallback.lat),
+        lng: Number(fallback.lng),
+        source: fallback.source || "order_snapshot",
+      });
+    }
+  }, [order?.guestCourierLiveLocation?.lastUpdatedAt]);
 
   useEffect(() => {
     const iv = setInterval(() => setClockTick(Date.now()), 30000);

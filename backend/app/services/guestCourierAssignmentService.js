@@ -103,6 +103,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
         $set: {
           deliveryAssigneeType: "guest",
           guestCourierAssignment: assignment._id,
+          guestCourierLiveLocation: null,
           workflowStatus: WORKFLOW_STATUS.DELIVERY_ASSIGNED,
           status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_ASSIGNED),
           orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_ASSIGNED),
@@ -131,6 +132,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
         $set: {
           returnDeliveryAssigneeType: "guest",
           returnGuestCourierAssignment: assignment._id,
+          guestCourierLiveLocation: null,
           returnStatus: "return_pickup_assigned",
         },
       },
@@ -210,6 +212,7 @@ export async function revokeGuestCourier({ adminId, actorRole, assignmentId, rea
         $set: {
           deliveryAssigneeType: "none",
           guestCourierAssignment: null,
+          guestCourierLiveLocation: null,
           workflowStatus: WORKFLOW_STATUS.DELIVERY_SEARCH,
           status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_SEARCH),
           orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_SEARCH),
@@ -228,7 +231,7 @@ export async function revokeGuestCourier({ adminId, actorRole, assignmentId, rea
   } else {
     await Order.updateOne(
       { _id: assignment.order, returnGuestCourierAssignment: assignment._id },
-      { $set: { returnDeliveryAssigneeType: "none", returnGuestCourierAssignment: null } },
+      { $set: { returnDeliveryAssigneeType: "none", returnGuestCourierAssignment: null, guestCourierLiveLocation: null } },
     );
   }
 

@@ -34,6 +34,8 @@ export default function GuestDeliveryPage() {
   const [completed, setCompleted] = useState(false);
   const [returnProof, setReturnProof] = useState([]);
   const [courierLocation, setCourierLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
+  const [otpResendSeconds, setOtpResendSeconds] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -58,9 +60,12 @@ export default function GuestDeliveryPage() {
       (p) => {
         const location = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, heading: p.coords.heading, speed: p.coords.speed };
         setCourierLocation(location);
-        guestDeliveryApi.updateLocation(location).catch(() => {});
+        setLocationError('');
+        guestDeliveryApi.updateLocation(location).catch((error) => {
+          setLocationError(error.response?.data?.message || 'Your live location could not be shared');
+        });
       },
-      () => {},
+      () => setLocationError('Enable precise location permission so the customer can track you'),
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     );
     return () => navigator.geolocation.clearWatch(watch);
@@ -92,6 +97,7 @@ export default function GuestDeliveryPage() {
       const location = await currentPosition();
       setCourierLocation(location);
       await guestDeliveryApi.updateLocation(location);
+      setLocationError('');
       toast.success('Live location refreshed');
     } catch (error) {
       toast.error(error.message || 'Unable to read your location');
@@ -157,21 +163,41 @@ export default function GuestDeliveryPage() {
     } catch (error) { toast.error(error.response?.data?.message || error.message || 'Unable to start payment'); setBusy(''); }
   };
 
+  useEffect(() => {
+    const resendAt = new Date(order?.otpState?.resendAvailableAt || 0).getTime();
+    if (!Number.isFinite(resendAt) || resendAt <= Date.now()) {
+      setOtpResendSeconds(0);
+      return undefined;
+    }
+    const update = () => setOtpResendSeconds(Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [order?.otpState?.resendAvailableAt]);
+
+  const requestTaskOtp = useCallback(async () => {
+    if (isReturn) {
+      if (order?.returnStatus === 'return_pickup_assigned') return guestDeliveryApi.requestReturnPickupOtp();
+      return guestDeliveryApi.requestReturnDropOtp();
+    }
+    return guestDeliveryApi.requestDeliveryOtp(await currentPosition());
+  }, [isReturn, order?.returnStatus]);
+
   const action = useMemo(() => {
     if (!order) return null;
     if (isReturn) {
       if (order.returnStatus === 'return_pickup_assigned' && !order.returnPickupImages?.length) return { label: 'Upload pickup proof', renderUpload: true };
-      if (order.returnStatus === 'return_pickup_assigned') return { label: 'Request customer OTP', run: () => guestDeliveryApi.requestReturnPickupOtp(), success: 'OTP sent to customer' };
-      if (order.returnStatus === 'return_in_transit') return { label: 'Request seller OTP', run: () => guestDeliveryApi.requestReturnDropOtp(), success: 'OTP sent to seller' };
+      if (order.returnStatus === 'return_pickup_assigned' && !order.otpState?.active) return { label: 'Request customer OTP', run: requestTaskOtp, success: 'OTP sent to customer' };
+      if (['return_in_transit', 'return_drop_pending'].includes(order.returnStatus) && !order.otpState?.active) return { label: 'Request seller OTP', run: requestTaskOtp, success: 'OTP sent to seller' };
       return null;
     }
     if (order.workflowStatus === 'DELIVERY_ASSIGNED') return { label: 'I arrived at the store', run: withLocation((p) => guestDeliveryApi.arrived(p)), success: 'Arrival recorded' };
     if (order.workflowStatus === 'PICKUP_READY') return { label: 'Waiting for seller handover', disabled: true };
     if (order.workflowStatus === 'HANDED_OVER_TO_LOGISTICS') return { label: 'Confirm package pickup', run: withLocation((p) => guestDeliveryApi.pickup(p)), success: 'Pickup confirmed' };
     if (order.workflowStatus === 'OUT_FOR_DELIVERY' && Number(order.deliveryRiderStep || 0) < 4) return { label: 'I reached the customer', run: () => guestDeliveryApi.advance(), success: 'Progress updated' };
-    if (order.workflowStatus === 'OUT_FOR_DELIVERY') return { label: 'Request customer OTP', run: withLocation((p) => guestDeliveryApi.requestDeliveryOtp(p)), success: 'OTP sent to customer' };
+    if (order.workflowStatus === 'OUT_FOR_DELIVERY' && !order.otpState?.active) return { label: 'Request customer OTP', run: requestTaskOtp, success: 'OTP sent to customer' };
     return null;
-  }, [order, isReturn]);
+  }, [order, isReturn, requestTaskOtp]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50"><RefreshCw className="animate-spin text-orange-600" /></div>;
   if (completed) return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><div className="max-w-md rounded-3xl bg-white p-10 text-center shadow-xl"><ShieldCheck className="mx-auto h-16 w-16 text-emerald-500" /><h1 className="mt-5 text-2xl font-black text-slate-900">Task completed</h1><p className="mt-2 text-sm text-slate-500">Access has been revoked. You can close this page.</p></div></div>;
@@ -199,10 +225,15 @@ export default function GuestDeliveryPage() {
           onRequestLocation={refreshCourierLocation}
           onNavigate={navigate}
         />
+        {locationError && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">
+            {locationError}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3"><a href={`tel:${isReturn ? order.address?.phone || order.customer?.phone : order.seller?.phone}`} className="flex items-center justify-center gap-2 rounded-2xl bg-white p-4 text-sm font-black shadow-sm"><Phone size={17} />Call pickup</a><button onClick={navigate} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 p-4 text-sm font-black text-white"><Navigation size={17} />Navigate</button></div>
         {order.paymentMode === 'COD' && !isReturn && order.cashSettlement && Number(order.cashSettlement.pendingAmount) > 0 && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-center gap-3"><IndianRupee className="text-amber-700" /><div><h3 className="font-black text-amber-950">COD cash to submit</h3><p className="text-sm text-amber-800">{money(order.cashSettlement.pendingAmount)} due to admin</p></div></div><button disabled={busy === 'cod'} onClick={payCod} className="mt-4 w-full rounded-2xl bg-amber-700 py-3 text-sm font-black text-white disabled:opacity-50">{busy === 'cod' ? 'Opening payment…' : 'Pay online now'}</button><p className="mt-2 text-xs text-amber-700">You may also hand over physical cash to an administrator for a recorded receipt.</p></section>}
         {action?.renderUpload ? <label className="flex cursor-pointer flex-col items-center rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50 p-8 text-orange-700"><Camera className="h-8 w-8" /><span className="mt-3 text-sm font-black">{busy === 'proof' ? 'Uploading…' : 'Take or upload pickup photos'}</span><input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={busy === 'proof'} onChange={(e) => uploadProof(e.target.files)} /></label> : action && <button disabled={busy || action.disabled} onClick={() => act('action', action.run, action.success)} className="w-full rounded-2xl bg-orange-600 py-4 text-sm font-black text-white shadow-lg disabled:bg-slate-300">{busy === 'action' ? 'Please wait…' : action.label}</button>}
-        {needsOtpEntry && <section className="rounded-3xl bg-white p-5 shadow-sm"><h3 className="font-black">Enter the 4-digit OTP</h3><p className="mt-1 text-xs text-slate-500">Request the code first, then ask {isReturn && order.returnStatus !== 'return_pickup_assigned' ? 'the seller' : 'the customer'} for it.</p><div className="mt-4 flex gap-3"><input value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.4em] outline-none focus:border-orange-500" placeholder="0000" /><button disabled={otp.length !== 4 || busy === 'otp'} onClick={() => act('otp', verifyOtp, terminalOtp ? 'Task completed' : 'Pickup verified', { terminal: terminalOtp })} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white disabled:opacity-40">Verify</button></div></section>}
+        {needsOtpEntry && <section className="rounded-3xl bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">Enter the 4-digit OTP</h3><p className="mt-1 text-xs text-slate-500">{order.otpState?.active ? `Ask ${isReturn && order.returnStatus !== 'return_pickup_assigned' ? 'the seller' : 'the customer'} for the code.` : 'Request the code first.'}</p></div>{order.otpState?.active && <button type="button" disabled={Boolean(busy) || otpResendSeconds > 0} onClick={() => act('resendOtp', requestTaskOtp, 'A new OTP has been sent')} className="shrink-0 rounded-xl bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{busy === 'resendOtp' ? 'Sending…' : otpResendSeconds > 0 ? `Resend in ${otpResendSeconds}s` : 'Resend OTP'}</button>}</div><div className="mt-4 flex gap-3"><input value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.4em] outline-none focus:border-orange-500" placeholder="0000" /><button disabled={otp.length !== 4 || busy === 'otp'} onClick={() => act('otp', verifyOtp, terminalOtp ? 'Task completed' : 'Pickup verified', { terminal: terminalOtp })} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white disabled:opacity-40">Verify</button></div></section>}
       </main>
     </div>
   );

@@ -793,6 +793,19 @@ const orderSchema = new mongoose.Schema(
       ref: "GuestCourierAssignment",
       default: null,
     },
+    // Server-persisted fallback for temporary-courier tracking. Firebase is
+    // still the primary high-frequency channel, but this snapshot also feeds
+    // Socket.IO and lets customer tracking recover when RTDB is unavailable.
+    guestCourierLiveLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      accuracy: { type: Number, default: null },
+      heading: { type: Number, default: null },
+      speed: { type: Number, default: null },
+      lastUpdatedAt: { type: Date, default: null },
+      deliveryId: { type: String, default: "" },
+      source: { type: String, default: "" },
+    },
     externalLogisticsProvider: String,
     externalTrackingLink: String,
     fulfillmentMethod: {

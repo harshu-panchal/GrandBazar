@@ -24,12 +24,49 @@ function assertCoordinates(lat, lng) {
   return { lat: a, lng: b };
 }
 
+const GUEST_OTP_RESEND_COOLDOWN_MS = Number(process.env.GUEST_OTP_RESEND_COOLDOWN_MS || 30_000);
+
+async function assertGuestOtpResendAllowed(orderId, type) {
+  const latest = await OrderOtp.findOne({ orderId, type, consumedAt: null })
+    .sort({ lastGeneratedAt: -1, createdAt: -1 })
+    .select("lastGeneratedAt createdAt")
+    .lean();
+  if (!latest) return;
+  const generatedAt = new Date(latest.lastGeneratedAt || latest.createdAt || 0).getTime();
+  const remainingMs = GUEST_OTP_RESEND_COOLDOWN_MS - (Date.now() - generatedAt);
+  if (remainingMs > 0) {
+    throw Object.assign(
+      new Error(`Please wait ${Math.ceil(remainingMs / 1000)} seconds before resending the OTP`),
+      { statusCode: 429 },
+    );
+  }
+}
+
 export async function getGuestTaskView(assignment, order) {
   const populated = await Order.findById(order._id)
     .populate("customer", "name phone")
     .populate("seller", "shopName name phone address city state pincode landmark location")
     .lean();
   const cashSettlement = await getGuestCodSettlement(assignment._id);
+  const otpType = assignment.taskType === "forward_delivery"
+    ? "delivery"
+    : populated.returnStatus === "return_pickup_assigned"
+      ? "return_pickup"
+      : ["return_in_transit", "return_drop_pending"].includes(populated.returnStatus)
+        ? "return_drop"
+        : null;
+  const activeOtp = otpType
+    ? await OrderOtp.findOne({
+        orderId: populated.orderId,
+        type: otpType,
+        consumedAt: null,
+        expiresAt: { $gt: new Date() },
+      })
+        .sort({ lastGeneratedAt: -1, createdAt: -1 })
+        .select("expiresAt lastGeneratedAt createdAt")
+        .lean()
+    : null;
+  const generatedAt = activeOtp?.lastGeneratedAt || activeOtp?.createdAt || null;
   return {
     assignment: assignmentPublicView(assignment),
     order: {
@@ -52,6 +89,14 @@ export async function getGuestTaskView(assignment, order) {
       pickupProofImages: populated.pickupProofImages || [],
       returnPickupImages: populated.returnPickupImages || [],
       cashSettlement,
+      otpState: {
+        active: Boolean(activeOtp),
+        expiresAt: activeOtp?.expiresAt || null,
+        requestedAt: generatedAt,
+        resendAvailableAt: generatedAt
+          ? new Date(new Date(generatedAt).getTime() + GUEST_OTP_RESEND_COOLDOWN_MS)
+          : null,
+      },
     },
   };
 }
@@ -70,10 +115,41 @@ export async function updateGuestLocation(assignment, order, payload = {}) {
     orderId: order.orderId,
     source: "guest_web_gps",
   };
+
+  const assignmentField = assignment.taskType === "return_pickup"
+    ? "returnGuestCourierAssignment"
+    : "guestCourierAssignment";
+  const persisted = await Order.updateOne(
+    { _id: order._id, [assignmentField]: assignment._id },
+    {
+      $set: {
+        guestCourierLiveLocation: {
+          lat,
+          lng,
+          accuracy: snapshot.accuracy ?? null,
+          heading: snapshot.heading ?? null,
+          speed: snapshot.speed ?? null,
+          lastUpdatedAt: new Date(snapshot.lastUpdatedAt),
+          deliveryId: actorId,
+          source: snapshot.source,
+        },
+      },
+    },
+  );
+  if (!persisted.matchedCount) {
+    throw Object.assign(new Error("This courier assignment is no longer active"), { statusCode: 410 });
+  }
+
   await Promise.all([
     writeDeliveryLocation(actorId, order.orderId, snapshot),
     appendTrailPoint(order.orderId, { lat, lng, timestamp: snapshot.lastUpdatedAt, source: snapshot.source }),
   ]);
+  emitOrderStatusUpdate(
+    order.orderId,
+    { liveLocation: snapshot, deliveryAssigneeType: "guest" },
+    order.customer,
+    order.seller,
+  );
   return snapshot;
 }
 
@@ -126,6 +202,7 @@ export async function guestRequestDeliveryOtp(assignment, order, payload) {
   if (distanceMeters(position.lat, position.lng, Number(destination.lat), Number(destination.lng)) > radius) {
     throw Object.assign(new Error(`Move within ${radius}m of the customer to request OTP`), { statusCode: 400 });
   }
+  await assertGuestOtpResendAllowed(order.orderId, "delivery");
   // The courier becomes accountable for COD only at the customer's doorstep.
   // Creating the liability here also makes online remittance available before
   // the completion OTP revokes the permanent task link.
@@ -184,6 +261,7 @@ export async function guestSaveReturnProof(assignment, order, { images, conditio
 export async function guestRequestReturnPickupOtp(assignment, order) {
   assertTask(assignment, "return_pickup");
   if (!order.returnPickupImages?.length) throw Object.assign(new Error("Upload pickup proof before requesting OTP"), { statusCode: 400 });
+  await assertGuestOtpResendAllowed(order.orderId, "return_pickup");
   const result = await generateReturnPickupOtp(order.orderId, { id: assignment._id, role: "guest" });
   if (!result.success) throw Object.assign(new Error(result.error), { statusCode: 400 });
   return { expiresAt: result.expiresAt };
@@ -207,6 +285,7 @@ export async function guestVerifyReturnPickupOtp(assignment, order, code) {
 export async function guestRequestReturnDropOtp(assignment, order) {
   assertTask(assignment, "return_pickup");
   if (!["return_in_transit", "return_drop_pending"].includes(order.returnStatus)) throw Object.assign(new Error("Return is not ready for seller drop-off"), { statusCode: 409 });
+  await assertGuestOtpResendAllowed(order.orderId, "return_drop");
   const result = await generateReturnDropOtp(order.orderId);
   if (!result.success) throw Object.assign(new Error(result.error), { statusCode: 400 });
   await Order.updateOne({ _id: order._id }, { $set: { returnStatus: "return_drop_pending" } });
