@@ -31,6 +31,10 @@ const Returns = () => {
   const [actionNote, setActionNote] = useState("");
   const [submittingAction, setSubmittingAction] = useState(false);
   const [assigningPickup, setAssigningPickup] = useState(false);
+  const [guestCourierForm, setGuestCourierForm] = useState({ name: "", phone: "", email: "", reason: "" });
+  const [guestCourierMode, setGuestCourierMode] = useState("assign");
+  const [showGuestCourierForm, setShowGuestCourierForm] = useState(false);
+  const [guestCourierSaving, setGuestCourierSaving] = useState(false);
 
   const tabs = [
     "All",
@@ -105,16 +109,19 @@ const Returns = () => {
         : res.data.results || [];
       // Keep the canonical orderId for actions and format it consistently
       // with the other order views when older records lack a short ID.
-      setReturns((items || []).map((item) => ({
+      const normalizedItems = (items || []).map((item) => ({
         ...item,
         shortOrderId: item.shortOrderId || null,
-      })));
+      }));
+      setReturns(normalizedItems);
+      return normalizedItems;
     } catch (error) {
       console.error("Failed to fetch returns", error);
       showToast("Failed to fetch return requests", "error");
     } finally {
       if (!silent) setLoading(false);
     }
+    return [];
   };
 
   useEffect(() => {
@@ -172,7 +179,74 @@ const Returns = () => {
 
   const openDetails = (ret) => {
     setSelectedReturn(ret);
+    setGuestCourierForm({ name: "", phone: "", email: "", reason: "" });
+    setGuestCourierMode("assign");
+    setShowGuestCourierForm(false);
     setIsDetailsOpen(true);
+  };
+
+  const refreshSelectedReturn = async (orderId) => {
+    const refreshed = await fetchReturns({ silent: true });
+    const next = refreshed.find((item) => item.orderId === orderId || item._id === orderId);
+    if (next) setSelectedReturn(next);
+    return next;
+  };
+
+  const handleGuestReturnCourier = async () => {
+    if (!selectedReturn) return;
+    const { name, phone, email, reason } = guestCourierForm;
+    if (!name.trim() || !phone.trim() || !email.trim() || !reason.trim()) {
+      showToast("Name, phone, email and assignment reason are required", "error");
+      return;
+    }
+    const assignmentId = selectedReturn.returnDeliveryAssignee?.assignmentId;
+    try {
+      setGuestCourierSaving(true);
+      const payload = { taskType: "return_pickup", name: name.trim(), phone: phone.trim(), email: email.trim(), reason: reason.trim() };
+      if (guestCourierMode === "replace" && assignmentId) {
+        await adminApi.replaceGuestCourier(assignmentId, payload);
+        showToast("Temporary return courier replaced and emailed", "success");
+      } else {
+        await adminApi.assignGuestCourier(selectedReturn.orderId || selectedReturn._id, payload);
+        showToast("Temporary return courier assigned and emailed", "success");
+      }
+      setGuestCourierForm({ name: "", phone: "", email: "", reason: "" });
+      setGuestCourierMode("assign");
+      setShowGuestCourierForm(false);
+      await refreshSelectedReturn(selectedReturn.orderId);
+    } catch (error) {
+      showToast(error.response?.data?.message || "Failed to assign temporary return courier", "error");
+    } finally {
+      setGuestCourierSaving(false);
+    }
+  };
+
+  const handleResendGuestReturnLink = async () => {
+    const assignmentId = selectedReturn?.returnDeliveryAssignee?.assignmentId;
+    if (!assignmentId) return;
+    const reason = window.prompt("Reason for resending the courier link:", "Courier requested a new link");
+    if (!reason?.trim()) return;
+    try {
+      await adminApi.resendGuestCourierLink(assignmentId, reason.trim());
+      showToast("New link emailed; all previous links were revoked", "success");
+      await refreshSelectedReturn(selectedReturn.orderId);
+    } catch (error) {
+      showToast(error.response?.data?.message || "Failed to resend courier link", "error");
+    }
+  };
+
+  const handleRevokeGuestReturnCourier = async () => {
+    const assignmentId = selectedReturn?.returnDeliveryAssignee?.assignmentId;
+    if (!assignmentId) return;
+    const reason = window.prompt("Reason for revoking this return courier:");
+    if (!reason?.trim()) return;
+    try {
+      await adminApi.revokeGuestCourier(assignmentId, reason.trim());
+      showToast("Temporary return courier revoked", "success");
+      await refreshSelectedReturn(selectedReturn.orderId);
+    } catch (error) {
+      showToast(error.response?.data?.message || "Failed to revoke return courier", "error");
+    }
   };
 
   const handleApprove = async (orderId) => {
@@ -582,6 +656,86 @@ const Returns = () => {
                     </p>
                   )}
                 </div>
+
+                {/* Temporary return courier assignment */}
+                {(
+                  ["return_approved", "return_pickup_assigned"].includes(selectedReturn.returnStatus) ||
+                  selectedReturn.returnDeliveryAssignee?.type === "guest"
+                ) && (
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Return pickup assignment</p>
+                        <h4 className="mt-1 text-sm font-black text-slate-900">Temporary courier</h4>
+                      </div>
+                      {selectedReturn.returnDeliveryAssignee?.type === "guest" && (
+                        <Badge className="bg-orange-100 text-[9px] font-black uppercase text-orange-700">Assigned</Badge>
+                      )}
+                    </div>
+
+                    {selectedReturn.returnDeliveryAssignee?.type === "guest" ? (
+                      <div className="space-y-3">
+                        <div className="rounded-xl border border-orange-100 bg-white p-3">
+                          <p className="text-sm font-black text-slate-900">{selectedReturn.returnDeliveryAssignee.name}</p>
+                          <div className="mt-2 grid gap-2 text-xs font-bold text-slate-600 sm:grid-cols-2">
+                            <a href={`tel:${selectedReturn.returnDeliveryAssignee.phone}`} className="rounded-lg bg-slate-50 px-3 py-2">{selectedReturn.returnDeliveryAssignee.phone}</a>
+                            <a href={`mailto:${selectedReturn.returnDeliveryAssignee.email}`} className="truncate rounded-lg bg-slate-50 px-3 py-2">{selectedReturn.returnDeliveryAssignee.email}</a>
+                          </div>
+                          <p className="mt-2 text-[10px] font-semibold text-slate-500">
+                            Email: {selectedReturn.returnDeliveryAssignee.emailStatus || selectedReturn.returnDeliveryAssignee.status}
+                            {selectedReturn.returnDeliveryAssignee.lastAccessedAt
+                              ? ` · Last opened ${new Date(selectedReturn.returnDeliveryAssignee.lastAccessedAt).toLocaleString("en-IN")}`
+                              : " · Link not opened yet"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={handleResendGuestReturnLink} className="rounded-xl bg-orange-600 px-3 py-2 text-[10px] font-black uppercase text-white">Resend link</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const courier = selectedReturn.returnDeliveryAssignee;
+                              setGuestCourierForm({ name: courier.name || "", phone: courier.phone || "", email: courier.email || "", reason: "" });
+                              setGuestCourierMode("replace");
+                              setShowGuestCourierForm(true);
+                            }}
+                            className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-orange-700"
+                          >
+                            Replace
+                          </button>
+                          <button type="button" onClick={handleRevokeGuestReturnCourier} className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-rose-600">Revoke</button>
+                        </div>
+                      </div>
+                    ) : selectedReturn.returnDeliveryBoy ? (
+                      <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-600">A registered rider is already assigned to this return.</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGuestCourierMode("assign");
+                          setGuestCourierForm({ name: "", phone: "", email: "", reason: "" });
+                          setShowGuestCourierForm((value) => !value);
+                        }}
+                        className="w-full rounded-xl bg-orange-600 py-3 text-xs font-black uppercase tracking-wider text-white"
+                      >
+                        {showGuestCourierForm ? "Close assignment form" : "Assign temporary return courier"}
+                      </button>
+                    )}
+
+                    {showGuestCourierForm && (
+                      <div className="space-y-2 rounded-xl border border-orange-100 bg-white p-3">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input value={guestCourierForm.name} onChange={(event) => setGuestCourierForm((value) => ({ ...value, name: event.target.value }))} placeholder="Courier full name" className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
+                          <input value={guestCourierForm.phone} onChange={(event) => setGuestCourierForm((value) => ({ ...value, phone: event.target.value }))} placeholder="Phone number" className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
+                        </div>
+                        <input type="email" value={guestCourierForm.email} onChange={(event) => setGuestCourierForm((value) => ({ ...value, email: event.target.value }))} placeholder="Email address" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
+                        <textarea value={guestCourierForm.reason} onChange={(event) => setGuestCourierForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Assignment reason" rows={2} className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
+                        <button type="button" disabled={guestCourierSaving} onClick={handleGuestReturnCourier} className="w-full rounded-xl bg-slate-900 py-3 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-50">
+                          {guestCourierSaving ? "Assigning…" : guestCourierMode === "replace" ? "Replace and email new link" : "Assign and email task link"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Tracking Info Section */}
                 {(selectedReturn.returnStatus === "return_pickup_assigned" ||

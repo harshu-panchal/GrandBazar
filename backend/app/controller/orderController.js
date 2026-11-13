@@ -347,9 +347,15 @@ export const getSellerReturns = async (req, res) => {
         .limit(limit)
         .populate("customer", "name phone")
         .populate("returnDeliveryBoy", "name phone")
+        .populate("returnGuestCourierAssignment", "courier taskType status assignedAt emailStatus lastAccessedAt tokenVersion")
         .lean(),
       Order.countDocuments(query),
     ]);
+
+    // The Returns console needs the same normalized registered/temporary
+    // assignee shape as Order Detail so admins can manage return couriers in
+    // the modal instead of hunting through the original delivery card.
+    await attachDeliveryPartners(orders);
 
     const pendingDropOrders = orders.filter((o) => o.returnStatus === "return_drop_pending");
     if (pendingDropOrders.length > 0) {
