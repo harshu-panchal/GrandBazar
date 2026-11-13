@@ -1265,6 +1265,7 @@ const OrderDetailPage = () => {
           <DeliveryOtpDisplay
             orderId={order?.orderId || orderId}
             checkoutGroupId={order?.checkoutGroupId || orderId}
+            initialOtp={order?.activeDeliveryOtp}
           />
         )}
 

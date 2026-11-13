@@ -31,7 +31,7 @@ const matchesOrderIdentifier = (payloadOrderId, identifiers = []) => {
     .includes(normalizedPayloadId);
 };
 
-const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
+const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null, initialOtp = null }) => {
   const [otpData, setOtpData] = useState(null);
   const [isDelivered, setIsDelivered] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
@@ -52,6 +52,22 @@ const DeliveryOtpDisplay = ({ orderId, checkoutGroupId = null }) => {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
+
+  // Socket delivery is intentionally not the source of truth. Restore the
+  // active OTP returned by the authorized order-details API after refresh,
+  // preserving the server-issued expiry rather than restarting ten minutes.
+  useEffect(() => {
+    if (!initialOtp?.otp || !initialOtp?.expiresAt) return;
+    const remaining = calculateRemainingTime(initialOtp.expiresAt);
+    if (remaining <= 0) return;
+    setOtpData({
+      otp: String(initialOtp.otp),
+      expiresAt: initialOtp.expiresAt,
+      deliveryPersonNearby: initialOtp.deliveryPersonNearby !== false,
+    });
+    setIsDelivered(false);
+    setRemainingSeconds(remaining);
+  }, [initialOtp?.otp, initialOtp?.expiresAt, initialOtp?.deliveryPersonNearby]);
 
   // Handle visibility change (app backgrounded or device locked)
   // Requirement 9.4: Hide OTP when app is backgrounded or device locked

@@ -706,6 +706,29 @@ export const getOrderDetails = async (req, res) => {
       order = sanitizeCommissionFieldsForSeller(order);
     }
 
+    // Socket events make the OTP appear instantly, but sockets are ephemeral.
+    // Return the still-active code to its owning customer so a browser refresh
+    // restores the same OTP and its original expiration countdown.
+    if (isOwnerCustomer && !["delivered", "cancelled"].includes(String(order.status || "").toLowerCase())) {
+      const activeDeliveryOtp = await OrderOtp.findOne({
+        orderId: order.orderId,
+        type: "delivery",
+        consumedAt: null,
+        expiresAt: { $gt: new Date() },
+      })
+        .sort({ lastGeneratedAt: -1, createdAt: -1 })
+        .select("code expiresAt lastGeneratedAt")
+        .lean();
+      order.activeDeliveryOtp = activeDeliveryOtp?.code
+        ? {
+            otp: activeDeliveryOtp.code,
+            expiresAt: activeDeliveryOtp.expiresAt,
+            requestedAt: activeDeliveryOtp.lastGeneratedAt,
+            deliveryPersonNearby: true,
+          }
+        : null;
+    }
+
     const viewerSafeOrder = redactDeliveredCustomerDetails(order, req.user);
     return handleResponse(res, 200, "Order details fetched", maskOrderForViewer(attachDisplayStatus(viewerSafeOrder), req.user));
   } catch (error) {
