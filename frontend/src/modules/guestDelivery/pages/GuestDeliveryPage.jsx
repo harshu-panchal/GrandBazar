@@ -3,6 +3,7 @@ import { MapPin, Navigation, Phone, Mail, Package, ShieldCheck, RefreshCw, India
 import { toast } from 'sonner';
 import { openRazorpayCheckout } from '@shared/hooks/useRazorpayCheckout';
 import { captureGuestTokenFromUrl, clearGuestToken, guestDeliveryApi } from '../services/guestDeliveryApi';
+import GuestNavigationMap from '../components/GuestNavigationMap';
 
 const money = (value) => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -32,6 +33,7 @@ export default function GuestDeliveryPage() {
   const [otp, setOtp] = useState('');
   const [completed, setCompleted] = useState(false);
   const [returnProof, setReturnProof] = useState([]);
+  const [courierLocation, setCourierLocation] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -53,7 +55,11 @@ export default function GuestDeliveryPage() {
   useEffect(() => {
     if (!task || completed || !navigator.geolocation) return undefined;
     const watch = navigator.geolocation.watchPosition(
-      (p) => guestDeliveryApi.updateLocation({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, heading: p.coords.heading, speed: p.coords.speed }).catch(() => {}),
+      (p) => {
+        const location = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, heading: p.coords.heading, speed: p.coords.speed };
+        setCourierLocation(location);
+        guestDeliveryApi.updateLocation(location).catch(() => {});
+      },
       () => {},
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     );
@@ -66,9 +72,30 @@ export default function GuestDeliveryPage() {
   const sellerCoords = order?.seller?.location?.coordinates;
   const sellerLocation = Array.isArray(sellerCoords) ? { lat: sellerCoords[1], lng: sellerCoords[0] } : null;
   const destination = isReturn && ['return_in_transit', 'return_drop_pending'].includes(order?.returnStatus) ? sellerLocation : isReturn ? order?.address?.location : ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order?.workflowStatus) ? order?.address?.location : sellerLocation;
+  const goingToStore = isReturn
+    ? ['return_in_transit', 'return_drop_pending'].includes(order?.returnStatus)
+    : !['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order?.workflowStatus);
+  const destinationLabel = goingToStore
+    ? order?.seller?.shopName || order?.seller?.name || 'Pickup store'
+    : order?.address?.name || order?.customer?.name || 'Customer';
 
   const navigate = () => {
-    if (destination?.lat != null && destination?.lng != null) window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}`, '_blank', 'noopener,noreferrer');
+    if (destination?.lat == null || destination?.lng == null) return;
+    const origin = courierLocation?.lat != null && courierLocation?.lng != null
+      ? `&origin=${courierLocation.lat},${courierLocation.lng}`
+      : '';
+    window.open(`https://www.google.com/maps/dir/?api=1${origin}&destination=${destination.lat},${destination.lng}&travelmode=driving&dir_action=navigate`, '_blank', 'noopener,noreferrer');
+  };
+
+  const refreshCourierLocation = async () => {
+    try {
+      const location = await currentPosition();
+      setCourierLocation(location);
+      await guestDeliveryApi.updateLocation(location);
+      toast.success('Live location refreshed');
+    } catch (error) {
+      toast.error(error.message || 'Unable to read your location');
+    }
   };
 
   const act = async (key, callback, success, { terminal = false } = {}) => {
@@ -164,6 +191,14 @@ export default function GuestDeliveryPage() {
       <main className="mx-auto -mt-3 max-w-3xl space-y-4 px-4">
         <section className="rounded-3xl bg-white p-5 shadow-lg ring-1 ring-slate-100"><div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-lg font-black text-orange-700">{assignment.courier.name.charAt(0).toUpperCase()}</div><div><h2 className="font-black">{assignment.courier.name}</h2><p className="text-xs text-slate-500">Assigned guest courier</p></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><a href={`tel:${assignment.courier.phone}`} className="rounded-xl bg-slate-50 p-3 text-sm font-bold"><Phone className="mr-2 inline h-4 w-4" />{assignment.courier.phone}</a><a href={`mailto:${assignment.courier.email}`} className="truncate rounded-xl bg-slate-50 p-3 text-sm font-bold"><Mail className="mr-2 inline h-4 w-4" />{assignment.courier.email}</a></div></section>
         <div className="grid gap-4 sm:grid-cols-2"><InfoRow icon={Package} label={isReturn ? 'Pickup from customer' : 'Pickup store'}>{isReturn ? order.address?.name || order.customer?.name : order.seller?.shopName || order.seller?.name}<p className="mt-1 text-xs font-medium text-slate-500">{isReturn ? order.address?.address : order.seller?.address}</p></InfoRow><InfoRow icon={MapPin} label={isReturn ? 'Return to store' : 'Deliver to customer'}>{isReturn ? order.seller?.shopName || order.seller?.name : order.address?.name || order.customer?.name}<p className="mt-1 text-xs font-medium text-slate-500">{isReturn ? order.seller?.address : order.address?.address}</p></InfoRow></div>
+        <GuestNavigationMap
+          courierLocation={courierLocation}
+          destination={destination}
+          destinationLabel={destinationLabel}
+          destinationKind={goingToStore ? 'store' : 'customer'}
+          onRequestLocation={refreshCourierLocation}
+          onNavigate={navigate}
+        />
         <div className="grid grid-cols-2 gap-3"><a href={`tel:${isReturn ? order.address?.phone || order.customer?.phone : order.seller?.phone}`} className="flex items-center justify-center gap-2 rounded-2xl bg-white p-4 text-sm font-black shadow-sm"><Phone size={17} />Call pickup</a><button onClick={navigate} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 p-4 text-sm font-black text-white"><Navigation size={17} />Navigate</button></div>
         {order.paymentMode === 'COD' && !isReturn && order.cashSettlement && Number(order.cashSettlement.pendingAmount) > 0 && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-center gap-3"><IndianRupee className="text-amber-700" /><div><h3 className="font-black text-amber-950">COD cash to submit</h3><p className="text-sm text-amber-800">{money(order.cashSettlement.pendingAmount)} due to admin</p></div></div><button disabled={busy === 'cod'} onClick={payCod} className="mt-4 w-full rounded-2xl bg-amber-700 py-3 text-sm font-black text-white disabled:opacity-50">{busy === 'cod' ? 'Opening payment…' : 'Pay online now'}</button><p className="mt-2 text-xs text-amber-700">You may also hand over physical cash to an administrator for a recorded receipt.</p></section>}
         {action?.renderUpload ? <label className="flex cursor-pointer flex-col items-center rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50 p-8 text-orange-700"><Camera className="h-8 w-8" /><span className="mt-3 text-sm font-black">{busy === 'proof' ? 'Uploading…' : 'Take or upload pickup photos'}</span><input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={busy === 'proof'} onChange={(e) => uploadProof(e.target.files)} /></label> : action && <button disabled={busy || action.disabled} onClick={() => act('action', action.run, action.success)} className="w-full rounded-2xl bg-orange-600 py-4 text-sm font-black text-white shadow-lg disabled:bg-slate-300">{busy === 'action' ? 'Please wait…' : action.label}</button>}
