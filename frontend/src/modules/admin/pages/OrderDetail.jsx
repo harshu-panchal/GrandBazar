@@ -1633,12 +1633,25 @@ const OrderDetail = () => {
                         const deliveryBoy = order.deliveryBoy || order.deliveryPartner;
                         const hasInternalRider = Boolean(deliveryBoy && (deliveryBoy.name || deliveryBoy._id));
                         const hasExternalLogistics = Boolean(order.externalLogisticsProvider);
-                        const guestAssignee = order.deliveryAssignee?.type === 'guest'
+                        const activeGuestStatuses = new Set(['email_pending', 'active', 'email_failed']);
+                        const forwardGuest = order.deliveryAssignee?.type === 'guest'
                             ? order.deliveryAssignee
-                            : order.returnDeliveryAssignee?.type === 'guest'
-                                ? order.returnDeliveryAssignee
-                                : null;
+                            : null;
+                        const returnGuest = order.returnDeliveryAssignee?.type === 'guest'
+                            ? order.returnDeliveryAssignee
+                            : null;
+                        // Completed/revoked forward assignments are history, not
+                        // candidates for resend/replace. Prefer an active return
+                        // assignment when the order has entered the return flow.
+                        const activeForwardGuest = forwardGuest && activeGuestStatuses.has(forwardGuest.status)
+                            ? forwardGuest
+                            : null;
+                        const activeReturnGuest = returnGuest && activeGuestStatuses.has(returnGuest.status)
+                            ? returnGuest
+                            : null;
+                        const guestAssignee = activeReturnGuest || activeForwardGuest;
                         const guestAssignmentId = guestAssignee?.assignmentId;
+                        const guestTaskType = guestAssignee === activeReturnGuest ? 'return_pickup' : 'forward_delivery';
                         const canAssignForwardGuest = String(order.workflowStatus || '').toUpperCase() === 'DELIVERY_SEARCH' && !hasInternalRider && !order.guestCourierAssignment;
                         const canAssignReturnGuest = ['return_approved', 'return_pickup_assigned'].includes(order.returnStatus) && !order.returnDeliveryBoy && !order.returnGuestCourierAssignment;
 
@@ -1687,7 +1700,7 @@ const OrderDetail = () => {
                                         <p className="text-[10px] font-semibold text-slate-500">Assigned {guestAssignee.assignedAt ? new Date(guestAssignee.assignedAt).toLocaleString('en-IN') : ''}{guestAssignee.lastAccessedAt ? ` · Last opened ${new Date(guestAssignee.lastAccessedAt).toLocaleString('en-IN')}` : ' · Link not opened yet'}</p>
                                         <div className="flex flex-wrap gap-2">
                                             <button type="button" onClick={() => handleResendGuestLink(guestAssignmentId)} className="rounded-xl bg-orange-600 px-3 py-2 text-[10px] font-black uppercase text-white">Resend link</button>
-                                            <button type="button" onClick={() => { setGuestCourierForm((prev) => ({ ...prev, taskType: order.deliveryAssignee?.type === 'guest' ? 'forward_delivery' : 'return_pickup' })); setShowGuestCourierForm(true); }} className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-orange-700">Replace</button>
+                                            <button type="button" onClick={() => { setGuestCourierForm((prev) => ({ ...prev, taskType: guestTaskType })); setShowGuestCourierForm(true); }} className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-orange-700">Replace</button>
                                             <button type="button" onClick={() => handleRevokeGuest(guestAssignmentId)} className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-rose-600">Revoke</button>
                                         </div>
                                     </div>
@@ -1894,7 +1907,7 @@ const OrderDetail = () => {
                                                 type="button"
                                                 onClick={() => {
                                                     if (!showGuestCourierForm) {
-                                                        setGuestCourierForm((prev) => ({ ...prev, taskType: guestAssignee ? (order.deliveryAssignee?.type === 'guest' ? 'forward_delivery' : 'return_pickup') : canAssignForwardGuest ? 'forward_delivery' : 'return_pickup' }));
+                                                        setGuestCourierForm((prev) => ({ ...prev, taskType: guestAssignee ? guestTaskType : canAssignForwardGuest ? 'forward_delivery' : 'return_pickup' }));
                                                     }
                                                     setShowGuestCourierForm(!showGuestCourierForm);
                                                 }}
