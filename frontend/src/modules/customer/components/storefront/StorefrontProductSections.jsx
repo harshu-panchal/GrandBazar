@@ -1,32 +1,16 @@
 import React, { useMemo } from "react";
 import { Compass } from "lucide-react";
 import ProductCard from "../shared/ProductCard";
-
-const productId = (product) => String(product?.id || product?._id || "");
+import {
+  getStorefrontProductId as productId,
+  resolveStorefrontSections,
+} from "@shared/utils/storefrontSections";
 
 const StorefrontProductSections = ({ sections = [], products = [] }) => {
-  const productMap = useMemo(
-    () => new Map(products.map((product) => [productId(product), product])),
-    [products],
+  const resolvedSections = useMemo(
+    () => resolveStorefrontSections(sections, products),
+    [sections, products],
   );
-  const assignedIds = useMemo(
-    () => new Set(sections.flatMap((section) => (section.productIds || []).map(String))),
-    [sections],
-  );
-
-  const resolvedSections = useMemo(() => {
-    const custom = sections.map((section) => ({
-      ...section,
-      products: (section.productIds || [])
-        .map((id) => productMap.get(String(id)))
-        .filter(Boolean),
-    }));
-    const unassigned = products.filter((product) => !assignedIds.has(productId(product)));
-    return [
-      ...custom,
-      { _id: "all-products", title: "All Products", layout: "grid", products: unassigned },
-    ].filter((section) => section.products.length > 0);
-  }, [sections, products, productMap, assignedIds]);
 
   if (resolvedSections.length === 0) {
     return (

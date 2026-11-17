@@ -2,10 +2,12 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Eye,
   GripVertical,
   LayoutGrid,
   List,
   Plus,
+  Pencil,
   RectangleHorizontal,
   Save,
   Sparkles,
@@ -13,6 +15,10 @@ import {
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getStorefrontProductId,
+  resolveStorefrontSections,
+} from "@shared/utils/storefrontSections";
 
 export const STOREFRONT_LAYOUT_OPTIONS = [
   { value: "carousel", label: "Horizontal carousel", icon: RectangleHorizontal },
@@ -23,6 +29,88 @@ export const STOREFRONT_LAYOUT_OPTIONS = [
 
 const sectionKey = (section) => String(section?._id || section?.clientId || "");
 const productKey = (product) => String(product?._id || product?.id || "");
+
+const previewPrice = (product) => {
+  const base = Number(product?.customerPrice ?? product?.price ?? 0);
+  const sale = Number(product?.customerSalePrice ?? product?.salePrice ?? 0);
+  return sale > 0 && (base <= 0 || sale < base) ? sale : base;
+};
+
+const PreviewProduct = ({ product, horizontal = false, featured = false }) => (
+  <div className={cn(
+    "overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm",
+    horizontal ? "flex min-h-20" : "flex flex-col",
+    featured && "rounded-2xl",
+  )}>
+    <div className={cn(
+      "shrink-0 overflow-hidden bg-slate-100",
+      horizontal ? "w-20" : featured ? "aspect-[16/9]" : "aspect-square",
+    )}>
+      {product?.mainImage ? (
+        <img src={product.mainImage} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <div className="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200" />
+      )}
+    </div>
+    <div className={cn("min-w-0 flex-1 p-2", featured && "p-3")}>
+      <p className={cn("truncate font-bold text-slate-900", featured ? "text-sm" : "text-[11px]")}>{product?.name}</p>
+      <p className="mt-1 text-[10px] font-black text-slate-800">₹{previewPrice(product)}</p>
+      <button type="button" tabIndex={-1} className="mt-2 rounded-md border border-emerald-500 px-2 py-1 text-[8px] font-black text-emerald-600">ADD</button>
+    </div>
+  </div>
+);
+
+const CustomerAppPreview = ({ sections, products }) => {
+  const resolved = useMemo(
+    () => resolveStorefrontSections(sections, products),
+    [sections, products],
+  );
+
+  return (
+    <div className="rounded-[2rem] bg-slate-100 p-3 sm:p-5">
+      <div className="mx-auto max-w-[420px] overflow-hidden rounded-[2rem] border-[6px] border-slate-900 bg-slate-50 shadow-2xl">
+        <div className="flex items-center justify-between bg-slate-900 px-5 py-2 text-[10px] font-bold text-white">
+          <span>13:04</span><span>● ● ●</span>
+        </div>
+        <div className="border-b border-slate-100 bg-white px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="text-xl font-black tracking-tight text-rose-600">zinto</div>
+            <div className="rounded-full bg-slate-900 px-3 py-2 text-[9px] font-black text-white">STORE</div>
+          </div>
+          <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">Search products in this store…</div>
+        </div>
+        <div className="max-h-[680px] space-y-7 overflow-y-auto p-4">
+          {resolved.length === 0 ? (
+            <div className="py-20 text-center text-xs font-bold text-slate-400">No products to preview</div>
+          ) : resolved.map((section) => (
+            <section key={String(section._id || section.clientId)} className="space-y-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">{section.title}</h3>
+                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{section.products.length} products</p>
+              </div>
+              {section.layout === "carousel" && (
+                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  {section.products.map((product) => <div key={getStorefrontProductId(product)} className="w-[118px] shrink-0"><PreviewProduct product={product} /></div>)}
+                </div>
+              )}
+              {section.layout === "grid" && (
+                <div className="grid grid-cols-2 gap-2">
+                  {section.products.map((product) => <PreviewProduct key={getStorefrontProductId(product)} product={product} />)}
+                </div>
+              )}
+              {section.layout === "featured" && section.products[0] && <PreviewProduct product={section.products[0]} featured />}
+              {section.layout === "compact_list" && (
+                <div className="space-y-2">
+                  {section.products.map((product) => <PreviewProduct key={getStorefrontProductId(product)} product={product} horizontal />)}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function moveItem(items, fromIndex, toIndex) {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return items;
@@ -46,6 +134,7 @@ const StorefrontSectionBuilder = ({
   description = "Build the product area customers see on your store page.",
 }) => {
   const [pickerValues, setPickerValues] = useState({});
+  const [viewMode, setViewMode] = useState("preview");
   const dragRef = useRef(null);
 
   const productsById = useMemo(
@@ -56,6 +145,7 @@ const StorefrontSectionBuilder = ({
   const emitSections = (next) => onChange?.(next);
 
   const addSection = () => {
+    setViewMode("edit");
     emitSections([
       ...sections,
       {
@@ -175,6 +265,10 @@ const StorefrontSectionBuilder = ({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-xl bg-slate-100 p-1">
+            <button type="button" onClick={() => setViewMode("preview")} className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black", viewMode === "preview" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}><Eye size={14} /> Customer preview</button>
+            <button type="button" onClick={() => setViewMode("edit")} className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black", viewMode === "edit" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}><Pencil size={14} /> Edit</button>
+          </div>
           <button
             type="button"
             onClick={addSection}
@@ -205,7 +299,9 @@ const StorefrontSectionBuilder = ({
         Products may appear in more than one section. Products not assigned to any published section automatically appear under “All Products.”
       </div>
 
-      {sections.length === 0 ? (
+      {viewMode === "preview" ? (
+        <CustomerAppPreview sections={sections} products={products} />
+      ) : sections.length === 0 ? (
         <button
           type="button"
           onClick={addSection}
