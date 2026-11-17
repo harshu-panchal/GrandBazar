@@ -2,12 +2,10 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  Eye,
   GripVertical,
   LayoutGrid,
   List,
   Plus,
-  Pencil,
   RectangleHorizontal,
   Save,
   Sparkles,
@@ -60,58 +58,6 @@ const PreviewProduct = ({ product, horizontal = false, featured = false }) => (
   </div>
 );
 
-const CustomerAppPreview = ({ sections, products }) => {
-  const resolved = useMemo(
-    () => resolveStorefrontSections(sections, products),
-    [sections, products],
-  );
-
-  return (
-    <div className="rounded-[2rem] bg-slate-100 p-3 sm:p-5">
-      <div className="mx-auto max-w-[420px] overflow-hidden rounded-[2rem] border-[6px] border-slate-900 bg-slate-50 shadow-2xl">
-        <div className="flex items-center justify-between bg-slate-900 px-5 py-2 text-[10px] font-bold text-white">
-          <span>13:04</span><span>● ● ●</span>
-        </div>
-        <div className="border-b border-slate-100 bg-white px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="text-xl font-black tracking-tight text-rose-600">zinto</div>
-            <div className="rounded-full bg-slate-900 px-3 py-2 text-[9px] font-black text-white">STORE</div>
-          </div>
-          <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">Search products in this store…</div>
-        </div>
-        <div className="max-h-[680px] space-y-7 overflow-y-auto p-4">
-          {resolved.length === 0 ? (
-            <div className="py-20 text-center text-xs font-bold text-slate-400">No products to preview</div>
-          ) : resolved.map((section) => (
-            <section key={String(section._id || section.clientId)} className="space-y-3">
-              <div>
-                <h3 className="text-sm font-black text-slate-900">{section.title}</h3>
-                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{section.products.length} products</p>
-              </div>
-              {section.layout === "carousel" && (
-                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                  {section.products.map((product) => <div key={getStorefrontProductId(product)} className="w-[118px] shrink-0"><PreviewProduct product={product} /></div>)}
-                </div>
-              )}
-              {section.layout === "grid" && (
-                <div className="grid grid-cols-2 gap-2">
-                  {section.products.map((product) => <PreviewProduct key={getStorefrontProductId(product)} product={product} />)}
-                </div>
-              )}
-              {section.layout === "featured" && section.products[0] && <PreviewProduct product={section.products[0]} featured />}
-              {section.layout === "compact_list" && (
-                <div className="space-y-2">
-                  {section.products.map((product) => <PreviewProduct key={getStorefrontProductId(product)} product={product} horizontal />)}
-                </div>
-              )}
-            </section>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 function moveItem(items, fromIndex, toIndex) {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return items;
   const next = [...items];
@@ -134,18 +80,21 @@ const StorefrontSectionBuilder = ({
   description = "Build the product area customers see on your store page.",
 }) => {
   const [pickerValues, setPickerValues] = useState({});
-  const [viewMode, setViewMode] = useState("preview");
   const dragRef = useRef(null);
 
   const productsById = useMemo(
     () => new Map(products.map((product) => [productKey(product), product])),
     [products],
   );
+  const unassignedProducts = useMemo(
+    () => resolveStorefrontSections(sections, products)
+      .find((section) => section._id === "all-products")?.products || [],
+    [sections, products],
+  );
 
   const emitSections = (next) => onChange?.(next);
 
   const addSection = () => {
-    setViewMode("edit");
     emitSections([
       ...sections,
       {
@@ -265,10 +214,6 @@ const StorefrontSectionBuilder = ({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-xl bg-slate-100 p-1">
-            <button type="button" onClick={() => setViewMode("preview")} className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black", viewMode === "preview" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}><Eye size={14} /> Customer preview</button>
-            <button type="button" onClick={() => setViewMode("edit")} className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-black", viewMode === "edit" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}><Pencil size={14} /> Edit</button>
-          </div>
           <button
             type="button"
             onClick={addSection}
@@ -299,9 +244,7 @@ const StorefrontSectionBuilder = ({
         Products may appear in more than one section. Products not assigned to any published section automatically appear under “All Products.”
       </div>
 
-      {viewMode === "preview" ? (
-        <CustomerAppPreview sections={sections} products={products} />
-      ) : sections.length === 0 ? (
+      {sections.length === 0 ? (
         <button
           type="button"
           onClick={addSection}
@@ -311,7 +254,7 @@ const StorefrontSectionBuilder = ({
           <span className="mt-2 text-sm font-black">Create your first product section</span>
         </button>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8 rounded-[2rem] bg-slate-50 p-3 sm:p-6">
           {sections.map((section, sectionIndex) => {
             const key = sectionKey(section);
             const selectedIds = (section.productIds || []).map(String);
@@ -323,142 +266,112 @@ const StorefrontSectionBuilder = ({
                 key={key}
                 data-sort-scope="sections"
                 data-sort-id={key}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                className="rounded-3xl border border-dashed border-slate-300 bg-white p-4 shadow-sm sm:p-6"
               >
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    aria-label="Drag section to reorder"
-                    onPointerDown={(event) => beginPointerSort(event, "sections", key)}
-                    onPointerMove={continuePointerSort}
-                    onPointerUp={endPointerSort}
-                    onPointerCancel={endPointerSort}
-                    className="mt-1 cursor-grab touch-none rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:cursor-grabbing"
-                  >
-                    <GripVertical size={18} />
-                  </button>
-                  <div className="min-w-0 flex-1 space-y-4">
-                    <div className="grid gap-3 md:grid-cols-[1fr_240px]">
-                      <div>
-                        <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Section title
-                        </label>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                      <button
+                        type="button"
+                        aria-label="Drag section to reorder"
+                        onPointerDown={(event) => beginPointerSort(event, "sections", key)}
+                        onPointerMove={continuePointerSort}
+                        onPointerUp={endPointerSort}
+                        onPointerCancel={endPointerSort}
+                        className="mt-1 cursor-grab touch-none rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:cursor-grabbing"
+                      >
+                        <GripVertical size={18} />
+                      </button>
+                      <div className="min-w-0 flex-1">
                         <input
+                          aria-label="Section title"
                           value={section.title || ""}
                           maxLength={120}
                           onChange={(event) => updateSection(key, { title: event.target.value })}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold outline-none focus:border-slate-400"
+                          className="w-full border-b border-dashed border-transparent bg-transparent px-1 py-1 text-xl font-black tracking-tight text-slate-900 outline-none hover:border-slate-300 focus:border-slate-500"
                         />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Layout
-                        </label>
-                        <select
-                          value={section.layout}
-                          onChange={(event) => {
-                            const layout = event.target.value;
-                            updateSection(key, {
-                              layout,
-                              productIds: layout === "featured" ? selectedIds.slice(0, 1) : selectedIds,
-                            });
-                          }}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold outline-none"
-                        >
-                          {STOREFRONT_LAYOUT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
+                        <p className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{selectedIds.length} products</p>
                       </div>
                     </div>
-
-                    <div>
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-xs font-black text-slate-700">
-                          Products <span className="text-slate-400">({selectedIds.length})</span>
-                        </p>
-                        {section.layout === "featured" && (
-                          <span className="text-[10px] font-bold text-amber-600">One product only</span>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <select
-                          value={pickerValues[key] || ""}
-                          onChange={(event) => setPickerValues((prev) => ({ ...prev, [key]: event.target.value }))}
-                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold outline-none"
-                        >
-                          <option value="">Choose a product…</option>
-                          {availableProducts.map((product) => (
-                            <option key={productKey(product)} value={productKey(product)}>
-                              {product.name}{product.sku ? ` · ${product.sku}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => addProduct(section)}
-                          disabled={!pickerValues[key]}
-                          className="rounded-xl bg-slate-900 px-4 text-xs font-black text-white disabled:opacity-40"
-                        >
-                          Add
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-1 self-end sm:self-auto">
+                      <select
+                        aria-label="Section layout"
+                        value={section.layout}
+                        onChange={(event) => {
+                          const layout = event.target.value;
+                          updateSection(key, { layout, productIds: layout === "featured" ? selectedIds.slice(0, 1) : selectedIds });
+                        }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none"
+                      >
+                        {STOREFRONT_LAYOUT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <button type="button" disabled={sectionIndex === 0} onClick={() => moveSection(key, "up")} className="rounded-lg p-2 text-slate-500 disabled:opacity-25" aria-label="Move section up"><ArrowUp size={15} /></button>
+                      <button type="button" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(key, "down")} className="rounded-lg p-2 text-slate-500 disabled:opacity-25" aria-label="Move section down"><ArrowDown size={15} /></button>
+                      <button type="button" onClick={() => removeSection(key)} className="rounded-lg p-2 text-rose-500" aria-label="Delete section"><Trash2 size={15} /></button>
                     </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      {selectedIds.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-xs font-semibold text-slate-400">
-                          This section is empty and will stay hidden from customers.
-                        </div>
-                      ) : selectedIds.map((id, productIndex) => {
+                  {selectedIds.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-xs font-semibold text-slate-400">Add products to display this section.</div>
+                  ) : (
+                    <div className={cn(
+                      section.layout === "carousel" && "flex snap-x gap-3 overflow-x-auto pb-3 no-scrollbar",
+                      section.layout === "grid" && "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
+                      section.layout === "featured" && "max-w-xl rounded-[2rem] bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4",
+                      section.layout === "compact_list" && "grid gap-3 lg:grid-cols-2",
+                    )}>
+                      {selectedIds.map((id, productIndex) => {
                         const product = productsById.get(id);
                         return (
                           <div
                             key={id}
                             data-sort-scope={`products-${key}`}
                             data-sort-id={id}
-                            className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2"
+                            className={cn(
+                              "relative group/product",
+                              section.layout === "carousel" && "w-[150px] shrink-0 snap-start sm:w-[190px] md:w-[210px]",
+                              section.layout === "featured" && "w-full",
+                            )}
                           >
-                            <button
-                              type="button"
-                              aria-label="Drag product to reorder"
-                              onPointerDown={(event) => beginPointerSort(event, `products-${key}`, id)}
-                              onPointerMove={continuePointerSort}
-                              onPointerUp={endPointerSort}
-                              onPointerCancel={endPointerSort}
-                              className="cursor-grab touch-none rounded-lg p-1.5 text-slate-400 active:cursor-grabbing"
-                            >
-                              <GripVertical size={16} />
-                            </button>
-                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white">
-                              {product?.mainImage ? (
-                                <img src={product.mainImage} alt="" className="h-full w-full object-cover" />
-                              ) : null}
+                            <PreviewProduct product={product} horizontal={section.layout === "compact_list"} featured={section.layout === "featured"} />
+                            <div className="absolute left-1.5 top-1.5 z-20 flex items-center rounded-lg bg-white/95 p-0.5 shadow-md backdrop-blur">
+                              <button type="button" aria-label="Drag product to reorder" onPointerDown={(event) => beginPointerSort(event, `products-${key}`, id)} onPointerMove={continuePointerSort} onPointerUp={endPointerSort} onPointerCancel={endPointerSort} className="cursor-grab touch-none rounded-md p-1.5 text-slate-500 active:cursor-grabbing"><GripVertical size={14} /></button>
+                              <span className="px-1 text-[9px] font-black text-slate-400">{productIndex + 1}</span>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-black text-slate-800">{product?.name || "Unavailable product"}</p>
-                              <p className="text-[10px] font-semibold text-slate-400">Position {productIndex + 1}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button type="button" disabled={productIndex === 0} onClick={() => moveProduct(section, id, "up")} className="rounded-lg p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move product up"><ArrowUp size={14} /></button>
-                              <button type="button" disabled={productIndex === selectedIds.length - 1} onClick={() => moveProduct(section, id, "down")} className="rounded-lg p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move product down"><ArrowDown size={14} /></button>
-                              <button type="button" onClick={() => removeProduct(section, id)} className="rounded-lg p-1.5 text-rose-500" aria-label="Remove product"><Trash2 size={14} /></button>
+                            <div className="absolute right-1.5 top-1.5 z-20 flex items-center rounded-lg bg-white/95 p-0.5 shadow-md backdrop-blur">
+                              <button type="button" disabled={productIndex === 0} onClick={() => moveProduct(section, id, "up")} className="rounded-md p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move product up"><ArrowUp size={13} /></button>
+                              <button type="button" disabled={productIndex === selectedIds.length - 1} onClick={() => moveProduct(section, id, "down")} className="rounded-md p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move product down"><ArrowDown size={13} /></button>
+                              <button type="button" onClick={() => removeProduct(section, id)} className="rounded-md p-1.5 text-rose-500" aria-label="Remove product"><Trash2 size={13} /></button>
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <button type="button" disabled={sectionIndex === 0} onClick={() => moveSection(key, "up")} className="rounded-lg p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move section up"><ArrowUp size={15} /></button>
-                    <button type="button" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(key, "down")} className="rounded-lg p-1.5 text-slate-500 disabled:opacity-25" aria-label="Move section down"><ArrowDown size={15} /></button>
-                    <button type="button" onClick={() => removeSection(key)} className="rounded-lg p-1.5 text-rose-500" aria-label="Delete section"><Trash2 size={15} /></button>
+                  <div className="flex gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-2">
+                    <select value={pickerValues[key] || ""} onChange={(event) => setPickerValues((prev) => ({ ...prev, [key]: event.target.value }))} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold outline-none">
+                      <option value="">Choose a product…</option>
+                      {availableProducts.map((product) => <option key={productKey(product)} value={productKey(product)}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>)}
+                    </select>
+                    <button type="button" onClick={() => addProduct(section)} disabled={!pickerValues[key]} className="rounded-xl bg-slate-900 px-4 text-xs font-black text-white disabled:opacity-40">Add product</button>
                   </div>
                 </div>
               </article>
             );
           })}
+
+          {unassignedProducts.length > 0 && (
+            <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-900">All Products</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Automatic · {unassignedProducts.length} products</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {unassignedProducts.map((product) => <PreviewProduct key={getStorefrontProductId(product)} product={product} />)}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </section>
