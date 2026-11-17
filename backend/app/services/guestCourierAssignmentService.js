@@ -14,6 +14,7 @@ import {
 import { retractDeliveryBroadcastForOrder, emitOrderStatusUpdate, emitReturnStatusUpdate } from "./orderSocketEmitter.js";
 import { sendGuestCourierAssignmentEmail } from "./emailService.js";
 import { createOperatorAuditLog } from "./operatorAuditLogService.js";
+import { saveGuestCourierProfile } from "./guestCourierDirectoryService.js";
 
 const ACTIVE_STATUSES = ["email_pending", "active", "email_failed"];
 
@@ -154,6 +155,10 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
     emitReturnStatusUpdate(updated, { returnDeliveryAssigneeType: "guest" });
   }
 
+  const courierProfile = await saveGuestCourierProfile(normalizedCourier, adminId);
+  assignment.courierProfile = courierProfile?._id || null;
+  await assignment.save();
+
   await createOperatorAuditLog({
     action: taskType === "forward_delivery" ? "guest_courier_assigned" : "guest_return_courier_assigned",
     actorId: adminId,
@@ -164,7 +169,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
   });
 
   const email = await dispatchAssignmentEmail(assignment, rawToken);
-  return { order: updated, assignment: assignmentPublicView(assignment), email };
+  return { order: updated, assignment: assignmentPublicView(assignment), courierProfile, email };
 }
 
 export async function resendGuestCourierLink({ adminId, actorRole, assignmentId, reason }) {

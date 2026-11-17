@@ -36,6 +36,7 @@ export const customerApi = {
   // Sellers & Location
   getNearbySellers: (params) => getWithDedupe("/seller/nearby", params),
   getSellerPublicProfile: (id, params) => getWithDedupe(`/seller/public/${id}`, params),
+  getStorefrontLayout: (id) => getWithDedupe(`/seller/public/${id}/storefront-layout`, {}, { ttl: 1000 }),
   getRecommendedStores: (params = {}) => getWithDedupe("/experience/recommended-stores", params, { ttl: 10000 }),
   getStoreAlternatives: (id) => getWithDedupe(`/seller/public/${id}/alternatives`),
   getDiscoverCityData: (citySlug) => getWithDedupe(`/public/discover/${encodeURIComponent(citySlug)}`),

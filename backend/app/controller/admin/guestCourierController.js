@@ -8,6 +8,16 @@ import {
   listGuestCashSettlements,
   recordGuestPhysicalCash,
 } from "../../services/guestCourierFinanceService.js";
+import { searchGuestCourierDirectory } from "../../services/guestCourierDirectoryService.js";
+
+export async function searchGuestCourierDirectoryController(req, res) {
+  try {
+    const results = await searchGuestCourierDirectory(req.query?.phone, req.query?.limit);
+    return handleResponse(res, 200, "Temporary courier directory fetched", results);
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+}
 
 export async function assignGuestCourierController(req, res) {
   try {

@@ -75,6 +75,11 @@ export const sellerApi = {
     getProfile: () => axiosInstance.get('/seller/profile'),
     getDeliverySettings: () => axiosInstance.get('/seller/delivery-settings'),
     updateProfile: (data) => axiosInstance.put('/seller/profile', data),
+    getStorefrontLayout: () => axiosInstance.get('/seller/storefront-layout'),
+    saveStorefrontLayoutDraft: (sections) =>
+        axiosInstance.put('/seller/storefront-layout/draft', { sections }),
+    publishStorefrontLayout: (sections) =>
+        axiosInstance.post('/seller/storefront-layout/publish', { sections }),
 
     // Stock
     adjustStock: (data) => axiosInstance.post('/products/adjust-stock', data),

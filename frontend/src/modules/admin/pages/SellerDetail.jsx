@@ -45,6 +45,7 @@ const LOGO_MAX_SIZE_MB = 5;
 import Modal from '@shared/components/ui/Modal';
 import { motion } from 'framer-motion';
 import MapPicker from '@/shared/components/MapPicker';
+import StorefrontSectionBuilder from '@shared/components/storefront/StorefrontSectionBuilder';
 
 const getVideoEmbedUrl = (url) => {
     if (!url) return "";
@@ -73,6 +74,15 @@ const SellerDetail = () => {
     const [sellerProductsPage, setSellerProductsPage] = useState(1);
     const [sellerProductsPageSize, setSellerProductsPageSize] = useState(25);
     const [sellerProductsTotal, setSellerProductsTotal] = useState(0);
+    const [storefrontProducts, setStorefrontProducts] = useState([]);
+    const [storefrontSections, setStorefrontSections] = useState([]);
+    const [storefrontLayoutMeta, setStorefrontLayoutMeta] = useState({
+        hasUnpublishedChanges: false,
+        publishedAt: null,
+    });
+    const [isLoadingStorefrontLayout, setIsLoadingStorefrontLayout] = useState(false);
+    const [isSavingStorefrontDraft, setIsSavingStorefrontDraft] = useState(false);
+    const [isPublishingStorefront, setIsPublishingStorefront] = useState(false);
     const [transactions, setTransactions] = useState([]);
     const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
     const [deliveryPolicyForm, setDeliveryPolicyForm] = useState({
@@ -375,6 +385,83 @@ const SellerDetail = () => {
             });
         return () => { cancelled = true; };
     }, [activeTab, id, sellerProductsPage, sellerProductsPageSize, showToast]);
+
+    useEffect(() => {
+        if (activeTab !== 'storefront-layout' || !id) return;
+        let cancelled = false;
+        setIsLoadingStorefrontLayout(true);
+
+        const loadStorefrontLayout = async () => {
+            try {
+                const [layoutResponse, firstProductsResponse] = await Promise.all([
+                    adminApi.getSellerStorefrontLayout(id),
+                    adminApi.getProducts({ sellerId: id, page: 1, limit: 100, sort: 'display-asc' }),
+                ]);
+                const firstPayload = firstProductsResponse.data?.result || {};
+                let products = Array.isArray(firstPayload.items) ? firstPayload.items : [];
+                const totalPages = Number(firstPayload.totalPages || 1);
+                if (totalPages > 1) {
+                    const remaining = await Promise.all(
+                        Array.from({ length: totalPages - 1 }, (_, index) =>
+                            adminApi.getProducts({ sellerId: id, page: index + 2, limit: 100, sort: 'display-asc' }),
+                        ),
+                    );
+                    products = products.concat(
+                        remaining.flatMap((response) => response.data?.result?.items || []),
+                    );
+                }
+                if (cancelled) return;
+                const layout = layoutResponse.data?.result || {};
+                setStorefrontProducts(products);
+                setStorefrontSections(Array.isArray(layout.draftSections) ? layout.draftSections : []);
+                setStorefrontLayoutMeta({
+                    hasUnpublishedChanges: Boolean(layout.hasUnpublishedChanges),
+                    publishedAt: layout.publishedAt || null,
+                });
+            } catch (error) {
+                if (!cancelled) showToast(error.response?.data?.message || 'Failed to load storefront layout', 'error');
+            } finally {
+                if (!cancelled) setIsLoadingStorefrontLayout(false);
+            }
+        };
+
+        loadStorefrontLayout();
+        return () => { cancelled = true; };
+    }, [activeTab, id, showToast]);
+
+    const applyStorefrontLayoutResult = (result) => {
+        setStorefrontSections(Array.isArray(result?.draftSections) ? result.draftSections : []);
+        setStorefrontLayoutMeta({
+            hasUnpublishedChanges: Boolean(result?.hasUnpublishedChanges),
+            publishedAt: result?.publishedAt || null,
+        });
+    };
+
+    const saveStorefrontDraft = async () => {
+        setIsSavingStorefrontDraft(true);
+        try {
+            const response = await adminApi.saveSellerStorefrontLayoutDraft(id, storefrontSections);
+            applyStorefrontLayoutResult(response.data?.result || {});
+            showToast('Storefront draft saved on behalf of seller', 'success');
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to save storefront draft', 'error');
+        } finally {
+            setIsSavingStorefrontDraft(false);
+        }
+    };
+
+    const publishStorefrontLayout = async () => {
+        setIsPublishingStorefront(true);
+        try {
+            const response = await adminApi.publishSellerStorefrontLayout(id, storefrontSections);
+            applyStorefrontLayoutResult(response.data?.result || {});
+            showToast('Storefront product sections published on behalf of seller', 'success');
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Failed to publish storefront layout', 'error');
+        } finally {
+            setIsPublishingStorefront(false);
+        }
+    };
 
     useEffect(() => {
         if (activeTab !== 'delivery-policy' || !id) return;
@@ -703,6 +790,7 @@ const SellerDetail = () => {
                             { id: 'payouts', label: 'Withdrawals', icon: Wallet },
                             { id: 'info', label: 'Store Info', icon: Building2 },
                             { id: 'products', label: 'Products', icon: ShoppingBag },
+                            { id: 'storefront-layout', label: 'Product Sections', icon: ImageIcon },
                             { id: 'delivery-policy', label: 'Delivery Mode', icon: Truck },
                             { id: 'shop-setup', label: 'Shop Setup', icon: Edit3 },
                         ].map((tab) => (
@@ -1180,6 +1268,33 @@ const SellerDetail = () => {
                                             loading={isLoadingSellerProducts}
                                         />
                                     </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'storefront-layout' && (
+                            <div className="p-5 animate-in fade-in slide-in-from-right-2 duration-300">
+                                {isLoadingStorefrontLayout ? (
+                                    <div className="flex min-h-[320px] items-center justify-center">
+                                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
+                                    </div>
+                                ) : (
+                                    <StorefrontSectionBuilder
+                                        products={storefrontProducts}
+                                        sections={storefrontSections}
+                                        onChange={(next) => {
+                                            setStorefrontSections(next);
+                                            setStorefrontLayoutMeta((prev) => ({ ...prev, hasUnpublishedChanges: true }));
+                                        }}
+                                        onSaveDraft={saveStorefrontDraft}
+                                        onPublish={publishStorefrontLayout}
+                                        isSaving={isSavingStorefrontDraft}
+                                        isPublishing={isPublishingStorefront}
+                                        hasUnpublishedChanges={storefrontLayoutMeta.hasUnpublishedChanges}
+                                        publishedAt={storefrontLayoutMeta.publishedAt}
+                                        title="Store Product Sections"
+                                        description="Design and publish this store's product sections on behalf of the seller."
+                                    />
                                 )}
                             </div>
                         )}

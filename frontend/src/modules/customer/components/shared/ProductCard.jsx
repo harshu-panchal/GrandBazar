@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProductDetail } from "../../context/ProductDetailContext";
 
 const ProductCard = React.memo(
-  ({ product, badge, className, compact = true, neutralBg = true, isSignature = false }) => {
+  ({ product, badge, className, compact = true, neutralBg = true, isSignature = false, horizontal = false }) => {
     const { toggleWishlist: toggleWishlistGlobal, isInWishlist } =
       useWishlist();
     const { cart, addToCart, updateQuantity, removeFromCart } = useCart();
@@ -231,9 +231,10 @@ const ProductCard = React.memo(
     return (
       <div
         className={cn(
-          "flex-shrink-0 w-full rounded-xl sm:rounded-2xl overflow-hidden flex flex-col h-full shadow-sm cursor-pointer transition-all duration-300 hover:scale-[1.02]",
+          "flex-shrink-0 w-full rounded-xl sm:rounded-2xl overflow-hidden flex h-full shadow-sm cursor-pointer transition-all duration-300 hover:scale-[1.02]",
+          horizontal ? "flex-row" : "flex-col",
           compact
-            ? "bg-white border-[1.5px] border-brand-50 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)] max-w-[160px] sm:max-w-[190px] md:max-w-[210px] lg:max-w-[220px]"
+            ? cn("bg-white border-[1.5px] border-brand-50 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)]", horizontal ? "max-w-none" : "max-w-[160px] sm:max-w-[190px] md:max-w-[210px] lg:max-w-[220px]")
             : neutralBg
               ? "bg-white border border-slate-100 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.08)]"
               : "bg-primary/10 border border-primary/20",
@@ -241,7 +242,7 @@ const ProductCard = React.memo(
         )}
         onClick={handleProductClick}>
         {/* Top Image Section */}
-        <div className="relative">
+        <div className={cn("relative", horizontal && "w-28 sm:w-32 shrink-0")}>
           {/* Badge (Custom or Discount) */}
           {(badge ||
             product.discount ||
@@ -299,7 +300,7 @@ const ProductCard = React.memo(
           <div
             className={cn(
               "block w-full overflow-hidden flex items-center justify-center transition-transform duration-500 group-hover:scale-105",
-              compact ? "aspect-[4/3]" : "aspect-square",
+              horizontal ? "h-full min-h-28" : compact ? "aspect-[4/3]" : "aspect-square",
               compact || neutralBg ? "bg-white" : "bg-primary/5"
             )}>
             <img
@@ -317,7 +318,7 @@ const ProductCard = React.memo(
           className={cn(
             "flex flex-col flex-1",
             compact
-              ? "p-2 pt-1 gap-0.5"
+              ? cn("p-2 pt-1 gap-0.5", horizontal && "p-3")
               : "bg-white/40 p-1.5 pt-2 sm:p-3 sm:pt-4 gap-0.5",
           )}>
           <div className="flex items-center gap-1 mb-0.5 sm:gap-1.5">

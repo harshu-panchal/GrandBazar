@@ -2,15 +2,15 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronLeft, MapPin, Clock, Search, Phone,
-  Mail, Shield, Sparkles, Compass, AlertCircle, Star, Heart, MessageSquare, Building2, Loader2
+  Mail, Shield, Sparkles, AlertCircle, Star, Heart, MessageSquare, Building2, Loader2
 } from "lucide-react";
 import { customerApi } from "../services/customerApi";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import { useFavoriteStores } from "../context/FavoriteStoresContext";
 import { useAuth } from "@core/context/AuthContext";
 import { useToast } from "@shared/components/ui/Toast";
-import ProductCard from "../components/shared/ProductCard";
 import ProductDetailSheet from "../components/shared/ProductDetailSheet";
+import StorefrontProductSections from "../components/storefront/StorefrontProductSections";
 import MiniCart from "../components/shared/MiniCart";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -92,6 +92,7 @@ const StoreDetailPage = () => {
   
   const [seller, setSeller] = useState(null);
   const [products, setProducts] = useState([]);
+  const [storefrontSections, setStorefrontSections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,7 +177,7 @@ const StoreDetailPage = () => {
         Number.isFinite(currentLocation?.longitude);
 
       // 1. Fetch public profile and products in parallel
-      const [profileRes, productsRes] = await Promise.all([
+      const [profileRes, productsRes, layoutRes] = await Promise.all([
         customerApi.getSellerPublicProfile(
           sellerId,
           hasValidLocation
@@ -193,7 +194,8 @@ const StoreDetailPage = () => {
               // the in-store search below to whatever fit on page 1.
               limit: 100,
             })
-          : Promise.resolve({ data: { success: true, result: { items: [] } } })
+          : Promise.resolve({ data: { success: true, result: { items: [] } } }),
+        customerApi.getStorefrontLayout(sellerId),
       ]);
 
       if (profileRes.data?.success) {
@@ -219,7 +221,30 @@ const StoreDetailPage = () => {
           ? rawResult
           : [];
 
-        setProducts(dbProds.map(formatStoreProduct));
+        let allProducts = dbProds;
+        const totalPages = Number(rawResult?.totalPages || 1);
+        if (hasValidLocation && totalPages > 1) {
+          const remaining = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, index) =>
+              customerApi.getProducts({
+                sellerId,
+                lat: currentLocation.latitude,
+                lng: currentLocation.longitude,
+                limit: 100,
+                page: index + 2,
+              }),
+            ),
+          );
+          allProducts = allProducts.concat(
+            remaining.flatMap((response) => response.data?.result?.items || []),
+          );
+        }
+        setProducts(allProducts.map(formatStoreProduct));
+      }
+
+      if (layoutRes.data?.success) {
+        const layout = layoutRes.data?.result || {};
+        setStorefrontSections(Array.isArray(layout.sections) ? layout.sections : []);
       }
 
       try {
@@ -770,36 +795,6 @@ const StoreDetailPage = () => {
               </div>
             )}
 
-            {/* Signature Products Section */}
-            {seller.signatureProducts && Array.isArray(seller.signatureProducts) && seller.signatureProducts.length > 0 && (
-              <div className="w-full bg-gradient-to-br from-[#FAF6F0] via-[#F8F3E8] to-[#F3EBE0] rounded-[1.5rem] md:rounded-3xl p-6 shadow-sm border border-[#E8DEC9] mt-2 mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Star size={18} className="text-amber-600 fill-amber-600" />
-                  <h3 className="text-lg md:text-xl font-[900] text-amber-955 uppercase tracking-widest">Signature Products</h3>
-                </div>
-                <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-5">
-                  {seller.signatureProducts.map(sigProd => (
-                    <div key={sigProd._id} className="w-[calc(50%-6px)] sm:w-[190px] md:w-[210px] lg:w-[220px] shrink-0">
-                      <ProductCard 
-                        product={{
-                          ...sigProd,
-                          id: sigProd._id,
-                          image: sigProd.mainImage || sigProd.image || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=400&h=400",
-                          price: sigProd.customerSalePrice ?? sigProd.customerPrice ?? sigProd.salePrice ?? sigProd.price,
-                          originalPrice: sigProd.customerPrice ?? sigProd.price,
-                          weight: sigProd.weight || "1 unit"
-                        }} 
-                        compact={true}
-                        neutralBg={true}
-                        isSignature={true}
-                        className="hover:scale-[1.03]"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Split layout: Sidebar for Category (Desktop) or Horizontal topbar (Mobile) + Main Product Grid */}
             <div className="flex flex-col md:flex-row items-start gap-8">
               
@@ -872,28 +867,10 @@ const StoreDetailPage = () => {
                   </span>
                 </div>
 
-                {/* Products Grid list */}
-                {filteredProducts.length === 0 ? (
-                  <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center flex flex-col items-center justify-center shadow-sm">
-                    <Compass size={36} className="text-slate-400 mb-3 animate-pulse" />
-                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-1">No items found</h4>
-                    <p className="text-slate-400 text-xs font-semibold max-w-[240px]">
-                      No items match your selected filter or search term in this seller's catalog.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
-                    {filteredProducts.map(p => (
-                      <ProductCard 
-                        key={p.id} 
-                        product={p} 
-                        compact={true} 
-                        neutralBg={true} 
-                        className="hover:scale-[1.03]"
-                      />
-                    ))}
-                  </div>
-                )}
+                <StorefrontProductSections
+                  sections={storefrontSections}
+                  products={filteredProducts}
+                />
 
               </main>
 

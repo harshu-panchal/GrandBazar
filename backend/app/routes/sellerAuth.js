@@ -60,6 +60,12 @@ import {
     initiateSubscriptionRazorpayPayment,
     verifySubscriptionRazorpayPaymentStatus,
 } from "../controller/seller/subscriptionController.js";
+import {
+    getSellerStorefrontLayout,
+    saveSellerStorefrontLayoutDraft,
+    publishSellerStorefrontLayout,
+    getPublicStorefrontLayout,
+} from "../controller/storefrontLayoutController.js";
 
 const allowOwnerOnly = requireStoreOwner;
 
@@ -122,6 +128,7 @@ router.post("/login", loginSeller);
 router.get("/invite/:token", validateSellerInvite);
 router.get("/nearby", getNearbySellers);
 router.get("/public/:id", getPublicSellerProfile);
+router.get("/public/:id/storefront-layout", getPublicStorefrontLayout);
 router.get("/public/:id/alternatives", getStoreAlternatives);
 
 const sellerAuthChain = [verifyToken, allowRoles("seller"), resolveActiveStore];
@@ -173,6 +180,24 @@ router.put(
     ...sellerAuthChain,
     checkSubSellerPermission("storefront", "write"),
     updateSellerProfile
+);
+router.get(
+    "/storefront-layout",
+    ...sellerAuthChain,
+    checkSubSellerPermission("storefront", "read"),
+    getSellerStorefrontLayout,
+);
+router.put(
+    "/storefront-layout/draft",
+    ...sellerAuthChain,
+    checkSubSellerPermission("storefront", "write"),
+    saveSellerStorefrontLayoutDraft,
+);
+router.post(
+    "/storefront-layout/publish",
+    ...sellerAuthChain,
+    checkSubSellerPermission("storefront", "write"),
+    publishSellerStorefrontLayout,
 );
 
 // Analytics & Financials

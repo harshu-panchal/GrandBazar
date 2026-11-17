@@ -19,6 +19,11 @@ export const adminApi = {
     getPendingSellers: (params) => axiosInstance.get('/admin/sellers/pending', { params }),
     createVendorAccount: (data) => axiosInstance.post('/admin/sellers/create', data),
     updateSellerStoreSetup: (id, data) => axiosInstance.put(`/admin/sellers/${id}/store-setup`, data),
+    getSellerStorefrontLayout: (id) => axiosInstance.get(`/admin/sellers/${id}/storefront-layout`),
+    saveSellerStorefrontLayoutDraft: (id, sections) =>
+        axiosInstance.put(`/admin/sellers/${id}/storefront-layout/draft`, { sections }),
+    publishSellerStorefrontLayout: (id, sections) =>
+        axiosInstance.post(`/admin/sellers/${id}/storefront-layout/publish`, { sections }),
     resendSellerCredentials: (id) => axiosInstance.post(`/admin/sellers/${id}/resend-credentials`),
     messageSeller: (id, data) => axiosInstance.post(`/admin/sellers/${id}/message`, data),
     inviteSeller: (data) => axiosInstance.post('/admin/sellers/invite', data),
@@ -232,6 +237,7 @@ export const adminApi = {
     getUnassignedOrders: (params) => axiosInstance.get('/admin/unassigned-orders', { params }),
     assignOrderToRider: (orderId, riderId, reason = '') => axiosInstance.post(`/admin/orders/${orderId}/assign-rider`, { riderId, reason }),
     assignGuestCourier: (orderId, data) => axiosInstance.post(`/admin/orders/${orderId}/assign-guest-courier`, data),
+    searchGuestCourierDirectory: (phone, limit = 10) => axiosInstance.get('/admin/guest-courier-directory', { params: { phone, limit } }),
     resendGuestCourierLink: (assignmentId, reason) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/resend`, { reason }),
     revokeGuestCourier: (assignmentId, reason) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/revoke`, { reason }),
     replaceGuestCourier: (assignmentId, data) => axiosInstance.post(`/admin/guest-couriers/${assignmentId}/replace`, data),

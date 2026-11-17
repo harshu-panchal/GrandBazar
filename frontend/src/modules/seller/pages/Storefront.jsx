@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, X, Image as ImageIcon, Save, Trash2, Video, Star } from "lucide-react";
+import { Plus, Image as ImageIcon, Save, Trash2, Video } from "lucide-react";
 import { sellerApi } from "../services/sellerApi";
 import Button from "@shared/components/ui/Button";
+import StorefrontSectionBuilder from "@shared/components/storefront/StorefrontSectionBuilder";
 
 // The logo is sent to the API as a base64 data URL inside the storefront JSON
 // payload (alongside the banners), so this ceiling is bounded by the server's
@@ -22,10 +23,16 @@ const Storefront = () => {
   const [logoUrl, setLogoUrl] = useState("");
   const [banners, setBanners] = useState([]);
   const [storeVideo, setStoreVideo] = useState("");
-  const [signatureProduct, setSignatureProduct] = useState("");
   const [products, setProducts] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [layoutMeta, setLayoutMeta] = useState({
+    hasUnpublishedChanges: false,
+    publishedAt: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -33,14 +40,37 @@ const Storefront = () => {
 
   const fetchProfile = async () => {
     try {
-      const [profileRes, productsRes] = await Promise.all([
+      const [profileRes, productsRes, layoutRes] = await Promise.all([
         sellerApi.getProfile(),
-        sellerApi.getProducts()
+        sellerApi.getProducts({ page: 1, limit: 100, sort: "display-asc" }),
+        sellerApi.getStorefrontLayout(),
       ]);
       const data = profileRes.data.result;
       setLogoUrl(data.logoUrl || "");
       setBanners(data.banners || []);
       setStoreVideo(data.storeVideo || "");
+
+      const firstPayload = productsRes.data?.result || {};
+      let allProducts = Array.isArray(firstPayload.items) ? firstPayload.items : [];
+      const totalPages = Number(firstPayload.totalPages || 1);
+      if (totalPages > 1) {
+        const remaining = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            sellerApi.getProducts({ page: index + 2, limit: 100, sort: "display-asc" }),
+          ),
+        );
+        allProducts = allProducts.concat(
+          remaining.flatMap((response) => response.data?.result?.items || []),
+        );
+      }
+      setProducts(allProducts);
+
+      const layout = layoutRes.data?.result || {};
+      setSections(Array.isArray(layout.draftSections) ? layout.draftSections : []);
+      setLayoutMeta({
+        hasUnpublishedChanges: Boolean(layout.hasUnpublishedChanges),
+        publishedAt: layout.publishedAt || null,
+      });
     } catch (error) {
       toast.error("Failed to fetch store design data");
     } finally {
@@ -95,6 +125,40 @@ const Storefront = () => {
       toast.error(error.response?.data?.message || "Failed to update storefront");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const applyLayoutResult = (result) => {
+    setSections(Array.isArray(result?.draftSections) ? result.draftSections : []);
+    setLayoutMeta({
+      hasUnpublishedChanges: Boolean(result?.hasUnpublishedChanges),
+      publishedAt: result?.publishedAt || null,
+    });
+  };
+
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true);
+    try {
+      const response = await sellerApi.saveStorefrontLayoutDraft(sections);
+      applyLayoutResult(response.data?.result || {});
+      toast.success("Storefront draft saved");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save storefront draft");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    try {
+      const response = await sellerApi.publishStorefrontLayout(sections);
+      applyLayoutResult(response.data?.result || {});
+      toast.success("Storefront product sections published");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to publish storefront layout");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -254,6 +318,23 @@ const Storefront = () => {
             </div>
           )}
       </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-8">
+        <StorefrontSectionBuilder
+          products={products}
+          sections={sections}
+          onChange={(next) => {
+            setSections(next);
+            setLayoutMeta((prev) => ({ ...prev, hasUnpublishedChanges: true }));
+          }}
+          onSaveDraft={handleSaveDraft}
+          onPublish={handlePublish}
+          isSaving={isSavingDraft}
+          isPublishing={isPublishing}
+          hasUnpublishedChanges={layoutMeta.hasUnpublishedChanges}
+          publishedAt={layoutMeta.publishedAt}
+        />
       </div>
 
     </div>

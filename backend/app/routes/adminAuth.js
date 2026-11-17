@@ -32,6 +32,11 @@ import {
     resetAdminPassword,
 } from "../controller/adminAuthController.js";
 import {
+    getAdminStorefrontLayout,
+    saveAdminStorefrontLayoutDraft,
+    publishAdminStorefrontLayout,
+} from "../controller/storefrontLayoutController.js";
+import {
     getAdminProfile,
     updateAdminProfile,
     updateAdminPassword,
@@ -115,6 +120,7 @@ import {
     replaceGuestCourierController,
     listGuestCashSettlementsController,
     recordGuestPhysicalCashController,
+    searchGuestCourierDirectoryController,
 } from "../controller/admin/guestCourierController.js";
 import { adminReconcileSellerCommissionController } from "../controller/sellerCodCommissionController.js";
 import { getAdminDashboard } from "../controller/admin/dashboardController.js";
@@ -421,6 +427,9 @@ router.get("/sellers/active/:id", verifyToken, allowRoles("admin"), checkAdminPe
 router.get("/sellers/pending", verifyToken, allowRoles("admin"), checkAdminPermission("sellers"), getPendingSellers);
 router.post("/sellers/create", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), createVendorAccount);
 router.put("/sellers/:id/store-setup", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), updateSellerStoreSetup);
+router.get("/sellers/:id/storefront-layout", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), getAdminStorefrontLayout);
+router.put("/sellers/:id/storefront-layout/draft", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), saveAdminStorefrontLayoutDraft);
+router.post("/sellers/:id/storefront-layout/publish", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), publishAdminStorefrontLayout);
 router.post("/sellers/:id/resend-credentials", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), resendSellerCredentials);
 router.post("/sellers/:id/message", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), sendMessageToSeller);
 router.post("/sellers/invite", verifyToken, allowRoles("admin"), checkAdminPermission("sellers.write"), inviteSeller);
@@ -514,6 +523,7 @@ router.get("/active-fleet", verifyToken, allowRoles("admin"), checkAnyAdminPermi
 router.get("/unassigned-orders", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery", "operations.monitor"), getUnassignedOrders);
 router.post("/orders/:orderId/assign-rider", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignOrderToRider);
 router.post("/orders/:orderId/assign-guest-courier", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, assignGuestCourierController);
+router.get("/guest-courier-directory", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), searchGuestCourierDirectoryController);
 router.post("/guest-couriers/:assignmentId/resend", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, resendGuestCourierLinkController);
 router.post("/guest-couriers/:assignmentId/revoke", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, revokeGuestCourierController);
 router.post("/guest-couriers/:assignmentId/replace", verifyToken, allowRoles("admin"), checkAnyAdminPermission("delivery.write", "operations.intervene"), requireReason, replaceGuestCourierController);

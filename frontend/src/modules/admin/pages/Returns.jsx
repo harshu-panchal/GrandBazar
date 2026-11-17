@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
 import { onOrderStatusUpdate } from "@core/services/orderSocket";
 import { formatOrderId } from "@/shared/utils/orderId";
+import GuestCourierPhoneLookup from "../components/GuestCourierPhoneLookup";
 
 const Returns = () => {
   const { showToast } = useToast();
@@ -725,7 +726,11 @@ const Returns = () => {
                       <div className="space-y-2 rounded-xl border border-orange-100 bg-white p-3">
                         <div className="grid gap-2 sm:grid-cols-2">
                           <input value={guestCourierForm.name} onChange={(event) => setGuestCourierForm((value) => ({ ...value, name: event.target.value }))} placeholder="Courier full name" className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
-                          <input value={guestCourierForm.phone} onChange={(event) => setGuestCourierForm((value) => ({ ...value, phone: event.target.value }))} placeholder="Phone number" className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
+                          <GuestCourierPhoneLookup
+                            value={guestCourierForm.phone}
+                            onChange={(phone) => setGuestCourierForm((value) => ({ ...value, phone }))}
+                            onSelect={(courier) => setGuestCourierForm((value) => ({ ...value, name: courier.name || "", phone: courier.phone || "", email: courier.email || "" }))}
+                          />
                         </div>
                         <input type="email" value={guestCourierForm.email} onChange={(event) => setGuestCourierForm((value) => ({ ...value, email: event.target.value }))} placeholder="Email address" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />
                         <textarea value={guestCourierForm.reason} onChange={(event) => setGuestCourierForm((value) => ({ ...value, reason: event.target.value }))} placeholder="Assignment reason" rows={2} className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold outline-none focus:border-orange-400" />

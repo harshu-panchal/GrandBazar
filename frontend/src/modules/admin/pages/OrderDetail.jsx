@@ -56,6 +56,7 @@ import { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate } from '@core/servic
 import OrderMoneyBreakdown from '../components/orders/OrderMoneyBreakdown';
 import { formatOrderId } from '@/shared/utils/orderId';
 import OrderReviewsPanel from '@shared/components/reviews/OrderReviewsPanel';
+import GuestCourierPhoneLookup from '../components/GuestCourierPhoneLookup';
 
 const OrderDetail = () => {
     const { orderId } = useParams();
@@ -1920,7 +1921,11 @@ const OrderDetail = () => {
                                                     {canAssignForwardGuest && canAssignReturnGuest && !guestAssignee && <select value={guestCourierForm.taskType} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, taskType: e.target.value }))} className="w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold"><option value="forward_delivery">Forward delivery</option><option value="return_pickup">Return pickup</option></select>}
                                                     <div className="grid gap-3 sm:grid-cols-2">
                                                         <input value={guestCourierForm.name} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Full name" className="rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
-                                                        <input value={guestCourierForm.phone} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone number" className="rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
+                                                        <GuestCourierPhoneLookup
+                                                            value={guestCourierForm.phone}
+                                                            onChange={(phone) => setGuestCourierForm((prev) => ({ ...prev, phone }))}
+                                                            onSelect={(courier) => setGuestCourierForm((prev) => ({ ...prev, name: courier.name || '', phone: courier.phone || '', email: courier.email || '' }))}
+                                                        />
                                                     </div>
                                                     <input type="email" value={guestCourierForm.email} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email address" className="w-full rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />
                                                     <textarea value={guestCourierForm.reason} onChange={(e) => setGuestCourierForm((prev) => ({ ...prev, reason: e.target.value }))} placeholder="Assignment reason" rows={2} className="w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-xs font-bold outline-none" />

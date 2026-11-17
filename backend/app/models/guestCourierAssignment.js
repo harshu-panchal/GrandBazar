@@ -15,6 +15,12 @@ const guestCourierAssignmentSchema = new mongoose.Schema(
       index: true,
     },
     orderId: { type: String, required: true, index: true },
+    courierProfile: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GuestCourierProfile",
+      default: null,
+      index: true,
+    },
     courier: {
       name: { type: String, required: true, trim: true },
       phone: { type: String, required: true, trim: true },
