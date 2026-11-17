@@ -142,9 +142,3 @@ export async function createProductFromCatalog({
   });
 }
 
-export function getCustomerVisibleProductFilter() {
-  return {
-    status: "active",
-    isPublished: { $ne: false },
-  };
-}

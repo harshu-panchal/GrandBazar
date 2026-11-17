@@ -55,9 +55,11 @@ const StorefrontProductSections = ({ sections = [], products = [] }) => {
             </div>
           )}
 
-          {section.layout === "featured" && section.products[0] && (
-            <div className="max-w-xl rounded-[2rem] bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4 sm:p-6">
-              <ProductCard product={section.products[0]} compact={false} neutralBg className="max-w-none" />
+          {section.layout === "featured" && (
+            <div className="max-w-xl space-y-4 rounded-[2rem] bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4 sm:p-6">
+              {section.products.map((product) => (
+                <ProductCard key={productId(product)} product={product} compact={false} neutralBg className="max-w-none" />
+              ))}
             </div>
           )}
 

@@ -28,6 +28,7 @@ import {
   PRODUCT_APPROVAL_STATUS,
   getProductApprovalConfig,
   getApprovedOrLegacyFilter,
+  getCustomerVisibleProductFilter,
   buildApprovalStatusFilter,
   normalizeProductModerationFields,
   sanitizeApprovalNote,
@@ -439,6 +440,7 @@ export const getProducts = async (req, res) => {
       lat,
       lng,
       productIds,
+      customerVisible,
     } = req.query;
     const enforceRadius = isCustomerVisibilityRequest(req);
 
@@ -596,6 +598,9 @@ export const getProducts = async (req, res) => {
         if (Object.keys(moderationFilter).length > 0) {
           finalQuery = { $and: [finalQuery, moderationFilter] };
         }
+      }
+      if (String(customerVisible).toLowerCase() === "true") {
+        finalQuery = { $and: [finalQuery, getCustomerVisibleProductFilter()] };
       }
     }
 
@@ -1041,7 +1046,7 @@ export const checkProductStockController = async (req, res) => {
 export const getSellerProducts = async (req, res) => {
   try {
     const sellerId = req.user.id;
-    const { stockStatus, sort, approvalStatus, pricingStatus } = req.query;
+    const { stockStatus, sort, approvalStatus, pricingStatus, customerVisible } = req.query;
     const { page, limit, skip } = getPagination(req, {
       defaultLimit: 20,
       maxLimit: 100,
@@ -1066,6 +1071,10 @@ export const getSellerProducts = async (req, res) => {
       query.isPublished = false;
     } else if (pricingStatus === "published") {
       query.isPublished = { $ne: false };
+    }
+
+    if (String(customerVisible).toLowerCase() === "true") {
+      query.$and = [getCustomerVisibleProductFilter()];
     }
 
     const sortMap = {

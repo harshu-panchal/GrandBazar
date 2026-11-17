@@ -42,7 +42,7 @@ const Storefront = () => {
     try {
       const [profileRes, productsRes, layoutRes] = await Promise.all([
         sellerApi.getProfile(),
-        sellerApi.getProducts({ page: 1, limit: 100, sort: "display-asc" }),
+        sellerApi.getProducts({ page: 1, limit: 100, sort: "display-asc", customerVisible: true }),
         sellerApi.getStorefrontLayout(),
       ]);
       const data = profileRes.data.result;
@@ -56,7 +56,7 @@ const Storefront = () => {
       if (totalPages > 1) {
         const remaining = await Promise.all(
           Array.from({ length: totalPages - 1 }, (_, index) =>
-            sellerApi.getProducts({ page: index + 2, limit: 100, sort: "display-asc" }),
+            sellerApi.getProducts({ page: index + 2, limit: 100, sort: "display-asc", customerVisible: true }),
           ),
         );
         allProducts = allProducts.concat(
@@ -171,7 +171,7 @@ const Storefront = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 font-['Outfit'] space-y-8">
+    <div className="w-full font-['Outfit'] space-y-8">
       <div>
         <h1 className="text-3xl font-black text-slate-900 mb-2">Store Design</h1>
         <p className="text-slate-500 font-medium">Manage how your shop appears to customers.</p>

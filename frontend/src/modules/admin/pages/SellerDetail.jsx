@@ -395,7 +395,7 @@ const SellerDetail = () => {
             try {
                 const [layoutResponse, firstProductsResponse] = await Promise.all([
                     adminApi.getSellerStorefrontLayout(id),
-                    adminApi.getProducts({ sellerId: id, page: 1, limit: 100, sort: 'display-asc' }),
+                    adminApi.getProducts({ sellerId: id, page: 1, limit: 100, sort: 'display-asc', customerVisible: true }),
                 ]);
                 const firstPayload = firstProductsResponse.data?.result || {};
                 let products = Array.isArray(firstPayload.items) ? firstPayload.items : [];
@@ -403,7 +403,7 @@ const SellerDetail = () => {
                 if (totalPages > 1) {
                     const remaining = await Promise.all(
                         Array.from({ length: totalPages - 1 }, (_, index) =>
-                            adminApi.getProducts({ sellerId: id, page: index + 2, limit: 100, sort: 'display-asc' }),
+                            adminApi.getProducts({ sellerId: id, page: index + 2, limit: 100, sort: 'display-asc', customerVisible: true }),
                         ),
                     );
                     products = products.concat(

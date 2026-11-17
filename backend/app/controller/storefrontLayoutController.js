@@ -53,12 +53,6 @@ export function normalizeStorefrontSections(rawSections, allowedProductIds) {
       }
     }
 
-    if (layout === "featured" && productIds.length > 1) {
-      const error = new Error(`Featured section ${index + 1} can contain only one product`);
-      error.statusCode = 400;
-      throw error;
-    }
-
     const normalized = { title, layout, productIds };
     const sectionId = asId(rawSection?._id || rawSection?.id);
     if (mongoose.Types.ObjectId.isValid(sectionId)) normalized._id = sectionId;

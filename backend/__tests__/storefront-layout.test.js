@@ -8,11 +8,34 @@ jest.unstable_mockModule("../app/services/auditTrailService.js", () => ({
 const { normalizeStorefrontSections } = await import(
   "../app/controller/storefrontLayoutController.js"
 );
+const { getApprovedOrLegacyFilter, getCustomerVisibleProductFilter } = await import(
+  "../app/services/productModerationService.js"
+);
 
 describe("storefront layout section validation", () => {
   const first = new mongoose.Types.ObjectId().toString();
   const second = new mongoose.Types.ObjectId().toString();
   const foreign = new mongoose.Types.ObjectId().toString();
+
+  test("uses the customer catalog eligibility filter for storefront product choices", () => {
+    expect(getCustomerVisibleProductFilter()).toEqual({
+      $and: [
+        {
+          status: "active",
+          isPublished: { $ne: false },
+          isCurrentlyAvailable: { $ne: false },
+          isHidden: { $ne: true },
+        },
+        {
+          $or: [
+            { stock: { $gt: 0 } },
+            { "variants.stock": { $gt: 0 } },
+          ],
+        },
+        getApprovedOrLegacyFilter(),
+      ],
+    });
+  });
 
   test("preserves section and product order while allowing a product in multiple sections", () => {
     const sections = normalizeStorefrontSections(
@@ -45,12 +68,12 @@ describe("storefront layout section validation", () => {
     ).toThrow("outside this store");
   });
 
-  test("limits the large featured layout to one product", () => {
-    expect(() =>
-      normalizeStorefrontSections(
-        [{ title: "Featured", layout: "featured", productIds: [first, second] }],
-        [first, second],
-      ),
-    ).toThrow("only one product");
+  test("preserves multiple products in the large featured layout", () => {
+    const [section] = normalizeStorefrontSections(
+      [{ title: "Featured", layout: "featured", productIds: [second, first] }],
+      [first, second],
+    );
+
+    expect(section.productIds).toEqual([second, first]);
   });
 });

@@ -57,6 +57,26 @@ export function getApprovedOrLegacyFilter() {
   };
 }
 
+export function getCustomerVisibleProductFilter() {
+  return {
+    $and: [
+      {
+        status: "active",
+        isPublished: { $ne: false },
+        isCurrentlyAvailable: { $ne: false },
+        isHidden: { $ne: true },
+      },
+      {
+        $or: [
+          { stock: { $gt: 0 } },
+          { "variants.stock": { $gt: 0 } },
+        ],
+      },
+      getApprovedOrLegacyFilter(),
+    ],
+  };
+}
+
 export function buildApprovalStatusFilter(rawStatus = "all") {
   const normalized = String(rawStatus || "all").trim().toLowerCase();
 

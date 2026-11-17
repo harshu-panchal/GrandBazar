@@ -129,9 +129,7 @@ const StorefrontSectionBuilder = ({
     const value = String(pickerValues[key] || "");
     if (!value) return;
     const current = (section.productIds || []).map(String);
-    const productIds = section.layout === "featured"
-      ? [value]
-      : current.includes(value) ? current : [...current, value];
+    const productIds = current.includes(value) ? current : [...current, value];
     updateSection(key, { productIds });
     setPickerValues((prev) => ({ ...prev, [key]: "" }));
   };
@@ -254,10 +252,12 @@ const StorefrontSectionBuilder = ({
           <span className="mt-2 text-sm font-black">Create your first product section</span>
         </button>
       ) : (
-        <div className="space-y-8 rounded-[2rem] bg-slate-50 p-3 sm:p-6">
+        <div className="-mx-4 space-y-8 bg-slate-50 py-3 sm:mx-0 sm:rounded-[2rem] sm:py-6">
           {sections.map((section, sectionIndex) => {
             const key = sectionKey(section);
-            const selectedIds = (section.productIds || []).map(String);
+            const selectedIds = (section.productIds || [])
+              .map(String)
+              .filter((id) => productsById.has(id));
             const availableProducts = products.filter(
               (product) => !selectedIds.includes(productKey(product)),
             );
@@ -266,7 +266,7 @@ const StorefrontSectionBuilder = ({
                 key={key}
                 data-sort-scope="sections"
                 data-sort-id={key}
-                className="rounded-3xl border border-dashed border-slate-300 bg-white p-4 shadow-sm sm:p-6"
+                className="border-y border-dashed border-slate-300 bg-white p-3 shadow-sm sm:rounded-3xl sm:border sm:p-6"
               >
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -297,10 +297,7 @@ const StorefrontSectionBuilder = ({
                       <select
                         aria-label="Section layout"
                         value={section.layout}
-                        onChange={(event) => {
-                          const layout = event.target.value;
-                          updateSection(key, { layout, productIds: layout === "featured" ? selectedIds.slice(0, 1) : selectedIds });
-                        }}
+                        onChange={(event) => updateSection(key, { layout: event.target.value })}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none"
                       >
                         {STOREFRONT_LAYOUT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -317,7 +314,7 @@ const StorefrontSectionBuilder = ({
                     <div className={cn(
                       section.layout === "carousel" && "flex snap-x gap-3 overflow-x-auto pb-3 no-scrollbar",
                       section.layout === "grid" && "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
-                      section.layout === "featured" && "max-w-xl rounded-[2rem] bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4",
+                      section.layout === "featured" && "max-w-xl space-y-4 rounded-[2rem] bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4",
                       section.layout === "compact_list" && "grid gap-3 lg:grid-cols-2",
                     )}>
                       {selectedIds.map((id, productIndex) => {
@@ -362,7 +359,7 @@ const StorefrontSectionBuilder = ({
           })}
 
           {unassignedProducts.length > 0 && (
-            <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+            <section className="space-y-4 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-6">
               <div>
                 <h2 className="text-xl font-black tracking-tight text-slate-900">All Products</h2>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Automatic · {unassignedProducts.length} products</p>
