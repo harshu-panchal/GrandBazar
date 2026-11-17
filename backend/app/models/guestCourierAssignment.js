@@ -42,7 +42,9 @@ const guestCourierAssignmentSchema = new mongoose.Schema(
     },
     tokenHash: { type: String, required: true, unique: true, index: true, select: false },
     tokenVersion: { type: Number, default: 1 },
-    assignedByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", required: true },
+    assignedByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+    assignedByActor: { type: mongoose.Schema.Types.ObjectId, default: null },
+    assignedByRole: { type: String, enum: ["admin", "superadmin", "seller"], default: null },
     assignmentReason: { type: String, required: true, trim: true },
     assignedAt: { type: Date, default: Date.now },
     emailStatus: {
@@ -56,6 +58,7 @@ const guestCourierAssignmentSchema = new mongoose.Schema(
     completedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },
     revokedByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "Admin", default: null },
+    revokedByActor: { type: mongoose.Schema.Types.ObjectId, default: null },
     revocationReason: { type: String, default: "" },
   },
   { timestamps: true },

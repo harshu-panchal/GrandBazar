@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
 import { onOrderStatusUpdate, onReturnDropOtp } from "@core/services/orderSocket";
 import NotifyRidersModal from "../components/NotifyRidersModal";
+import GuestCourierAssignmentPanel from "../components/GuestCourierAssignmentPanel";
 
 const Returns = () => {
     const { showToast } = useToast();
@@ -756,6 +757,18 @@ const Returns = () => {
                                         </span>
                                     </p>
                                 </div>
+
+                                <GuestCourierAssignmentPanel
+                                    orderId={selectedReturn.orderId}
+                                    taskType="return_pickup"
+                                    assignment={selectedReturn.returnGuestCourierAssignment}
+                                    eligible={['return_approved', 'return_pickup_assigned'].includes(selectedReturn.returnStatus) && !selectedReturn.returnDeliveryBoy && !selectedReturn.returnGuestCourierAssignment}
+                                    onChanged={async () => {
+                                        const response = await sellerApi.getReturnDetails(selectedReturn.orderId);
+                                        if (response.data?.success) setSelectedReturn(response.data.result);
+                                        await fetchReturns({ silent: true });
+                                    }}
+                                />
 
                                 {/* Active OTP Display */}
                                 {(() => {

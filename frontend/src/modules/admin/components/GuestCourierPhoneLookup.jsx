@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Search, UserRound } from 'lucide-react';
 import { adminApi } from '../services/adminApi';
 
-export default function GuestCourierPhoneLookup({ value, onChange, onSelect, className = '' }) {
+export default function GuestCourierPhoneLookup({ value, onChange, onSelect, searchCouriers = adminApi.searchGuestCourierDirectory, className = '' }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -26,7 +26,7 @@ export default function GuestCourierPhoneLookup({ value, onChange, onSelect, cla
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const response = await adminApi.searchGuestCourierDirectory(value, 10);
+        const response = await searchCouriers(value, 10);
         if (cancelled) return;
         setResults(response.data?.result || []);
         setSearched(true);
@@ -46,7 +46,7 @@ export default function GuestCourierPhoneLookup({ value, onChange, onSelect, cla
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [value]);
+  }, [value, searchCouriers]);
 
   const choose = (courier) => {
     suppressNextSearch.current = true;

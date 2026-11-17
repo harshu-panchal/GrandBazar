@@ -45,6 +45,23 @@ function validateCourier(input = {}) {
   return { name, phone, email };
 }
 
+export function assertGuestCourierSellerScope(order, allowedSellerIds, expectedTaskType = null, assignment = null) {
+  if (expectedTaskType && assignment?.taskType !== expectedTaskType) {
+    throw Object.assign(new Error("Guest assignment does not belong to this task type"), { statusCode: 404 });
+  }
+  if (Array.isArray(allowedSellerIds) && !allowedSellerIds.some((id) => String(id) === String(order?.seller))) {
+    throw Object.assign(new Error("Order not found for this store"), { statusCode: 404 });
+  }
+}
+
+async function requireAssignmentScope(assignmentId, allowedSellerIds, expectedTaskType) {
+  const assignment = await GuestCourierAssignment.findOne({ _id: assignmentId, status: { $in: ACTIVE_STATUSES } }).select("+tokenHash");
+  if (!assignment) throw Object.assign(new Error("Active guest assignment not found"), { statusCode: 404 });
+  const order = await Order.findById(assignment.order).select("seller").lean();
+  assertGuestCourierSellerScope(order, allowedSellerIds, expectedTaskType, assignment);
+  return assignment;
+}
+
 async function dispatchAssignmentEmail(assignment, rawToken) {
   const result = await sendGuestCourierAssignmentEmail({
     email: assignment.courier.email,
@@ -62,7 +79,7 @@ async function dispatchAssignmentEmail(assignment, rawToken) {
   return result;
 }
 
-export async function assignGuestCourier({ adminId, actorRole, orderRef, taskType, courier, reason }) {
+export async function assignGuestCourier({ adminId, actorRole, orderRef, taskType, courier, reason, allowedSellerIds = null }) {
   const orderId = await requireCanonicalOrderId(orderRef);
   const normalizedCourier = validateCourier(courier);
   const assignmentReason = String(reason || "").trim();
@@ -73,6 +90,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
 
   const order = await Order.findOne({ orderId });
   if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
+  assertGuestCourierSellerScope(order, allowedSellerIds);
 
   const rawToken = createToken();
   const assignment = await GuestCourierAssignment.create({
@@ -81,7 +99,9 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
     orderId,
     courier: normalizedCourier,
     tokenHash: hashGuestToken(rawToken),
-    assignedByAdmin: adminId,
+    assignedByAdmin: ["admin", "superadmin"].includes(actorRole) ? adminId : null,
+    assignedByActor: adminId,
+    assignedByRole: actorRole,
     assignmentReason,
   });
 
@@ -109,7 +129,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
           status: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_ASSIGNED),
           orderStatus: legacyStatusFromWorkflow(WORKFLOW_STATUS.DELIVERY_ASSIGNED),
           assignedAt: now,
-          assignedByAdmin: adminId,
+          assignedByAdmin: ["admin", "superadmin"].includes(actorRole) ? adminId : null,
           deliveryRiderStep: 1,
         },
         $inc: { assignmentVersion: 1 },
@@ -155,7 +175,7 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
     emitReturnStatusUpdate(updated, { returnDeliveryAssigneeType: "guest" });
   }
 
-  const courierProfile = await saveGuestCourierProfile(normalizedCourier, adminId);
+  const courierProfile = await saveGuestCourierProfile(normalizedCourier, adminId, updated.seller, actorRole);
   assignment.courierProfile = courierProfile?._id || null;
   await assignment.save();
 
@@ -172,9 +192,8 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
   return { order: updated, assignment: assignmentPublicView(assignment), courierProfile, email };
 }
 
-export async function resendGuestCourierLink({ adminId, actorRole, assignmentId, reason }) {
-  const assignment = await GuestCourierAssignment.findOne({ _id: assignmentId, status: { $in: ACTIVE_STATUSES } }).select("+tokenHash");
-  if (!assignment) throw Object.assign(new Error("Active guest assignment not found"), { statusCode: 404 });
+export async function resendGuestCourierLink({ adminId, actorRole, assignmentId, reason, allowedSellerIds = null, expectedTaskType = null }) {
+  const assignment = await requireAssignmentScope(assignmentId, allowedSellerIds, expectedTaskType);
   const rawToken = createToken();
   assignment.tokenHash = hashGuestToken(rawToken);
   assignment.tokenVersion += 1;
@@ -194,14 +213,16 @@ export async function resendGuestCourierLink({ adminId, actorRole, assignmentId,
   return { assignment: assignmentPublicView(assignment), email };
 }
 
-export async function revokeGuestCourier({ adminId, actorRole, assignmentId, reason, replacement = false }) {
+export async function revokeGuestCourier({ adminId, actorRole, assignmentId, reason, replacement = false, allowedSellerIds = null, expectedTaskType = null }) {
+  await requireAssignmentScope(assignmentId, allowedSellerIds, expectedTaskType);
   const assignment = await GuestCourierAssignment.findOneAndUpdate(
     { _id: assignmentId, status: { $in: ACTIVE_STATUSES } },
     {
       $set: {
         status: replacement ? "replaced" : "revoked",
         revokedAt: new Date(),
-        revokedByAdmin: adminId,
+        revokedByAdmin: ["admin", "superadmin"].includes(actorRole) ? adminId : null,
+        revokedByActor: adminId,
         revocationReason: String(reason || (replacement ? "Replaced by admin" : "Revoked by admin")).trim(),
       },
       $inc: { tokenVersion: 1 },

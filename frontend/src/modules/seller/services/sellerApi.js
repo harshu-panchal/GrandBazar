@@ -65,6 +65,16 @@ export const sellerApi = {
     updateOrderStatus: (orderId, data) => axiosInstance.put(`/orders/status/${orderId}`, data),
     markOrderPacked: (orderId) => axiosInstance.put(`/orders/${orderId}/seller-packed`),
     resendDeliveryRequest: (orderId) => axiosInstance.put(`/orders/${orderId}/resend-delivery-request`),
+    searchGuestCourierDirectory: (phone, taskType = 'forward_delivery', limit = 10) =>
+        axiosInstance.get(`/orders/seller/${taskType === 'return_pickup' ? 'returns/' : ''}guest-couriers`, { params: { phone, limit } }),
+    assignGuestCourier: (orderId, taskType, data) =>
+        axiosInstance.post(`/orders/seller/${taskType === 'return_pickup' ? 'returns' : 'orders'}/${orderId}/guest-courier`, data),
+    resendGuestCourierLink: (assignmentId, taskType, reason) =>
+        axiosInstance.post(`/orders/seller/${taskType === 'return_pickup' ? 'returns' : 'orders'}/guest-couriers/${assignmentId}/resend`, { reason }),
+    revokeGuestCourier: (assignmentId, taskType, reason) =>
+        axiosInstance.post(`/orders/seller/${taskType === 'return_pickup' ? 'returns' : 'orders'}/guest-couriers/${assignmentId}/revoke`, { reason }),
+    replaceGuestCourier: (assignmentId, taskType, data) =>
+        axiosInstance.post(`/orders/seller/${taskType === 'return_pickup' ? 'returns' : 'orders'}/guest-couriers/${assignmentId}/replace`, data),
     bulkUpdateOrderStatus: (data) => axiosInstance.put('/orders/status/bulk', data),
     getEarnings: () => axiosInstance.get('/seller/earnings'),
     getWalletSummary: () => axiosInstance.get('/seller/wallet/summary'),

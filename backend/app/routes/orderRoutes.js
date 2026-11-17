@@ -131,6 +131,13 @@ import {
   adminGetStoreDeliveryPolicy,
   adminUpdateStoreDeliveryPolicy,
 } from "../controller/deliveryPolicyController.js";
+import {
+  assignSellerGuestCourier,
+  replaceSellerGuestCourier,
+  resendSellerGuestCourier,
+  revokeSellerGuestCourier,
+  searchSellerGuestCouriers,
+} from "../controller/sellerGuestCourierController.js";
 
 const router = express.Router();
 const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
@@ -272,11 +279,21 @@ router.put(
   ...sellerOrdersWriteChain,
   resendDeliveryRequestBySeller,
 );
+router.get("/seller/guest-couriers", ...sellerOrdersWriteChain, allowRoles("seller"), searchSellerGuestCouriers);
+router.post("/seller/orders/:orderId/guest-courier", ...sellerOrdersWriteChain, allowRoles("seller"), assignSellerGuestCourier);
+router.post("/seller/orders/guest-couriers/:assignmentId/resend", ...sellerOrdersWriteChain, allowRoles("seller"), resendSellerGuestCourier);
+router.post("/seller/orders/guest-couriers/:assignmentId/revoke", ...sellerOrdersWriteChain, allowRoles("seller"), revokeSellerGuestCourier);
+router.post("/seller/orders/guest-couriers/:assignmentId/replace", ...sellerOrdersWriteChain, allowRoles("seller"), replaceSellerGuestCourier);
 router.get(
   "/seller-returns",
   ...sellerReturnsReadChain,
   getSellerReturns,
 );
+router.get("/seller/returns/guest-couriers", ...sellerReturnsWriteChain, allowRoles("seller"), searchSellerGuestCouriers);
+router.post("/seller/returns/:orderId/guest-courier", ...sellerReturnsWriteChain, allowRoles("seller"), assignSellerGuestCourier);
+router.post("/seller/returns/guest-couriers/:assignmentId/resend", ...sellerReturnsWriteChain, allowRoles("seller"), resendSellerGuestCourier);
+router.post("/seller/returns/guest-couriers/:assignmentId/revoke", ...sellerReturnsWriteChain, allowRoles("seller"), revokeSellerGuestCourier);
+router.post("/seller/returns/guest-couriers/:assignmentId/replace", ...sellerReturnsWriteChain, allowRoles("seller"), replaceSellerGuestCourier);
 router.put(
   "/returns/:orderId/approve",
   ...sellerReturnsWriteChain,

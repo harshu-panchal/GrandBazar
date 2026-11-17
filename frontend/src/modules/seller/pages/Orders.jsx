@@ -46,6 +46,7 @@ import { optimizeProofImage } from "@/core/utils/imageCompression";
 import { formatOrderId } from "@/shared/utils/orderId";
 import { useSearchParams } from "react-router-dom";
 import OrderReviewsPanel from '@shared/components/reviews/OrderReviewsPanel';
+import GuestCourierAssignmentPanel from '../components/GuestCourierAssignmentPanel';
 
 const ORDER_EDITABLE_STATUSES = new Set([
     'pending',
@@ -95,6 +96,8 @@ function formatSellerOrder(order) {
         statusLabel: getOrderStatusLabel(order),
         workflowStatus: order.workflowStatus,
         workflowVersion: order.workflowVersion,
+        deliveryAssigneeType: order.deliveryAssigneeType || 'none',
+        guestCourierAssignment: order.guestCourierAssignment || null,
         storeReassignment: getOrderStoreReassignment(order),
         fulfillmentType: order.fulfillmentType || 'instant',
         logisticsMode: order.logisticsMode || null,
@@ -3079,6 +3082,17 @@ const Orders = () => {
                                                 </div>
                                             );
                                         })()}
+                                        <GuestCourierAssignmentPanel
+                                            orderId={selectedOrder.id}
+                                            taskType="forward_delivery"
+                                            assignment={selectedOrder.guestCourierAssignment}
+                                            eligible={String(selectedOrder.workflowStatus || '').toUpperCase() === 'DELIVERY_SEARCH' && !selectedOrder.guestCourierAssignment}
+                                            onChanged={async () => {
+                                                const response = await sellerApi.getOrderDetails(selectedOrder.id);
+                                                if (response.data?.success) setSelectedOrder(formatSellerOrder(response.data.result));
+                                                await fetchOrders(page, false);
+                                            }}
+                                        />
                                         {Array.isArray(selectedOrder.pickupProofImages) && selectedOrder.pickupProofImages.length > 0 && (
                                             <div className="mb-4 p-3 rounded-2xl bg-purple-50 ring-1 ring-purple-100">
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-2">
