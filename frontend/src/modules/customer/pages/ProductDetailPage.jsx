@@ -15,6 +15,8 @@ import { buildProductPath, extractObjectIdFromSlugAndId } from '@core/seo/url';
 import { useSeoMeta } from '@core/seo/useSeoMeta';
 import SimilarProductsSection from '../components/product/SimilarProductsSection';
 import OtherSellersSection from '../components/product/OtherSellersSection';
+import { buildProductDetailRows } from '../utils/productInfo';
+import LocalizedNamesTable from '../components/shared/LocalizedNamesTable';
 
 const ProductDetailPage = () => {
     const { slugAndId } = useParams();
@@ -343,7 +345,7 @@ const ProductDetailPage = () => {
                                 </span>
                             )}
                             <div className="flex items-center gap-1 text-orange-500 font-bold bg-orange-50 px-3 py-0.5 rounded-full text-xs">
-                                <Star size={12} fill="currentColor" /> 4.8 ({reviews.length > 0 ? reviews.length : '120+'})
+                                <Star size={12} fill="currentColor" /> 4.8 ({reviews.length})
                             </div>
                         </div>
 
@@ -432,6 +434,20 @@ const ProductDetailPage = () => {
                             <p className="text-sm font-black text-slate-800">{product.brand || 'Premium'}</p>
                         </div>
                     </div>
+
+                    <div className="rounded-[2rem] border border-slate-100 bg-white p-6">
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4">Product Information</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {buildProductDetailRows(product, null, settings?.supportEmail || 'support@example.com').map((d) => (
+                                <div key={d.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <span className="text-[10px] text-slate-400 block mb-0.5 font-bold uppercase tracking-wider">{d.label}</span>
+                                    <span className="font-black text-slate-800 text-xs">{d.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <LocalizedNamesTable names={product.localizedNames} />
                 </div>
             </div>
 

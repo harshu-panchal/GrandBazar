@@ -253,6 +253,7 @@ export const placeOrder = async (req, res) => {
       res,
       error.statusCode || 500,
       isKnownUserFacingError ? error.message : "Something went wrong while placing your order. Please try again.",
+      error.insufficientStockItems ? { insufficientStockItems: error.insufficientStockItems } : {},
     );
   }
 };
