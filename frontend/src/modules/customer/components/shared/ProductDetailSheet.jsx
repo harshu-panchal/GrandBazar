@@ -27,6 +27,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { buildProductPath } from '@/core/seo/url';
 import OtherSellersSection from '../product/OtherSellersSection';
+import { buildProductDetailRows } from '../../utils/productInfo';
+import LocalizedNamesTable from './LocalizedNamesTable';
 
 const ProductDetailSheet = () => {
     const { selectedProduct, isOpen, closeProduct } = useProductDetail();
@@ -721,7 +723,7 @@ const ProductDetailSheet = () => {
                                             >
                                                 <Star size={10} fill="currentColor" />
                                                 {Array.isArray(reviews) && reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : '4.8'}
-                                                <span className="text-orange-400 font-medium">({Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})</span>
+                                                <span className="text-orange-400 font-medium">({Array.isArray(reviews) ? reviews.length : 0})</span>
                                             </motion.div>
                                         </div>
 
@@ -896,22 +898,18 @@ const ProductDetailSheet = () => {
                                                 icon={<Search size={16} />}
                                             >
                                                 <div className="grid grid-cols-2 gap-3 mt-1">
-                                                    {[
-                                                        { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh', emoji: '🏷️' },
-                                                        { label: 'Weight / Unit', value: selectedProduct?.netQuantity ? `${selectedProduct.netQuantity} ${selectedProduct.unit || ''}` : (selectedProduct?.weight || '1 unit'), emoji: '⚖️' },
-                                                        ...(selectedProduct?.shelfLife ? [{ label: 'Shelf Life', value: selectedProduct.shelfLife, emoji: '📅' }] : []),
-                                                        ...(selectedProduct?.legal?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.legal.countryOfOrigin, emoji: '🇮🇳' }] : []),
-                                                        ...((selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct?.legal?.fssaiLicenseNumber) ? [{ label: 'FSSAI License', value: selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct.legal.fssaiLicenseNumber, emoji: '🛡️' }] : []),
-                                                        { label: 'Customer Care', value: supportEmail, emoji: '📧' }
-                                                    ].map((d) => (
+                                                    {buildProductDetailRows(selectedProduct, sellerProfile, supportEmail).map((d) => (
                                                         <div key={d.label} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 group hover:bg-white hover:shadow-sm transition-all">
                                                             <span className="text-[10px] text-slate-400 block mb-0.5 font-bold uppercase tracking-wider">{d.label}</span>
                                                             <span className="font-black text-slate-800 text-[12px]">{d.value}</span>
                                                         </div>
                                                     ))}
                                                 </div>
+                                                <div className="mt-3">
+                                                    <LocalizedNamesTable names={selectedProduct?.localizedNames} />
+                                                </div>
                                             </AccordionItem>
-                                            
+
                                             {/* Seller Info */}
                                             {sellerProfile && (
                                                 <AccordionItem 
@@ -941,7 +939,7 @@ const ProductDetailSheet = () => {
                                             {/* Customer Reviews */}
                                             <AccordionItem 
                                                 id="reviews" 
-                                                title={`Customer Reviews (${Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})`}
+                                                title={`Customer Reviews (${Array.isArray(reviews) ? reviews.length : 0})`}
                                                 icon={<Star size={16} />}
                                             >
                                                 <div className="space-y-6 mt-2">
@@ -1229,19 +1227,15 @@ const ProductDetailSheet = () => {
                                         icon={<Search size={18} strokeWidth={2.5} />}
                                     >
                                         <div className="grid grid-cols-2 gap-3 mt-1">
-                                            {[
-                                                { label: 'Brand', value: selectedProduct?.brand || 'Generic / Fresh' },
-                                                { label: 'Weight / Unit', value: selectedProduct?.netQuantity ? `${selectedProduct.netQuantity} ${selectedProduct.unit || ''}` : (selectedProduct?.weight || '1 unit') },
-                                                ...(selectedProduct?.shelfLife ? [{ label: 'Shelf Life', value: selectedProduct.shelfLife }] : []),
-                                                ...(selectedProduct?.legal?.countryOfOrigin ? [{ label: 'Country of Origin', value: selectedProduct.legal.countryOfOrigin }] : []),
-                                                ...((selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct?.legal?.fssaiLicenseNumber) ? [{ label: 'FSSAI License', value: selectedProduct?.legal?.inheritStoreFssai ? (sellerProfile?.fssaiLicenseNumber || sellerProfile?.documents?.fssaiLicense) : selectedProduct.legal.fssaiLicenseNumber }] : []),
-                                                { label: 'Customer Care', value: supportEmail }
-                                            ].map((d) => (
+                                            {buildProductDetailRows(selectedProduct, sellerProfile, supportEmail).map((d) => (
                                                 <div key={d.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                                                     <span className="text-gray-400 block mb-0.5 text-[10px] font-bold uppercase tracking-wider">{d.label}</span>
                                                     <span className="font-black text-slate-800 text-xs">{d.value}</span>
                                                 </div>
                                             ))}
+                                        </div>
+                                        <div className="mt-3">
+                                            <LocalizedNamesTable names={selectedProduct?.localizedNames} />
                                         </div>
                                     </AccordionItem>
                                     
@@ -1274,7 +1268,7 @@ const ProductDetailSheet = () => {
                                     {/* Customer Reviews */}
                                     <AccordionItem 
                                         id="reviews" 
-                                        title={`Customer Reviews (${Array.isArray(reviews) && reviews.length > 0 ? reviews.length : '120+'})`}
+                                        title={`Customer Reviews (${Array.isArray(reviews) ? reviews.length : 0})`}
                                         icon={<Star size={18} strokeWidth={2.5} />}
                                     >
                                         <div className="space-y-6 mt-2">

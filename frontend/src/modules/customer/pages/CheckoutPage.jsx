@@ -1156,49 +1156,12 @@ const CheckoutPage = () => {
     }
     setIsPlacingOrder(true);
     try {
-      // Pre-flight stock check. Runs before order creation so the customer
-      // sees a specific "X out of stock, only Y available" toast instead
-      // of a generic transaction failure surfaced mid-placement.
-      try {
-        const stockRes = await customerApi.checkProductStock(
-          cart.map((item) => ({
-            productId: item.id || item._id,
-            variantSku: String(item.variantSku || "").trim(),
-            quantity: item.quantity,
-          })),
-        );
-        const result = stockRes?.data?.result;
-        if (result && result.ok === false) {
-          const rows = (result.unavailable || []).map((u) => {
-            let label;
-            if (u.reason === "out_of_stock") label = "out of stock";
-            else if (u.reason === "insufficient_stock")
-              label = `only ${u.available} left (you selected ${u.requested})`;
-            else if (u.reason === "inactive") label = "no longer available";
-            else if (u.reason === "variant_not_found")
-              label = "selected variant is unavailable";
-            else label = "unavailable";
-            return { productId: u.productId, name: u.name, label };
-          });
-          setUnavailableItems(rows);
-          showToast(
-            rows[0]
-              ? `${rows[0].name}: ${rows[0].label}`
-              : "Some items in your cart are no longer available.",
-            "error",
-          );
-          setIsPlacingOrder(false);
-          return;
-        }
-        // Clear the banner when the check passes so a previously-shown
-        // warning does not linger after the customer fixes their cart.
-        setUnavailableItems([]);
-      } catch (stockErr) {
-        // A network error on the pre-check is not enough to block the
-        // order — the placement service does its own transactional stock
-        // reservation. Log and continue.
-        console.error("Stock pre-check failed", stockErr);
-      }
+      // Clear a previously-shown stock warning so it doesn't linger after
+      // the customer fixes their cart. The actual stock check happens
+      // transactionally inside createOrder below — a separate pre-flight
+      // call here would just add a second blocking round-trip for the
+      // common case where stock is fine.
+      setUnavailableItems([]);
 
       const taxAmount = pricingPreview?.taxTotal || 0;
       const orderData = {
@@ -1349,6 +1312,12 @@ const CheckoutPage = () => {
       // next attempt gets a fresh one. No answer (timeout/offline) keeps it.
       if (error.response) {
         checkoutAttemptRef.current = { key: null, signature: null };
+      }
+      const insufficientStockItems = error.response?.data?.result?.insufficientStockItems;
+      if (Array.isArray(insufficientStockItems) && insufficientStockItems.length > 0) {
+        setUnavailableItems(
+          insufficientStockItems.map((u) => ({ name: u.name, label: u.reason })),
+        );
       }
       showToast(
         error.response?.data?.message ||
@@ -1696,7 +1665,7 @@ const CheckoutPage = () => {
                   </p>
                   <ul className="space-y-0.5">
                     {unavailableItems.map((row) => (
-                      <li key={row.productId} className="text-sm text-red-700 font-semibold">
+                      <li key={row.productId || row.name} className="text-sm text-red-700 font-semibold">
                         {row.name}: {row.label}
                       </li>
                     ))}
@@ -1739,7 +1708,7 @@ const CheckoutPage = () => {
           {unavailableItems.length > 0 && (
             <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
               {unavailableItems.map((row) => (
-                <p key={row.productId} className="text-xs text-red-700 font-semibold leading-snug">
+                <p key={row.productId || row.name} className="text-xs text-red-700 font-semibold leading-snug">
                   {row.name}: {row.label}
                 </p>
               ))}

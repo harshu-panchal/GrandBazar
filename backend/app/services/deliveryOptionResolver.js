@@ -186,12 +186,15 @@ export async function resolveDeliveryOptions({
     throw err;
   }
 
-  const platformProvider = await getPlatformDeliveryProvider();
   const storePolicy = resolveStoreDeliveryPolicy(store);
   const ids = [...new Set((productIds || []).map(String).filter(Boolean))];
-  const productPolicies = ids.length
-    ? await Product.find({ _id: { $in: ids } }).select("deliveryOptions").lean()
-    : [];
+  // Independent of each other — run in parallel instead of two serial DB round-trips.
+  const [platformProvider, productPolicies] = await Promise.all([
+    getPlatformDeliveryProvider(),
+    ids.length
+      ? Product.find({ _id: { $in: ids } }).select("deliveryOptions").lean()
+      : Promise.resolve([]),
+  ]);
   const permits = (field) => productPolicies.length === 0 || productPolicies.every((product) => {
     const override = product.deliveryOptions;
     return override?.mode === "override" ? override[field] === true : storePolicy[field] === true;
