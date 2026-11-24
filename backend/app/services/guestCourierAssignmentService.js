@@ -14,6 +14,8 @@ import {
 import { retractDeliveryBroadcastForOrder, emitOrderStatusUpdate, emitReturnStatusUpdate } from "./orderSocketEmitter.js";
 import { sendGuestCourierAssignmentEmail } from "./emailService.js";
 import { createOperatorAuditLog } from "./operatorAuditLogService.js";
+import { sendRiderTaskWhatsapp } from "./bhashWhatsappService.js";
+import { sendTrackingLinkForOrder } from "./orderTrackingLinkService.js";
 import { saveGuestCourierProfile } from "./guestCourierDirectoryService.js";
 
 const ACTIVE_STATUSES = ["email_pending", "active", "email_failed"];
@@ -71,12 +73,33 @@ async function dispatchAssignmentEmail(assignment, rawToken) {
     accessToken: rawToken,
   });
   const sent = result?.success === true;
+  const baseUrl = String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  const whatsapp = await sendRiderTaskWhatsapp({
+    phone: assignment.courier.phone,
+    name: assignment.courier.name,
+    taskType: assignment.taskType,
+    orderId: assignment.orderId,
+    taskUrl: `${baseUrl}/delivery/guest#token=${encodeURIComponent(rawToken)}`,
+  });
   assignment.emailStatus = sent ? "sent" : "failed";
-  assignment.status = sent ? "active" : "email_failed";
   assignment.emailSentAt = sent ? new Date() : null;
   assignment.emailFailureReason = sent ? "" : String(result?.error || "Email delivery failed");
+  assignment.whatsappStatus = whatsapp.success ? "sent" : "failed";
+  assignment.whatsappFailureReason = whatsapp.success ? "" : whatsapp.error;
+  // The courier is reachable if either channel delivered the link.
+  assignment.status = sent || whatsapp.success ? "active" : "email_failed";
   await assignment.save();
-  return result;
+  return { ...result, whatsapp };
+}
+
+/** One-line operator message covering both link channels. */
+export function describeLinkDelivery(email, verb = "assigned") {
+  const parts = [];
+  if (email?.success) parts.push("emailed");
+  if (email?.whatsapp?.success) parts.push("sent on WhatsApp");
+  if (parts.length === 0) return `Courier ${verb}, but the link could not be delivered. ${email?.whatsapp?.error || ""} Resend or replace the courier.`.trim();
+  const note = !email?.whatsapp?.success ? ` WhatsApp failed: ${email?.whatsapp?.error}` : !email?.success ? " (email failed)" : "";
+  return `Courier ${verb}; link ${parts.join(" and ")}.${note}`;
 }
 
 export async function assignGuestCourier({ adminId, actorRole, orderRef, taskType, courier, reason, allowedSellerIds = null }) {
@@ -189,7 +212,12 @@ export async function assignGuestCourier({ adminId, actorRole, orderRef, taskTyp
   });
 
   const email = await dispatchAssignmentEmail(assignment, rawToken);
-  return { order: updated, assignment: assignmentPublicView(assignment), courierProfile, email };
+  // Phone-order customers get the tracking link again once a courier is on the way.
+  const trackingWhatsapp =
+    taskType === "forward_delivery" && updated.placementChannel === "ADMIN_PHONE_ORDER"
+      ? await sendTrackingLinkForOrder(updated)
+      : null;
+  return { order: updated, assignment: assignmentPublicView(assignment), courierProfile, email, trackingWhatsapp };
 }
 
 export async function resendGuestCourierLink({ adminId, actorRole, assignmentId, reason, allowedSellerIds = null, expectedTaskType = null }) {

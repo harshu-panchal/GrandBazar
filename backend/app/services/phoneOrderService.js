@@ -5,6 +5,8 @@ import { findCustomerByPhone } from "./admin/userAdminService.js";
 import { signPhoneOrderPayLinkToken, moveOrderToSellerPendingAfterPayment } from "./paymentService.js";
 import { sendPhoneOrderPayLinkSms } from "./smsIndiaHubService.js";
 import { sendOrderPaymentLinkEmail } from "./emailService.js";
+import { sendPayLinkWhatsapp } from "./bhashWhatsappService.js";
+import { sendTrackingLinkForOrder } from "./orderTrackingLinkService.js";
 import { emitNotificationEvent } from "../modules/notifications/notification.emitter.js";
 import { NOTIFICATION_EVENTS } from "../modules/notifications/notification.constants.js";
 
@@ -204,7 +206,19 @@ export async function placePhoneOrderForCustomer({
   const payLinkUrl = `${process.env.FRONTEND_URL}/pay/${token}`;
 
   const sentVia = [];
+  const notifyErrors = [];
   const channels = notifyVia || [];
+  if (channels.includes("whatsapp")) {
+    const wa = await sendPayLinkWhatsapp({
+      phone: customer.phone,
+      name: customer.name,
+      orderId: primaryOrder?.orderId,
+      amount,
+      payLinkUrl,
+    });
+    if (wa.success) sentVia.push("whatsapp");
+    else notifyErrors.push({ channel: "whatsapp", message: wa.error });
+  }
   if (channels.includes("sms") && customer.phone) {
     try {
       await sendPhoneOrderPayLinkSms({ phone: customer.phone, payLinkUrl, amount });
@@ -227,6 +241,12 @@ export async function placePhoneOrderForCustomer({
     } catch (err) {
       console.warn("[phoneOrderService] Email send failed:", err.message);
     }
+  }
+
+  // Tracking link goes out at placement and again when a courier is assigned.
+  if (primaryOrder) {
+    const track = await sendTrackingLinkForOrder(primaryOrder);
+    if (!track.success) notifyErrors.push({ channel: "whatsapp-tracking", message: track.error });
   }
 
   const orderIds = orders.map((order) => order._id);
@@ -265,5 +285,6 @@ export async function placePhoneOrderForCustomer({
     duplicate: Boolean(placement.duplicate),
     paymentLinkUrl: payLinkUrl,
     sentVia,
+    notifyErrors,
   };
 }

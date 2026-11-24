@@ -54,6 +54,8 @@ const guestCourierAssignmentSchema = new mongoose.Schema(
     },
     emailSentAt: { type: Date, default: null },
     emailFailureReason: { type: String, default: "" },
+    whatsappStatus: { type: String, enum: ["pending", "sent", "failed"], default: "pending" },
+    whatsappFailureReason: { type: String, default: "" },
     lastAccessedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
     revokedAt: { type: Date, default: null },

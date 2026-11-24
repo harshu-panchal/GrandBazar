@@ -72,6 +72,8 @@ import {
   checkAnyAdminPermission,
   allowSuperAdminOnly,
 } from "../middleware/authMiddleware.js";
+import handleResponse from "../utils/helper.js";
+import { getPublicTracking } from "../services/orderTrackingLinkService.js";
 import { requireReason } from "../middleware/requireReasonMiddleware.js";
 import {
   getSellerSchedulingSettings,
@@ -140,6 +142,15 @@ import {
 } from "../controller/sellerGuestCourierController.js";
 
 const router = express.Router();
+
+// Public (no login): the signed token in the WhatsApp tracking link is the credential.
+router.get("/track/:token", async (req, res) => {
+  try {
+    return handleResponse(res, 200, "Tracking fetched", await getPublicTracking(req.params.token));
+  } catch (error) {
+    return handleResponse(res, error.statusCode || 500, error.message);
+  }
+});
 const sellerOrderChain = [verifyToken, allowRoles("admin", "seller"), resolveActiveStore, requireApprovedSeller, requireBusinessModelChosen, requireSellerOperational];
 const sellerOrdersReadChain = [...sellerOrderChain, checkSubSellerPermission("orders", "read")];
 const sellerOrdersWriteChain = [...sellerOrderChain, checkSubSellerPermission("orders", "write")];

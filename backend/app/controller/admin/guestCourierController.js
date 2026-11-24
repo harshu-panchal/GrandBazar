@@ -3,6 +3,7 @@ import {
   assignGuestCourier,
   resendGuestCourierLink,
   revokeGuestCourier,
+  describeLinkDelivery,
 } from "../../services/guestCourierAssignmentService.js";
 import {
   listGuestCashSettlements,
@@ -29,10 +30,7 @@ export async function assignGuestCourierController(req, res) {
       courier: req.body,
       reason: req.body?.reason,
     });
-    const message = result.email?.success
-      ? "Guest courier assigned and link emailed"
-      : "Guest courier assigned, but email failed. Resend or replace the courier.";
-    return handleResponse(res, 201, message, result);
+    return handleResponse(res, 201, describeLinkDelivery(result.email), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -46,7 +44,7 @@ export async function resendGuestCourierLinkController(req, res) {
       assignmentId: req.params.assignmentId,
       reason: req.body?.reason,
     });
-    return handleResponse(res, 200, result.email?.success ? "New guest link emailed; previous links were revoked" : "New link created, but email failed", result);
+    return handleResponse(res, 200, describeLinkDelivery(result.email, "link regenerated (previous links revoked)"), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -83,7 +81,7 @@ export async function replaceGuestCourierController(req, res) {
       courier: req.body,
       reason: req.body?.reason || "Replacement guest courier",
     });
-    return handleResponse(res, 201, result.email?.success ? "Guest courier replaced and link emailed" : "Guest courier replaced, but email failed", result);
+    return handleResponse(res, 201, describeLinkDelivery(result.email, "replaced"), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

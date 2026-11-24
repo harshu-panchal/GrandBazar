@@ -225,7 +225,7 @@ const OrderDetail = () => {
             const response = mode === 'replace'
                 ? await adminApi.replaceGuestCourier(assignmentId, payload)
                 : await adminApi.assignGuestCourier(order.orderId || order._id, payload);
-            showToast(response.data?.message || 'Guest courier assigned', response.data?.result?.email?.success === false ? 'warning' : 'success');
+            showToast(response.data?.message || 'Guest courier assigned', response.data?.result?.email?.success === false || response.data?.result?.email?.whatsapp?.success === false ? 'warning' : 'success');
             setShowGuestCourierForm(false);
             setGuestCourierForm((prev) => ({ ...prev, name: '', phone: '', email: '', reason: '' }));
             fetchDetail();
@@ -241,7 +241,7 @@ const OrderDetail = () => {
         if (!reason) return;
         try {
             const response = await adminApi.resendGuestCourierLink(assignmentId, reason);
-            showToast(response.data?.message || 'New link sent', response.data?.result?.email?.success === false ? 'warning' : 'success');
+            showToast(response.data?.message || 'New link sent', response.data?.result?.email?.success === false || response.data?.result?.email?.whatsapp?.success === false ? 'warning' : 'success');
             fetchDetail();
         } catch (error) {
             showToast(error.response?.data?.message || 'Failed to resend link', 'error');

@@ -61,6 +61,7 @@ export const createPhoneOrderForCustomerBySeller = async (req, res) => {
         orders: result.orders,
         paymentLinkUrl: result.paymentLinkUrl,
         sentVia: result.sentVia,
+        notifyErrors: result.notifyErrors,
       },
     );
   } catch (error) {

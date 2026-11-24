@@ -62,7 +62,7 @@ export const createFinanceOrderSchema = checkoutPreviewSchema.keys({
 export const adminPhoneOrderSchema = checkoutPreviewSchema.keys({
   items: Joi.array().items(orderItemSchema).min(1).required(),
   customerPhone: Joi.string().required(),
-  notifyVia: Joi.array().items(Joi.string().valid("sms", "email")).min(1).required(),
+  notifyVia: Joi.array().items(Joi.string().valid("sms", "email", "whatsapp")).min(1).required(),
 }).fork(["paymentMode"], (schema) => schema.forbidden());
 
 export const verifyOnlinePaymentSchema = Joi.object({

@@ -850,6 +850,20 @@ export async function settleDeliveredOrder(orderOrId, { actorId = null } = {}) {
       console.warn("[orderFinanceService] finance summary cache invalidation failed:", cacheErr.message);
     }
 
+    // Tell the seller panel what this delivery earned (popup + ring). Skipped
+    // for seller-collected COD, where no wallet credit happens.
+    const sellerCredit = roundCurrency(order.paymentBreakdown?.sellerPayoutTotal || 0);
+    if (order.seller && sellerCredit > 0 && order.settlementStatus?.sellerPayout !== "SETTLED_VIA_CASH") {
+      import("../orderSocketEmitter.js")
+        .then(({ emitToSeller }) =>
+          emitToSeller(order.seller, {
+            event: "seller:wallet:credited",
+            payload: { orderId: order.orderId, amount: sellerCredit },
+          }),
+        )
+        .catch((e) => console.warn("[orderFinanceService] seller credit emit failed:", e.message));
+    }
+
     // PDF generation + Cloudinary upload are slow I/O — never do them inside
     // the DB transaction. Fire-and-forget after commit; failures are logged
     // but never block order delivery or the caller's response.

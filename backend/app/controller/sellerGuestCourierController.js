@@ -4,6 +4,7 @@ import {
   assignGuestCourier,
   resendGuestCourierLink,
   revokeGuestCourier,
+  describeLinkDelivery,
 } from "../services/guestCourierAssignmentService.js";
 import { searchGuestCourierDirectory } from "../services/guestCourierDirectoryService.js";
 
@@ -45,9 +46,7 @@ export async function assignSellerGuestCourier(req, res) {
       reason: requireReason(req),
       allowedSellerIds: await sellerStoreIds(req),
     });
-    return handleResponse(res, 201, result.email?.success
-      ? "Temporary courier assigned and link emailed"
-      : "Temporary courier assigned, but email failed. Resend or replace the courier.", result);
+    return handleResponse(res, 201, describeLinkDelivery(result.email), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -63,7 +62,7 @@ export async function resendSellerGuestCourier(req, res) {
       allowedSellerIds: await sellerStoreIds(req),
       expectedTaskType: taskType(req),
     });
-    return handleResponse(res, 200, result.email?.success ? "New link emailed; previous links were revoked" : "New link created, but email failed", result);
+    return handleResponse(res, 200, describeLinkDelivery(result.email, "link regenerated (previous links revoked)"), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }
@@ -108,7 +107,7 @@ export async function replaceSellerGuestCourier(req, res) {
       reason,
       allowedSellerIds,
     });
-    return handleResponse(res, 201, result.email?.success ? "Temporary courier replaced and link emailed" : "Temporary courier replaced, but email failed", result);
+    return handleResponse(res, 201, describeLinkDelivery(result.email, "replaced"), result);
   } catch (error) {
     return handleResponse(res, error.statusCode || 500, error.message);
   }

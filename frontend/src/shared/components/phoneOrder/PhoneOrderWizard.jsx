@@ -91,7 +91,7 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
     });
 
     // Step 4: send
-    const [notifyVia, setNotifyVia] = useState(['sms']);
+    const [notifyVia, setNotifyVia] = useState(['whatsapp']);
     const [result, setResult] = useState(null);
 
     const resetAfterCustomerChange = () => {
@@ -291,9 +291,15 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                 ...(scheduleSelection.windowLabel ? { windowLabel: scheduleSelection.windowLabel } : {}),
             };
             const res = await createOrder(payload);
-            setResult(res?.data?.result);
+            const created = res?.data?.result;
+            setResult(created);
             setStep(3);
-            showToast('Phone order created and payment link sent', 'success');
+            const failures = created?.notifyErrors || [];
+            if (failures.length) {
+                showToast(`Phone order created, but: ${failures.map((f) => f.message).join(' ')}`, 'warning');
+            } else {
+                showToast('Phone order created and payment link sent', 'success');
+            }
         } catch (err) {
             showToast(
                 err?.response?.data?.message || err?.message || 'Failed to create phone order',
@@ -676,12 +682,12 @@ const PhoneOrderWizard = ({ lookupCustomerByPhone, searchProducts, getDeliverySl
                         <p className="text-xs font-black uppercase text-slate-500 mb-2">Send payment link via</p>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => toggleNotifyVia('sms')}
+                                onClick={() => toggleNotifyVia('whatsapp')}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold ring-1 ${
-                                    notifyVia.includes('sms') ? 'bg-fuchsia-600 text-white ring-fuchsia-600' : 'ring-slate-200 text-slate-600'
+                                    notifyVia.includes('whatsapp') ? 'bg-fuchsia-600 text-white ring-fuchsia-600' : 'ring-slate-200 text-slate-600'
                                 }`}
                             >
-                                <MessageSquare className="h-3.5 w-3.5" /> SMS
+                                <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
                             </button>
                             <button
                                 onClick={() => toggleNotifyVia('email')}

@@ -35,9 +35,11 @@ export default function GuestCourierAssignmentPanel({ orderId, taskType, assignm
     }
     setSaving(true);
     try {
-      if (replacing) await sellerApi.replaceGuestCourier(assignment._id, taskType, form);
-      else await sellerApi.assignGuestCourier(orderId, taskType, form);
-      showToast(replacing ? 'Temporary courier replaced' : 'Temporary courier assigned', 'success');
+      const res = replacing
+        ? await sellerApi.replaceGuestCourier(assignment._id, taskType, form)
+        : await sellerApi.assignGuestCourier(orderId, taskType, form);
+      const email = res?.data?.result?.email;
+      showToast(res?.data?.message || 'Temporary courier assigned', email?.success === false || email?.whatsapp?.success === false ? 'warning' : 'success');
       await refresh();
     } catch (error) {
       showToast(error?.response?.data?.message || 'Unable to assign temporary courier', 'error');
@@ -55,9 +57,10 @@ export default function GuestCourierAssignmentPanel({ orderId, taskType, assignm
     }
     setSaving(true);
     try {
-      if (action === 'resend') await sellerApi.resendGuestCourierLink(assignment._id, taskType, reason);
-      else await sellerApi.revokeGuestCourier(assignment._id, taskType, reason);
-      showToast(action === 'resend' ? 'A new link was emailed' : 'Temporary courier revoked', 'success');
+      const res = action === 'resend'
+        ? await sellerApi.resendGuestCourierLink(assignment._id, taskType, reason)
+        : await sellerApi.revokeGuestCourier(assignment._id, taskType, reason);
+      showToast(action === 'resend' ? (res?.data?.message || 'A new link was sent') : 'Temporary courier revoked', 'success');
       await refresh();
     } catch (error) {
       showToast(error?.response?.data?.message || `Unable to ${action} courier`, 'error');

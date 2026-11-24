@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getSellerOrderPayout, formatInr } from '@/shared/utils/sellerOrderMoney';
 import { getFulfillmentDisplay } from '@/shared/utils/orderFulfillment';
 import SellerEarningsContext, { defaultEarnings } from '@/modules/seller/context/SellerEarningsContext';
-import { getOrderSocket, onSellerOrderNew, onSellerOrderReminder, onReturnDropOtp, onOrderStatusUpdate, onSellerReturnRequested } from '@/core/services/orderSocket';
+import { getOrderSocket, onSellerOrderNew, onSellerOrderReminder, onReturnDropOtp, onOrderStatusUpdate, onSellerReturnRequested, onSellerWalletCredited } from '@/core/services/orderSocket';
 import { getProductImageUrl, handleProductImageError } from "@/core/utils/imageUtils";
 import orderAlertSound from '@/assets/sounds/order_alert.mp3';
 
@@ -151,6 +151,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
     const acceptWindowTotalRef = useRef(60);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [returnDropOtpAlert, setReturnDropOtpAlert] = useState(null); // { orderId, otp, expiresAt }
+    const [walletCreditAlert, setWalletCreditAlert] = useState(null); // { orderId, amount }
 
     const canPollSellerOrders = React.useMemo(() => {
         if (role !== 'seller' || !user) return false;
@@ -485,6 +486,12 @@ const DashboardLayout = ({ children, navItems, title }) => {
             audio.play().catch(() => { });
         });
 
+        const unsubscribeWalletCredit = onSellerWalletCredited(getToken, (payload) => {
+            if (!(Number(payload?.amount) > 0)) return;
+            setWalletCreditAlert(payload);
+            new Audio(orderAlertSound).play().catch(() => { });
+        });
+
         const unsubscribeReturn = onSellerReturnRequested(getToken, (payload) => {
             console.log("[DashboardLayout] Received return:requested socket event:", payload);
             if (!payload?.orderId) return;
@@ -506,6 +513,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
             unsubscribeSellerReminder();
             unsubscribeOrderStatus();
             unsubscribeDrop();
+            unsubscribeWalletCredit();
             unsubscribeReturn();
         };
     }, [role]);
@@ -1020,6 +1028,33 @@ const DashboardLayout = ({ children, navItems, title }) => {
                     </div>
                 )}
 
+
+                {walletCreditAlert && (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-brand-100 text-center"
+                        >
+                            <div className="h-20 w-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6 mx-auto animate-pulse">
+                                <Check className="h-10 w-10 text-emerald-600" />
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-900 mb-2">
+                                ₹{formatInr(walletCreditAlert.amount)} is credited in your Zinto wallet
+                            </h2>
+                            <p className="text-slate-600 font-medium mb-8">
+                                Order <span className="font-bold">#{walletCreditAlert.orderId}</span> was delivered.
+                            </p>
+                            <button
+                                onClick={() => setWalletCreditAlert(null)}
+                                className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-black hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95 uppercase tracking-widest text-xs"
+                            >
+                                OK
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
 
                 {/* Global Return Drop OTP Modal */}
                 {returnDropOtpAlert && (

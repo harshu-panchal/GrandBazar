@@ -194,6 +194,8 @@ export const customerApi = {
       razorpaySignature,
       payLinkToken,
     }),
+  getPublicTracking: (token) =>
+    axiosInstance.get(`/orders/track/${encodeURIComponent(token)}`),
   resolvePhoneOrderPayLink: (token) =>
     axiosInstance.get(`/payments/pay-link/${encodeURIComponent(token)}`),
 

@@ -55,6 +55,7 @@ const ProductDetailPage = lazy(() => import('../../modules/customer/pages/Produc
 const CartPage = lazy(() => import('../../modules/customer/pages/CartPage'));
 const CheckoutPage = lazy(() => import('../../modules/customer/pages/CheckoutPage'));
 const PaymentStatusPage = lazy(() => import('../../modules/customer/pages/PaymentStatusPage'));
+const PublicTrackingPage = lazy(() => import('../../modules/customer/pages/PublicTrackingPage'));
 const PhoneOrderPayPage = lazy(() => import('../../modules/customer/pages/PhoneOrderPayPage'));
 const SearchPage = lazy(() => import('../../modules/customer/pages/SearchPage'));
 const WalletPage = lazy(() => import('../../modules/customer/pages/WalletPage'));
@@ -231,6 +232,7 @@ const router = createBrowserRouter([
                         { path: 'checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute> },
                         { path: 'payment-status', element: <PaymentStatusPage /> },
                         { path: 'pay/:token', element: <PhoneOrderPayPage /> },
+                        { path: 'track/:token', element: <PublicTrackingPage /> },
                         { path: 'profile', element: <ProtectedRoute><ProfilePage /></ProtectedRoute> },
                         { path: 'profile/edit', element: <ProtectedRoute><EditProfilePage /></ProtectedRoute> },
                         { path: 'wallet', element: <ProtectedRoute><WalletPage /></ProtectedRoute> },

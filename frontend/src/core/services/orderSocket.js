@@ -191,6 +191,13 @@ export function onSellerOrderReminder(getToken, handler) {
   return () => s.off("order:reminder", handler);
 }
 
+export function onSellerWalletCredited(getToken, handler) {
+  const s = getOrderSocket(getToken);
+  if (!s || typeof handler !== "function") return () => {};
+  s.on("seller:wallet:credited", handler);
+  return () => s.off("seller:wallet:credited", handler);
+}
+
 export function onSellerReturnRequested(getToken, handler) {
   const s = getOrderSocket(getToken);
   if (!s || typeof handler !== "function") return () => {};
